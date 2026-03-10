@@ -43,17 +43,12 @@ export default function Navbar({ profile, setProfile, currentScreen, setScreen }
       flexShrink: 0,
     }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 40 }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 8,
-          background: 'linear-gradient(135deg, #F47E2F, #ff9a52)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, fontWeight: 900, color: '#fff', fontFamily: 'Montserrat, sans-serif',
-        }}>∞</div>
-        <div>
-          <div style={{ color: '#fff', fontWeight: 800, fontSize: 14, fontFamily: 'Montserrat, sans-serif', lineHeight: 1 }}>SIGEC</div>
-          <div style={{ color: '#F47E2F', fontWeight: 700, fontSize: 10, fontFamily: 'Montserrat, sans-serif', letterSpacing: 2 }}>ELOS</div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', marginRight: 40 }}>
+        <img
+          src="/logo.png"
+          alt="SIGEC-ELOS"
+          style={{ height: 42, width: 'auto', objectFit: 'contain' }}
+        />
       </div>
 
       {/* Nav items */}
