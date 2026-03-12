@@ -6,7 +6,7 @@ const CNAE_OPTIONS = ['Até 3', '4 a 10', '11 a 15', '16+']
 const PLANS = [
   {
     name: 'Simples', icon: '🏷️', color: '#2563eb', highlight: false,
-    prices: [290, 390, 490, 590],
+    prices: [0, 0, 0, 0],
     docs: [
       'Cartão CNPJ + CNAE verificado',
       'Dados bancários',
