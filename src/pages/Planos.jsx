@@ -19,7 +19,7 @@ const PLANS = [
   },
   {
     name: 'Premium', icon: '⭐', color: '#F47E2F', highlight: true,
-    prices: [990, 1290, 1690, 2190],
+    prices: [0, 0, 0, 0],
     docs: [
       'Tudo do Simples +',
       'Certidões fiscais plenas (CND Federal, Estadual e Municipal)',
