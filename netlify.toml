@@ -6,19 +6,38 @@
   NODE_VERSION = "20"
 
 # SPA redirect — todas as rotas vão para index.html
+# EXCETO /pesquisa.html que é um arquivo estático real em /public
+[[redirects]]
+  from   = "/pesquisa-sigec.html"
+  to     = "/pesquisa-sigec.html"
+  status = 200
+  force  = false
+
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
   status = 200
 
-# Headers de segurança e cache
+# Headers de segurança globais
+# SAMEORIGIN (não DENY) permite que o próprio site carregue iframes internos
+# como /pesquisa.html dentro do popup de exit-intent
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options        = "DENY"
+    X-Frame-Options        = "SAMEORIGIN"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy        = "strict-origin-when-cross-origin"
 
+# /pesquisa.html — remove X-Frame-Options completamente
+# necessário para que o Google Forms/Scripts dentro dela funcione
+# e para que o iframe do popup consiga renderizá-la
+[[headers]]
+  for = "/pesquisa.html"
+  [headers.values]
+    X-Frame-Options = ""
+    X-Content-Type-Options = "nosniff"
+
+# Cache longo para assets com hash (JS/CSS gerados pelo Vite)
 [[headers]]
   for = "/assets/*"
   [headers.values]
