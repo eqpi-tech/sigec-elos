@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pesquisa — SIGEC-ELOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:    #1a2550;
+    --navy2:   #243060;
+    --orange:  #F97316;
+    --orange2: #EA6C0A;
+    --bg:      #eef0f4;
+    --white:   #ffffff;
+    --border:  #dde2ec;
+    --text:    #1a2550;
+    --muted:   #6b7693;
+    --dim:     #a0a8c0;
+    --green:   #22c55e;
+    --shadow:  0 2px 10px rgba(26,37,80,0.08);
+    --shadow-lg: 0 8px 32px rgba(26,37,80,0.13);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* NAVBAR */
+  .navbar { background:var(--navy); padding:0 32px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; box-shadow:0 2px 12px rgba(0,0,0,0.18); }
+  .logo { display:flex; align-items:center; gap:10px; }
+  .logo-icon { width:34px; height:34px;  border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800; color:white; }
+  .logo-text { font-size:13px; font-weight:700; color:white; letter-spacing:.04em; line-height:1.2; }
+  .logo-text span { display:block; font-size:10px; font-weight:400; color:rgba(255,255,255,.5); letter-spacing:.12em; text-transform:uppercase; }
+  .nav-badge { background:rgba(255,255,255,.1); color:rgba(255,255,255,.7); font-size:11px; font-weight:500; padding:4px 12px; border-radius:100px; border:1px solid rgba(255,255,255,.15); letter-spacing:.05em; }
+
+  /* HERO */
+  .hero { background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%); padding:48px 32px 56px; position:relative; overflow:hidden; }
+  .hero::before { content:''; position:absolute; right:-60px; top:-60px; width:340px; height:340px; border-radius:50%; background:rgba(249,115,22,.08); pointer-events:none; }
+  .hero::after  { content:''; position:absolute; right:80px; bottom:-100px; width:220px; height:220px; border-radius:50%; background:rgba(249,115,22,.05); pointer-events:none; }
+  .hero-inner { max-width:760px; margin:0 auto; position:relative; }
+  .hero-tag { display:inline-flex; align-items:center; gap:7px; background:rgba(249,115,22,.15); border:1px solid rgba(249,115,22,.35); color:#FDBA74; font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; padding:5px 13px; border-radius:100px; margin-bottom:18px; }
+  .hero-tag::before { content:''; width:6px; height:6px; background:var(--orange); border-radius:50%; box-shadow:0 0 7px var(--orange); animation:blink 2s infinite; }
+  .hero h1 { font-size:clamp(24px,4vw,36px); font-weight:800; color:white; line-height:1.2; margin-bottom:12px; }
+  .hero h1 span { color:var(--orange); }
+  .hero p { color:rgba(255,255,255,.6); font-size:14px; line-height:1.7; max-width:500px; }
+
+  /* MAIN */
+  .main { max-width:760px; margin:0 auto; padding:32px 24px 80px; }
+
+  /* PROGRESS */
+  .progress-card { background:var(--white); border-radius:12px; padding:20px 24px; margin-bottom:24px; box-shadow:var(--shadow); border:1px solid var(--border); }
+  .progress-meta { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; margin-bottom:10px; }
+  .progress-meta span:last-child { color:var(--orange); }
+  .progress-bar { height:6px; background:var(--bg); border-radius:4px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--orange),#FDBA74); border-radius:4px; width:0%; transition:width .45s cubic-bezier(.4,0,.2,1); }
+
+  /* SECTION DIVIDER */
+  .section-divider {
+    display:flex; align-items:center; gap:12px;
+    margin: 28px 0 16px;
+  }
+  .section-divider::before, .section-divider::after {
+    content:''; flex:1; height:1px; background:var(--border);
+  }
+  .section-divider span {
+    font-size:11px; font-weight:700; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--dim);
+    white-space:nowrap;
+  }
+
+  /* CARDS */
+  .card { background:var(--white); border:1px solid var(--border); border-radius:14px; padding:28px 28px 24px; margin-bottom:14px; box-shadow:var(--shadow); transition:border-color .2s,box-shadow .2s; animation:fadeUp .4s ease both; }
+  .card:hover { box-shadow:var(--shadow-lg); }
+  .card.has-answer { border-left:3px solid var(--green); border-color:rgba(34,197,94,.3); }
+  .card:nth-child(1){animation-delay:.04s} .card:nth-child(2){animation-delay:.08s} .card:nth-child(3){animation-delay:.12s}
+  .card:nth-child(4){animation-delay:.16s} .card:nth-child(5){animation-delay:.20s} .card:nth-child(6){animation-delay:.24s}
+  .card:nth-child(7){animation-delay:.28s} .card:nth-child(8){animation-delay:.32s} .card:nth-child(9){animation-delay:.36s}
+  .card:nth-child(10){animation-delay:.40s} .card:nth-child(11){animation-delay:.44s}
+  .q-label { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--orange); margin-bottom:7px; }
+  .q-text  { font-size:15px; font-weight:600; color:var(--text); line-height:1.5; margin-bottom:20px; }
+
+  /* OPTIONS */
+  .options { display:flex; flex-direction:column; gap:7px; }
+  .option { display:flex; align-items:center; gap:13px; padding:12px 16px; border-radius:9px; border:1.5px solid var(--border); background:var(--bg); cursor:pointer; transition:all .15s ease; user-select:none; }
+  .option:hover { border-color:var(--orange); background:#fff7f0; }
+  .option input[type="radio"] { display:none; }
+  .radio-dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--dim); flex-shrink:0; transition:all .15s; position:relative; background:white; }
+  .radio-dot::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0); width:8px; height:8px; background:var(--orange); border-radius:50%; transition:transform .2s cubic-bezier(.34,1.56,.64,1); }
+  .option.selected { border-color:var(--orange); background:#fff7f0; }
+  .option.selected .radio-dot { border-color:var(--orange); }
+  .option.selected .radio-dot::after { transform:translate(-50%,-50%) scale(1); }
+  .option-label { font-size:14px; color:var(--muted); transition:color .15s; }
+  .option.selected .option-label { color:var(--text); font-weight:600; }
+
+  /* TEXTAREA */
+  textarea { width:100%; background:var(--bg); border:1.5px solid var(--border); border-radius:9px; color:var(--text); font-family:'Inter',sans-serif; font-size:14px; line-height:1.6; padding:14px 16px; resize:vertical; min-height:110px; outline:none; transition:border-color .2s,box-shadow .2s; }
+  textarea:focus { border-color:var(--orange); box-shadow:0 0 0 3px rgba(249,115,22,.12); background:white; }
+  textarea::placeholder { color:var(--dim); }
+
+  /* CONSENT TOGGLE */
+  .consent-card { background:linear-gradient(135deg,#fff7f0,#fff); border-color:rgba(249,115,22,.25); }
+  .toggle-row { display:flex; align-items:flex-start; gap:14px; cursor:pointer; }
+  .toggle-track { width:44px; height:24px; border-radius:12px; background:var(--border); flex-shrink:0; position:relative; transition:background .2s; margin-top:2px; }
+  .toggle-track::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:white; box-shadow:0 1px 4px rgba(0,0,0,.2); transition:transform .2s cubic-bezier(.34,1.56,.64,1); }
+  .toggle-row.on .toggle-track { background:var(--orange); }
+  .toggle-row.on .toggle-track::after { transform:translateX(20px); }
+  .toggle-text strong { display:block; font-size:15px; font-weight:600; color:var(--text); margin-bottom:3px; }
+  .toggle-text p { font-size:13px; color:var(--muted); line-height:1.5; }
+
+  /* ── IDENTIFICATION CARD ── */
+  .id-card {
+    background: linear-gradient(135deg, #f0f4ff, #fff);
+    border-color: rgba(26,37,80,0.18);
+    position: relative;
+    overflow: hidden;
+  }
+  .id-card::before {
+    content: '';
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: rgba(249,115,22,0.05);
+    pointer-events: none;
+  }
+
+  .id-toggle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    gap: 16px;
+  }
+
+  .id-toggle-header-text { flex: 1; }
+  .id-toggle-header-text strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+  .id-toggle-header-text p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .optional-badge {
+    display: inline-block;
+    background: #eef0f4;
+    color: var(--dim);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 100px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Fields panel */
+  .id-fields {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height .4s cubic-bezier(.4,0,.2,1), opacity .3s ease, margin .3s ease;
+    opacity: 0;
+    margin-top: 0;
+  }
+  .id-fields.open {
+    max-height: 600px;
+    opacity: 1;
+    margin-top: 24px;
+  }
+
+  .fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .fields-grid .full { grid-column: 1 / -1; }
+
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+  .field-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .field-input {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+    width: 100%;
+  }
+  .field-input:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(249,115,22,.12);
+    background: white;
+  }
+  .field-input::placeholder { color: var(--dim); }
+
+  /* Canal preferencial */
+  .channel-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .channel-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .channel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--muted);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s ease;
+    user-select: none;
+  }
+  .channel-btn:hover { border-color: var(--orange); background: #fff7f0; color: var(--text); }
+  .channel-btn.active { border-color: var(--orange); background: #fff7f0; color: var(--navy); font-weight: 700; }
+  .channel-btn .ch-icon { font-size: 16px; line-height: 1; }
+
+  .id-privacy-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: rgba(34,197,94,.06);
+    border: 1px solid rgba(34,197,94,.2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .id-privacy-note .lock { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  /* SUBMIT */
+  .submit-area { display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:28px; }
+  .btn-submit { display:inline-flex; align-items:center; gap:10px; background:var(--orange); color:white; border:none; padding:16px 48px; border-radius:10px; font-family:'Inter',sans-serif; font-size:15px; font-weight:700; cursor:pointer; transition:all .2s; box-shadow:0 4px 16px rgba(249,115,22,.35); }
+  .btn-submit:hover { background:var(--orange2); transform:translateY(-2px); box-shadow:0 8px 24px rgba(249,115,22,.4); }
+  .btn-submit:active { transform:translateY(0); }
+  .btn-submit:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+  .btn-arrow { transition:transform .2s; }
+  .btn-submit:hover .btn-arrow { transform:translateX(3px); }
+  .submit-note { font-size:12px; color:var(--dim); text-align:center; }
+  .error-msg { display:none; background:#fef2f2; border:1px solid #fca5a5; color:#dc2626; border-radius:9px; padding:13px 18px; font-size:13px; margin-top:6px; text-align:center; }
+  .spinner { display:none; width:18px; height:18px; border:2.5px solid rgba(255,255,255,.3); border-top-color:white; border-radius:50%; animation:spin .7s linear infinite; }
+
+  /* SUCCESS */
+  #success-screen { display:none; text-align:center; padding:80px 24px; animation:fadeUp .5s ease both; }
+  .success-icon { width:72px; height:72px; border-radius:50%; background:rgba(34,197,94,.1); border:2px solid var(--green); display:flex; align-items:center; justify-content:center; margin:0 auto 24px; font-size:32px; color:var(--green); }
+  #success-screen h2 { font-size:28px; font-weight:800; color:var(--navy); margin-bottom:10px; }
+  #success-screen p  { color:var(--muted); font-size:15px; line-height:1.7; }
+  .success-identified { display:none; margin-top:20px; background:#fff7ed; border:1px solid rgba(249,115,22,.2); border-radius:10px; padding:16px 20px; font-size:14px; color:var(--orange2); font-weight:600; }
+
+  @keyframes spin    { to { transform:rotate(360deg); } }
+  @keyframes fadeUp  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes blink   { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  @media(max-width:520px) {
+    .hero{padding:36px 20px 44px} .main{padding:24px 16px 60px} .card{padding:22px 18px} .navbar{padding:0 16px}
+    .fields-grid { grid-template-columns: 1fr; }
+    .fields-grid .full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo">
+    <div class="logo-icon"><img
+          src="public/logo.png"
+          alt="SIGEC-ELOS"
+          style="height: 42px; width: 'auto';"
+        /></div>
+    <div class="logo-text">SIGEC-ELOS<span>EQPI Tech</span></div>
+  </div>
+  <div class="nav-badge">✦ Protótipo de Validação · v1.0</div>
+</nav>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-tag">Pesquisa de Usabilidade</div>
+    <h1>Sua opinião sobre a<br><span>nova interface</span> do SIGEC</h1>
+    <p>Responda as perguntas abaixo e nos ajude a construir um sistema melhor. Leva menos de 3 minutos.</p>
+  </div>
+</div>
+
+<div class="main">
+  <div id="form-area">
+
+    <div class="progress-card">
+      <div class="progress-meta">
+        <span id="prog-label">0 de 11 respondidas</span>
+        <span id="prog-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+    </div>
+
+    <!-- Consent: grupo de usuários -->
+    <div class="card consent-card" id="card-consent">
+      <div class="q-label">Participação voluntária</div>
+      <div class="q-text">Você aceitaria participar de um grupo de usuários para ajudar a evoluir o SIGEC?</div>
+      <div class="toggle-row" id="toggle-consent">
+        <div class="toggle-track"></div>
+        <div class="toggle-text">
+          <strong>Quero participar do grupo de usuários</strong>
+          <p>Suas sugestões terão impacto direto no desenvolvimento do sistema.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Q1 -->
+    <div class="card" id="card-1">
+      <div class="q-label">Pergunta 1 · Primeira impressão</div>
+      <div class="q-text">Qual foi sua primeira impressão ao visualizar a nova interface do sistema?</div>
+      <div class="options" data-q="q1">
+        <label class="option"><input type="radio" name="q1" value="Muito positiva"><div class="radio-dot"></div><span class="option-label">Muito positiva</span></label>
+        <label class="option"><input type="radio" name="q1" value="Positiva"><div class="radio-dot"></div><span class="option-label">Positiva</span></label>
+        <label class="option"><input type="radio" name="q1" value="Neutra"><div class="radio-dot"></div><span class="option-label">Neutra</span></label>
+        <label class="option"><input type="radio" name="q1" value="Negativa"><div class="radio-dot"></div><span class="option-label">Negativa</span></label>
+        <label class="option"><input type="radio" name="q1" value="Muito negativa"><div class="radio-dot"></div><span class="option-label">Muito negativa</span></label>
+      </div>
+    </div>
+
+    <!-- Q2 -->
+    <div class="card" id="card-2">
+      <div class="q-label">Pergunta 2 · Clareza das informações</div>
+      <div class="q-text">As informações apresentadas na tela são claras e fáceis de entender?</div>
+      <div class="options" data-q="q2">
+        <label class="option"><input type="radio" name="q2" value="Muito claras"><div class="radio-dot"></div><span class="option-label">Muito claras</span></label>
+        <label class="option"><input type="radio" name="q2" value="Claras"><div class="radio-dot"></div><span class="option-label">Claras</span></label>
+        <label class="option"><input type="radio" name="q2" value="Razoavelmente claras"><div class="radio-dot"></div><span class="option-label">Razoavelmente claras</span></label>
+        <label class="option"><input type="radio" name="q2" value="Pouco claras"><div class="radio-dot"></div><span class="option-label">Pouco claras</span></label>
+        <label class="option"><input type="radio" name="q2" value="Confusas"><div class="radio-dot"></div><span class="option-label">Confusas</span></label>
+      </div>
+    </div>
+
+    <!-- Q3 -->
+    <div class="card" id="card-3">
+      <div class="q-label">Pergunta 3 · Navegação</div>
+      <div class="q-text">A navegação entre menus e funcionalidades parece intuitiva?</div>
+      <div class="options" data-q="q3">
+        <label class="option"><input type="radio" name="q3" value="Muito intuitiva"><div class="radio-dot"></div><span class="option-label">Muito intuitiva</span></label>
+        <label class="option"><input type="radio" name="q3" value="Intuitiva"><div class="radio-dot"></div><span class="option-label">Intuitiva</span></label>
+        <label class="option"><input type="radio" name="q3" value="Razoável"><div class="radio-dot"></div><span class="option-label">Razoável</span></label>
+        <label class="option"><input type="radio" name="q3" value="Pouco intuitiva"><div class="radio-dot"></div><span class="option-label">Pouco intuitiva</span></label>
+        <label class="option"><input type="radio" name="q3" value="Difícil de navegar"><div class="radio-dot"></div><span class="option-label">Difícil de navegar</span></label>
+      </div>
+    </div>
+
+    <!-- Q4 -->
+    <div class="card" id="card-4">
+      <div class="q-label">Pergunta 4 · Utilidade prática</div>
+      <div class="q-text">Essa nova visualização facilita a análise e acompanhamento de fornecedores ou processos?</div>
+      <div class="options" data-q="q4">
+        <label class="option"><input type="radio" name="q4" value="Facilita muito"><div class="radio-dot"></div><span class="option-label">Facilita muito</span></label>
+        <label class="option"><input type="radio" name="q4" value="Facilita"><div class="radio-dot"></div><span class="option-label">Facilita</span></label>
+        <label class="option"><input type="radio" name="q4" value="Não muda muito"><div class="radio-dot"></div><span class="option-label">Não muda muito</span></label>
+        <label class="option"><input type="radio" name="q4" value="Complica um pouco"><div class="radio-dot"></div><span class="option-label">Complica um pouco</span></label>
+        <label class="option"><input type="radio" name="q4" value="Complica bastante"><div class="radio-dot"></div><span class="option-label">Complica bastante</span></label>
+      </div>
+    </div>
+
+    <!-- Q5 -->
+    <div class="card" id="card-5">
+      <div class="q-label">Pergunta 5 · Velocidade de entendimento</div>
+      <div class="q-text">Em quanto tempo você conseguiu entender o que estava sendo apresentado na tela?</div>
+      <div class="options" data-q="q5">
+        <label class="option"><input type="radio" name="q5" value="Imediatamente"><div class="radio-dot"></div><span class="option-label">Imediatamente</span></label>
+        <label class="option"><input type="radio" name="q5" value="Em poucos minutos"><div class="radio-dot"></div><span class="option-label">Em poucos minutos</span></label>
+        <label class="option"><input type="radio" name="q5" value="Demorei um pouco"><div class="radio-dot"></div><span class="option-label">Demorei um pouco</span></label>
+        <label class="option"><input type="radio" name="q5" value="Tive dificuldade para entender"><div class="radio-dot"></div><span class="option-label">Tive dificuldade para entender</span></label>
+      </div>
+    </div>
+
+    <!-- Q6 -->
+    <div class="card" id="card-6">
+      <div class="q-label">Pergunta 6 · Elementos visuais</div>
+      <div class="q-text">Como você avalia o layout visual — cores, organização e destaque das informações?</div>
+      <div class="options" data-q="q6">
+        <label class="option"><input type="radio" name="q6" value="Excelente"><div class="radio-dot"></div><span class="option-label">Excelente</span></label>
+        <label class="option"><input type="radio" name="q6" value="Bom"><div class="radio-dot"></div><span class="option-label">Bom</span></label>
+        <label class="option"><input type="radio" name="q6" value="Regular"><div class="radio-dot"></div><span class="option-label">Regular</span></label>
+        <label class="option"><input type="radio" name="q6" value="Ruim"><div class="radio-dot"></div><span class="option-label">Ruim</span></label>
+      </div>
+    </div>
+
+    <!-- Q7 -->
+    <div class="card" id="card-7">
+      <div class="q-label">Pergunta 7 · Valor percebido</div>
+      <div class="q-text">Essa nova visualização contribui para melhorar a gestão de fornecedores ou contratos?</div>
+      <div class="options" data-q="q7">
+        <label class="option"><input type="radio" name="q7" value="Contribui muito"><div class="radio-dot"></div><span class="option-label">Contribui muito</span></label>
+        <label class="option"><input type="radio" name="q7" value="Contribui"><div class="radio-dot"></div><span class="option-label">Contribui</span></label>
+        <label class="option"><input type="radio" name="q7" value="Pouco impacto"><div class="radio-dot"></div><span class="option-label">Pouco impacto</span></label>
+        <label class="option"><input type="radio" name="q7" value="Não contribui"><div class="radio-dot"></div><span class="option-label">Não contribui</span></label>
+      </div>
+    </div>
+
+    <!-- Q8 -->
+    <div class="card" id="card-8">
+      <div class="q-label">Pergunta 8 · Comparação com versão atual</div>
+      <div class="q-text">Comparado à versão atual do sistema, essa nova visualização é:</div>
+      <div class="options" data-q="q8">
+        <label class="option"><input type="radio" name="q8" value="Muito melhor"><div class="radio-dot"></div><span class="option-label">Muito melhor</span></label>
+        <label class="option"><input type="radio" name="q8" value="Melhor"><div class="radio-dot"></div><span class="option-label">Melhor</span></label>
+        <label class="option"><input type="radio" name="q8" value="Igual"><div class="radio-dot"></div><span class="option-label">Igual</span></label>
+        <label class="option"><input type="radio" name="q8" value="Pior"><div class="radio-dot"></div><span class="option-label">Pior</span></label>
+      </div>
+    </div>
+
+    <!-- Q9 -->
+    <div class="card" id="card-9">
+      <div class="q-label">Pergunta 9 · Sugestões abertas</div>
+      <div class="q-text">O que você melhoraria ou ajustaria nesta nova visualização?</div>
+      <textarea id="q9-text" placeholder="Compartilhe suas sugestões livremente…"></textarea>
+    </div>
+
+    <!-- Q10 -->
+    <div class="card" id="card-10">
+      <div class="q-label">Pergunta 10 · Recomendação final</div>
+      <div class="q-text">Você gostaria que essa nova interface fosse implementada na versão oficial do sistema?</div>
+      <div class="options" data-q="q10">
+        <label class="option"><input type="radio" name="q10" value="Sim"><div class="radio-dot"></div><span class="option-label">Sim</span></label>
+        <label class="option"><input type="radio" name="q10" value="Sim, com ajustes"><div class="radio-dot"></div><span class="option-label">Sim, com ajustes</span></label>
+        <label class="option"><input type="radio" name="q10" value="Ainda tenho dúvidas"><div class="radio-dot"></div><span class="option-label">Ainda tenho dúvidas</span></label>
+        <label class="option"><input type="radio" name="q10" value="Não"><div class="radio-dot"></div><span class="option-label">Não</span></label>
+      </div>
+    </div>
+
+    <!-- ── IDENTIFICAÇÃO (opcional) ── -->
+    <div class="section-divider">
+      <span>Identificação opcional</span>
+    </div>
+
+    <div class="card id-card" id="card-id">
+      <div class="id-toggle-header" id="toggle-id">
+        <div class="id-toggle-header-text">
+          <strong>
+            Quer ser contactado pela nossa equipe?
+            <span class="optional-badge">Opcional</span>
+          </strong>
+          <p>Deixe seus dados caso queira receber retorno ou participar de próximas etapas do projeto.</p>
+        </div>
+        <div class="toggle-track" id="id-toggle-track" style="flex-shrink:0;margin-top:0;"></div>
+      </div>
+
+      <!-- Painel de campos — aparece ao ativar o toggle -->
+      <div class="id-fields" id="id-fields">
+        <div class="fields-grid">
+          <div class="field-group full">
+            <label class="field-label">Nome completo</label>
+            <input class="field-input" id="id-nome" type="text" placeholder="Ex: João da Silva" autocomplete="name">
+          </div>
+          <div class="field-group">
+            <label class="field-label">E-mail</label>
+            <input class="field-input" id="id-email" type="email" placeholder="joao@empresa.com.br" autocomplete="email">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Celular / WhatsApp</label>
+            <input class="field-input" id="id-celular" type="tel" placeholder="(11) 99999-9999" autocomplete="tel" oninput="maskPhone(this)">
+          </div>
+        </div>
+
+        <!-- Canal preferencial -->
+        <div class="channel-label">Canal preferencial de contato</div>
+        <div class="channel-options" id="channel-options">
+          <button type="button" class="channel-btn" data-channel="WhatsApp" onclick="selectChannel(this)">
+            <span class="ch-icon">💬</span> WhatsApp
+          </button>
+          <button type="button" class="channel-btn" data-channel="E-mail" onclick="selectChannel(this)">
+            <span class="ch-icon">📧</span> E-mail
+          </button>
+          <button type="button" class="channel-btn" data-channel="Ligação" onclick="selectChannel(this)">
+            <span class="ch-icon">📞</span> Ligação
+          </button>
+          <button type="button" class="channel-btn" data-channel="Sem preferência" onclick="selectChannel(this)">
+            <span class="ch-icon">🔀</span> Sem preferência
+          </button>
+        </div>
+
+        <div class="id-privacy-note">
+          <span class="lock">🔒</span>
+          <span>Seus dados serão usados <strong>exclusivamente</strong> para retorno sobre o SIGEC. Não serão compartilhados com terceiros nem usados para fins comerciais.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="submit-area">
+      <button class="btn-submit" id="btn-submit" onclick="submitForm()">
+        <span id="btn-text">Enviar respostas</span>
+        <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        <div class="spinner" id="spinner"></div>
+      </button>
+      <p class="submit-note">🔒 Suas respostas são confidenciais. A identificação é totalmente opcional.</p>
+      <div class="error-msg" id="error-msg">Ocorreu um erro ao enviar. Tente novamente.</div>
+    </div>
+
+  </div><!-- /form-area -->
+
+  <!-- SUCCESS -->
+  <div id="success-screen">
+    <div class="success-icon">✓</div>
+    <h2>Obrigado pela sua participação!</h2>
+    <p>Suas respostas foram registradas com sucesso.<br>Elas são fundamentais para evoluirmos o SIGEC-ELOS.</p>
+    <div class="success-identified" id="success-identified">
+      ✉️ Entraremos em contato em breve pelo canal informado.
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+  // ══════════════════════════════════════════════
+  //  ⚙️  Cole aqui a URL gerada no Apps Script
+  // ══════════════════════════════════════════════
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw52XSssHYx0Icy9RdChRFgA7sGu8vfkThWK_T4ouSseRnL73qv6T3kvBdb39AhwD4/exec';
+  // ══════════════════════════════════════════════
+
+  const totalQ = 11;
+  const answered = new Set();
+
+  // ── Radio options ──
+  document.querySelectorAll('.options').forEach(group => {
+    group.querySelectorAll('.option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const q = group.dataset.q;
+        group.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        opt.querySelector('input').checked = true;
+        answered.add(q);
+        group.closest('.card').classList.add('has-answer');
+        updateProgress();
+      });
+    });
+  });
+
+  // ── Textarea ──
+  document.getElementById('q9-text').addEventListener('input', function () {
+    const card = document.getElementById('card-9');
+    if (this.value.trim()) { answered.add('q9'); card.classList.add('has-answer'); }
+    else                   { answered.delete('q9'); card.classList.remove('has-answer'); }
+    updateProgress();
+  });
+
+  // ── Consent toggle (grupo de usuários) ──
+  let consentOn = false;
+  document.getElementById('toggle-consent').addEventListener('click', () => {
+    consentOn = !consentOn;
+    document.getElementById('toggle-consent').classList.toggle('on', consentOn);
+    const card = document.getElementById('card-consent');
+    if (consentOn) { answered.add('consent'); card.classList.add('has-answer'); }
+    else           { answered.delete('consent'); card.classList.remove('has-answer'); }
+    updateProgress();
+  });
+
+  // ── Identificação toggle ──
+  let idOn = false;
+  let selectedChannel = '';
+
+  document.getElementById('toggle-id').addEventListener('click', () => {
+    idOn = !idOn;
+    document.getElementById('id-toggle-track').style.background = idOn ? 'var(--orange)' : '';
+    const thumb = document.getElementById('id-toggle-track');
+    thumb.classList.toggle('on-local', idOn);
+
+    // Aplicar estilo inline no ::after via data-on
+    thumb.setAttribute('data-on', idOn ? '1' : '0');
+    // Usar estilo inline para mover o thumb
+    thumb.style.background = idOn ? 'var(--orange)' : 'var(--border)';
+
+    const fields = document.getElementById('id-fields');
+    fields.classList.toggle('open', idOn);
+    document.getElementById('card-id').classList.toggle('has-answer', idOn);
+
+    if (idOn) {
+      setTimeout(() => document.getElementById('id-nome').focus(), 420);
+    }
+  });
+
+  // Mover o thumb do toggle de identificação com JS puro
+  const idTrack = document.getElementById('id-toggle-track');
+  idTrack.style.cssText += '; position:relative; cursor:pointer;';
+  // O ::after é controlado via CSS class; precisamos de um span filho
+  idTrack.innerHTML = '<span id="id-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:white;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .2s cubic-bezier(.34,1.56,.64,1);display:block;"></span>';
+
+  document.getElementById('toggle-id').addEventListener('click', () => {
+    const thumb = document.getElementById('id-thumb');
+    thumb.style.transform = idOn ? 'translateX(20px)' : 'translateX(0)';
+  });
+
+  // ── Canal preferencial ──
+  function selectChannel(btn) {
+    document.querySelectorAll('.channel-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedChannel = btn.dataset.channel;
+  }
+
+  // ── Máscara de celular ──
+  function maskPhone(input) {
+    let v = input.value.replace(/\D/g, '').slice(0, 11);
+    if (v.length > 10) {
+      v = v.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+    } else if (v.length > 6) {
+      v = v.replace(/^(\d{2})(\d{4})(\d{0,4})$/, '($1) $2-$3');
+    } else if (v.length > 2) {
+      v = v.replace(/^(\d{2})(\d{0,5})$/, '($1) $2');
+    } else {
+      v = v.replace(/^(\d*)$/, '($1');
+    }
+    input.value = v;
+  }
+
+  // ── Progress ──
+  function updateProgress() {
+    const n   = answered.size;
+    const pct = Math.round((n / totalQ) * 100);
+    document.getElementById('prog-label').textContent = `${n} de ${totalQ} respondidas`;
+    document.getElementById('prog-pct').textContent   = `${pct}%`;
+    document.getElementById('prog-fill').style.width  = pct + '%';
+  }
+
+  // ── Submit ──
+  async function submitForm() {
+    const btn      = document.getElementById('btn-submit');
+    const spinner  = document.getElementById('spinner');
+    const btnText  = document.getElementById('btn-text');
+    const errorMsg = document.getElementById('error-msg');
+
+    errorMsg.style.display = 'none';
+    btn.disabled = true;
+    spinner.style.display = 'inline-block';
+    btnText.textContent = 'Enviando…';
+
+    const getVal = name => {
+      const el = document.querySelector(`input[name="${name}"]:checked`);
+      return el ? el.value : '';
+    };
+
+    const payload = {
+      timestamp:                 new Date().toLocaleString('pt-BR'),
+      grupo_usuarios:            consentOn ? 'Sim' : 'Não',
+      q1_primeira_impressao:     getVal('q1'),
+      q2_clareza:                getVal('q2'),
+      q3_navegacao:              getVal('q3'),
+      q4_utilidade:              getVal('q4'),
+      q5_velocidade:             getVal('q5'),
+      q6_layout_visual:          getVal('q6'),
+      q7_valor_percebido:        getVal('q7'),
+      q8_comparacao:             getVal('q8'),
+      q9_sugestoes:              document.getElementById('q9-text').value.trim(),
+      q10_recomendacao:          getVal('q10'),
+      // Identificação (opcional)
+      id_quer_contato:           idOn ? 'Sim' : 'Não',
+      id_nome:                   idOn ? document.getElementById('id-nome').value.trim()    : '',
+      id_email:                  idOn ? document.getElementById('id-email').value.trim()   : '',
+      id_celular:                idOn ? document.getElementById('id-celular').value.trim() : '',
+      id_canal_preferencial:     idOn ? (selectedChannel || 'Não informado')               : '',
+    };
+
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode:   'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body:   JSON.stringify(payload),
+      });
+      showSuccess();
+    } catch (err) {
+      errorMsg.style.display = 'block';
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      btnText.textContent = 'Enviar respostas';
+    }
+  }
+
+  function showSuccess() {
+    document.getElementById('form-area').style.display = 'none';
+    const sc = document.getElementById('success-screen');
+    sc.style.display = 'block';
+    if (idOn && document.getElementById('id-nome').value.trim()) {
+      document.getElementById('success-identified').style.display = 'block';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>

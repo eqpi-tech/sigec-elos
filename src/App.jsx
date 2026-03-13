@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Planos from './pages/Planos.jsx'
 import Marketplace from './pages/Marketplace.jsx'
 import { PerfilFornecedor, Admin, Onboarding } from './pages/OtherPages.jsx'
+import ExitIntentPopup from './components/ExitIntentPopup.jsx'
 
 const SCREEN_DEFAULT = {
   fornecedor: 'dashboard',
@@ -76,6 +77,7 @@ export default function App() {
       }}>
         {renderPage()}
       </main>
+      <ExitIntentPopup />
     </div>
   )
 }
