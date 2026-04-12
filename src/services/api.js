@@ -257,22 +257,37 @@ export const rfqApi = {
 // ── Admin / Backoffice ────────────────────────────────────────────────────────
 export const adminApi = {
   getQueue: async () => {
-    const { data, error } = await supabase
+    // Passo 1: selos PENDING com supplier (FK válida: seals.supplier_id → suppliers.id)
+    const { data: sealsData, error: sealsErr } = await supabase
       .from('seals')
-      .select(`supplier_id, level, status, score, suppliers(id, razao_social, cnpj, city, state, employee_range, created_at), documents(type, label, status)`)
+      .select('supplier_id, level, status, score, suppliers(id, razao_social, cnpj, city, state, employee_range, created_at)')
       .eq('status', 'PENDING')
-    if (error) throw new Error(error.message)
+    if (sealsErr) throw new Error(sealsErr.message)
+    if (!sealsData?.length) return []
 
-    return (data || []).map(s => ({
+    // Passo 2: documentos separado (não existe FK seals→documents, só suppliers→documents)
+    const supplierIds = sealsData.map(s => s.supplier_id).filter(Boolean)
+    const { data: docsData } = await supabase
+      .from('documents')
+      .select('supplier_id, type, label, status')
+      .in('supplier_id', supplierIds)
+
+    const docsBySupplier = (docsData || []).reduce((acc, d) => {
+      acc[d.supplier_id] = acc[d.supplier_id] || []
+      acc[d.supplier_id].push(d)
+      return acc
+    }, {})
+
+    return sealsData.map(s => ({
       id:          s.suppliers?.id,
       razaoSocial: s.suppliers?.razao_social,
       cnpj:        s.suppliers?.cnpj,
       city:        s.suppliers?.city,
       state:       s.suppliers?.state,
-      documents:   s.documents || [],
+      documents:   docsBySupplier[s.supplier_id] || [],
       score:       s.score || 0,
       sealStatus:  s.status,
-      riskLevel:   s.score < 30 ? 'Alto' : s.score < 60 ? 'Médio' : 'Baixo',
+      riskLevel:   (s.score||0) < 30 ? 'Alto' : (s.score||0) < 60 ? 'Médio' : 'Baixo',
       requestedAt: s.suppliers?.created_at?.slice(0,10) || '—',
     }))
   },
@@ -323,20 +338,22 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   getMetrics: async () => {
-    const [
-      { count: totalSuppliers },
-      { count: activeSeals },
-      { count: pendingAnalysis },
-    ] = await Promise.all([
+    // Queries independentes com tratamento de erro individual
+    const [suppliersRes, activeSealsRes, pendingSealsRes, planRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*', { count: 'exact', head: true }),
       supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
       supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'PENDING'),
+      supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE'),
     ])
 
-    const { data: planData } = await supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE')
-    const mrrBrl = (planData || []).reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)
-    const simples = (planData || []).filter(p => p.type === 'Simples')
-    const premium = (planData || []).filter(p => p.type === 'Premium')
+    const totalSuppliers  = suppliersRes.status === 'fulfilled'  ? (suppliersRes.value.count  || 0) : 0
+    const activeSeals     = activeSealsRes.status === 'fulfilled' ? (activeSealsRes.value.count || 0) : 0
+    const pendingAnalysis = pendingSealsRes.status === 'fulfilled'? (pendingSealsRes.value.count|| 0) : 0
+    const planData        = planRes.status === 'fulfilled' ? (planRes.value.data || []) : []
+
+    const mrrBrl = planData.reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)
+    const simples = planData.filter(p => p.type === 'Simples')
+    const premium = planData.filter(p => p.type === 'Premium')
 
     return {
       totalSuppliers: totalSuppliers || 0,

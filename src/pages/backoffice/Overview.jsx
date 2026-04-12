@@ -8,7 +8,17 @@ export default function BackofficeOverview() {
   const [metrics, setMetrics] = useState(null)
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(true)
-  useEffect(() => { Promise.all([adminApi.getMetrics(),adminApi.getQueue()]).then(([m,q])=>{setMetrics(m);setQueue(q)}).finally(()=>setLoading(false)) },[])
+  useEffect(() => {
+    Promise.allSettled([adminApi.getMetrics(), adminApi.getQueue()])
+      .then(([metricsRes, queueRes]) => {
+        setMetrics(metricsRes.status === 'fulfilled' ? metricsRes.value : {
+          totalSuppliers:0, activeSeals:0, pendingAnalysis:0, mrrBrl:0, mrrGrowth:0,
+          byPlan:{ Simples:{count:0,rev:0}, Premium:{count:0,rev:0} }, newThisMonth:0, churnRate:0,
+        })
+        setQueue(queueRes.status === 'fulfilled' ? queueRes.value : [])
+      })
+      .finally(() => setLoading(false))
+  }, [])
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
   const riskColor = { Alto:'#ef4444',Médio:'#f59e0b',Baixo:'#22c55e' }
   return (
