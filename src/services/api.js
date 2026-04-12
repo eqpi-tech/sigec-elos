@@ -74,19 +74,29 @@ export const supplierApi = {
   },
 
   me: async (supplierId) => {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select(`*, seals(*), plans(*), documents(*)`)
-      .eq('id', supplierId)
-      .single()
-    if (error) throw new Error(error.message)
+    // Queries separadas para evitar problema de RLS em joins embutidos
+    const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
+      supabase.from('suppliers').select('*').eq('id', supplierId).single(),
+      supabase.from('seals').select('*').eq('supplier_id', supplierId),
+      supabase.from('plans').select('*').eq('supplier_id', supplierId),
+      supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
+    ])
 
-    // Normaliza para o formato esperado pelas páginas
+    if (supplierRes.error) throw new Error(supplierRes.error.message)
+    const data = supplierRes.data
+
+    const seal = sealsRes.data?.[0]
+    const plan = plansRes.data?.[0]
+
     return {
       ...data,
-      sealLevel:  data.seals?.[0]?.level  || 'Simples',
-      sealStatus: data.seals?.[0]?.status || 'PENDING',
-      score:      data.seals?.[0]?.score  || 0,
+      seals:      sealsRes.data  || [],
+      plans:      plansRes.data  || [],
+      documents:  docsRes.data   || [],
+      sealLevel:  seal?.level  || 'Simples',
+      sealStatus: seal?.status || 'PENDING',
+      score:      seal?.score  || 0,
+      activePlan: plan?.status === 'ACTIVE' ? plan : null,
     }
   },
 
@@ -194,24 +204,40 @@ export const documentApi = {
 // ── Marketplace ───────────────────────────────────────────────────────────────
 export const marketplaceApi = {
   search: async ({ level, state, category, q } = {}) => {
+    // Query 1: fornecedores ativos
     let query = supabase
       .from('suppliers')
-      .select(`id, razao_social, cnae_main, state, city, services, certifications, employee_range, revenue_range, status, seals(level, status, score)`)
+      .select('id, razao_social, cnae_main, state, city, services, certifications, employee_range, revenue_range, status')
       .eq('status', 'ACTIVE')
 
     if (state && state !== 'Todos') query = query.eq('state', state)
     if (q) query = query.ilike('razao_social', `%${q}%`)
 
-    const { data, error } = await query
+    const { data: suppliers, error } = await query
     if (error) throw new Error(error.message)
+    if (!suppliers?.length) return { data: [], total: 0 }
 
-    // Normaliza para o formato esperado pelo Marketplace.jsx
-    let results = (data || []).map(s => ({
-      ...s,
-      sealLevel:  s.seals?.[0]?.level  || 'Simples',
-      sealStatus: s.seals?.[0]?.status || 'PENDING',
-      score:      s.seals?.[0]?.score  || 0,
-    })).filter(s => s.sealStatus === 'ACTIVE')
+    // Query 2: selos ativos (separado — evita problema de RLS em join embutido)
+    const supplierIds = suppliers.map(s => s.id)
+    const { data: seals } = await supabase
+      .from('seals')
+      .select('supplier_id, level, status, score')
+      .in('supplier_id', supplierIds)
+      .eq('status', 'ACTIVE')
+
+    const sealMap = (seals || []).reduce((acc, sl) => {
+      acc[sl.supplier_id] = sl
+      return acc
+    }, {})
+
+    let results = suppliers
+      .map(s => ({
+        ...s,
+        sealLevel:  sealMap[s.id]?.level  || 'Simples',
+        sealStatus: sealMap[s.id]?.status || 'PENDING',
+        score:      sealMap[s.id]?.score  || 0,
+      }))
+      .filter(s => s.sealStatus === 'ACTIVE') // só exibe quem tem selo ativo
 
     if (level && level !== 'Todos') results = results.filter(s => s.sealLevel === level)
 

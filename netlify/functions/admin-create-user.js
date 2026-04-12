@@ -55,13 +55,21 @@ exports.handler = async (event) => {
 
     if (error) throw new Error(error.message)
 
-    // Se for BUYER, cria o registro na tabela buyers
+    // Se for BUYER, cria o registro na tabela buyers e vincula o buyer_id correto
     if (role === 'BUYER') {
-      await supabaseAdmin.from('buyers').insert({
-        user_id:     newUser.user.id,
-        razao_social: name,
-      })
-      await supabaseAdmin.from('profiles').update({ buyer_id: newUser.user.id }).eq('id', newUser.user.id)
+      const { data: buyerRecord } = await supabaseAdmin
+        .from('buyers')
+        .insert({ user_id: newUser.user.id, razao_social: name })
+        .select('id')
+        .single()
+
+      if (buyerRecord?.id) {
+        // buyer_id deve ser o UUID da tabela buyers, não o auth user id
+        await supabaseAdmin
+          .from('profiles')
+          .update({ buyer_id: buyerRecord.id })
+          .eq('id', newUser.user.id)
+      }
     }
 
     return {

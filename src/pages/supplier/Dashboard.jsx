@@ -72,7 +72,7 @@ export default function SupplierDashboard() {
       )}
 
       {/* Status do plano */}
-      {!supplier.plans?.length && (
+      {!supplier.activePlan && (
         <div className="fade-in-up" style={{ background:'linear-gradient(135deg,#F47E2F,#ff9a52)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff' }}>Nenhum plano ativo</div>
@@ -169,12 +169,12 @@ export default function SupplierDashboard() {
           </Card>
 
           {/* Info do plano */}
-          {supplier.plans?.[0] && (
+          {supplier.activePlan && (
             <Card style={{ borderRadius:16, padding:'20px 24px', background:'rgba(46,49,146,.03)', border:'1px solid rgba(46,49,146,.1)' }}>
               <div style={{ fontSize:11, fontWeight:600, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Plano Ativo</div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{supplier.plans[0].type}</div>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{supplier.activePlan.type}</div>
               <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                Válido até: {supplier.plans[0].ends_at?.slice(0,10) || '—'}
+                Válido até: {supplier.activePlan.ends_at?.slice(0,10) || '—'}
               </div>
             </Card>
           )}
