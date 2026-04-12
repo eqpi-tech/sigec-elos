@@ -5,8 +5,7 @@
 // Cadastro: https://resend.com (plano grátis, sem cartão)
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY
-const FROM_EMAIL     = process.env.EMAIL_FROM || 'SIGEC-ELOS <noreply@eqpitech.com.br>'
-// Em sandbox: use onboarding@resend.dev como from até verificar o domínio eqpitech.com.br
+const FROM_EMAIL = process.env.EMAIL_FROM || 'SIGEC-ELOS <noreply@eqpitech.com.br>'
 
 async function sendEmail({ to, subject, html }) {
   if (!RESEND_API_KEY) {
