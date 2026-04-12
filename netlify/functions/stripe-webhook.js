@@ -70,6 +70,30 @@ exports.handler = async (event) => {
       if (sealErr) console.error('Seal upsert error:', sealErr)
 
       console.log(`✅ Plano ativado: ${supplierId} → ${planType}`)
+
+    // Envia e-mail de boas-vindas via Netlify Function send-email
+    try {
+      const { data: supplierData } = await supabase
+        .from('suppliers').select('razao_social').eq('id', supplierId).single()
+      if (supplierData && session.customer_email) {
+        await fetch(`${process.env.FRONTEND_URL}/.netlify/functions/send-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to:       session.customer_email,
+            template: 'welcome',
+            data: {
+              razaoSocial: supplierData.razao_social,
+              planType,
+              userEmail:   session.customer_email,
+            },
+          }),
+        })
+        console.log(`📧 E-mail de boas-vindas enviado para ${session.customer_email}`)
+      }
+    } catch (emailErr) {
+      console.warn('Welcome email error (não crítico):', emailErr.message)
+    }
     }
 
     // ── Assinatura cancelada ────────────────────────────────────────

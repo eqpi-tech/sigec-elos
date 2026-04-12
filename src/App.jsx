@@ -5,6 +5,7 @@ import Navbar from './components/Navbar.jsx'
 import { Spinner } from './components/ui.jsx'
 
 import Login from './pages/Login.jsx'
+import ResetPassword from './pages/ResetPassword.jsx'
 import SupplierOnboarding from './pages/supplier/Onboarding.jsx'
 
 import SupplierDashboard  from './pages/supplier/Dashboard.jsx'
@@ -47,9 +48,10 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/login"   element={<Login/>} />
-      <Route path="/cadastro" element={<SupplierOnboarding/>} />
-      <Route path="/"        element={<RootRedirect/>} />
+      <Route path="/login"            element={<Login/>} />
+      <Route path="/cadastro"         element={<SupplierOnboarding/>} />
+      <Route path="/redefinir-senha"  element={<ResetPassword/>} />
+      <Route path="/"                 element={<RootRedirect/>} />
 
       {/* Supplier */}
       <Route path="/fornecedor"             element={<Protect roles={['SUPPLIER']}><SupplierDashboard/></Protect>} />

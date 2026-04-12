@@ -11,6 +11,12 @@
   to   = "/pesquisa.html"
   status = 200
   force  = false
+
+# Rota de reset de senha — deve ser SPA (index.html) para o hash token funcionar
+[[redirects]]
+  from = "/redefinir-senha"
+  to   = "/index.html"
+  status = 200
 [[redirects]]
   from = "/*"
   to   = "/index.html"

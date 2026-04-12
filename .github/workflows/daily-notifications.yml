@@ -1,0 +1,30 @@
+# .github/workflows/daily-notifications.yml
+# Executa todo dia às 8h BRT (11h UTC)
+# Chama a Netlify Function check-expiring-docs
+# Adicione CRON_SECRET e SITE_URL nos GitHub Secrets
+
+name: Daily — Notificações de Documentos Vencendo
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 11:00 UTC = 08:00 BRT
+  workflow_dispatch:        # Permite rodar manualmente pelo GitHub Actions
+
+jobs:
+  check-expiring-docs:
+    name: Verifica documentos vencendo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/check-expiring-docs")
+          echo "HTTP status: $response"
+          if [ "$response" != "200" ]; then
+            echo "❌ Falha na notificação (HTTP $response)"
+            exit 1
+          fi
+          echo "✅ Notificações processadas com sucesso"

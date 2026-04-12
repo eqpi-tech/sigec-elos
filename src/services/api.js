@@ -3,6 +3,7 @@
 // Todas as páginas funcionam sem alteração.
 
 import { supabase } from '../lib/supabase.js'
+import { calculateScore } from '../lib/score.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const DOC_LABELS = {
@@ -192,11 +193,28 @@ export const documentApi = {
   },
 
   updateStatus: async (docId, status, note) => {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // Busca o supplier_id antes de atualizar
+    const { data: docData } = await supabase
+      .from('documents').select('supplier_id').eq('id', docId).single()
+
     const { error } = await supabase
       .from('documents')
-      .update({ status, review_note: note, reviewed_by: (await supabase.auth.getUser()).data.user?.id })
+      .update({ status, review_note: note, reviewed_by: user?.id })
       .eq('id', docId)
     if (error) throw new Error(error.message)
+
+    // Recalcula score após mudança de status
+    if (docData?.supplier_id) {
+      const { data: allDocs } = await supabase
+        .from('documents').select('type, status').eq('supplier_id', docData.supplier_id)
+      const newScore = calculateScore(allDocs || [])
+      await supabase.from('seals')
+        .update({ score: newScore })
+        .eq('supplier_id', docData.supplier_id)
+    }
+
     return { success: true }
   },
 }
@@ -368,11 +386,19 @@ export const adminApi = {
 
     await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
 
+    // Recalcula score final no momento da aprovação
+    const { data: allDocs } = await supabase
+      .from('documents').select('type, status').eq('supplier_id', supplierId)
+    const finalScore = calculateScore(allDocs || [])
+    await supabase.from('seals')
+      .update({ score: finalScore, issued_at: new Date().toISOString() })
+      .eq('supplier_id', supplierId)
+
     // Log de auditoria
     await supabase.from('audit_log').insert({
       user_id: (await supabase.auth.getUser()).data.user?.id,
       action: 'SEAL_APPROVED', entity_type: 'supplier', entity_id: supplierId,
-      metadata: { level },
+      metadata: { level, score: finalScore },
     })
     return { success: true }
   },

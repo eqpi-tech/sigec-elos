@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button } from '../components/ui.jsx'
 
@@ -20,6 +21,25 @@ export default function Login() {
     } catch (err) {
       setError(err.message)
     } finally { setLoading(false) }
+  }
+
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+
+  const handleForgot = async (e) => {
+    e.preventDefault()
+    setForgotLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: 'https://elos.eqpitech.com.br/redefinir-senha',
+      })
+      if (error) throw new Error(error.message)
+      setForgotSent(true)
+    } catch (err) {
+      setError(err.message)
+    } finally { setForgotLoading(false) }
   }
 
   return (
@@ -66,6 +86,41 @@ export default function Login() {
                 {loading ? '⏳ Entrando...' : 'Entrar →'}
               </Button>
             </form>
+
+            {/* Esqueci a senha */}
+            {!showForgot && (
+              <div style={{ textAlign:'center', marginTop:12 }}>
+                <button onClick={() => setShowForgot(true)}
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:13, fontFamily:'DM Sans,sans-serif', textDecoration:'underline' }}>
+                  Esqueci minha senha
+                </button>
+              </div>
+            )}
+
+            {showForgot && !forgotSent && (
+              <div style={{ marginTop:16, padding:'16px', background:'#f4f5f9', borderRadius:12 }}>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', marginBottom:8 }}>
+                  Redefinir senha
+                </div>
+                <form onSubmit={handleForgot}>
+                  <input value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
+                    type="email" placeholder="seu@email.com" required
+                    style={{ width:'100%', padding:'10px 12px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, marginBottom:8, boxSizing:'border-box' }} />
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Button type="button" variant="neutral" size="sm" full onClick={() => setShowForgot(false)}>Cancelar</Button>
+                    <Button type="submit" variant="primary" size="sm" full disabled={forgotLoading}>
+                      {forgotLoading ? '⏳...' : 'Enviar link'}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {forgotSent && (
+              <div style={{ marginTop:16, padding:'12px', background:'#f0fdf4', border:'1px solid #86efac', borderRadius:10, textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'DM Sans,sans-serif' }}>
+                ✅ Link enviado! Verifique seu e-mail.
+              </div>
+            )}
           </div>
           <div style={{ textAlign:'center', marginTop:16 }}>
             <p style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'rgba(255,255,255,.4)' }}>
