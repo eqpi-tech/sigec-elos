@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { authApi } from '../services/mockApi.js'
+import { supabase } from '../lib/supabase.js'
 
 const AuthContext = createContext(null)
 
@@ -7,24 +7,59 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (authApi.isAuthenticated()) setUser(authApi.me())
-    setLoading(false)
-  }, [])
-
-  const login = async (credentials) => {
-    const { user } = await authApi.login(credentials)
-    setUser(user)
-    return user
+  const buildUser = (authUser, profile) => {
+    if (!authUser || !profile) return null
+    return {
+      id:         authUser.id,
+      email:      authUser.email,
+      role:       profile.role,
+      name:       profile.name || authUser.email,
+      supplierId: profile.supplier_id,
+      buyerId:    profile.buyer_id,
+    }
   }
 
-  const logout = () => {
-    authApi.logout()
-    setUser(null)
+  const fetchProfile = async (authUser) => {
+    if (!authUser) { setUser(null); setLoading(false); return }
+    const { data: profile } = await supabase
+      .from('profiles').select('*').eq('id', authUser.id).single()
+    setUser(buildUser(authUser, profile))
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetchProfile(session?.user || null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      fetchProfile(session?.user || null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const login = async ({ email, password }) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
+    return data.user
+  }
+
+  const signup = async ({ email, password, role, name }) => {
+    const { data, error } = await supabase.auth.signUp({
+      email, password, options: { data: { role, name } },
+    })
+    if (error) throw new Error(error.message)
+    return data.user
+  }
+
+  const logout = async () => { await supabase.auth.signOut(); setUser(null) }
+
+  const reloadProfile = async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    await fetchProfile(authUser)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, reloadProfile }}>
       {children}
     </AuthContext.Provider>
   )

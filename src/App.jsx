@@ -2,108 +2,74 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Navbar from './components/Navbar.jsx'
+import { Spinner } from './components/ui.jsx'
 
-// Pages
 import Login from './pages/Login.jsx'
+import SupplierOnboarding from './pages/supplier/Onboarding.jsx'
 
-// Supplier
-import SupplierDashboard from './pages/supplier/Dashboard.jsx'
-import SupplierDocuments from './pages/supplier/Documents.jsx'
-import SupplierPlans     from './pages/supplier/Plans.jsx'
+import SupplierDashboard  from './pages/supplier/Dashboard.jsx'
+import SupplierDocuments  from './pages/supplier/Documents.jsx'
+import SupplierPlans      from './pages/supplier/Plans.jsx'
+import PlanSuccess        from './pages/supplier/PlanSuccess.jsx'
 
-// Buyer
-import BuyerMarketplace    from './pages/buyer/Marketplace.jsx'
+import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
-import BuyerQuotations     from './pages/buyer/Quotations.jsx'
+import BuyerQuotations      from './pages/buyer/Quotations.jsx'
 
-// Backoffice
-import BackofficeOverview  from './pages/backoffice/Overview.jsx'
-import BackofficeMetrics   from './pages/backoffice/Metrics.jsx'
+import BackofficeOverview from './pages/backoffice/Overview.jsx'
+import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
+import BackofficeCreateUser from './pages/backoffice/CreateUser.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
 
 function RootRedirect() {
   const { user, loading } = useAuth()
-  if (loading) return null
+  if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'100vh' }}><Spinner size={48}/></div>
   if (!user) return <Navigate to="/login" replace />
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />
 }
 
 function AppLayout({ children }) {
   return (
-    <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
-      <Navbar />
+    <div style={{ display:'flex',flexDirection:'column',minHeight:'100vh' }}>
+      <Navbar/>
       <main style={{ flex:1 }}>{children}</main>
     </div>
   )
+}
+
+function Protect({ roles, children }) {
+  return <ProtectedRoute allowedRoles={roles}><AppLayout>{children}</AppLayout></ProtectedRoute>
 }
 
 function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<RootRedirect />} />
+      <Route path="/login"   element={<Login/>} />
+      <Route path="/cadastro" element={<SupplierOnboarding/>} />
+      <Route path="/"        element={<RootRedirect/>} />
 
       {/* Supplier */}
-      <Route path="/fornecedor" element={
-        <ProtectedRoute allowedRoles={['SUPPLIER']}>
-          <AppLayout><SupplierDashboard /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/fornecedor/documentos" element={
-        <ProtectedRoute allowedRoles={['SUPPLIER']}>
-          <AppLayout><SupplierDocuments /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/fornecedor/planos" element={
-        <ProtectedRoute allowedRoles={['SUPPLIER']}>
-          <AppLayout><SupplierPlans /></AppLayout>
-        </ProtectedRoute>
-      } />
+      <Route path="/fornecedor"             element={<Protect roles={['SUPPLIER']}><SupplierDashboard/></Protect>} />
+      <Route path="/fornecedor/documentos"  element={<Protect roles={['SUPPLIER']}><SupplierDocuments/></Protect>} />
+      <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']}><SupplierPlans/></Protect>} />
+      <Route path="/fornecedor/plano-ativo" element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
 
       {/* Buyer */}
-      <Route path="/comprador" element={
-        <ProtectedRoute allowedRoles={['BUYER']}>
-          <AppLayout><BuyerMarketplace /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/comprador/fornecedor/:id" element={
-        <ProtectedRoute allowedRoles={['BUYER']}>
-          <AppLayout><BuyerSupplierProfile /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/comprador/cotacoes" element={
-        <ProtectedRoute allowedRoles={['BUYER']}>
-          <AppLayout><BuyerQuotations /></AppLayout>
-        </ProtectedRoute>
-      } />
+      <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
+      <Route path="/comprador/fornecedor/:id"   element={<Protect roles={['BUYER']}><BuyerSupplierProfile/></Protect>} />
+      <Route path="/comprador/cotacoes"         element={<Protect roles={['BUYER']}><BuyerQuotations/></Protect>} />
 
       {/* Backoffice */}
-      <Route path="/backoffice" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
-          <AppLayout><BackofficeOverview /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/backoffice/fila" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
-          <AppLayout><BackofficeQueue /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/backoffice/analise/:id" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
-          <AppLayout><BackofficeAnalysis /></AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/backoffice/metricas" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
-          <AppLayout><BackofficeMetrics /></AppLayout>
-        </ProtectedRoute>
-      } />
+      <Route path="/backoffice"                 element={<Protect roles={['ADMIN']}><BackofficeOverview/></Protect>} />
+      <Route path="/backoffice/fila"            element={<Protect roles={['ADMIN']}><BackofficeQueue/></Protect>} />
+      <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
+      <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
+      <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']}><BackofficeCreateUser/></Protect>} />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>
   )
 }
@@ -112,7 +78,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <AppRoutes/>
       </AuthProvider>
     </BrowserRouter>
   )

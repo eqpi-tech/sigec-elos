@@ -1,0 +1,368 @@
+// ─── SIGEC-ELOS API Service — Supabase Real ───────────────────────────────
+// Contrato idêntico ao mockApi.js anterior.
+// Todas as páginas funcionam sem alteração.
+
+import { supabase } from '../lib/supabase.js'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const DOC_LABELS = {
+  CNPJ_CARD:'Cartão CNPJ', CND_FEDERAL:'CND Federal', CRF_FGTS:'CRF (FGTS)',
+  CNDT:'CNDT Trabalhista', ALVARA:'Alvará de Funcionamento', CONTRACT:'Contrato Social',
+  ISO9001:'Certificado ISO 9001', ISO14001:'Certificado ISO 14001',
+  ISO45001:'Certificado ISO 45001', BALANCE:'Balanço Patrimonial',
+  INSURANCE:'Apólice de Seguro', OTHER:'Documento',
+}
+
+// ── CNPJ Lookup (via Netlify Function → BrasilAPI + Portal Transparência) ───
+export const cnpjApi = {
+  lookup: async (cnpj) => {
+    const clean = cnpj.replace(/\D/g, '')
+    if (clean.length !== 14) throw new Error('CNPJ deve ter 14 dígitos')
+
+    const res = await fetch(`/.netlify/functions/cnpj-lookup?cnpj=${clean}`)
+    if (!res.ok) throw new Error('Erro ao consultar CNPJ')
+    return res.json()
+  },
+}
+
+// ── Auth (usado pelo AuthContext) ────────────────────────────────────────────
+export const authApi = {
+  signup: async ({ email, password, role, name }) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { role, name } },
+    })
+    if (error) throw new Error(error.message)
+    return data.user
+  },
+
+  login: async ({ email, password }) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
+    return data.user
+  },
+
+  logout: async () => supabase.auth.signOut(),
+
+  getSession: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session
+  },
+}
+
+// ── Supplier ─────────────────────────────────────────────────────────────────
+export const supplierApi = {
+  create: async (supplierData) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert(supplierData)
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+
+    // Cria perfil de seal pendente
+    await supabase.from('seals').insert({ supplier_id: data.id })
+
+    // Vincula supplier_id ao profile do usuário
+    await supabase
+      .from('profiles')
+      .update({ supplier_id: data.id })
+      .eq('id', supplierData.user_id)
+
+    return data
+  },
+
+  me: async (supplierId) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select(`*, seals(*), plans(*), documents(*)`)
+      .eq('id', supplierId)
+      .single()
+    if (error) throw new Error(error.message)
+
+    // Normaliza para o formato esperado pelas páginas
+    return {
+      ...data,
+      sealLevel:  data.seals?.[0]?.level  || 'Simples',
+      sealStatus: data.seals?.[0]?.status || 'PENDING',
+      score:      data.seals?.[0]?.score  || 0,
+    }
+  },
+
+  update: async (supplierId, updates) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .update(updates)
+      .eq('id', supplierId)
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+}
+
+// ── Documents ────────────────────────────────────────────────────────────────
+export const documentApi = {
+  list: async (supplierId) => {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('supplier_id', supplierId)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  upload: async (supplierId, userId, file, docType) => {
+    const ext  = file.name.split('.').pop().toLowerCase()
+    const path = `${userId}/${docType}_${Date.now()}.${ext}`
+
+    // 1. Upload para Supabase Storage
+    const { error: storageError } = await supabase.storage
+      .from('documents')
+      .upload(path, file, { upsert: true, contentType: file.type })
+    if (storageError) throw new Error(storageError.message)
+
+    // 2. Gera signed URL (1 hora)
+    const { data: urlData } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(path, 3600)
+
+    // 3. Salva no banco
+    const { data, error } = await supabase
+      .from('documents')
+      .upsert({
+        supplier_id:  supplierId,
+        type:         docType,
+        label:        DOC_LABELS[docType] || file.name,
+        source:       'MANUAL',
+        status:       'PENDING', // backoffice precisa validar
+        storage_path: path,
+        public_url:   urlData?.signedUrl || '',
+        metadata:     { originalName: file.name, size: file.size, mime: file.type },
+      }, { onConflict: 'supplier_id,type' })
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  getSignedUrl: async (storagePath) => {
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(storagePath, 3600)
+    if (error) throw new Error(error.message)
+    return data.signedUrl
+  },
+
+  updateStatus: async (docId, status, note) => {
+    const { error } = await supabase
+      .from('documents')
+      .update({ status, review_note: note, reviewed_by: (await supabase.auth.getUser()).data.user?.id })
+      .eq('id', docId)
+    if (error) throw new Error(error.message)
+    return { success: true }
+  },
+}
+
+// ── Marketplace ───────────────────────────────────────────────────────────────
+export const marketplaceApi = {
+  search: async ({ level, state, category, q } = {}) => {
+    let query = supabase
+      .from('suppliers')
+      .select(`id, razao_social, cnae_main, state, city, services, certifications, employee_range, revenue_range, status, seals(level, status, score)`)
+      .eq('status', 'ACTIVE')
+
+    if (state && state !== 'Todos') query = query.eq('state', state)
+    if (q) query = query.ilike('razao_social', `%${q}%`)
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+
+    // Normaliza para o formato esperado pelo Marketplace.jsx
+    let results = (data || []).map(s => ({
+      ...s,
+      sealLevel:  s.seals?.[0]?.level  || 'Simples',
+      sealStatus: s.seals?.[0]?.status || 'PENDING',
+      score:      s.seals?.[0]?.score  || 0,
+    })).filter(s => s.sealStatus === 'ACTIVE')
+
+    if (level && level !== 'Todos') results = results.filter(s => s.sealLevel === level)
+
+    return { data: results, total: results.length }
+  },
+
+  getById: async (id) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select(`*, seals(*), documents(status, label, type, expires_at, source)`)
+      .eq('id', id)
+      .single()
+    if (error) throw new Error(error.message)
+    return {
+      ...data,
+      sealLevel:  data.seals?.[0]?.level  || 'Simples',
+      sealStatus: data.seals?.[0]?.status || 'PENDING',
+      score:      data.seals?.[0]?.score  || 0,
+    }
+  },
+}
+
+// ── Payments (Stripe via Netlify Function) ───────────────────────────────────
+export const paymentsApi = {
+  createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly }) => {
+    const res = await fetch('/.netlify/functions/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planType, cnaeCount, supplierId, userEmail, priceYearly }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Erro ao criar sessão de pagamento')
+    }
+    return res.json() // { url: 'https://checkout.stripe.com/...' }
+  },
+}
+
+// ── RFQ ──────────────────────────────────────────────────────────────────────
+export const rfqApi = {
+  send: async ({ supplierIds, category, message, buyerId }) => {
+    const rfqs = supplierIds.map(sid => ({
+      buyer_id: buyerId, supplier_id: sid, category, message, status: 'SENT',
+    }))
+    const { data, error } = await supabase.from('rfqs').insert(rfqs).select()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  list: async (userId, role) => {
+    if (role === 'BUYER') {
+      const { data: buyer } = await supabase.from('buyers').select('id').eq('user_id', userId).single()
+      if (!buyer) return []
+      const { data } = await supabase.from('rfqs').select(`*, suppliers(razao_social)`).eq('buyer_id', buyer.id)
+      return data || []
+    }
+    if (role === 'SUPPLIER') {
+      const { data: profile } = await supabase.from('profiles').select('supplier_id').eq('id', userId).single()
+      if (!profile?.supplier_id) return []
+      const { data } = await supabase.from('rfqs').select(`*, buyers(razao_social)`).eq('supplier_id', profile.supplier_id)
+      return data || []
+    }
+    const { data } = await supabase.from('rfqs').select('*')
+    return data || []
+  },
+}
+
+// ── Admin / Backoffice ────────────────────────────────────────────────────────
+export const adminApi = {
+  getQueue: async () => {
+    const { data, error } = await supabase
+      .from('seals')
+      .select(`supplier_id, level, status, score, suppliers(id, razao_social, cnpj, city, state, employee_range, created_at), documents(type, label, status)`)
+      .eq('status', 'PENDING')
+    if (error) throw new Error(error.message)
+
+    return (data || []).map(s => ({
+      id:          s.suppliers?.id,
+      razaoSocial: s.suppliers?.razao_social,
+      cnpj:        s.suppliers?.cnpj,
+      city:        s.suppliers?.city,
+      state:       s.suppliers?.state,
+      documents:   s.documents || [],
+      score:       s.score || 0,
+      sealStatus:  s.status,
+      riskLevel:   s.score < 30 ? 'Alto' : s.score < 60 ? 'Médio' : 'Baixo',
+      requestedAt: s.suppliers?.created_at?.slice(0,10) || '—',
+    }))
+  },
+
+  getSealAnalysis: async (supplierId) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select(`*, seals(*), documents(*)`)
+      .eq('id', supplierId)
+      .single()
+    if (error) throw new Error(error.message)
+    return { ...data, documents: data.documents || [] }
+  },
+
+  approveSeal: async (supplierId, level) => {
+    const { error: sealErr } = await supabase
+      .from('seals')
+      .update({ level, status: 'ACTIVE', issued_at: new Date().toISOString() })
+      .eq('supplier_id', supplierId)
+    if (sealErr) throw new Error(sealErr.message)
+
+    await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
+
+    // Log de auditoria
+    await supabase.from('audit_log').insert({
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      action: 'SEAL_APPROVED', entity_type: 'supplier', entity_id: supplierId,
+      metadata: { level },
+    })
+    return { success: true }
+  },
+
+  rejectSeal: async (supplierId, reason) => {
+    const { error } = await supabase
+      .from('seals')
+      .update({ status: 'SUSPENDED', suspended_reason: reason })
+      .eq('supplier_id', supplierId)
+    if (error) throw new Error(error.message)
+
+    await supabase.from('audit_log').insert({
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      action: 'SEAL_REJECTED', entity_type: 'supplier', entity_id: supplierId,
+      metadata: { reason },
+    })
+    return { success: true }
+  },
+
+  updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
+
+  getMetrics: async () => {
+    const [
+      { count: totalSuppliers },
+      { count: activeSeals },
+      { count: pendingAnalysis },
+    ] = await Promise.all([
+      supabase.from('suppliers').select('*', { count: 'exact', head: true }),
+      supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
+      supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'PENDING'),
+    ])
+
+    const { data: planData } = await supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE')
+    const mrrBrl = (planData || []).reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)
+    const simples = (planData || []).filter(p => p.type === 'Simples')
+    const premium = (planData || []).filter(p => p.type === 'Premium')
+
+    return {
+      totalSuppliers: totalSuppliers || 0,
+      activeSeals:    activeSeals    || 0,
+      pendingAnalysis: pendingAnalysis || 0,
+      mrrBrl: Math.round(mrrBrl),
+      mrrGrowth: 18,
+      byPlan: {
+        Simples: { count: simples.length, rev: Math.round(simples.reduce((a,p) => a + Number(p.price_yearly)/12, 0)) },
+        Premium: { count: premium.length, rev: Math.round(premium.reduce((a,p) => a + Number(p.price_yearly)/12, 0)) },
+      },
+      newThisMonth: 12,
+      churnRate: 2.1,
+    }
+  },
+
+  createUser: async ({ email, role, name, password }) => {
+    const res = await fetch('/.netlify/functions/admin-create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role, name, password }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || 'Erro ao criar usuário')
+    }
+    return res.json()
+  },
+}

@@ -1,131 +1,141 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi } from '../../services/mockApi.js'
+import { supplierApi, documentApi } from '../../services/api.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
-const STATUS_BG = { VALID:'#f8fffe', EXPIRING:'#fffbeb', MISSING:'#fff5f5', EXPIRED:'#fff5f5', REJECTED:'#fff5f5' }
-const STATUS_BD = { VALID:'#dcfce7', EXPIRING:'#fef3c7', MISSING:'#fee2e2', EXPIRED:'#fee2e2', REJECTED:'#fee2e2' }
-const STATUS_LABEL = { VALID:'Válido', EXPIRING:'Vencendo', MISSING:'Pendente', EXPIRED:'Vencido', REJECTED:'Rejeitado' }
-const STATUS_COLOR = { VALID:'#22c55e', EXPIRING:'#f59e0b', MISSING:'#ef4444', EXPIRED:'#ef4444', REJECTED:'#ef4444' }
+const DOC_TYPES = [
+  { type:'CNPJ_CARD',   label:'Cartão CNPJ',            source:'AUTO',   required:true  },
+  { type:'CND_FEDERAL', label:'CND Federal',             source:'MANUAL', required:true  },
+  { type:'CRF_FGTS',   label:'CRF (FGTS)',              source:'MANUAL', required:true  },
+  { type:'CNDT',        label:'CNDT Trabalhista',        source:'MANUAL', required:true  },
+  { type:'ALVARA',      label:'Alvará de Funcionamento', source:'MANUAL', required:true  },
+  { type:'CONTRACT',    label:'Contrato Social',         source:'MANUAL', required:true  },
+  { type:'ISO9001',     label:'Certificado ISO 9001',    source:'MANUAL', required:false },
+  { type:'BALANCE',     label:'Balanço Patrimonial',     source:'MANUAL', required:false },
+]
+
+const STATUS_CONFIG = {
+  VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
+  EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vencendo' },
+  MISSING:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Pendente' },
+  PENDING:  { bg:'#fff7ed', bd:'#fed7aa', color:'#f59e0b', label:'Em análise' },
+  EXPIRED:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Vencido' },
+  REJECTED: { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Rejeitado' },
+}
 
 export default function SupplierDocuments() {
   const { user } = useAuth()
-  const [data, setData]       = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [supplier, setSupplier] = useState(null)
+  const [docs, setDocs]         = useState([])
+  const [loading, setLoading]   = useState(true)
   const [uploading, setUploading] = useState(null)
-  const [toast, setToast]     = useState('')
+  const [toast, setToast]       = useState(null)
+  const fileRefs = useRef({})
 
-  useEffect(() => {
-    supplierApi.me(user.supplierId).then(setData).finally(() => setLoading(false))
-  }, [user.supplierId])
-
-  const handleUpload = async (docId) => {
-    setUploading(docId)
-    await new Promise(r => setTimeout(r, 1200))
-    setData(prev => ({
-      ...prev,
-      documents: prev.documents.map(d =>
-        d.id === docId ? { ...d, status: 'VALID', expires: '2026-06-15' } : d
-      )
-    }))
-    setUploading(null)
-    setToast('✅ Documento enviado com sucesso!')
-    setTimeout(() => setToast(''), 3000)
+  const loadData = async () => {
+    if (!user?.supplierId) { setLoading(false); return }
+    try {
+      const s = await supplierApi.me(user.supplierId)
+      setSupplier(s)
+      const d = await documentApi.list(user.supplierId)
+      setDocs(d)
+    } finally { setLoading(false) }
   }
 
-  if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48} /></div>
-  if (!data) return null
+  useEffect(() => { loadData() }, [user?.supplierId])
 
-  const docs = data.documents || []
-  const ok = docs.filter(d => d.status === 'VALID').length
-  const pending = docs.filter(d => d.status !== 'VALID').length
+  const showToast = (msg, type='success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleUpload = async (docType, file) => {
+    if (!file) return
+    if (file.size > 10*1024*1024) { showToast('Arquivo muito grande. Máx 10MB', 'error'); return }
+    const ok = ['application/pdf','image/jpeg','image/jpg','image/png']
+    if (!ok.includes(file.type)) { showToast('Use PDF, JPG ou PNG', 'error'); return }
+    setUploading(docType)
+    try {
+      const uploaded = await documentApi.upload(user.supplierId, user.id, file, docType)
+      setDocs(prev => { const i=prev.findIndex(d=>d.type===docType); return i>=0?prev.map(d=>d.type===docType?uploaded:d):[...prev,uploaded] })
+      showToast('✅ Documento enviado! Aguardando validação.')
+    } catch (err) { showToast('Erro: '+err.message,'error') }
+    finally { setUploading(null) }
+  }
+
+  const getDoc = (type) => docs.find(d => d.type === type)
+
+  if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
+
+  if (!user?.supplierId) return (
+    <div style={{ padding:'60px 32px', textAlign:'center' }}>
+      <div style={{ fontSize:48, marginBottom:12 }}>📋</div>
+      <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:18,color:'#1a1c5e',marginBottom:8 }}>Complete o cadastro primeiro</div>
+      <Button variant="orange" onClick={()=>window.location.href='/cadastro'}>Ir para cadastro →</Button>
+    </div>
+  )
+
+  const docGrid = (types) => (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      {types.map(dt => {
+        const doc  = getDoc(dt.type)
+        const cfg  = STATUS_CONFIG[doc?.status||'MISSING']
+        const busy = uploading === dt.type
+        return (
+          <div key={dt.type} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, background:cfg.bg, border:`1px solid ${cfg.bd}` }}>
+            <StatusDot status={doc?.status||'MISSING'} />
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>{dt.label}</div>
+              <div style={{ display:'flex', gap:6, marginTop:2, alignItems:'center', flexWrap:'wrap' }}>
+                <span style={{ fontSize:10, fontWeight:700, color:cfg.color, background:`${cfg.color}18`, padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{cfg.label}</span>
+                {doc?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>{doc.expires_at.slice(0,10)}</span>}
+              </div>
+              {doc?.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
+            </div>
+            {dt.source === 'MANUAL' && (
+              <>
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png" ref={el=>fileRefs.current[dt.type]=el} style={{ display:'none' }} onChange={e=>handleUpload(dt.type,e.target.files[0])} />
+                {busy ? <Spinner size={20}/> : (
+                  <Button variant={doc?.status==='VALID'?'neutral':'orange'} size="sm" onClick={()=>fileRefs.current[dt.type]?.click()}>
+                    {doc?.status==='VALID'?'↑ Atualizar':'↑ Enviar'}
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const ok  = docs.filter(d=>d.status==='VALID').length
+  const pnd = docs.filter(d=>['PENDING','MISSING'].includes(d.status)).length
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:960, margin:'0 auto' }}>
-      {toast && (
-        <div style={{ position:'fixed', top:80, right:24, background:'#22c55e', color:'#fff', padding:'12px 20px', borderRadius:12, zIndex:9999, fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, boxShadow:'0 8px 24px rgba(34,197,94,.35)' }}>
-          {toast}
-        </div>
-      )}
+      {toast && <div style={{ position:'fixed',top:80,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',padding:'12px 20px',borderRadius:12,zIndex:9999,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,boxShadow:'0 8px 24px rgba(0,0,0,.2)',maxWidth:340 }}>{toast.msg}</div>}
 
-      <PageHeader title="Meus Documentos" subtitle={`${data.razaoSocial} · ${ok} de ${docs.length} documentos válidos`} />
+      <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${ok}/${DOC_TYPES.length} válidos`} />
 
-      {/* Summary */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16, marginBottom:24 }}>
-        {[
-          { label:'Documentos Válidos', value:ok, color:'#22c55e', icon:'✅' },
-          { label:'Pendentes / Vencendo', value:pending, color:pending>0?'#ef4444':'#22c55e', icon:pending>0?'⚠️':'✅' },
-          { label:'Score de Conformidade', value:`${data.score}/100`, color:data.score>=70?'#22c55e':'#f59e0b', icon:'📊' },
-        ].map((s,i) => (
-          <Card key={i}>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ fontSize:28 }}>{s.icon}</div>
-              <div>
-                <div style={{ fontSize:22, fontWeight:800, color:s.color, fontFamily:'Montserrat,sans-serif' }}>{s.value}</div>
-                <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{s.label}</div>
-              </div>
-            </div>
-          </Card>
+        {[['Válidos',ok,'#22c55e','✅'],['Pendentes',pnd,pnd>0?'#f59e0b':'#22c55e','⏳'],['Score ELOS',`${supplier?.score||0}/100`,supplier?.score>=70?'#22c55e':'#f59e0b','📊']].map(([l,v,c,i])=>(
+          <Card key={l}><div style={{ display:'flex',alignItems:'center',gap:12 }}><div style={{ fontSize:28 }}>{i}</div><div><div style={{ fontSize:22,fontWeight:800,color:c,fontFamily:'Montserrat,sans-serif' }}>{v}</div><div style={{ fontSize:11,color:'#9B9B9B' }}>{l}</div></div></div></Card>
         ))}
       </div>
 
-      {/* Auto-collected */}
       <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-          <SectionTitle style={{ marginBottom:0 }}>Certidões Públicas</SectionTitle>
-          <span style={{ fontSize:11, background:'rgba(46,49,146,.08)', color:'#2E3192', padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>Coletadas automaticamente</span>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          {docs.filter(d => d.source === 'AUTO').map((doc, i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, background:STATUS_BG[doc.status], border:`1px solid ${STATUS_BD[doc.status]}` }}>
-              <StatusDot status={doc.status} />
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>{doc.label}</div>
-                <div style={{ display:'flex', gap:8, marginTop:2, alignItems:'center' }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:STATUS_COLOR[doc.status], background:`${STATUS_COLOR[doc.status]}18`, padding:'1px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{STATUS_LABEL[doc.status]}</span>
-                  {doc.expires && <span style={{ fontSize:10, color:'#9B9B9B' }}>vence {doc.expires}</span>}
-                </div>
-              </div>
-              {uploading === doc.id
-                ? <Spinner size={20} />
-                : doc.status !== 'VALID' && <Button variant="orange" size="sm" onClick={() => handleUpload(doc.id)}>Renovar</Button>
-              }
-            </div>
-          ))}
-        </div>
+        <SectionTitle>Documentos Obrigatórios</SectionTitle>
+        {docGrid(DOC_TYPES.filter(d=>d.required))}
       </Card>
 
-      {/* Manual docs */}
       <Card style={{ borderRadius:16, padding:'20px 24px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-          <SectionTitle style={{ marginBottom:0 }}>Documentos Manuais</SectionTitle>
-          <span style={{ fontSize:11, background:'rgba(244,126,47,.1)', color:'#ea580c', padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>Upload necessário</span>
+          <SectionTitle style={{ marginBottom:0 }}>Documentos Opcionais</SectionTitle>
+          <span style={{ fontSize:11,background:'rgba(46,49,146,.08)',color:'#2E3192',padding:'3px 10px',borderRadius:20,fontFamily:'Montserrat,sans-serif',fontWeight:700 }}>Eleva o score ELOS</span>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          {docs.filter(d => d.source === 'MANUAL').map((doc, i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, background:STATUS_BG[doc.status], border:`1px solid ${STATUS_BD[doc.status]}` }}>
-              <StatusDot status={doc.status} />
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>{doc.label}</div>
-                <div style={{ display:'flex', gap:8, marginTop:2, alignItems:'center' }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:STATUS_COLOR[doc.status], background:`${STATUS_COLOR[doc.status]}18`, padding:'1px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{STATUS_LABEL[doc.status]}</span>
-                </div>
-              </div>
-              {uploading === doc.id
-                ? <Spinner size={20} />
-                : (
-                  <label style={{ cursor:'pointer' }}>
-                    <Button variant={doc.status==='VALID'?'neutral':'orange'} size="sm" onClick={() => handleUpload(doc.id)}>
-                      {doc.status==='VALID' ? '↑ Atualizar' : '↑ Enviar'}
-                    </Button>
-                  </label>
-                )
-              }
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop:16, padding:'12px 16px', background:'rgba(46,49,146,.04)', borderRadius:12, border:'1px solid rgba(46,49,146,.1)', fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-          📄 Formatos aceitos: PDF, JPG, PNG · Tamanho máximo: 10MB por arquivo
+        {docGrid(DOC_TYPES.filter(d=>!d.required))}
+        <div style={{ marginTop:14,padding:'10px 14px',background:'rgba(46,49,146,.04)',borderRadius:10,fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>
+          📄 PDF, JPG ou PNG · Máx 10MB · Documentos são validados pelo backoffice EQPI
         </div>
       </Card>
     </div>
