@@ -68,7 +68,7 @@ export default function BuyerSupplierProfile() {
       {tab===3&&<Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:20 }}><div style={{ fontSize:13,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',lineHeight:1.6 }}>Histórico de performance no ecossistema SIGEC disponível após homologação completa via SIGEC-HOC.</div></Card>}
       <div style={{ display:'flex',gap:12 }}>
         {rfqSent?<div style={{ flex:1,textAlign:'center',padding:'14px',background:'#f0fdf4',border:'1px solid #86efac',borderRadius:12,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:14,color:'#16a34a' }}>✅ Solicitação enviada!</div>:<Button variant="primary" full size="lg" style={{ borderRadius:12 }} onClick={sendRfq}>📩 Solicitar Cotação</Button>}
-        <Button variant="ghost" full size="lg" style={{ borderRadius:12 }}>🔗 Iniciar HOC</Button>
+        <Button variant="ghost" full size="lg" style={{ borderRadius:12 }} onClick={() => window.open('https://www.sistemas-equipo.com.br/hoc-portal-cliente', '_blank')}>🔗 Iniciar SIGEC-HOC</Button>
       </div>
     </div>
   )

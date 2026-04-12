@@ -344,13 +344,19 @@ export const adminApi = {
   },
 
   getSealAnalysis: async (supplierId) => {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select(`*, seals(*), documents(*)`)
-      .eq('id', supplierId)
-      .single()
-    if (error) throw new Error(error.message)
-    return { ...data, documents: data.documents || [] }
+    const [supplierRes, sealsRes, docsRes, cnpjRes] = await Promise.all([
+      supabase.from('suppliers').select('*').eq('id', supplierId).single(),
+      supabase.from('seals').select('*').eq('supplier_id', supplierId),
+      supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
+      supabase.from('cnpj_consultations').select('*').eq('supplier_id', supplierId).order('consulted_at', { ascending: false }).limit(1),
+    ])
+    if (supplierRes.error) throw new Error(supplierRes.error.message)
+    return {
+      ...supplierRes.data,
+      seals:           sealsRes.data   || [],
+      documents:       docsRes.data    || [],
+      cnpj_consultation: cnpjRes.data?.[0] || null,
+    }
   },
 
   approveSeal: async (supplierId, level) => {

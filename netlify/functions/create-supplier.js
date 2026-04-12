@@ -75,7 +75,21 @@ exports.handler = async (event) => {
       throw new Error(supplierError.message)
     }
 
-    // 2. Cria o Seal inicial como PENDING
+    // 2. Persiste consulta CNPJ completa para análise do backoffice
+    //    Dados: QSA, CNAEs, endereços, capital social, histórico de situações
+    if (body.cnpj_full_data || body.sanctions_result) {
+      await supabaseAdmin.from('cnpj_consultations').insert({
+        cnpj:          body.cnpj.replace(/\D/g, ''),
+        supplier_id:   supplier.id,
+        cnpj_data:     body.cnpj_full_data     || null,
+        sanctions_data: body.sanctions_result  || null,
+        has_sanctions: !!(body.sanctions_result?.ceis?.length || body.sanctions_result?.cnep?.length),
+        consulted_at:  new Date().toISOString(),
+      }).catch(e => console.warn('cnpj_consultations insert warn:', e.message))
+      // .catch para não bloquear o fluxo se falhar
+    }
+
+    // 3. Cria o Seal inicial como PENDING
     const { error: sealError } = await supabaseAdmin
       .from('seals')
       .insert({

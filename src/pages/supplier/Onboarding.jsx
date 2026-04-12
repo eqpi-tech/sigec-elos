@@ -104,10 +104,15 @@ export default function SupplierOnboarding() {
           razao_social:      cnpjData?.razao_social || name,
           nome_fantasia:     cnpjData?.nome_fantasia || null,
           cnae_main:         cnpjData?.cnae_fiscal_descricao || '',
+          cnae_list:         cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
           state:             cnpjData?.uf || '',
           city:              cnpjData?.municipio || '',
+          phone:             cnpjData?.ddd_telefone_1 || null,
+          employee_range:    cnpjData?.porte ? cnpjData.porte : null,
           sanctions_checked: true,
           sanctions_result:  sanctions,
+          // Dados completos para cnpj_consultations (histórico e backoffice)
+          cnpj_full_data:    cnpjData || null,
         }),
       })
 

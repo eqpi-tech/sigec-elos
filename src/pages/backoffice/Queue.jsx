@@ -89,6 +89,55 @@ export function BackofficeAnalysis() {
             </div>
             {data.sanctions_result?.hasSanctions&&<div style={{ background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:10,padding:'10px 14px',marginTop:12,fontSize:13,color:'#dc2626',fontFamily:'DM Sans,sans-serif' }}>⚠ Consta em listas de sanções CEIS/CNEP — análise especial obrigatória</div>}
           </Card>
+          {/* Painel CNPJ Intelligence */}
+          {data.cnpj_consultation && (
+            <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16,border:'1px solid rgba(46,49,146,.15)' }}>
+              <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:14 }}>
+                <SectionTitle style={{ marginBottom:0 }}>Inteligência CNPJ</SectionTitle>
+                <span style={{ fontSize:10,background:'rgba(46,49,146,.08)',color:'#2E3192',padding:'3px 10px',borderRadius:20,fontFamily:'Montserrat,sans-serif',fontWeight:700 }}>BrasilAPI + Transparência</span>
+                {data.cnpj_consultation.has_sanctions && <span style={{ fontSize:10,background:'rgba(239,68,68,.1)',color:'#dc2626',padding:'3px 10px',borderRadius:20,fontFamily:'Montserrat,sans-serif',fontWeight:700 }}>⚠ SANÇÕES</span>}
+              </div>
+              {data.cnpj_consultation.cnpj_data && (() => {
+                const d = data.cnpj_consultation.cnpj_data
+                return (
+                  <>
+                    <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12 }}>
+                      {[['Situação',d.descricao_situacao_cadastral||'—'],['Abertura',d.data_inicio_atividade||'—'],['Porte',d.porte||'—'],['Capital Social',d.capital_social?`R$ ${Number(d.capital_social).toLocaleString('pt-BR')}`:'—'],['Natureza Jurídica',d.natureza_juridica||'—'],['Município/UF',d.municipio&&d.uf?`${d.municipio}/${d.uf}`:'—']].map(([l,v])=>(
+                        <div key={l} style={{ padding:'8px 10px',background:'rgba(46,49,146,.04)',borderRadius:8 }}>
+                          <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif' }}>{l}</div>
+                          <div style={{ fontSize:12,fontWeight:600,color:'#1a1c5e',marginTop:2 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {d.qsa?.length>0&&(
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Quadro Societário ({d.qsa.length})</div>
+                        {d.qsa.map((s,i)=>(
+                          <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'6px 10px',background:'#f9f9fb',borderRadius:8,marginBottom:3,fontSize:12 }}>
+                            <span style={{ fontWeight:600,color:'#1a1c5e' }}>{s.nome_socio}</span>
+                            <span style={{ color:'#9B9B9B' }}>{s.qualificacao_socio}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {d.cnaes_secundarios?.length>0&&(
+                      <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                        {d.cnaes_secundarios.slice(0,5).map((c,i)=>(
+                          <span key={i} style={{ fontSize:10,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'2px 8px',borderRadius:20 }}>{c.codigo}</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+              {data.cnpj_consultation.has_sanctions
+                ? <div style={{ marginTop:10,padding:'10px',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:10,fontSize:12,color:'#dc2626',fontFamily:'DM Sans,sans-serif' }}>⚠ Sanções detectadas em CEIS/CNEP — análise especial obrigatória</div>
+                : <div style={{ marginTop:10,fontSize:13,color:'#22c55e',fontFamily:'Montserrat,sans-serif',fontWeight:600 }}>✅ Sem sanções em CEIS/CNEP</div>
+              }
+              <div style={{ fontSize:10,color:'#9B9B9B',marginTop:8 }}>Consultado: {data.cnpj_consultation.consulted_at?.slice(0,16).replace('T',' ')}</div>
+            </Card>
+          )}
+
           <Card style={{ borderRadius:16,padding:'20px 24px' }}>
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
               <SectionTitle>Documentos para Validação</SectionTitle>
