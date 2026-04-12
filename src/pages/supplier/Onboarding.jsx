@@ -38,20 +38,31 @@ export default function SupplierOnboarding() {
     return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
   }
 
+  const [sanctionsConfirm, setSanctionsConfirm] = useState(false)
+
   const handleCnpjLookup = async () => {
-    setLookupLoading(true); setLookupError('')
+    setLookupLoading(true); setLookupError(''); setSanctionsConfirm(false)
     try {
       const result = await cnpjApi.lookup(cnpj)
       setCnpjData(result.cnpj)
       setSanctions(result.sanctions)
 
+      const inactive = result.cnpj?.descricao_situacao_cadastral &&
+        result.cnpj.descricao_situacao_cadastral !== 'ATIVA'
+
+      if (inactive) {
+        setLookupError(`⚠️  Situação cadastral: ${result.cnpj.descricao_situacao_cadastral}. Regularize o CNPJ antes de prosseguir.`)
+        return // bloqueia — não pode prosseguir com CNPJ inativo
+      }
+
       if (result.hasSanctions) {
-        setLookupError('⚠️  Este CNPJ consta em listas de sanções (CEIS/CNEP). A homologação poderá ser negada.')
+        // Não avança automaticamente — exige confirmação do usuário
+        setLookupError('⚠️  Este CNPJ consta em listas de sanções (CEIS/CNEP). A homologação poderá ser negada pelo backoffice.')
+        setSanctionsConfirm(true) // mostra botões de confirmação
+        return
       }
-      if (result.cnpj?.descricao_situacao_cadastral && result.cnpj.descricao_situacao_cadastral !== 'ATIVA') {
-        setLookupError(`⚠️  Situação cadastral: ${result.cnpj.descricao_situacao_cadastral}. Verifique a regularidade do CNPJ.`)
-      }
-      setStep(1)
+
+      setStep(1) // CNPJ limpo — avança normalmente
     } catch (err) {
       setLookupError(err.message)
     } finally { setLookupLoading(false) }
@@ -169,11 +180,27 @@ export default function SupplierOnboarding() {
               {lookupError && (
                 <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 14px', marginTop:12, fontSize:13, color:'#c2410c' }}>{lookupError}</div>
               )}
-              <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
-                disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
-                onClick={handleCnpjLookup}>
-                {lookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
-              </Button>
+              {sanctionsConfirm ? (
+                <div style={{ marginTop:16 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#92400e', marginBottom:12 }}>
+                    Deseja prosseguir mesmo com restrições cadastrais?
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Button variant="neutral" full onClick={() => { setSanctionsConfirm(false); setLookupError(''); setCnpjData(null) }}>
+                      ← Usar outro CNPJ
+                    </Button>
+                    <Button variant="orange" full onClick={() => setStep(1)}>
+                      Prosseguir mesmo assim →
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
+                  disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
+                  onClick={handleCnpjLookup}>
+                  {lookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
+                </Button>
+              )}
             </div>
           )}
 

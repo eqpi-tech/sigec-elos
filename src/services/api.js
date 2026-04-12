@@ -115,6 +115,8 @@ export const documentApi = {
   },
 
   upload: async (supplierId, userId, file, docType) => {
+    if (!supplierId) throw new Error('supplier_id ausente — recarregue a página e tente novamente.')
+
     const ext  = file.name.split('.').pop().toLowerCase()
     const path = `${userId}/${docType}_${Date.now()}.${ext}`
 
@@ -122,29 +124,52 @@ export const documentApi = {
     const { error: storageError } = await supabase.storage
       .from('documents')
       .upload(path, file, { upsert: true, contentType: file.type })
-    if (storageError) throw new Error(storageError.message)
+    if (storageError) throw new Error('Erro no storage: ' + storageError.message)
 
     // 2. Gera signed URL (1 hora)
     const { data: urlData } = await supabase.storage
       .from('documents')
       .createSignedUrl(path, 3600)
 
-    // 3. Salva no banco
-    const { data, error } = await supabase
+    const payload = {
+      supplier_id:  supplierId,
+      type:         docType,
+      label:        DOC_LABELS[docType] || file.name,
+      source:       'MANUAL',
+      status:       'PENDING',
+      storage_path: path,
+      public_url:   urlData?.signedUrl || '',
+      metadata:     { originalName: file.name, size: file.size, mime: file.type },
+    }
+
+    // 3. INSERT ou UPDATE — evita depender do UPSERT com onConflict
+    //    (que requer constraint UNIQUE — garantida pelo patch SQL)
+    const { data: existing } = await supabase
       .from('documents')
-      .upsert({
-        supplier_id:  supplierId,
-        type:         docType,
-        label:        DOC_LABELS[docType] || file.name,
-        source:       'MANUAL',
-        status:       'PENDING', // backoffice precisa validar
-        storage_path: path,
-        public_url:   urlData?.signedUrl || '',
-        metadata:     { originalName: file.name, size: file.size, mime: file.type },
-      }, { onConflict: 'supplier_id,type' })
-      .select()
-      .single()
-    if (error) throw new Error(error.message)
+      .select('id')
+      .eq('supplier_id', supplierId)
+      .eq('type', docType)
+      .maybeSingle()
+
+    let data, error
+    if (existing?.id) {
+      // Atualiza registro existente
+      ;({ data, error } = await supabase
+        .from('documents')
+        .update(payload)
+        .eq('id', existing.id)
+        .select()
+        .single())
+    } else {
+      // Insere novo registro
+      ;({ data, error } = await supabase
+        .from('documents')
+        .insert(payload)
+        .select()
+        .single())
+    }
+
+    if (error) throw new Error('Erro ao salvar documento: ' + error.message)
     return data
   },
 

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
 import { Badge, Seal, Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
@@ -11,18 +11,22 @@ export default function SupplierDashboard() {
   const [docs, setDocs]         = useState([])
   const [loading, setLoading]   = useState(true)
 
-  useEffect(() => {
-    const load = async () => {
-      if (!user?.supplierId) { setLoading(false); return }
-      try {
-        const s = await supplierApi.me(user.supplierId)
-        setSupplier(s)
-        const d = await documentApi.list(user.supplierId)
-        setDocs(d)
-      } finally { setLoading(false) }
-    }
-    load()
+  const { pathname } = useLocation()
+
+  const load = useCallback(async () => {
+    if (!user?.supplierId) { setLoading(false); return }
+    setLoading(true)
+    try {
+      const s = await supplierApi.me(user.supplierId)
+      setSupplier(s)
+      const d = await documentApi.list(user.supplierId)
+      setDocs(d)
+    } finally { setLoading(false) }
   }, [user?.supplierId])
+
+  // Recarrega quando supplierId muda (primeiro acesso após cadastro)
+  // ou quando volta do plano-ativo
+  useEffect(() => { load() }, [load])
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
 

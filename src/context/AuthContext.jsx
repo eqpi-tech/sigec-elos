@@ -20,20 +20,38 @@ export function AuthProvider({ children }) {
   }
 
   const fetchProfile = async (authUser) => {
-    if (!authUser) { setUser(null); setLoading(false); return }
-    const { data: profile } = await supabase
-      .from('profiles').select('*').eq('id', authUser.id).single()
-    setUser(buildUser(authUser, profile))
-    setLoading(false)
+    if (!authUser) {
+      setUser(null)
+      setLoading(false)
+      return
+    }
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+      setUser(buildUser(authUser, profile))
+    } catch {
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
+    // Sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       fetchProfile(session?.user || null)
     })
+
+    // FIX: setLoading(true) ANTES de fetchProfile para que RootRedirect
+    // mostre o spinner enquanto o perfil carrega — evita blank page pós-login
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setLoading(true)
       fetchProfile(session?.user || null)
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -45,15 +63,20 @@ export function AuthProvider({ children }) {
 
   const signup = async ({ email, password, role, name }) => {
     const { data, error } = await supabase.auth.signUp({
-      email, password, options: { data: { role, name } },
+      email, password,
+      options: { data: { role, name } },
     })
     if (error) throw new Error(error.message)
     return data.user
   }
 
-  const logout = async () => { await supabase.auth.signOut(); setUser(null) }
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+  }
 
   const reloadProfile = async () => {
+    setLoading(true)
     const { data: { user: authUser } } = await supabase.auth.getUser()
     await fetchProfile(authUser)
   }
