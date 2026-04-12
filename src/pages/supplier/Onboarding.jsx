@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { cnpjApi, supplierApi, paymentsApi } from '../../services/api.js'
+import { cnpjApi, paymentsApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
 const PLAN_PRICES = { Simples: [290,390,490,590], Premium: [990,1290,1690,2190] }
@@ -68,26 +69,47 @@ export default function SupplierOnboarding() {
       // 1. Cria conta no Supabase Auth
       const authUser = await signup({ email, password, role: 'SUPPLIER', name })
 
-      // 2. Cria fornecedor no banco
-      const supplier = await supplierApi.create({
-        user_id:      authUser.id,
-        cnpj:         cnpj.replace(/\D/g,''),
-        razao_social: cnpjData?.razao_social || name,
-        nome_fantasia: cnpjData?.nome_fantasia,
-        cnae_main:    cnpjData?.cnae_fiscal_descricao || cnpjData?.cnaes_secundarios?.[0]?.descricao || '',
-        state:        cnpjData?.uf || '',
-        city:         cnpjData?.municipio || '',
-        sanctions_checked: true,
-        sanctions_result: sanctions,
-        status: 'PENDING',
+      // 2. Aguarda sessão ser estabelecida (pode levar alguns ms após signUp)
+      let sessionToken = null
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 400))
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token) { sessionToken = session.access_token; break }
+      }
+
+      if (!sessionToken) {
+        throw new Error('Sessão não iniciada. Certifique-se de que "Confirm email" está desativado no Supabase → Authentication → Settings.')
+      }
+
+      // 3. Cria fornecedor via Netlify Function (service_role bypassa RLS)
+      const res = await fetch('/.netlify/functions/create-supplier', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({
+          cnpj:              cnpj.replace(/\D/g,''),
+          razao_social:      cnpjData?.razao_social || name,
+          nome_fantasia:     cnpjData?.nome_fantasia || null,
+          cnae_main:         cnpjData?.cnae_fiscal_descricao || '',
+          state:             cnpjData?.uf || '',
+          city:              cnpjData?.municipio || '',
+          sanctions_checked: true,
+          sanctions_result:  sanctions,
+        }),
       })
 
-      // 3. Redireciona para Stripe Checkout
+      const resData = await res.json()
+      if (!res.ok) throw new Error(resData.error || 'Erro ao criar fornecedor')
+      const supplier = resData.supplier
+
+      // 4. Redireciona para Stripe Checkout
       const priceYearly = PLAN_PRICES[planType][cnaeIdx]
       const { url } = await paymentsApi.createCheckout({
         planType, cnaeCount: CNAE_COUNTS[cnaeIdx],
         supplierId: supplier.id,
-        userEmail: email,
+        userEmail:  email,
         priceYearly,
       })
 
