@@ -1,108 +1,73 @@
-import { Avatar } from './ui.jsx'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext.jsx'
 
-const NAV_ITEMS = {
-  fornecedor: [
-    { id: 'dashboard',  label: 'Dashboard',  icon: '⊞' },
-    { id: 'documentos', label: 'Documentos', icon: '📋' },
-    { id: 'planos',     label: 'Meu Plano',  icon: '⭐' },
+const NAVS = {
+  SUPPLIER: [
+    { path: '/fornecedor',          label: 'Dashboard',   icon: '⊞' },
+    { path: '/fornecedor/documentos', label: 'Documentos', icon: '📋' },
+    { path: '/fornecedor/planos',   label: 'Meu Plano',   icon: '⭐' },
   ],
-  comprador: [
-    { id: 'marketplace', label: 'Marketplace', icon: '🔍' },
-    { id: 'cotacoes',    label: 'Cotações',    icon: '📝' },
+  BUYER: [
+    { path: '/comprador',           label: 'Marketplace', icon: '🔍' },
+    { path: '/comprador/cotacoes',  label: 'Cotações',    icon: '📝' },
   ],
-  admin: [
-    { id: 'admin',      label: 'Visão Geral',  icon: '⊞' },
-    { id: 'aprovacoes', label: 'Aprovações',   icon: '✓' },
-    { id: 'financeiro', label: 'Financeiro',   icon: '💰' },
+  ADMIN: [
+    { path: '/backoffice',          label: 'Visão Geral', icon: '⊞' },
+    { path: '/backoffice/fila',     label: 'Fila de Análise', icon: '⏳' },
+    { path: '/backoffice/metricas', label: 'Métricas',    icon: '📊' },
   ],
 }
 
-const PROFILE_LABELS = {
-  fornecedor: 'Metalúrgica Souza Ltda',
-  comprador:  'Vale S.A. · Comprador',
-  admin:      'Admin · EQPI Tech',
-}
+const ROLE_LABEL = { SUPPLIER: 'Fornecedor', BUYER: 'Comprador', ADMIN: 'Backoffice EQPI' }
+const ROLE_COLOR = { SUPPLIER: '#2563eb', BUYER: '#ea580c', ADMIN: '#7c3aed' }
 
-const PROFILE_AVATARS = {
-  fornecedor: { name: 'JS', gradient: 'linear-gradient(135deg, rgba(244,126,47,0.8), #3d40b5)' },
-  comprador:  { name: 'VA', gradient: 'linear-gradient(135deg, #F47E2F, #c2410c)' },
-  admin:      { name: 'AD', gradient: 'linear-gradient(135deg, #8b5cf6, #4c1d95)' },
-}
+export default function Navbar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
 
-export default function Navbar({ profile, setProfile, currentScreen, setScreen }) {
-  const items = NAV_ITEMS[profile] || []
-  const av = PROFILE_AVATARS[profile]
+  if (!user) return null
+  const items = NAVS[user.role] || []
+
+  const handleLogout = () => { logout(); navigate('/login') }
 
   return (
-    <nav style={{
-      background: '#2E3192',
-      display: 'flex', alignItems: 'center',
-      padding: '0 24px', height: 58,
-      boxShadow: '0 2px 12px rgba(46,49,146,0.4)',
-      position: 'sticky', top: 0, zIndex: 100,
-      flexShrink: 0,
-    }}>
+    <nav style={{ background:'#2E3192', display:'flex', alignItems:'center', padding:'0 24px', height:58, boxShadow:'0 2px 12px rgba(46,49,146,.4)', position:'sticky', top:0, zIndex:100, flexShrink:0 }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', marginRight: 40 }}>
-        <img
-          src="/logo.png"
-          alt="SIGEC-ELOS"
-          style={{ height: 42, width: 'auto', objectFit: 'contain' }}
-        />
+      <div style={{ display:'flex', alignItems:'center', marginRight:36, cursor:'pointer' }} onClick={() => navigate(items[0]?.path || '/')}>
+        <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:40, width:'auto', objectFit:'contain' }} />
       </div>
 
       {/* Nav items */}
-      <div style={{ display: 'flex', gap: 4, flex: 1 }}>
-        {items.map(item => (
-          <button
-            key={item.id}
-            onClick={() => setScreen(item.id)}
-            style={{
-              background: currentScreen === item.id ? 'rgba(255,255,255,0.12)' : 'transparent',
-              border: currentScreen === item.id ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
-              color: currentScreen === item.id ? '#fff' : 'rgba(255,255,255,0.6)',
-              padding: '6px 14px', borderRadius: 8, cursor: 'pointer',
-              fontFamily: 'DM Sans, sans-serif', fontSize: 13, fontWeight: 500,
-              display: 'flex', alignItems: 'center', gap: 6,
-              transition: 'all 0.15s',
-            }}
-          >
-            <span>{item.icon}</span> {item.label}
-          </button>
-        ))}
+      <div style={{ display:'flex', gap:4, flex:1 }}>
+        {items.map(item => {
+          const active = pathname === item.path || (item.path !== '/comprador' && item.path !== '/fornecedor' && item.path !== '/backoffice' && pathname.startsWith(item.path))
+          return (
+            <button key={item.path} onClick={() => navigate(item.path)}
+              style={{ background:active?'rgba(255,255,255,.12)':'transparent', border:active?'1px solid rgba(255,255,255,.2)':'1px solid transparent', color:active?'#fff':'rgba(255,255,255,.6)', padding:'6px 14px', borderRadius:8, cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:6, transition:'all .15s' }}>
+              <span>{item.icon}</span> {item.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Demo profile switcher */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <span style={{
-          color: 'rgba(255,255,255,0.35)', fontSize: 10,
-          fontFamily: 'Montserrat, sans-serif', fontWeight: 600, marginRight: 4,
-          background: 'rgba(255,255,255,0.08)', padding: '3px 8px', borderRadius: 6,
-        }}>DEMO</span>
-        {['fornecedor', 'comprador', 'admin'].map(p => (
-          <button
-            key={p}
-            onClick={() => {
-              setProfile(p)
-              const screens = { fornecedor: 'dashboard', comprador: 'marketplace', admin: 'admin' }
-              setScreen(screens[p])
-            }}
-            style={{
-              background: profile === p ? '#F47E2F' : 'rgba(255,255,255,0.08)',
-              color: profile === p ? '#fff' : 'rgba(255,255,255,0.5)',
-              border: 'none', borderRadius: 6, padding: '4px 10px',
-              fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'Montserrat, sans-serif', textTransform: 'capitalize',
-              transition: 'all 0.15s',
-            }}
-          >{p}</button>
-        ))}
-
-        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.15)', margin: '0 8px' }} />
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'DM Sans, sans-serif' }}>
-          {PROFILE_LABELS[profile]}
-        </span>
-        <Avatar name={av.name} gradient={av.gradient} />
+      {/* User info */}
+      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <div style={{ textAlign:'right' }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#fff', fontFamily:'Montserrat,sans-serif' }}>{user.name}</div>
+          <div style={{ fontSize:10, color:ROLE_COLOR[user.role], background:`${ROLE_COLOR[user.role]}22`, padding:'1px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif', fontWeight:700, display:'inline-block', marginTop:1 }}>
+            {ROLE_LABEL[user.role]}
+          </div>
+        </div>
+        <div style={{ width:36, height:36, borderRadius:10, background:'rgba(255,255,255,.12)', border:'1px solid rgba(255,255,255,.2)', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800, fontSize:13, fontFamily:'Montserrat,sans-serif' }}>
+          {user.name?.slice(0,2).toUpperCase()}
+        </div>
+        <button onClick={handleLogout}
+          style={{ background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.15)', color:'rgba(255,255,255,.6)', borderRadius:8, padding:'5px 12px', fontSize:11, fontFamily:'DM Sans,sans-serif', cursor:'pointer', transition:'all .15s' }}
+          onMouseEnter={e=>e.currentTarget.style.color='#fff'}
+          onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,.6)'}>
+          Sair
+        </button>
       </div>
     </nav>
   )
