@@ -1,199 +1,214 @@
 // netlify/functions/fgts-crf-lookup.js
-// Consulta automática do CRF FGTS na Caixa Econômica Federal
-// Sem captcha — usa scraping de formulário JSF (JavaServer Faces)
-//
-// Fluxo JSF:
-//   1. GET  /consultaEmpregador.jsf  → obtém cookies + ViewState oculto no HTML
-//   2. POST /consultaEmpregador.jsf  → envia CNPJ → recebe resultado (REGULAR/IRREGULAR)
-//   3. POST /consultaEmpregador.jsf  → clica "Gerar Certificado" → obtém PDF com dados de validade
-//
-// Campos esperados no HTML de resultado:
-//   "REGULAR"  → ok
-//   "IRREGULAR" → nok
-//   Validade: 31/03/2026 a 29/04/2026
-//   Certificado Número: 2026033118491661973409
-//   Informação obtida em 14/04/2026 18:30:42
+// Consulta CRF FGTS - Caixa Econômica Federal (JSF sem captcha)
 
 const BASE = 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf'
 const UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Extrai Set-Cookie headers e monta uma string "Cookie: k=v; k2=v2" */
-function mergeCookies(existingCookies, newHeaders) {
-  const existing = {}
-  if (existingCookies) {
-    existingCookies.split(';').forEach(c => {
+function mergeCookies(existing, newHeaders) {
+  const jar = {}
+  if (existing) {
+    existing.split(';').forEach(c => {
       const [k, ...v] = c.trim().split('=')
-      if (k) existing[k.trim()] = v.join('=').trim()
+      if (k?.trim()) jar[k.trim()] = v.join('=').trim()
     })
   }
-  // set-cookie pode vir como array ou string
-  const setCookieRaw = newHeaders.get('set-cookie') || ''
-  setCookieRaw.split(',').forEach(cookie => {
+  const raw = newHeaders.raw?.()?.['set-cookie'] || []
+  const arr = Array.isArray(raw) ? raw : (raw ? [raw] : [])
+  arr.forEach(cookie => {
     const part = cookie.split(';')[0].trim()
     const [k, ...v] = part.split('=')
-    if (k?.trim()) existing[k.trim()] = (v.join('=') || '').trim()
+    if (k?.trim()) jar[k.trim()] = (v.join('=') || '').trim()
   })
-  return Object.entries(existing).map(([k, v]) => `${k}=${v}`).join('; ')
+  // Tenta também o get() padrão
+  const single = newHeaders.get?.('set-cookie') || ''
+  if (single) {
+    single.split(',').forEach(cookie => {
+      const part = cookie.split(';')[0].trim()
+      const [k, ...v] = part.split('=')
+      if (k?.trim()) jar[k.trim()] = (v.join('=') || '').trim()
+    })
+  }
+  return Object.entries(jar).map(([k,v])=>`${k}=${v}`).join('; ')
 }
 
-/** Extrai javax.faces.ViewState do HTML */
 function extractViewState(html) {
-  // Tenta vários padrões comuns em implementações JSF
   const patterns = [
-    /name="javax\.faces\.ViewState"\s+id="[^"]*"\s+value="([^"]+)"/i,
-    /name="javax\.faces\.ViewState"\s+value="([^"]+)"/i,
+    /name="javax\.faces\.ViewState"[^>]*value="([^"]+)"/i,
+    /value="([^"]+)"[^>]*name="javax\.faces\.ViewState"/i,
     /javax\.faces\.ViewState[^>]*value="([^"]+)"/i,
-    /id="j_id[^"]*:javax\.faces\.ViewState[^"]*"\s+value="([^"]+)"/i,
   ]
   for (const p of patterns) {
     const m = html.match(p)
-    if (m?.[1]) return m[1]
+    if (m?.[1]) return decodeURIComponent(m[1])
   }
   return null
 }
 
-/** Extrai todos os campos hidden de um formulário JSF */
-function extractHiddenFields(html, formId) {
+function extractAllHiddenFields(html) {
   const fields = {}
-  // Pega todos os inputs hidden dentro do form (ou global)
-  const re = /<input[^>]+type="hidden"[^>]*>/gi
-  let match
-  while ((match = re.exec(html)) !== null) {
-    const tag = match[0]
-    const name  = tag.match(/name="([^"]+)"/i)?.[1]
-    const value = tag.match(/value="([^"]+)"/i)?.[1] || ''
+  const re = /<input[^>]+type=["']?hidden["']?[^>]*>/gi
+  let m
+  while ((m = re.exec(html)) !== null) {
+    const name  = m[0].match(/name="([^"]+)"/i)?.[1]
+    const value = m[0].match(/value="([^"]+)"/i)?.[1] ?? ''
     if (name) fields[name] = value
   }
   return fields
 }
 
-/** Tenta identificar o ID do formulário de consulta */
-function extractFormAction(html) {
-  const m = html.match(/<form[^>]+action="([^"]*consultaEmpregador[^"]*)"[^>]*>/i)
+// Encontra o ID real do formulário no HTML
+function extractFormId(html) {
+  const m = html.match(/<form[^>]+id="([^"]+)"[^>]*action="[^"]*consultaEmpregador[^"]*"/i)
+    || html.match(/<form[^>]+action="[^"]*consultaEmpregador[^"]*"[^>]+id="([^"]+)"/i)
     || html.match(/<form[^>]+id="([^"]+)"[^>]*>/i)
-  return m?.[1] || BASE
+  return m?.[1] || 'consultaEmpregador'
 }
 
-/** Extrai o nome da empresa do HTML de resultado */
+// Encontra o nome real do campo de CNPJ/inscrição
+function findInputField(html, hints) {
+  for (const hint of hints) {
+    const re = new RegExp(`name="([^"]*${hint}[^"]*)"`, 'i')
+    const m = html.match(re)
+    if (m?.[1]) return m[1]
+  }
+  return null
+}
+
+// Encontra o nome real do botão de submit
+function findSubmitButton(html) {
+  // Procura por input type=submit ou button com nomes comuns
+  const re = /<input[^>]+type=["']?submit["']?[^>]*>/gi
+  const buttons = []
+  let m
+  while ((m = re.exec(html)) !== null) {
+    const name  = m[0].match(/name="([^"]+)"/i)?.[1]
+    const value = m[0].match(/value="([^"]+)"/i)?.[1] || ''
+    if (name) buttons.push({ name, value })
+  }
+  return buttons
+}
+
+// Resultado APENAS se texto muito específico aparecer
+function detectResult(html) {
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toUpperCase()
+
+  // Padrões de REGULAR — muito específicos
+  const regularPatterns = [
+    /ESTÁ REGULAR PERANTE O FGTS/,
+    /ESTÁ\s+REGULAR\s+PERANTE/,
+    /SITUAÇÃO[^:]{0,20}:\s*REGULAR\b/,
+    /CERTIDÃO DE REGULARIDADE DO FGTS/,
+  ]
+  // Padrões de IRREGULAR — muito específicos
+  const irregularPatterns = [
+    /ESTÁ IRREGULAR PERANTE O FGTS/,
+    /ESTÁ\s+IRREGULAR\s+PERANTE/,
+    /SITUAÇÃO[^:]{0,20}:\s*IRREGULAR\b/,
+    /NÃO ESTÁ EM SITUAÇÃO REGULAR PERANTE O FGTS/,
+  ]
+
+  for (const p of regularPatterns) {
+    if (p.test(text)) return 'REGULAR'
+  }
+  for (const p of irregularPatterns) {
+    if (p.test(text)) return 'IRREGULAR'
+  }
+  return null
+}
+
+function extractCertData(html) {
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const validadeMatch = text.match(/Validade[:\s]+(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i)
+  const numMatch      = text.match(/Certificado\s+N[úu]mero[:\s]+(\d+)/i)
+    || text.match(/N[úu]mero\s+(?:do\s+)?[Cc]ertificado[:\s]+(\d+)/i)
+    || text.match(/(\d{20,})/i) // número longo
+  const dataMatch     = text.match(/obtida\s+em[:\s]+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/i)
+  return {
+    validadeInicio:    validadeMatch?.[1] || null,
+    validadeFim:       validadeMatch?.[2] || null,
+    numeroCertificado: numMatch?.[1]      || null,
+    consultadoEm:      dataMatch?.[1]     || null,
+  }
+}
+
 function extractEmpresa(html) {
-  // "A EMPRESA abaixo identificada está REGULAR perante o FGTS:"
-  // seguido de uma linha com a razão social
-  const m = html.match(/EMPRESA[^:]*:\s*<[^>]+>\s*([A-Z][^<]{3,})/i)
-    || html.match(/Empresa\s*[:\-]\s*<[^>]+>([^<]+)/i)
-    || html.match(/class="[^"]*empresa[^"]*"[^>]*>([^<]+)/i)
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  // Tenta encontrar o nome da empresa após "EMPRESA" ou "RAZÃO SOCIAL"
+  const m = text.match(/(?:EMPRESA|RAZ[ÃA]O SOCIAL)\s*[:\-]?\s*([A-Z][A-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ][^:.\n]{3,60}?)(?:\s{2,}|\s*CNPJ|\s*CPF)/i)
   return m?.[1]?.trim() || null
 }
 
-/** Extrai os dados do certificado */
-function extractCertData(html) {
-  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
-
-  // Validade: 31/03/2026 a 29/04/2026
-  const validadeMatch = text.match(/Validade[:\s]+(\d{2}\/\d{2}\/\d{4})\s+a\s+(\d{2}\/\d{2}\/\d{4})/i)
-
-  // Certificado Número: 2026033118491661973409
-  const numMatch = text.match(/Certificado\s+N[úu]mero[:\s]+(\d+)/i)
-    || text.match(/N[úu]mero\s+do\s+certificado[:\s]+(\d+)/i)
-
-  // Informação obtida em 14/04/2026 18:30:42
-  const dataMatch = text.match(/[Ii]nforma[çc][ãa]o\s+obtida\s+em[:\s]+(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/i)
-
-  return {
-    validadeInicio: validadeMatch?.[1] || null,
-    validadeFim:    validadeMatch?.[2] || null,
-    numeroCertificado: numMatch?.[1] || null,
-    consultadoEm:   dataMatch?.[1] || null,
-  }
-}
-
-/** Verifica se o resultado é REGULAR */
-function isRegular(html) {
-  return /est[aá]\s+REGULAR\s+perante\s+o\s+FGTS/i.test(html)
-      || /SITUAÇÃO[^:]*:\s*REGULAR/i.test(html)
-      || /class="[^"]*regular[^"]*"/i.test(html)
-}
-
-/** Verifica se o resultado é IRREGULAR */
-function isIrregular(html) {
-  return /IRREGULAR\s+perante\s+o\s+FGTS/i.test(html)
-      || /SITUAÇÃO[^:]*:\s*IRREGULAR/i.test(html)
-      || /n[ãa]o\s+est[aá]\s+regular/i.test(html)
-}
-
-/** Encontra o botão/link para gerar o certificado */
-function findCertButton(html) {
-  // Procura por botão "Certificado" ou "Gerar" nos forms
-  const m = html.match(/name="([^"]*certificado[^"]*)"[^>]*value="([^"]*)"/i)
-    || html.match(/id="([^"]*certificado[^"]*)"[^>]*>/i)
-    || html.match(/<input[^>]+value="[^"]*[Cc]ertificado[^"]*"[^>]*name="([^"]+)"/i)
-    || html.match(/<input[^>]+value="[^"]*[Gg]erar[^"]*"[^>]*name="([^"]+)"/i)
-    || html.match(/name="([^"]*:j_id[^"]*)"[^>]*value="[^"]*[Cc]ert[^"]*"/i)
-  return m?.[1] || null
-}
-
-// ─── Handler principal ────────────────────────────────────────────────────────
-
 exports.handler = async (event) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  }
-
+  const headers = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' }
   if (event.httpMethod === 'OPTIONS') return { statusCode:200, headers, body:'' }
 
-  const cnpj = (event.queryStringParameters?.cnpj || '').replace(/\D/g, '')
-  const uf   = (event.queryStringParameters?.uf   || '').toUpperCase().trim()
+  const cnpj   = (event.queryStringParameters?.cnpj || '').replace(/\D/g,'')
+  const uf     = (event.queryStringParameters?.uf   || '').toUpperCase().trim() || 'MG'
+  const debug  = event.queryStringParameters?.debug === '1'
 
   if (!cnpj || cnpj.length !== 14) {
     return { statusCode:400, headers, body: JSON.stringify({ error:'CNPJ inválido' }) }
   }
 
-  // UF é necessária pelo formulário da Caixa
-  const ufFinal = uf || 'SP' // fallback; idealmente vir da base (supplier.state)
-
   try {
-    // ── ETAPA 1: GET página inicial ─────────────────────────────────────────
-    console.log(`[fgts-crf] Iniciando consulta CNPJ=${cnpj} UF=${ufFinal}`)
-
+    // ── ETAPA 1: GET página ─────────────────────────────────────────────────
+    console.log(`[fgts-crf] GET ${BASE} CNPJ=${cnpj} UF=${uf}`)
     const step1 = await fetch(BASE, {
       headers: {
         'User-Agent': UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-      },
-      redirect: 'follow',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.5',
+        'Connection': 'keep-alive',
+      }
     })
+    let cookies = mergeCookies('', step1.headers)
+    const html1 = await step1.text()
 
-    if (!step1.ok) throw new Error(`Etapa 1 falhou: HTTP ${step1.status}`)
-    let cookies   = mergeCookies('', step1.headers)
-    const html1   = await step1.text()
-    const vs1     = extractViewState(html1)
-    const hidden1 = extractHiddenFields(html1)
+    const vs1      = extractViewState(html1)
+    const hidden1  = extractAllHiddenFields(html1)
+    const formId   = extractFormId(html1)
+    const submitBtns = findSubmitButton(html1)
+
+    // Descobre o nome real dos campos de CNPJ e UF no formulário
+    const cnpjField = findInputField(html1, ['inscricao','cnpj','CNPJ','inscri']) || `${formId}:inscricao`
+    const ufField   = findInputField(html1, ['uf','UF','estado']) || `${formId}:uf`
+
+    console.log(`[fgts-crf] formId=${formId} cnpjField=${cnpjField} ufField=${ufField}`)
+    console.log(`[fgts-crf] ViewState presente: ${!!vs1}`)
+    console.log(`[fgts-crf] Campos hidden:`, JSON.stringify(Object.keys(hidden1)))
+    console.log(`[fgts-crf] Botões submit:`, JSON.stringify(submitBtns))
 
     if (!vs1) {
-      console.error('[fgts-crf] ViewState não encontrado. HTML preview:', html1.slice(0,800))
-      throw new Error('Não foi possível obter ViewState da página da Caixa. A estrutura do site pode ter mudado.')
+      return { statusCode:200, headers, body: JSON.stringify({
+        status: 'ERRO_VIEWSTATE',
+        regular: null,
+        message: 'Não foi possível obter ViewState. O site da Caixa pode ter mudado.',
+        _debug: debug ? html1.slice(0, 2000) : 'use ?debug=1 para ver o HTML',
+      })}
     }
 
-    console.log('[fgts-crf] Etapa 1 OK — ViewState obtido, cookies:', cookies.slice(0,60))
-
-    // ── ETAPA 2: POST com CNPJ ──────────────────────────────────────────────
-    // Monta o corpo do formulário JSF
-    // O campo de CNPJ varia: 'inscricao', 'cnpj', 'txtCnpj', etc.
-    // Inclui todos os campos hidden + os campos do formulário
-    const formBody2 = new URLSearchParams({
-      ...hidden1,
-      // Campos possíveis para CNPJ (JSF usa o ID do componente como prefixo)
-      'consultaEmpregador:inscricao': cnpj,
-      'consultaEmpregador:uf':        ufFinal,
-      // Botão de submit — nome varia; tentamos os mais comuns
-      'consultaEmpregador:botaoConsultar': 'Consultar',
-      'javax.faces.ViewState': vs1,
+    // ── ETAPA 2: POST formulário ────────────────────────────────────────────
+    // Inclui TODOS os campos hidden + os valores do formulário
+    const body2 = new URLSearchParams({
+      ...hidden1,              // todos os campos hidden do form (incluindo ViewState)
+      [cnpjField]: cnpj,       // campo CNPJ detectado
+      [ufField]:   uf,         // campo UF detectado
     })
 
-    console.log('[fgts-crf] Etapa 2: POST form...')
+    // Adiciona o botão de submit (simula clique)
+    if (submitBtns.length > 0) {
+      body2.set(submitBtns[0].name, submitBtns[0].value)
+    } else {
+      // Fallback: tenta nomes comuns do botão
+      body2.set(`${formId}:botaoConsultar`, 'Consultar')
+    }
+
+    // Garante que ViewState está no corpo (pode já estar via hidden1)
+    if (vs1 && !body2.has('javax.faces.ViewState')) {
+      body2.set('javax.faces.ViewState', vs1)
+    }
+
+    console.log(`[fgts-crf] POST body keys:`, [...body2.keys()])
 
     const step2 = await fetch(BASE, {
       method: 'POST',
@@ -202,137 +217,96 @@ exports.handler = async (event) => {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'pt-BR,pt;q=0.9',
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie':   cookies,
-        'Referer':  BASE,
-        'Origin':   'https://consulta-crf.caixa.gov.br',
+        'Cookie': cookies,
+        'Referer': BASE,
+        'Origin': 'https://consulta-crf.caixa.gov.br',
       },
-      body: formBody2.toString(),
-      redirect: 'follow',
+      body: body2.toString(),
     })
-
     cookies = mergeCookies(cookies, step2.headers)
     const html2 = await step2.text()
-    const vs2   = extractViewState(html2)
+    const result2 = detectResult(html2)
+    const vs2 = extractViewState(html2)
 
-    console.log('[fgts-crf] Etapa 2: HTTP', step2.status,
-                '| regular?', isRegular(html2),
-                '| irregular?', isIrregular(html2),
-                '| html preview:', html2.slice(0,300))
+    console.log(`[fgts-crf] Etapa 2: HTTP ${step2.status} | resultado=${result2}`)
 
-    // Verifica resultado
-    if (!isRegular(html2) && !isIrregular(html2)) {
-      // Nenhum dos padrões reconhecidos — pode ser que os campo IDs sejam diferentes
-      // Loga o HTML completo para diagnóstico
-      console.warn('[fgts-crf] Resultado indefinido. HTML (2000 chars):', html2.slice(0,2000))
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          status: 'INDEFINIDO',
-          regular: null,
-          empresa: null,
-          message: 'Não foi possível identificar REGULAR/IRREGULAR na resposta. Ver logs para diagnóstico.',
-          _debug_html: html2.slice(0, 1500),
-        }),
-      }
+    // ── Resultado IRREGULAR → para aqui ────────────────────────────────────
+    if (result2 === 'IRREGULAR') {
+      return { statusCode:200, headers, body: JSON.stringify({
+        status: 'IRREGULAR',
+        regular: false,
+        empresa: extractEmpresa(html2),
+        message: 'Empresa com pendências perante o FGTS.',
+        _debug: debug ? html2.slice(0,2000) : undefined,
+      })}
     }
 
-    const regular = isRegular(html2)
+    // ── Resultado indefinido → retorna diagnóstico ──────────────────────────
+    if (result2 !== 'REGULAR') {
+      console.warn('[fgts-crf] Resultado indefinido — HTML da etapa 2:', html2.slice(0,500))
+      return { statusCode:200, headers, body: JSON.stringify({
+        status: 'INDEFINIDO',
+        regular: null,
+        message: 'Não foi possível identificar o resultado. Verifique os logs do Netlify.',
+        // Sempre retorna debug HTML neste caso para diagnóstico
+        _debug_html_preview: html2.slice(0, 2000),
+        _form_fields_detected: { formId, cnpjField, ufField, submitBtns },
+        _hidden_fields: Object.keys(hidden1),
+      })}
+    }
+
+    // ── REGULAR → tenta gerar certificado ──────────────────────────────────
     const empresa = extractEmpresa(html2)
+    let certData  = extractCertData(html2) // tenta extrair da própria página de resultado
 
-    if (!regular) {
-      console.log('[fgts-crf] IRREGULAR — CNPJ com pendências FGTS')
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          status: 'IRREGULAR',
-          regular: false,
-          empresa,
-          message: 'Empresa com pendências perante o FGTS.',
-          certificado: null,
-          consultadoEm: new Date().toISOString(),
-        }),
+    if (vs2 && !certData.numeroCertificado) {
+      const hidden2   = extractAllHiddenFields(html2)
+      const certBtns  = findSubmitButton(html2)
+        .filter(b => /cert|emitir|obter|gerar/i.test(b.name + b.value))
+
+      if (certBtns.length > 0) {
+        const body3 = new URLSearchParams({ ...hidden2 })
+        body3.set(certBtns[0].name, certBtns[0].value)
+        if (!body3.has('javax.faces.ViewState')) body3.set('javax.faces.ViewState', vs2)
+
+        const step3 = await fetch(BASE, {
+          method: 'POST',
+          headers: {
+            'User-Agent': UA,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cookie': cookies,
+            'Referer': BASE,
+          },
+          body: body3.toString(),
+        })
+        const html3 = await step3.text()
+        console.log(`[fgts-crf] Etapa 3 (cert): HTTP ${step3.status}`)
+        certData = extractCertData(html3)
+        if (!certData.numeroCertificado) certData = extractCertData(html2)
       }
     }
 
-    // ── ETAPA 3: Gerar certificado (segundo POST) ───────────────────────────
-    console.log('[fgts-crf] REGULAR — tentando gerar certificado...')
+    console.log(`[fgts-crf] ✅ REGULAR | empresa=${empresa} | cert=${certData.numeroCertificado}`)
 
-    let certData = {}
-
-    if (vs2) {
-      const hidden2     = extractHiddenFields(html2)
-      const certButton  = findCertButton(html2)
-
-      // Monta o corpo para "clicar" no botão de certificado
-      const formBody3 = new URLSearchParams({
-        ...hidden2,
-        'javax.faces.ViewState': vs2,
-      })
-
-      // Adiciona o botão de geração (nome varia)
-      if (certButton) {
-        formBody3.set(certButton, 'Obtenha o Certificado de Regularidade do FGTS')
-      } else {
-        // Tentativa com nomes comuns
-        formBody3.set('consultaEmpregador:botaoCertificado', 'Obtenha o Certificado de Regularidade do FGTS')
-        formBody3.set('consultaEmpregador:linkCertificado', 'Certificado')
-      }
-
-      const step3 = await fetch(BASE, {
-        method: 'POST',
-        headers: {
-          'User-Agent': UA,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie':   cookies,
-          'Referer':  BASE,
-          'Origin':   'https://consulta-crf.caixa.gov.br',
-        },
-        body: formBody3.toString(),
-        redirect: 'follow',
-      })
-
-      const html3 = await step3.text()
-      console.log('[fgts-crf] Etapa 3: HTTP', step3.status, '| html preview:', html3.slice(0,300))
-
-      certData = extractCertData(html3)
-
-      // Se o certificado não veio na etapa 3, tenta extrair da etapa 2 (alguns sites mostram direto)
-      if (!certData.numeroCertificado) {
-        certData = extractCertData(html2)
-        if (certData.numeroCertificado) console.log('[fgts-crf] Certificado extraído da etapa 2')
-      }
-    }
-
-    console.log('[fgts-crf] Resultado final:', { regular, empresa, certData })
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        status: 'REGULAR',
-        regular: true,
-        empresa,
-        validadeInicio:    certData.validadeInicio    || null,
-        validadeFim:       certData.validadeFim       || null,
-        numeroCertificado: certData.numeroCertificado || null,
-        consultadoEm:      certData.consultadoEm      || new Date().toISOString(),
-        message: 'Empresa regular perante o FGTS.',
-      }),
-    }
+    return { statusCode:200, headers, body: JSON.stringify({
+      status: 'REGULAR',
+      regular: true,
+      empresa,
+      validadeInicio:    certData.validadeInicio,
+      validadeFim:       certData.validadeFim,
+      numeroCertificado: certData.numeroCertificado,
+      consultadoEm:      certData.consultadoEm || new Date().toISOString(),
+      message: certData.validadeFim
+        ? `✅ FGTS regular. Validade: ${certData.validadeInicio} a ${certData.validadeFim}`
+        : '✅ Empresa regular perante o FGTS.',
+      _debug: debug ? html2.slice(0,1000) : undefined,
+    })}
 
   } catch (err) {
     console.error('[fgts-crf] Erro:', err.message)
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({
-        error: 'Erro na consulta FGTS',
-        detail: err.message,
-        tip: 'Verifique os logs do Netlify Functions para ver o HTML de resposta e ajustar os IDs dos campos JSF.',
-      }),
-    }
+    return { statusCode:500, headers, body: JSON.stringify({
+      error: 'Erro na consulta FGTS',
+      detail: err.message,
+    })}
   }
 }
