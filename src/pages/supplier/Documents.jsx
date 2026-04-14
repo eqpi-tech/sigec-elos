@@ -5,10 +5,13 @@ import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
 // Documentos coletados automaticamente pelo sistema (por document_id do catálogo EQPI)
+// 'INSTANT' = feito no cadastro, sem interação
+// 'ON_DEMAND' = botão "Buscar agora" na tela de documentos
 const AUTO_COLLECT = {
-  37: 'BrasilAPI',   // Cartão CNPJ — situação cadastral
-  61: 'BrasilAPI',   // Análise CNAEs — CNAEs principal e secundários
-  62: 'BrasilAPI',   // Simples Nacional — opcao_pelo_simples
+  37: 'INSTANT',    // Cartão CNPJ — BrasilAPI (no cadastro)
+  61: 'INSTANT',    // Análise CNAEs — BrasilAPI (no cadastro)
+  62: 'INSTANT',    // Simples Nacional — BrasilAPI (no cadastro)
+  7:  'ON_DEMAND',  // CRF FGTS — scraping Caixa Econômica Federal
 }
 
 const STATUS_CONFIG = {
@@ -29,6 +32,30 @@ export default function SupplierDocuments() {
   const [uploading, setUploading] = useState(null)
   const [toast, setToast]       = useState(null)
   const fileRefs = useRef({})
+
+  const [collecting, setCollecting] = useState(null)
+
+  const handleCollect = async (docId, docLabel) => {
+    if (!user?.supplierId || !supplier) return
+    setCollecting(docId)
+    try {
+      const cnpj = supplier.cnpj?.replace(/\D/g,'')
+      const uf   = supplier.state || ''
+      const res  = await fetch('/.netlify/functions/collect-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplierId: user.supplierId, documentId: docId, cnpj, uf }),
+      })
+      const result = await res.json()
+      if (!result.success && result.status !== 'INDEFINIDO') throw new Error(result.detail || result.error)
+      showToast(result.message || '✅ Documento coletado com sucesso!')
+      // Reload documents
+      const d = await documentApi.list(user.supplierId)
+      setUploaded(d)
+    } catch (err) {
+      showToast('Erro na coleta: ' + err.message, 'error')
+    } finally { setCollecting(null) }
+  }
 
   const loadAll = async () => {
     if (!user?.supplierId) { setLoading(false); return }
@@ -174,8 +201,11 @@ export default function SupplierDocuments() {
     const up      = getDoc(doc.id)
     const status  = up?.status || 'MISSING'
     const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
-    const isAuto  = !!AUTO_COLLECT[doc.id]
-    const busy    = uploading === doc.id
+    const autoType  = AUTO_COLLECT[doc.id]  // 'INSTANT' | 'ON_DEMAND' | undefined
+    const isInstant = autoType === 'INSTANT'
+    const isOnDemand= autoType === 'ON_DEMAND'
+    const busy      = uploading === doc.id
+    const busyCollect = collecting === doc.id
 
     return (
       <div key={doc.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, background:cfg.bg, border:`1px solid ${cfg.bd}`, marginBottom:8 }}>
@@ -184,14 +214,32 @@ export default function SupplierDocuments() {
           <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{doc.name}</div>
           <div style={{ display:'flex', gap:6, marginTop:2, alignItems:'center', flexWrap:'wrap' }}>
             <span style={{ fontSize:10, fontWeight:700, color:cfg.color, background:`${cfg.color}18`, padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{cfg.label}</span>
-            {isAuto && <span style={{ fontSize:9, color:'#22c55e', background:'rgba(34,197,94,.1)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>⚡ Auto</span>}
+            {isInstant   && <span style={{ fontSize:9, color:'#22c55e', background:'rgba(34,197,94,.1)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>⚡ Auto</span>}
+            {isOnDemand  && <span style={{ fontSize:9, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>🤖 Automático</span>}
             {up?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>vence {up.expires_at.slice(0,10)}</span>}
           </div>
           {up?.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {up.review_note}</div>}
+          {/* Metadados do certificado FGTS */}
+          {doc.id===7 && up?.metadata?.numeroCertificado && (
+            <div style={{ fontSize:10,color:'#9B9B9B',marginTop:3 }}>
+              Cert. nº {up.metadata.numeroCertificado} · {up.metadata.validadeInicio} a {up.metadata.validadeFim}
+            </div>
+          )}
         </div>
 
-        {/* Botão de upload (só se não for automático) */}
-        {!isAuto && (
+        {/* ON_DEMAND: botão "Buscar agora" */}
+        {isOnDemand && (
+          busyCollect ? <Spinner size={20}/> : (
+            <Button variant={status==='VALID'?'neutral':'orange'} size="sm"
+              onClick={() => handleCollect(doc.id, doc.name)}
+              title="Buscar automaticamente na Caixa Econômica Federal">
+              {status==='VALID' ? '🔄 Renovar' : '🤖 Buscar'}
+            </Button>
+          )
+        )}
+
+        {/* Upload manual (só para docs não automáticos) */}
+        {!isInstant && !isOnDemand && (
           <>
             <input type="file" accept=".pdf,.jpg,.jpeg,.png"
               ref={el => fileRefs.current[doc.id] = el}
