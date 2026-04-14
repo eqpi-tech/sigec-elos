@@ -207,9 +207,22 @@ export const documentApi = {
 
     // Recalcula score após mudança de status
     if (docData?.supplier_id) {
-      const { data: allDocs } = await supabase
-        .from('documents').select('type, status').eq('supplier_id', docData.supplier_id)
-      const newScore = calculateScore(allDocs || [])
+      const [{ data: allDocs }, { data: catRows }] = await Promise.all([
+        supabase.from('documents').select('type, status').eq('supplier_id', docData.supplier_id),
+        supabase.from('supplier_categories').select('category_id').eq('supplier_id', docData.supplier_id),
+      ])
+      // Busca documentos exigidos pelas categorias
+      let reqDocs = []
+      if (catRows?.length) {
+        const catIds = catRows.map(r => r.category_id)
+        const { data: catDocRows } = await supabase
+          .from('category_documents').select('document_id').in('category_id', catIds)
+        const seen = new Set()
+        reqDocs = (catDocRows || [])
+          .map(r => ({ id: r.document_id }))
+          .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+      }
+      const newScore = calculateScore(allDocs || [], reqDocs)
       await supabase.from('seals')
         .update({ score: newScore })
         .eq('supplier_id', docData.supplier_id)
@@ -387,9 +400,21 @@ export const adminApi = {
     await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
 
     // Recalcula score final no momento da aprovação
-    const { data: allDocs } = await supabase
-      .from('documents').select('type, status').eq('supplier_id', supplierId)
-    const finalScore = calculateScore(allDocs || [])
+    const [{ data: allDocs }, { data: catRows }] = await Promise.all([
+      supabase.from('documents').select('type, status').eq('supplier_id', supplierId),
+      supabase.from('supplier_categories').select('category_id').eq('supplier_id', supplierId),
+    ])
+    let reqDocs = []
+    if (catRows?.length) {
+      const catIds = catRows.map(r => r.category_id)
+      const { data: catDocRows } = await supabase
+        .from('category_documents').select('document_id').in('category_id', catIds)
+      const seen = new Set()
+      reqDocs = (catDocRows || [])
+        .map(r => ({ id: r.document_id }))
+        .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+    }
+    const finalScore = calculateScore(allDocs || [], reqDocs)
     await supabase.from('seals')
       .update({ score: finalScore, issued_at: new Date().toISOString() })
       .eq('supplier_id', supplierId)

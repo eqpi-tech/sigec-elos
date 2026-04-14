@@ -6,9 +6,7 @@ import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
-const PLAN_PRICES = { Simples: [290,390,490,590], Premium: [990,1290,1690,2190] }
-const CNAE_OPTS   = ['Até 3', '4 a 10', '11 a 15', '16+']
-const CNAE_COUNTS = [3, 10, 15, 16]
+const PLAN_PRICES = { Simples: 290, Premium: 990 }
 
 const STEPS = ['Empresa','Categorias','Conta','Plano','Pagamento']
 
@@ -30,7 +28,6 @@ export default function SupplierOnboarding() {
   const [password2, setPassword2] = useState('')
 
   const [planType, setPlanType]   = useState('Simples')
-  const [cnaeIdx, setCnaeIdx]     = useState(0)
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -123,9 +120,9 @@ export default function SupplierOnboarding() {
       const supplier = resData.supplier
 
       // 4. Redireciona para Stripe Checkout
-      const priceYearly = PLAN_PRICES[planType][cnaeIdx]
+      const priceYearly = PLAN_PRICES[planType]
       const { url } = await paymentsApi.createCheckout({
-        planType, cnaeCount: CNAE_COUNTS[cnaeIdx],
+        planType, cnaeCount: 3,
         supplierId: supplier.id,
         userEmail:  email,
         priceYearly,
@@ -139,7 +136,7 @@ export default function SupplierOnboarding() {
     }
   }
 
-  const price    = PLAN_PRICES[planType][cnaeIdx]
+  const price    = PLAN_PRICES[planType]
   const monthly  = Math.ceil(price/12)
 
   const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box', transition:'all .15s' }
@@ -286,30 +283,21 @@ export default function SupplierOnboarding() {
           {step === 3 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
-              <div style={{ marginBottom:16 }}>
-                <label style={labelStyle}>Quantidade de CNAEs</label>
-                <div style={{ display:'flex', gap:6 }}>
-                  {CNAE_OPTS.map((opt,i) => (
-                    <button key={i} onClick={() => setCnaeIdx(i)} style={{ flex:1, padding:'8px 4px', borderRadius:8, border:`1px solid ${cnaeIdx===i?'#2E3192':'#e2e4ef'}`, background:cnaeIdx===i?'rgba(46,49,146,.08)':'#fff', color:cnaeIdx===i?'#2E3192':'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, cursor:'pointer' }}>
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
                 {['Simples','Premium'].map(pt => (
                   <button key={pt} onClick={() => setPlanType(pt)} style={{ padding:'16px 12px', borderRadius:14, border:`2px solid ${planType===pt?(pt==='Premium'?'#ea580c':'#2E3192'):'#e2e4ef'}`, background:planType===pt?(pt==='Premium'?'rgba(244,126,47,.06)':'rgba(46,49,146,.06)'):'#fff', cursor:'pointer', textAlign:'center', transition:'all .15s' }}>
                     <div style={{ fontSize:22 }}>{pt==='Premium'?'⭐':'🏷️'}</div>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:planType===pt?(pt==='Premium'?'#ea580c':'#2E3192'):'#1a1c5e', marginTop:4 }}>{pt}</div>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:20, color:'#1a1c5e', marginTop:4 }}>
-                      R$ {PLAN_PRICES[pt][cnaeIdx].toLocaleString('pt-BR')}
+                      R$ {PLAN_PRICES[pt].toLocaleString('pt-BR')}
                     </div>
                     <div style={{ fontSize:11, color:'#9B9B9B' }}>/ano</div>
                   </button>
                 ))}
               </div>
               <div style={{ background:'rgba(46,49,146,.04)', borderRadius:12, padding:'12px 16px', marginBottom:20, fontSize:13, fontFamily:'DM Sans,sans-serif', color:'#1a1c5e' }}>
-                <strong style={{ fontFamily:'Montserrat,sans-serif' }}>{planType}</strong> · {CNAE_OPTS[cnaeIdx]} CNAEs · R$ {price.toLocaleString('pt-BR')}/ano (~R$ {monthly.toLocaleString('pt-BR')}/mês)
+                <strong style={{ fontFamily:'Montserrat,sans-serif' }}>{planType}</strong> · R$ {price.toLocaleString('pt-BR')}/ano (~R$ {monthly.toLocaleString('pt-BR')}/mês)
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <Button variant="neutral" full onClick={() => setStep(1)}>← Voltar</Button>
@@ -323,7 +311,7 @@ export default function SupplierOnboarding() {
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Confirmar e pagar</div>
               <div style={{ background:'rgba(46,49,146,.04)', borderRadius:14, padding:'16px 18px', marginBottom:20 }}>
-                {[['Empresa', cnpjData?.razao_social || name], ['CNPJ', cnpj], ['Plano', `${planType} · ${CNAE_OPTS[cnaeIdx]} CNAEs`], ['Valor', `R$ ${price.toLocaleString('pt-BR')}/ano`], ['E-mail', email]].map(([l,v]) => (
+                {[['Empresa', cnpjData?.razao_social || name], ['CNPJ', cnpj], ['Plano', planType], ['Valor', `R$ ${price.toLocaleString('pt-BR')}/ano`], ['E-mail', email]].map(([l,v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', marginBottom:8, fontSize:13, fontFamily:'DM Sans,sans-serif' }}>
                     <span style={{ color:'#9B9B9B' }}>{l}</span>
                     <span style={{ fontWeight:600, color:'#1a1c5e' }}>{v}</span>

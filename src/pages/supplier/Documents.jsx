@@ -41,6 +41,7 @@ export default function SupplierDocuments() {
       let docs = []
       if (cats.length > 0) {
         docs = await categoriesApi.getRequiredDocuments(cats.map(c => c.id))
+        docs.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
       }
       setReqDocs(docs)
 
