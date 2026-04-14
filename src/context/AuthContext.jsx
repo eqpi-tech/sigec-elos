@@ -30,9 +30,10 @@ export function AuthProvider({ children }) {
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single()
+        .maybeSingle()   // maybeSingle: não lança 406 quando não há profile
       setUser(buildUser(authUser, profile))
-    } catch {
+    } catch (err) {
+      console.warn('fetchProfile error:', err?.message)
       setUser(null)
     } finally {
       setLoading(false)

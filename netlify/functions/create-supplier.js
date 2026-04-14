@@ -142,9 +142,11 @@ exports.handler = async (event) => {
     // Insere todos os documentos auto-coletados
     if (autoDocuments.length > 0) {
       for (const doc of autoDocuments) {
-        await supabaseAdmin.from('documents')
-          .upsert(doc, { onConflict: 'supplier_id,type' })
-          .catch(e => console.warn(`Auto-doc ${doc.type} warn:`, e.message))
+        try {
+          const { error: docErr } = await supabaseAdmin.from('documents')
+            .upsert(doc, { onConflict: 'supplier_id,type' })
+          if (docErr) console.warn(`Auto-doc ${doc.type} warn:`, docErr.message)
+        } catch (e) { console.warn(`Auto-doc ${doc.type} catch:`, e.message) }
       }
       console.log(`⚡ ${autoDocuments.length} documento(s) auto-coletado(s) para ${supplier.id}`)
     }
@@ -154,21 +156,35 @@ exports.handler = async (event) => {
     if (body.cnpj_full_data || body.sanctions_result) {
       // try/catch porque .catch() não existe no PostgrestFilterBuilder
       try {
-        await supabaseAdmin.from('cnpj_consultations').insert({
-          cnpj:           body.cnpj.replace(/\D/g, ''),
-          supplier_id:    supplier.id,
-          cnpj_data:      body.cnpj_full_data    || null,
-          sanctions_data: body.sanctions_result  || null,
-          has_sanctions:  !!(
-              (body.sanctions_result?.ceis?.length  || 0) +
-              (body.sanctions_result?.cnep?.length  || 0)
-            ) > 0,
-          sanctions_history: {
-            ceis: body.sanctions_result?.ceisHistory || [],
-            cnep: body.sanctions_result?.cnepHistory || [],
-          },
-          consulted_at:   new Date().toISOString(),
-        })
+        const activeCeis = body.sanctions_result?.ceis || []
+        const activeCnep = body.sanctions_result?.cnep || []
+        const hasSanctions = activeCeis.length > 0 || activeCnep.length > 0
+
+        const { error: cnpjInsertErr } = await supabaseAdmin
+          .from('cnpj_consultations')
+          .insert({
+            cnpj:           body.cnpj.replace(/\D/g, ''),
+            supplier_id:    supplier.id,
+            cnpj_data:      body.cnpj_full_data    || null,
+            sanctions_data: body.sanctions_result  || null,
+            has_sanctions:  hasSanctions,
+            consulted_at:   new Date().toISOString(),
+          })
+        if (cnpjInsertErr) {
+          // Tenta sem campos novos (compatibilidade com schema antigo)
+          if (cnpjInsertErr.code === 'PGRST204' || cnpjInsertErr.message?.includes('column')) {
+            console.warn('cnpj_consultations: tentando sem campo sanctions_history...')
+            await supabaseAdmin.from('cnpj_consultations').insert({
+              cnpj:        body.cnpj.replace(/\D/g, ''),
+              supplier_id: supplier.id,
+              cnpj_data:   body.cnpj_full_data || null,
+              has_sanctions: hasSanctions,
+              consulted_at: new Date().toISOString(),
+            })
+          } else {
+            console.warn('cnpj_consultations insert warn:', cnpjInsertErr.message)
+          }
+        }
       } catch (cnpjErr) {
         console.warn('cnpj_consultations insert (não crítico):', cnpjErr.message)
       }

@@ -141,9 +141,12 @@ export default function SupplierDocuments() {
       }
 
       for (const doc of docsToCreate) {
-        await supabase.from('documents')
-          .upsert(doc, { onConflict: 'supplier_id,type' })
-          .catch(e => console.warn(`auto-doc ${doc.type}:`, e.message))
+        try {
+          const { error: docErr } = await supabase
+            .from('documents')
+            .upsert(doc, { onConflict: 'supplier_id,type' })
+          if (docErr) console.warn(`auto-doc ${doc.type}:`, docErr.message)
+        } catch (e) { console.warn(`auto-doc ${doc.type} catch:`, e.message) }
       }
     } catch (err) {
       console.warn('autoValidateDocs warn:', err.message)

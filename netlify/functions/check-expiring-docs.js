@@ -57,9 +57,12 @@ exports.handler = async (event) => {
       .map(s => s.supplier?.user_id)
       .filter(Boolean)
 
-    const { data: usersData } = await supabase
-      .rpc('get_user_emails_by_ids', { user_ids: supplierUserIds })
-      .catch(() => ({ data: [] }))
+    let usersData = null
+    try {
+      const { data } = await supabase
+        .rpc('get_user_emails_by_ids', { user_ids: supplierUserIds })
+      usersData = data
+    } catch { usersData = [] }
 
     // Fallback: busca direto via auth admin
     const emailMap = {}
@@ -104,10 +107,12 @@ exports.handler = async (event) => {
     }
 
     // Log de auditoria no banco
-    await supabase.from('audit_log').insert({
-      action:    'EXPIRING_DOCS_CHECK',
-      metadata:  { total: expiringDocs.length, emails_sent: sent, urgent_marked: urgent, date: today },
-    }).catch(() => {})
+    try {
+      await supabase.from('audit_log').insert({
+        action:    'EXPIRING_DOCS_CHECK',
+        metadata:  { total: expiringDocs.length, emails_sent: sent, urgent_marked: urgent, date: today },
+      })
+    } catch { /* non-critical */ }
 
     console.log(`📧 Notificações: ${sent} enviadas | ${urgent} urgentes marcados`)
     return {
