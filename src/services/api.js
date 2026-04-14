@@ -375,18 +375,26 @@ export const adminApi = {
   },
 
   getSealAnalysis: async (supplierId) => {
-    const [supplierRes, sealsRes, docsRes, cnpjRes] = await Promise.all([
-      supabase.from('suppliers').select('*').eq('id', supplierId).single(),
+    const [supplierRes, sealsRes, docsRes, cnpjRes] = await Promise.allSettled([
+      supabase.from('suppliers').select('*').eq('id', supplierId).maybeSingle(),
       supabase.from('seals').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
-      supabase.from('cnpj_consultations').select('*').eq('supplier_id', supplierId).order('consulted_at', { ascending: false }).limit(1),
+      // Seleciona apenas colunas conhecidas — evita 503 se coluna nova não existir ainda
+      supabase.from('cnpj_consultations')
+        .select('id, supplier_id, cnpj, cnpj_data, sanctions_data, has_sanctions, consulted_at')
+        .eq('supplier_id', supplierId)
+        .order('consulted_at', { ascending: false })
+        .limit(1),
     ])
-    if (supplierRes.error) throw new Error(supplierRes.error.message)
+
+    const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
+    if (!supplier) throw new Error('Fornecedor não encontrado')
+
     return {
-      ...supplierRes.data,
-      seals:           sealsRes.data   || [],
-      documents:       docsRes.data    || [],
-      cnpj_consultation: cnpjRes.data?.[0] || null,
+      ...supplier,
+      seals:             sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : [],
+      documents:         docsRes.status  === 'fulfilled' ? (docsRes.value.data  || []) : [],
+      cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,
     }
   },
 

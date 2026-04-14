@@ -5,6 +5,22 @@ import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionT
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
+/** Converte qualquer valor para string segura para renderização React.
+ *  Previne o erro "Objects are not valid as a React child" quando a BrasilAPI
+ *  retorna campos como objetos {codigo, descricao} em vez de strings. */
+function safeStr(val, fallback = '—') {
+  if (val === null || val === undefined) return fallback
+  if (typeof val === 'string') return val || fallback
+  if (typeof val === 'number') return String(val)
+  if (typeof val === 'boolean') return val ? 'Sim' : 'Não'
+  if (typeof val === 'object') {
+    // Campos comuns da BrasilAPI que vêm como objeto
+    return val.descricao || val.nome || val.texto || val.sigla
+      || JSON.stringify(val).slice(0, 60)
+  }
+  return String(val) || fallback
+}
+
 // ─── Fila de homologação ──────────────────────────────────────────────────────
 export function BackofficeQueue() {
   const navigate = useNavigate()
@@ -107,8 +123,8 @@ function SimplesCard({ cnpjData }) {
   if (!cnpjData) return null
   const isOptante   = cnpjData.opcao_pelo_simples === true && !cnpjData.data_exclusao_do_simples
   const isMei       = cnpjData.opcao_pelo_mei === true
-  const dataOpcao   = cnpjData.data_opcao_pelo_simples
-  const dataExclusao= cnpjData.data_exclusao_do_simples
+  const dataOpcao   = safeStr(cnpjData.data_opcao_pelo_simples, '')
+  const dataExclusao= safeStr(cnpjData.data_exclusao_do_simples, '')
 
   const color   = isOptante ? '#15803d' : '#9B9B9B'
   const bg      = isOptante ? 'rgba(34,197,94,.06)' : 'rgba(0,0,0,.03)'
@@ -214,7 +230,7 @@ export function BackofficeAnalysis() {
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:18,fontWeight:800,color:'#1a1c5e',fontFamily:'Montserrat,sans-serif' }}>{data.razao_social}</div>
                 <div style={{ fontSize:13,color:'#9B9B9B' }}>{data.cnpj} · {data.city}/{data.state}</div>
-                {cnpjDat?.email && <div style={{ fontSize:12,color:'#2E3192',marginTop:2 }}>{cnpjDat.email}</div>}
+                {cnpjDat?.email && <div style={{ fontSize:12,color:'#2E3192',marginTop:2 }}>{safeStr(cnpjDat.email)}</div>}
               </div>
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:28,fontWeight:900,color:data.score>=70?'#22c55e':data.score>=50?'#f59e0b':'#ef4444',fontFamily:'Montserrat,sans-serif' }}>{data.score||0}</div>
@@ -235,12 +251,12 @@ export function BackofficeAnalysis() {
               {cnpjDat && (
                 <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:16 }}>
                   {[
-                    ['Situação',    cnpjDat.descricao_situacao_cadastral||'—'],
-                    ['Abertura',    cnpjDat.data_inicio_atividade||'—'],
-                    ['Porte',       cnpjDat.porte||'—'],
+                    ['Situação',    safeStr(cnpjDat.descricao_situacao_cadastral)],
+                    ['Abertura',    safeStr(cnpjDat.data_inicio_atividade)],
+                    ['Porte',       safeStr(cnpjDat.porte)],
                     ['Capital Social', cnpjDat.capital_social ? `R$ ${Number(cnpjDat.capital_social).toLocaleString('pt-BR')}` : '—'],
-                    ['Natureza Jurídica', cnpjDat.natureza_juridica||'—'],
-                    ['Município/UF', cnpjDat.municipio&&cnpjDat.uf ? `${cnpjDat.municipio}/${cnpjDat.uf}` : '—'],
+                    ['Natureza Jurídica', safeStr(cnpjDat.natureza_juridica)],
+                    ['Município/UF', `${safeStr(cnpjDat.municipio,'?')}/${safeStr(cnpjDat.uf,'?')}`],
                   ].map(([l,v])=>(
                     <div key={l} style={{ padding:'8px 10px',background:'rgba(46,49,146,.04)',borderRadius:8 }}>
                       <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif' }}>{l}</div>
@@ -261,7 +277,7 @@ export function BackofficeAnalysis() {
                 <div style={{ marginBottom:16 }}>
                   <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>CNAE Principal</div>
                   <div style={{ fontSize:12,background:'rgba(46,49,146,.05)',border:'1px solid rgba(46,49,146,.1)',padding:'8px 10px',borderRadius:8,color:'#1a1c5e' }}>
-                    <strong>{cnpjDat.cnae_fiscal}</strong> — {cnpjDat.cnae_fiscal_descricao}
+                    <strong>{safeStr(cnpjDat.cnae_fiscal)}</strong> — {safeStr(cnpjDat.cnae_fiscal_descricao)}
                   </div>
                 </div>
               )}
@@ -274,7 +290,7 @@ export function BackofficeAnalysis() {
                   </div>
                   <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
                     {cnpjDat.cnaes_secundarios.map((c,i)=>(
-                      <span key={i} title={c.descricao} style={{ fontSize:11,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'3px 8px',borderRadius:20,cursor:'default' }}>{c.codigo}</span>
+                      <span key={i} title={safeStr(c.descricao)} style={{ fontSize:11,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'3px 8px',borderRadius:20,cursor:'default' }}>{safeStr(c.codigo)}</span>
                     ))}
                   </div>
                 </div>
@@ -288,8 +304,8 @@ export function BackofficeAnalysis() {
                   </div>
                   {cnpjDat.qsa.map((s,i)=>(
                     <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'6px 10px',background:'#f9f9fb',borderRadius:8,marginBottom:3,fontSize:12 }}>
-                      <span style={{ fontWeight:600,color:'#1a1c5e' }}>{s.nome_socio}</span>
-                      <span style={{ color:'#9B9B9B' }}>{s.qualificacao_socio}</span>
+                      <span style={{ fontWeight:600,color:'#1a1c5e' }}>{safeStr(s.nome_socio)}</span>
+                      <span style={{ color:'#9B9B9B' }}>{safeStr(s.qualificacao_socio)}</span>
                     </div>
                   ))}
                 </div>
