@@ -55,13 +55,12 @@ export default function SupplierOnboarding() {
       }
 
       if (result.hasSanctions) {
-        // Não avança automaticamente — exige confirmação do usuário
-        setLookupError('⚠️  Este CNPJ consta em listas de sanções (CEIS/CNEP). A homologação poderá ser negada pelo backoffice.')
-        setSanctionsConfirm(true) // mostra botões de confirmação
-        return
+        // Apenas avisa — não bloqueia o cadastro
+        // O backoffice revisará e tomará a decisão de aprovação/rejeição
+        setLookupError('⚠️  Este CNPJ possui ocorrências em listas de sanções (CEIS/CNEP). O cadastro pode prosseguir, mas a homologação estará sujeita a análise especial pelo backoffice.')
       }
 
-      setStep(1) // CNPJ limpo — vai para seleção de categorias
+      setStep(1) // Avança para seleção de categorias (com ou sem alerta)
     } catch (err) {
       setLookupError(err.message)
     } finally { setLookupLoading(false) }
@@ -184,27 +183,11 @@ export default function SupplierOnboarding() {
               {lookupError && (
                 <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 14px', marginTop:12, fontSize:13, color:'#c2410c' }}>{lookupError}</div>
               )}
-              {sanctionsConfirm ? (
-                <div style={{ marginTop:16 }}>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#92400e', marginBottom:12 }}>
-                    Deseja prosseguir mesmo com restrições cadastrais?
-                  </div>
-                  <div style={{ display:'flex', gap:8 }}>
-                    <Button variant="neutral" full onClick={() => { setSanctionsConfirm(false); setLookupError(''); setCnpjData(null) }}>
-                      ← Usar outro CNPJ
-                    </Button>
-                    <Button variant="orange" full onClick={() => setStep(1)}>
-                      Prosseguir mesmo assim →
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
-                  disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
-                  onClick={handleCnpjLookup}>
-                  {lookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
-                </Button>
-              )}
+              <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
+                disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
+                onClick={handleCnpjLookup}>
+                {lookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
+              </Button>
             </div>
           )}
 

@@ -3,14 +3,19 @@
 // Chamado via: /.netlify/functions/cnpj-lookup?cnpj=00000000000000
 
 /**
- * Filtra apenas sanções ATIVAS.
- * O Portal da Transparência retorna TODAS as sanções históricas do CNPJ,
- * incluindo as já expiradas. É necessário filtrar por data e situação.
+ * Filtra apenas sanções COMPROVADAMENTE ATIVAS.
  *
- * Campos relevantes (Portal da Transparência API):
- *   dataInicioSancao : "dd/MM/yyyy" — início da sanção
- *   dataFimSancao    : "dd/MM/yyyy" | null — fim; null = sem prazo (permanente)
- *   situacaoDoSancionado: "Ativo" | "Inativo" | outros — situação atual
+ * Regra conservadora (evitar falsos positivos):
+ *   Uma sanção só é considerada ATIVA se PELO MENOS UMA das condições abaixo for verdadeira:
+ *   a) situacaoDoSancionado é explicitamente "Ativo" ou "Vigente"
+ *   b) dataFimSancao existe E é uma data FUTURA (> hoje)
+ *
+ *   Se ambos os campos estiverem ausentes/nulos, a sanção é tratada como HISTÓRICA
+ *   (o Portal da Transparência tem muitos registros antigos sem data de fim registrada).
+ *
+ * Campos relevantes:
+ *   situacaoDoSancionado : "Ativo" | "Inativo" | "" | null
+ *   dataFimSancao        : "dd/MM/yyyy" | null
  */
 function filterActiveSanctions(list) {
   if (!Array.isArray(list)) return []
@@ -19,34 +24,32 @@ function filterActiveSanctions(list) {
   today.setHours(0, 0, 0, 0)
 
   return list.filter(sanction => {
-    // 1. Verifica campo de situação (quando disponível)
-    const situacao = (sanction.situacaoDoSancionado || '').toLowerCase()
-    if (situacao && situacao !== 'ativo' && situacao !== 'vigente') {
-      // Se explicitamente inativo/expirado → descarta
-      return false
+    const situacao = (sanction.situacaoDoSancionado || '').toLowerCase().trim()
+    const rawFim   = sanction.dataFimSancao
+
+    // Critério A: situação explicitamente ativa
+    const situacaoAtiva = situacao === 'ativo' || situacao === 'vigente'
+
+    // Critério B: data de fim existe e ainda não passou
+    let dataFimFutura = false
+    if (rawFim) {
+      try {
+        let endDate
+        if (rawFim.includes('/')) {
+          const [d, m, y] = rawFim.split('/')
+          endDate = new Date(Number(y), Number(m) - 1, Number(d))
+        } else {
+          endDate = new Date(rawFim)
+        }
+        if (!isNaN(endDate.getTime())) {
+          dataFimFutura = endDate >= today
+        }
+      } catch {}
     }
 
-    // 2. Verifica data de fim
-    const rawFim = sanction.dataFimSancao
-    if (!rawFim) {
-      // Sem data de fim = sanção permanente/sem prazo → ATIVA
-      return true
-    }
-
-    // Converte "dd/MM/yyyy" → Date
-    // Formato alternativo "yyyy-MM-dd" também suportado
-    let endDate
-    if (rawFim.includes('/')) {
-      const [d, m, y] = rawFim.split('/')
-      endDate = new Date(Number(y), Number(m) - 1, Number(d))
-    } else {
-      endDate = new Date(rawFim)
-    }
-
-    if (isNaN(endDate.getTime())) return true  // Data inválida: mantém por precaução
-
-    // Sanção ativa se a data de fim ainda não passou
-    return endDate >= today
+    // Sanção ativa SOMENTE se tiver evidência positiva (A ou B)
+    // Registros sem situação E sem data de fim → histórico → NÃO conta
+    return situacaoAtiva || dataFimFutura
   })
 }
 
