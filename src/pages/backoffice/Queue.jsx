@@ -29,13 +29,27 @@ function safeStr(val, fallback = '—') {
   return String(val).trim() || fallback
 }
 
-// ─── Filtro de sanções ativas (espelha a lógica do cnpj-lookup.js) ──────────────
-// Aplicado no frontend para que dados gravados antes do fix também sejam filtrados.
-function filterActiveSanctions(list) {
+// ─── Filtro de sanções ativas ────────────────────────────────────────────────
+// Aplica dois filtros cumulativos:
+// 1. CNPJ exato — descarta sanções de outras filiais do mesmo grupo econômico
+// 2. Data/situação — descarta sanções históricas expiradas
+function filterActiveSanctions(list, supplierCnpj) {
   if (!Array.isArray(list)) return []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const cnpjNums = (supplierCnpj || '').replace(/\D/g, '')
+
   return list.filter(s => {
+    // ── Filtro 1: CNPJ exato ──────────────────────────────────────────────
+    // A API do Portal da Transparência pode retornar sanções de outras filiais
+    // (mesmo grupo econômico). Descarta qualquer registro que não seja do CNPJ exato.
+    if (cnpjNums) {
+      const cnpjRecord = (s.cnpjSancionado || s.cpfCnpj || s.numeroCnpj || '')
+        .replace(/\D/g, '')
+      if (cnpjRecord && cnpjRecord !== cnpjNums) return false
+    }
+
+    // ── Filtro 2: sanção realmente ativa ─────────────────────────────────
     const situacao = (s.situacaoDoSancionado || '').toLowerCase().trim()
     const situacaoAtiva = situacao === 'ativo' || situacao === 'vigente'
     let dataFimFutura = false
@@ -49,7 +63,6 @@ function filterActiveSanctions(list) {
         if (!isNaN(end.getTime())) dataFimFutura = end >= today
       } catch {}
     }
-    // Só conta se tiver evidência POSITIVA de estar ativa
     return situacaoAtiva || dataFimFutura
   })
 }
@@ -98,13 +111,12 @@ export function BackofficeQueue() {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function SanctionCard({ sanctions }) {
-  // Re-filtra no cliente: garante que dados antigos (antes do fix server-side) também
-  // sejam filtrados corretamente, evitando falsos positivos históricos.
+function SanctionCard({ sanctions, cnpj }) {
+  // Re-filtra no cliente: CNPJ exato + data/situação
   const rawCeis  = sanctions?.ceis  || []
   const rawCnep  = sanctions?.cnep  || []
-  const activeCeis  = filterActiveSanctions(rawCeis)
-  const activeCnep  = filterActiveSanctions(rawCnep)
+  const activeCeis  = filterActiveSanctions(rawCeis, cnpj)
+  const activeCnep  = filterActiveSanctions(rawCnep, cnpj)
   // Histórico = todos os registros retornados (ceisHistory/cnepHistory ou raw sem filtro)
   const historyCeis = sanctions?.ceisHistory?.length ? sanctions.ceisHistory : rawCeis
   const historyCnep = sanctions?.cnepHistory?.length ? sanctions.cnepHistory : rawCnep
@@ -228,9 +240,11 @@ export function BackofficeAnalysis() {
   const cnpjDat = cnpjC?.cnpj_data
   const sanctions = cnpjC?.sanctions_data  // { ceis, cnep, ceisHistory, cnepHistory }
 
-  // Re-filtra no cliente para corrigir dados históricos gravados antes do fix
-  const activeSancCeis = filterActiveSanctions(sanctions?.ceis || [])
-  const activeSancCnep = filterActiveSanctions(sanctions?.cnep || [])
+  // Re-filtra no cliente: CNPJ exato + data/situação
+  // Corrige dados históricos onde a API retornou sanções de outras filiais
+  const supplierCnpj = data.cnpj || ''
+  const activeSancCeis = filterActiveSanctions(sanctions?.ceis || [], supplierCnpj)
+  const activeSancCnep = filterActiveSanctions(sanctions?.cnep || [], supplierCnpj)
   const hasActiveSanctions = activeSancCeis.length > 0 || activeSancCnep.length > 0
 
   if (done) return (
@@ -354,7 +368,7 @@ export function BackofficeAnalysis() {
               {/* Sanções CEIS / CNEP */}
               <div>
                 <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:8 }}>Sanções CEIS / CNEP</div>
-                <SanctionCard sanctions={{ ceis: activeSancCeis, cnep: activeSancCnep, ceisHistory: sanctions?.ceisHistory, cnepHistory: sanctions?.cnepHistory }}/>
+                <SanctionCard sanctions={{ ceis: activeSancCeis, cnep: activeSancCnep, ceisHistory: sanctions?.ceisHistory, cnepHistory: sanctions?.cnepHistory }} cnpj={supplierCnpj}/>
               </div>
 
               <div style={{ fontSize:10,color:'#9B9B9B',marginTop:12,fontFamily:'DM Sans,sans-serif' }}>
