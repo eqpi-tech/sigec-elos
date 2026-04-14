@@ -46,10 +46,11 @@ ALTER TABLE public.categories           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.category_documents   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplier_categories  ENABLE ROW LEVEL SECURITY;
 
--- Catálogo e categorias são leitura pública (autenticados)
-CREATE POLICY "catalog_read"     ON public.documents_catalog  FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "categories_read"  ON public.categories         FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "cat_docs_read"    ON public.category_documents FOR SELECT USING (auth.uid() IS NOT NULL);
+-- Catálogo de categorias/documentos é público (leitura anônima permitida — dados de referência)
+-- Necessário porque o fornecedor seleciona categorias ANTES de criar a conta (step 2 do cadastro)
+CREATE POLICY "catalog_read"     ON public.documents_catalog  FOR SELECT USING (true);
+CREATE POLICY "categories_read"  ON public.categories         FOR SELECT USING (true);
+CREATE POLICY "cat_docs_read"    ON public.category_documents FOR SELECT USING (true);
 -- Admin pode modificar catálogo
 CREATE POLICY "catalog_admin"    ON public.documents_catalog  FOR ALL USING (public.is_admin());
 CREATE POLICY "categories_admin" ON public.categories         FOR ALL USING (public.is_admin());

@@ -23,9 +23,17 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   const [loadingDocs, setLoadingDocs]   = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const [loadError, setLoadError] = useState('')
+
   // Carrega categorias pai
   useEffect(() => {
-    categoriesApi.getParents().then(setParents).finally(() => setLoading(false))
+    categoriesApi.getParents()
+      .then(data => {
+        setParents(data)
+        if (!data.length) setLoadError('Nenhuma categoria encontrada. Verifique se o patch_002_categorias.sql foi executado no Supabase.')
+      })
+      .catch(err => setLoadError('Erro ao carregar categorias: ' + err.message))
+      .finally(() => setLoading(false))
   }, [])
 
   // Recalcula documentos quando seleção muda
@@ -99,6 +107,12 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   }
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:20 }}><Spinner size={32}/></div>
+
+  if (loadError) return (
+    <div style={{ padding:'16px', background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
+      ⚠️ {loadError}
+    </div>
+  )
 
   return (
     <div>
