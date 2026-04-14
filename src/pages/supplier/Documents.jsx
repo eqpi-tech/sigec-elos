@@ -107,7 +107,7 @@ export default function SupplierDocuments() {
           metadata:     { auto_collect: true, source: 'BrasilAPI', situacao: cnpj?.descricao_situacao_cadastral },
         })
       }
-      // Doc 62 — Simples Nacional
+      // Doc 62 — Simples Nacional (VALID sempre que a consulta foi feita)
       if (allReqDocs.find(d => d.id === 62)) {
         const isOptante = cnpj?.opcao_pelo_simples === true && !cnpj?.data_exclusao_do_simples
         docsToCreate.push({
@@ -115,9 +115,15 @@ export default function SupplierDocuments() {
           type:         '62',
           label:        'Comprovante de Deferimento do Simples Nacional',
           source:       'AUTO',
-          status:       isOptante ? 'VALID' : 'MISSING',
+          // VALID independente de ser optante: a consulta confirma o regime tributário
+          status:       'VALID',
           storage_path: null,
-          metadata:     { auto_collect: true, source: 'BrasilAPI', optante: isOptante },
+          metadata: {
+            auto_collect: true,
+            source: 'BrasilAPI',
+            optante: isOptante,
+            regime: isOptante ? 'Simples Nacional' : 'Lucro Presumido / Real',
+          },
         })
       }
       // Doc 61 — Análise CNAEs

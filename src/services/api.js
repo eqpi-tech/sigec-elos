@@ -375,25 +375,67 @@ export const adminApi = {
   },
 
   getSealAnalysis: async (supplierId) => {
-    const [supplierRes, sealsRes, docsRes, cnpjRes] = await Promise.allSettled([
+    const [supplierRes, sealsRes, docsRes, cnpjRes, catRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*').eq('id', supplierId).maybeSingle(),
       supabase.from('seals').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
-      // Seleciona apenas colunas conhecidas — evita 503 se coluna nova não existir ainda
       supabase.from('cnpj_consultations')
         .select('id, supplier_id, cnpj, cnpj_data, sanctions_data, has_sanctions, consulted_at')
         .eq('supplier_id', supplierId)
         .order('consulted_at', { ascending: false })
         .limit(1),
+      // Busca categorias do fornecedor para calcular docs exigidos
+      supabase.from('supplier_categories').select('category_id').eq('supplier_id', supplierId),
     ])
 
     const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
     if (!supplier) throw new Error('Fornecedor não encontrado')
 
+    const uploadedDocs = docsRes.status === 'fulfilled' ? (docsRes.value.data || []) : []
+    const uploadedByType = {}
+    uploadedDocs.forEach(d => { uploadedByType[String(d.type)] = d })
+
+    // Constrói lista completa: docs exigidos pelas categorias + docs já enviados
+    let fullDocList = [...uploadedDocs]
+    if (catRes.status === 'fulfilled' && catRes.value.data?.length) {
+      const catIds = catRes.value.data.map(r => r.category_id)
+      const { data: catDocRows } = await supabase
+        .from('category_documents')
+        .select('document_id, documents_catalog(id, name)')
+        .in('category_id', catIds)
+      if (catDocRows) {
+        const seen = new Set(uploadedDocs.map(d => String(d.type)))
+        catDocRows.forEach(row => {
+          const docId = String(row.document_id)
+          if (!seen.has(docId) && row.documents_catalog) {
+            seen.add(docId)
+            // Documento exigido mas ainda não enviado → aparece como MISSING
+            fullDocList.push({
+              id:          `req-${docId}`,
+              supplier_id: supplierId,
+              type:        docId,
+              label:       row.documents_catalog.name,
+              status:      'MISSING',
+              source:      'REQUIRED',
+              storage_path: null,
+              created_at:  null,
+            })
+          }
+        })
+      }
+    }
+
+    // Ordena: docs enviados primeiro, depois os faltantes; alfabético dentro de cada grupo
+    fullDocList.sort((a, b) => {
+      if (a.status === 'MISSING' && b.status !== 'MISSING') return 1
+      if (a.status !== 'MISSING' && b.status === 'MISSING') return -1
+      return (a.label||'').localeCompare(b.label||'', 'pt-BR')
+    })
+
     return {
       ...supplier,
       seals:             sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : [],
-      documents:         docsRes.status  === 'fulfilled' ? (docsRes.value.data  || []) : [],
+      documents:         fullDocList,
       cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,
     }
   },

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { Badge, Seal, Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 export default function SupplierDashboard() {
@@ -13,6 +14,8 @@ export default function SupplierDashboard() {
 
   const { pathname } = useLocation()
 
+  const [requiredDocsCount, setRequiredDocsCount] = useState(0)
+
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
     setLoading(true)
@@ -21,6 +24,19 @@ export default function SupplierDashboard() {
       setSupplier(s)
       const d = await documentApi.list(user.supplierId)
       setDocs(d)
+      // Busca contagem de documentos EXIGIDOS pelas categorias
+      // para usar como denominador correto no KPI
+      try {
+        const { data: catRows } = await supabase
+          .from('supplier_categories').select('category_id').eq('supplier_id', user.supplierId)
+        if (catRows?.length) {
+          const catIds = catRows.map(r => r.category_id)
+          const { data: catDocs } = await supabase
+            .from('category_documents').select('document_id').in('category_id', catIds)
+          const unique = new Set((catDocs||[]).map(r => r.document_id))
+          setRequiredDocsCount(unique.size)
+        }
+      } catch { /* não crítico */ }
     } finally { setLoading(false) }
   }, [user?.supplierId])
 
@@ -48,7 +64,8 @@ export default function SupplierDashboard() {
   const docsWarn    = docs.filter(d => d.status === 'EXPIRING').length
   const docsMissing = docs.filter(d => ['MISSING','REJECTED'].includes(d.status)).length
   const docsPending = docs.filter(d => d.status === 'PENDING').length
-  const progress    = Math.round((docsOk / Math.max(docs.length, 6)) * 100)
+  const total4progress = requiredDocsCount || Math.max(docs.length, 1)
+  const progress    = Math.round((docsOk / total4progress) * 100)
   const firstName   = user.name?.split(' ')[0] || 'Bem-vindo'
   const hour        = new Date().getHours()
   const greeting    = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
@@ -63,8 +80,8 @@ export default function SupplierDashboard() {
         }
       />
 
-      {/* Alert de documentos pendentes */}
-      {docsMissing > 0 && (
+      {/* Alert de documentos pendentes — só relevante se o selo já está ativo */}
+      {docsMissing > 0 && supplier?.sealStatus === 'ACTIVE' && (
         <div className="fade-in-up" style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.25)', borderRadius:14, padding:'14px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#dc2626' }}>⚠ {docsMissing} documento(s) pendente(s) — Seu Selo pode ser suspenso.</span>
           <Button variant="danger" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Resolver agora</Button>
@@ -86,7 +103,7 @@ export default function SupplierDashboard() {
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
         <KpiCard label="Nível Atual"     value={supplier.sealLevel || 'Simples'} sub={`Score: ${supplier.score || 0}/100`} subColor="#9B9B9B" icon="🏷️" iconBg="rgba(46,49,146,.1)" />
-        <KpiCard label="Docs Válidos"    value={`${docsOk}/${docs.length||6}`} sub={docsWarn>0?`${docsWarn} vencendo`:'Todos em dia'} subColor={docsWarn>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
+        <KpiCard label="Docs Válidos"    value={`${docsOk}/${requiredDocsCount||docs.length||'?'}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
         <KpiCard label="Em Análise"      value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />
         <KpiCard label="Status Seal"     value={supplier.sealStatus==='ACTIVE'?'Ativo':supplier.sealStatus==='PENDING'?'Pendente':'Inativo'} sub={`Nível ${supplier.sealLevel||'—'}`} subColor={supplier.sealStatus==='ACTIVE'?'#22c55e':'#f59e0b'} icon="✅" iconBg="rgba(34,197,94,.1)" />
       </div>
@@ -112,7 +129,7 @@ export default function SupplierDashboard() {
               </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
-              {[{l:'Cadastro',d:true},{l:'Plano',d:!!supplier.plans?.length},{l:'Documentos',d:docsOk>=4},{l:'Aprovação',d:supplier.sealStatus==='ACTIVE'}].map((s,i)=>(
+              {[{l:'Cadastro',d:true},{l:'Plano',d:!!supplier.plans?.length},{l:'Documentos',d:docsOk>0&&docsMissing===0},{l:'Aprovação',d:supplier.sealStatus==='ACTIVE'}].map((s,i)=>(
                 <div key={i} style={{ flex:1, textAlign:'center', padding:'8px 6px', borderRadius:8, background:s.d?'rgba(255,255,255,.15)':'rgba(255,255,255,.06)', border:s.d?'1px solid rgba(255,255,255,.2)':'1px solid rgba(255,255,255,.08)' }}>
                   <div style={{ fontSize:14 }}>{s.d?'✅':'⏳'}</div>
                   <div style={{ fontSize:9, fontFamily:'Montserrat,sans-serif', fontWeight:600, marginTop:2, color:s.d?'#fff':'rgba(255,255,255,.4)' }}>{s.l}</div>
@@ -122,6 +139,17 @@ export default function SupplierDashboard() {
           </div>
 
           {/* Docs preview */}
+          {/* Msg de contexto quando em fase de homologação */}
+          {supplier.sealStatus === 'PENDING' && docsMissing > 0 && (
+            <div style={{ background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.1)',borderRadius:12,padding:'12px 16px',marginBottom:12,display:'flex',gap:10,alignItems:'center' }}>
+              <span style={{ fontSize:20 }}>📋</span>
+              <div>
+                <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e' }}>Documentação em andamento</div>
+                <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>{docsMissing} documento{docsMissing>1?'s':''} ainda pendente{docsMissing>1?'s':''} · Envie para agilizar a homologação</div>
+              </div>
+              <Button variant="orange" size="sm" style={{ marginLeft:'auto' }} onClick={()=>navigate('/fornecedor/documentos')}>Enviar →</Button>
+            </div>
+          )}
           {docs.length > 0 && (
             <Card style={{ borderRadius:16, padding:'20px 24px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>

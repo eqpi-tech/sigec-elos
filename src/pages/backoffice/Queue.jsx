@@ -29,6 +29,31 @@ function safeStr(val, fallback = '—') {
   return String(val).trim() || fallback
 }
 
+// ─── Filtro de sanções ativas (espelha a lógica do cnpj-lookup.js) ──────────────
+// Aplicado no frontend para que dados gravados antes do fix também sejam filtrados.
+function filterActiveSanctions(list) {
+  if (!Array.isArray(list)) return []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return list.filter(s => {
+    const situacao = (s.situacaoDoSancionado || '').toLowerCase().trim()
+    const situacaoAtiva = situacao === 'ativo' || situacao === 'vigente'
+    let dataFimFutura = false
+    if (s.dataFimSancao) {
+      try {
+        let end
+        if (String(s.dataFimSancao).includes('/')) {
+          const [d, m, y] = String(s.dataFimSancao).split('/')
+          end = new Date(Number(y), Number(m) - 1, Number(d))
+        } else { end = new Date(s.dataFimSancao) }
+        if (!isNaN(end.getTime())) dataFimFutura = end >= today
+      } catch {}
+    }
+    // Só conta se tiver evidência POSITIVA de estar ativa
+    return situacaoAtiva || dataFimFutura
+  })
+}
+
 // ─── Fila de homologação ──────────────────────────────────────────────────────
 export function BackofficeQueue() {
   const navigate = useNavigate()
@@ -74,10 +99,15 @@ export function BackofficeQueue() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function SanctionCard({ sanctions }) {
-  const activeCeis  = sanctions?.ceis  || []
-  const activeCnep  = sanctions?.cnep  || []
-  const historyCeis = sanctions?.ceisHistory || []
-  const historyCnep = sanctions?.cnepHistory || []
+  // Re-filtra no cliente: garante que dados antigos (antes do fix server-side) também
+  // sejam filtrados corretamente, evitando falsos positivos históricos.
+  const rawCeis  = sanctions?.ceis  || []
+  const rawCnep  = sanctions?.cnep  || []
+  const activeCeis  = filterActiveSanctions(rawCeis)
+  const activeCnep  = filterActiveSanctions(rawCnep)
+  // Histórico = todos os registros retornados (ceisHistory/cnepHistory ou raw sem filtro)
+  const historyCeis = sanctions?.ceisHistory?.length ? sanctions.ceisHistory : rawCeis
+  const historyCnep = sanctions?.cnepHistory?.length ? sanctions.cnepHistory : rawCnep
   const totalActive  = activeCeis.length + activeCnep.length
   const totalHistory = historyCeis.length + historyCnep.length
   const expiredCount = totalHistory - totalActive
@@ -198,9 +228,10 @@ export function BackofficeAnalysis() {
   const cnpjDat = cnpjC?.cnpj_data
   const sanctions = cnpjC?.sanctions_data  // { ceis, cnep, ceisHistory, cnepHistory }
 
-  // Sanção ativa = campo has_sanctions do banco OU ceis/cnep ativos no objeto
-  const hasActiveSanctions = cnpjC?.has_sanctions ||
-    (sanctions?.ceis?.length > 0) || (sanctions?.cnep?.length > 0)
+  // Re-filtra no cliente para corrigir dados históricos gravados antes do fix
+  const activeSancCeis = filterActiveSanctions(sanctions?.ceis || [])
+  const activeSancCnep = filterActiveSanctions(sanctions?.cnep || [])
+  const hasActiveSanctions = activeSancCeis.length > 0 || activeSancCnep.length > 0
 
   if (done) return (
     <div style={{ maxWidth:600,margin:'80px auto',padding:24,textAlign:'center' }}>
@@ -323,7 +354,7 @@ export function BackofficeAnalysis() {
               {/* Sanções CEIS / CNEP */}
               <div>
                 <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:8 }}>Sanções CEIS / CNEP</div>
-                <SanctionCard sanctions={sanctions}/>
+                <SanctionCard sanctions={{ ceis: activeSancCeis, cnep: activeSancCnep, ceisHistory: sanctions?.ceisHistory, cnepHistory: sanctions?.cnepHistory }}/>
               </div>
 
               <div style={{ fontSize:10,color:'#9B9B9B',marginTop:12,fontFamily:'DM Sans,sans-serif' }}>

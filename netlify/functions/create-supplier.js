@@ -89,17 +89,17 @@ exports.handler = async (event) => {
         type:         '62',
         label:        'Comprovante de Deferimento do Simples Nacional',
         source:       'AUTO',
-        status:       isOptante ? 'VALID' : 'MISSING',
+        // VALID independente de ser optante: a consulta foi feita e o status é conhecido
+        status:       'VALID',
         storage_path: null,
         metadata: {
           auto_collect: true,
           source: 'BrasilAPI',
           optante: isOptante,
+          regime: isOptante ? 'Simples Nacional' : 'Lucro Presumido / Real',
           data_opcao: body.cnpj_full_data.data_opcao_pelo_simples || null,
           data_exclusao: body.cnpj_full_data.data_exclusao_do_simples || null,
-          note: isOptante
-            ? 'Optante confirmado pela Receita Federal via BrasilAPI'
-            : 'Empresa não optante pelo Simples Nacional',
+          note: 'Situação tributária confirmada via Receita Federal (BrasilAPI)',
         },
       })
     }
