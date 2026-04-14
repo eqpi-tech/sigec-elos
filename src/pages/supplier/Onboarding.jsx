@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { cnpjApi, paymentsApi } from '../../services/api.js'
+import { cnpjApi, paymentsApi, categoriesApi } from '../../services/api.js'
+import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
@@ -9,7 +10,7 @@ const PLAN_PRICES = { Simples: [290,390,490,590], Premium: [990,1290,1690,2190] 
 const CNAE_OPTS   = ['Até 3', '4 a 10', '11 a 15', '16+']
 const CNAE_COUNTS = [3, 10, 15, 16]
 
-const STEPS = ['Empresa','Conta','Plano','Pagamento']
+const STEPS = ['Empresa','Categorias','Conta','Plano','Pagamento']
 
 export default function SupplierOnboarding() {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export default function SupplierOnboarding() {
   const [cnpjData, setCnpjData]   = useState(null)
   const [sanctions, setSanctions] = useState(null)
   const [lookupLoading, setLookupLoading] = useState(false)
+  const [selectedCategories, setSelectedCategories] = useState(new Set())
   const [lookupError, setLookupError]     = useState('')
 
   const [name, setName]       = useState('')
@@ -62,7 +64,7 @@ export default function SupplierOnboarding() {
         return
       }
 
-      setStep(1) // CNPJ limpo — avança normalmente
+      setStep(1) // CNPJ limpo — vai para seleção de categorias
     } catch (err) {
       setLookupError(err.message)
     } finally { setLookupLoading(false) }
@@ -71,7 +73,7 @@ export default function SupplierOnboarding() {
   const handleCreateAccount = async () => {
     if (password !== password2) { setError('As senhas não coincidem'); return }
     if (password.length < 8)    { setError('Senha deve ter pelo menos 8 caracteres'); return }
-    setStep(2); setError('')
+    setStep(3); setError('')
   }
 
   const handlePayment = async () => {
@@ -111,8 +113,8 @@ export default function SupplierOnboarding() {
           employee_range:    cnpjData?.porte ? cnpjData.porte : null,
           sanctions_checked: true,
           sanctions_result:  sanctions,
-          // Dados completos para cnpj_consultations (histórico e backoffice)
           cnpj_full_data:    cnpjData || null,
+          category_ids:      [...selectedCategories],
         }),
       })
 
@@ -209,8 +211,34 @@ export default function SupplierOnboarding() {
             </div>
           )}
 
-          {/* Step 1 — Conta */}
+
+          {/* Step 1 — Categorias */}
           {step === 1 && (
+            <div>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Em quais categorias você atua?</div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16 }}>
+                Selecione todas as categorias relevantes. Os documentos exigidos serão calculados automaticamente.
+              </div>
+              <div style={{ maxHeight:340, overflowY:'auto', paddingRight:4 }}>
+                <CategorySelector
+                  selectedIds={selectedCategories}
+                  onChange={setSelectedCategories}
+                  showDocuments={true}
+                />
+              </div>
+              <div style={{ display:'flex', gap:8, marginTop:20 }}>
+                <Button variant="neutral" full onClick={() => setStep(0)}>← Voltar</Button>
+                <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
+                  onClick={() => { if (selectedCategories.size===0) { setError('Selecione pelo menos uma categoria'); return }; setError(''); setStep(2) }}>
+                  Próximo →
+                </Button>
+              </div>
+              {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginTop:10, fontSize:13, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>}
+            </div>
+          )}
+
+          {/* Step 2 — Conta */}
+          {step === 2 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Crie sua conta</div>
 
@@ -254,8 +282,8 @@ export default function SupplierOnboarding() {
             </div>
           )}
 
-          {/* Step 2 — Plano */}
-          {step === 2 && (
+          {/* Step 3 — Plano */}
+          {step === 3 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
               <div style={{ marginBottom:16 }}>
@@ -285,13 +313,13 @@ export default function SupplierOnboarding() {
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <Button variant="neutral" full onClick={() => setStep(1)}>← Voltar</Button>
-                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(3)}>Ir para pagamento →</Button>
+                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(4)}>Ir para pagamento →</Button>
               </div>
             </div>
           )}
 
-          {/* Step 3 — Pagamento */}
-          {step === 3 && (
+          {/* Step 4 — Pagamento */}
+          {step === 4 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Confirmar e pagar</div>
               <div style={{ background:'rgba(46,49,146,.04)', borderRadius:14, padding:'16px 18px', marginBottom:20 }}>

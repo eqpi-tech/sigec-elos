@@ -466,3 +466,89 @@ export const adminApi = {
     return res.json()
   },
 }
+
+// ── Categorias e Documentos EQPI ─────────────────────────────────────────────
+export const categoriesApi = {
+  // Busca todas as categorias pai
+  getParents: async () => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id, name')
+      .is('parent_id', null)
+      .eq('active', true)
+      .order('name')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // Busca filhas de uma categoria pai
+  getChildren: async (parentId) => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id, name, parent_id')
+      .eq('parent_id', parentId)
+      .eq('active', true)
+      .order('name')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // Busca todos os nós filhos e netos de um pai (para expandir a árvore)
+  getTree: async (parentId) => {
+    // Busca nível 2 (filhos diretos)
+    const { data: children } = await supabase
+      .from('categories')
+      .select('id, name, parent_id')
+      .eq('parent_id', parentId)
+      .eq('active', true)
+      .order('name')
+    if (!children?.length) return []
+    // Busca nível 3 (netos) para cada filho
+    const childIds = children.map(c => c.id)
+    const { data: grandchildren } = await supabase
+      .from('categories')
+      .select('id, name, parent_id')
+      .in('parent_id', childIds)
+      .eq('active', true)
+      .order('name')
+    return { children: children || [], grandchildren: grandchildren || [] }
+  },
+
+  // Calcula documentos exigidos pela união das categorias selecionadas (sem duplicatas)
+  getRequiredDocuments: async (categoryIds) => {
+    if (!categoryIds?.length) return []
+    const { data, error } = await supabase
+      .from('category_documents')
+      .select('document_id, documents_catalog(id, name, auto_collect)')
+      .in('category_id', categoryIds)
+    if (error) throw new Error(error.message)
+    // Union: deduplica por document_id
+    const seen = new Set()
+    return (data || [])
+      .filter(r => r.documents_catalog)
+      .map(r => r.documents_catalog)
+      .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
+      .sort((a, b) => a.id - b.id)
+  },
+
+  // Salva categorias do fornecedor
+  saveSupplierCategories: async (supplierId, categoryIds) => {
+    // Remove as antigas
+    await supabase.from('supplier_categories').delete().eq('supplier_id', supplierId)
+    if (!categoryIds.length) return []
+    const rows = categoryIds.map(cid => ({ supplier_id: supplierId, category_id: cid }))
+    const { data, error } = await supabase.from('supplier_categories').insert(rows).select()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  // Busca categorias salvas de um fornecedor
+  getSupplierCategories: async (supplierId) => {
+    const { data, error } = await supabase
+      .from('supplier_categories')
+      .select('category_id, categories(id, name, parent_id)')
+      .eq('supplier_id', supplierId)
+    if (error) throw new Error(error.message)
+    return (data || []).map(r => r.categories).filter(Boolean)
+  },
+}

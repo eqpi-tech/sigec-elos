@@ -118,7 +118,17 @@ exports.handler = async (event) => {
       console.error('Profile update error:', profileError)
     }
 
-    console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id}`)
+    // 4. Salva categorias selecionadas
+    const categoryIds = body.category_ids || []
+    if (categoryIds.length > 0) {
+      const catRows = categoryIds.map(cid => ({ supplier_id: supplier.id, category_id: cid }))
+      const { error: catErr } = await supabaseAdmin
+        .from('supplier_categories')
+        .insert(catRows)
+      if (catErr) console.warn('supplier_categories insert warn:', catErr.message)
+    }
+
+    console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
 
     return {
       statusCode: 201,

@@ -12,6 +12,7 @@ import SupplierDashboard  from './pages/supplier/Dashboard.jsx'
 import SupplierDocuments  from './pages/supplier/Documents.jsx'
 import SupplierPlans      from './pages/supplier/Plans.jsx'
 import PlanSuccess        from './pages/supplier/PlanSuccess.jsx'
+import SupplierCategories from './pages/supplier/Categories.jsx'
 
 import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
@@ -57,7 +58,8 @@ function AppRoutes() {
       <Route path="/fornecedor"             element={<Protect roles={['SUPPLIER']}><SupplierDashboard/></Protect>} />
       <Route path="/fornecedor/documentos"  element={<Protect roles={['SUPPLIER']}><SupplierDocuments/></Protect>} />
       <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']}><SupplierPlans/></Protect>} />
-      <Route path="/fornecedor/plano-ativo" element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
+      <Route path="/fornecedor/plano-ativo"    element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
+      <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
