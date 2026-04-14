@@ -10,15 +10,23 @@ const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
  *  retorna campos como objetos {codigo, descricao} em vez de strings. */
 function safeStr(val, fallback = '—') {
   if (val === null || val === undefined) return fallback
-  if (typeof val === 'string') return val || fallback
+  if (typeof val === 'string') return val.trim() || fallback
   if (typeof val === 'number') return String(val)
   if (typeof val === 'boolean') return val ? 'Sim' : 'Não'
+  if (Array.isArray(val)) return val.map(v => safeStr(v, '')).filter(Boolean).join(', ') || fallback
   if (typeof val === 'object') {
-    // Campos comuns da BrasilAPI que vêm como objeto
-    return val.descricao || val.nome || val.texto || val.sigla
-      || JSON.stringify(val).slice(0, 60)
+    // Portal da Transparência: {descricaoPortal, descricaoResumida}
+    // BrasilAPI: {codigo, descricao}, {nome, poder, esfera, siglaUf}
+    return val.descricaoPortal
+      || val.descricaoResumida
+      || val.descricao
+      || val.nome
+      || val.texto
+      || val.sigla
+      || val.codigo
+      || JSON.stringify(val).slice(0, 80)
   }
-  return String(val) || fallback
+  return String(val).trim() || fallback
 }
 
 // ─── Fila de homologação ──────────────────────────────────────────────────────
@@ -90,21 +98,22 @@ function SanctionCard({ sanctions }) {
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2 }}>
                 <span style={{ fontWeight:700,color:'#dc2626',fontFamily:'Montserrat,sans-serif' }}>{s._src}</span>
                 <span style={{ fontSize:10,color:'#9B9B9B' }}>
-                  {s.dataInicioSancao && `Início: ${s.dataInicioSancao}`}
-                  {s.dataFimSancao   && ` · Fim: ${s.dataFimSancao}`}
+                  {s.dataInicioSancao && `Início: ${safeStr(s.dataInicioSancao)}`}
+                  {s.dataFimSancao   && ` · Fim: ${safeStr(s.dataFimSancao)}`}
                   {!s.dataFimSancao  && ' · Sem prazo determinado'}
                 </span>
               </div>
               <div style={{ color:'#1a1c5e',fontFamily:'DM Sans,sans-serif' }}>
-                {s.nomeOrgaoSancionador || s.orgaoSancionador || '—'}
+                {safeStr(s.nomeOrgaoSancionador || s.orgaoSancionador, '—')}
               </div>
-              {(s.fundamentacaoLegal||s.tipoSancao) && (
+              {(s.fundamentacaoLegal || s.tipoSancao) && (
                 <div style={{ color:'#9B9B9B',fontSize:11,marginTop:2 }}>
-                  {s.tipoSancao} {s.fundamentacaoLegal && `· ${s.fundamentacaoLegal}`}
+                  {safeStr(s.tipoSancao, '')}
+                  {s.fundamentacaoLegal && ` · ${safeStr(s.fundamentacaoLegal)}`}
                 </div>
               )}
               {s.situacaoDoSancionado && (
-                <div style={{ marginTop:2,fontSize:10,color:'#f59e0b',fontWeight:700 }}>Situação: {s.situacaoDoSancionado}</div>
+                <div style={{ marginTop:2,fontSize:10,color:'#f59e0b',fontWeight:700 }}>Situação: {safeStr(s.situacaoDoSancionado)}</div>
               )}
             </div>
           ))}
