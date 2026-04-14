@@ -5,13 +5,21 @@ import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
 // Documentos coletados automaticamente pelo sistema (por document_id do catálogo EQPI)
-// 'INSTANT' = feito no cadastro, sem interação
-// 'ON_DEMAND' = botão "Buscar agora" na tela de documentos
+// 'INSTANT'   = coletado no cadastro via BrasilAPI, sem interação do usuário
+// 'LINK'      = upload manual com link direto para o site emissor
 const AUTO_COLLECT = {
-  37: 'INSTANT',    // Cartão CNPJ — BrasilAPI (no cadastro)
-  61: 'INSTANT',    // Análise CNAEs — BrasilAPI (no cadastro)
-  62: 'INSTANT',    // Simples Nacional — BrasilAPI (no cadastro)
-  7:  'ON_DEMAND',  // CRF FGTS — scraping Caixa Econômica Federal
+  37: 'INSTANT',  // Cartão CNPJ — BrasilAPI
+  61: 'INSTANT',  // Análise CNAEs — BrasilAPI
+  62: 'INSTANT',  // Simples Nacional — BrasilAPI
+}
+
+// Links diretos para emissão dos documentos que precisam de upload manual
+const DOC_LINKS = {
+  7:  'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
+  8:  'https://cndt-certidao.tst.jus.br/inicio.faces',
+  42: 'https://solucoes.receita.fazenda.gov.br/servicos/certidaointernet/PJ/Emitir',
+  40: null, // Alvará — emitido pela prefeitura (varia por município)
+  19: null, // Licença ambiental — emitida pelo órgão estadual
 }
 
 const STATUS_CONFIG = {
@@ -35,26 +43,11 @@ export default function SupplierDocuments() {
 
   const [collecting, setCollecting] = useState(null)
 
+  // Reservado para integração futura via proxy residencial (ScrapingBee/Zyte)
+  // Por ora FGTS e CND usam upload manual com link direto para o site emissor
   const handleCollect = async (docId, docLabel) => {
-    if (!user?.supplierId || !supplier) return
-    setCollecting(docId)
-    try {
-      const cnpj = supplier.cnpj?.replace(/\D/g,'')
-      const uf   = supplier.state || ''
-      const res  = await fetch('/.netlify/functions/collect-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supplierId: user.supplierId, documentId: docId, cnpj, uf }),
-      })
-      const result = await res.json()
-      if (!result.success && result.status !== 'INDEFINIDO') throw new Error(result.detail || result.error)
-      showToast(result.message || '✅ Documento coletado com sucesso!')
-      // Reload documents
-      const d = await documentApi.list(user.supplierId)
-      setUploaded(d)
-    } catch (err) {
-      showToast('Erro na coleta: ' + err.message, 'error')
-    } finally { setCollecting(null) }
+    const link = DOC_LINKS[docId]
+    if (link) window.open(link, '_blank')
   }
 
   const loadAll = async () => {
@@ -204,9 +197,9 @@ export default function SupplierDocuments() {
     const up      = getDoc(doc.id)
     const status  = up?.status || 'MISSING'
     const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
-    const autoType  = AUTO_COLLECT[doc.id]  // 'INSTANT' | 'ON_DEMAND' | undefined
+    const autoType  = AUTO_COLLECT[doc.id]  // 'INSTANT' | undefined
     const isInstant = autoType === 'INSTANT'
-    const isOnDemand= autoType === 'ON_DEMAND'
+    const isOnDemand= false // reservado para futura integração com proxy residencial
     const busy      = uploading === doc.id
     const busyCollect = collecting === doc.id
 
@@ -230,15 +223,15 @@ export default function SupplierDocuments() {
           )}
         </div>
 
-        {/* ON_DEMAND: botão "Buscar agora" */}
-        {isOnDemand && (
-          busyCollect ? <Spinner size={20}/> : (
-            <Button variant={status==='VALID'?'neutral':'orange'} size="sm"
-              onClick={() => handleCollect(doc.id, doc.name)}
-              title="Buscar automaticamente na Caixa Econômica Federal">
-              {status==='VALID' ? '🔄 Renovar' : '🤖 Buscar'}
+        {/* Link direto para emissão (documentos com site externo) */}
+        {DOC_LINKS[doc.id] && (
+          <a href={DOC_LINKS[doc.id]} target="_blank" rel="noopener noreferrer"
+            style={{ textDecoration:'none' }}
+            title="Abrir site emissor para baixar o documento">
+            <Button variant={status==='VALID'?'neutral':'orange'} size="sm">
+              🌐 Emitir
             </Button>
-          )
+          </a>
         )}
 
         {/* Upload manual (só para docs não automáticos) */}
@@ -304,7 +297,7 @@ export default function SupplierDocuments() {
           </div>
           {reqDocs.map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            ⚡ Documentos marcados como "Auto" são coletados pelo sistema · PDF, JPG ou PNG · Máx 10MB · Validação pelo backoffice EQPI
+            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial para download · PDF, JPG ou PNG · Máx 10MB
           </div>
         </Card>
       )}
