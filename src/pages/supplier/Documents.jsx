@@ -4,10 +4,11 @@ import { supplierApi, documentApi, categoriesApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
-// Documentos que o sistema busca automaticamente (por document_id do catálogo EQPI)
-// Expandir conforme integrarmos mais APIs
+// Documentos coletados automaticamente pelo sistema (por document_id do catálogo EQPI)
 const AUTO_COLLECT = {
-  37: 'CNPJ',   // Cartão CNPJ — já buscado na BrasilAPI durante o cadastro
+  37: 'BrasilAPI',   // Cartão CNPJ — situação cadastral
+  61: 'BrasilAPI',   // Análise CNAEs — CNAEs principal e secundários
+  62: 'BrasilAPI',   // Simples Nacional — opcao_pelo_simples
 }
 
 const STATUS_CONFIG = {
@@ -53,7 +54,7 @@ export default function SupplierDocuments() {
       const alreadyHasCnpj = d.some(u => u.type === '37' || u.type === 'CNPJ_CARD')
       const cnpjInReqs = docs.find(r => r.id === 37)
       if (cnpjInReqs && !alreadyHasCnpj) {
-        await autoValidateCnpj(user.supplierId)
+        await autoValidateDocs(user.supplierId, docs)
         // Recarrega após auto-validar
         const d2 = await documentApi.list(user.supplierId)
         setUploaded(d2)
@@ -61,28 +62,64 @@ export default function SupplierDocuments() {
     } finally { setLoading(false) }
   }
 
-  const autoValidateCnpj = async (supplierId) => {
+  const autoValidateDocs = async (supplierId, allReqDocs) => {
     try {
-      // Busca os dados do CNPJ já salvos na cnpj_consultations
       const { data: consult } = await supabase
         .from('cnpj_consultations')
         .select('cnpj_data, consulted_at')
         .eq('supplier_id', supplierId)
         .order('consulted_at', { ascending: false })
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      await supabase.from('documents').upsert({
-        supplier_id:  supplierId,
-        type:         '37',
-        label:        'Cartão de Inscrição no CNPJ',
-        source:       'AUTO',
-        status:       'VALID',
-        storage_path: null,
-        metadata:     { auto_collect: true, source: 'BrasilAPI', data: consult?.cnpj_data || null },
-      }, { onConflict: 'supplier_id,type' })
+      const cnpj = consult?.cnpj_data
+      const docsToCreate = []
+
+      // Doc 37 — Cartão CNPJ
+      if (allReqDocs.find(d => d.id === 37)) {
+        docsToCreate.push({
+          supplier_id:  supplierId,
+          type:         '37',
+          label:        'Cartão de Inscrição no CNPJ',
+          source:       'AUTO',
+          status:       cnpj?.descricao_situacao_cadastral === 'ATIVA' ? 'VALID' : 'PENDING',
+          storage_path: null,
+          metadata:     { auto_collect: true, source: 'BrasilAPI', situacao: cnpj?.descricao_situacao_cadastral },
+        })
+      }
+      // Doc 62 — Simples Nacional
+      if (allReqDocs.find(d => d.id === 62)) {
+        const isOptante = cnpj?.opcao_pelo_simples === true && !cnpj?.data_exclusao_do_simples
+        docsToCreate.push({
+          supplier_id:  supplierId,
+          type:         '62',
+          label:        'Comprovante de Deferimento do Simples Nacional',
+          source:       'AUTO',
+          status:       isOptante ? 'VALID' : 'MISSING',
+          storage_path: null,
+          metadata:     { auto_collect: true, source: 'BrasilAPI', optante: isOptante },
+        })
+      }
+      // Doc 61 — Análise CNAEs
+      if (allReqDocs.find(d => d.id === 61) && cnpj?.cnae_fiscal) {
+        docsToCreate.push({
+          supplier_id:  supplierId,
+          type:         '61',
+          label:        'Analise CNAES',
+          source:       'AUTO',
+          status:       'VALID',
+          storage_path: null,
+          metadata:     { auto_collect: true, source: 'BrasilAPI', cnae: cnpj?.cnae_fiscal, descricao: cnpj?.cnae_fiscal_descricao },
+        })
+      }
+
+      for (const doc of docsToCreate) {
+        await supabase.from('documents')
+          .upsert(doc, { onConflict: 'supplier_id,type' })
+          .catch(e => console.warn(`auto-doc ${doc.type}:`, e.message))
+      }
     } catch (err) {
-      console.warn('autoValidateCnpj warn:', err.message)
+      console.warn('autoValidateDocs warn:', err.message)
     }
   }
 

@@ -3238,3 +3238,9 @@ INSERT INTO public.category_documents (category_id, document_id) VALUES (32180, 
 INSERT INTO public.category_documents (category_id, document_id) VALUES (32180, 161) ON CONFLICT (category_id, document_id) DO NOTHING;
 INSERT INTO public.category_documents (category_id, document_id) VALUES (32180, 216) ON CONFLICT (category_id, document_id) DO NOTHING;
 INSERT INTO public.category_documents (category_id, document_id) VALUES (32180, 578) ON CONFLICT (category_id, document_id) DO NOTHING;
+-- ── Marcar documentos com coleta automática ──────────────────────────────────
+UPDATE public.documents_catalog SET auto_collect = TRUE WHERE id IN (
+  37,  -- Cartão de Inscrição no CNPJ (BrasilAPI)
+  61,  -- Análise CNAES (BrasilAPI)
+  62   -- Comprovante Simples Nacional (BrasilAPI opcao_pelo_simples)
+);

@@ -75,6 +75,80 @@ exports.handler = async (event) => {
       throw new Error(supplierError.message)
     }
 
+    // 2a. Auto-valida documentos que podem ser confirmados pelo CNPJ lookup
+    //     Doc 62 = Comprovante Simples Nacional
+    //     Doc 61 = Análise CNAEs
+    const autoDocuments = []
+
+    // Simples Nacional — confirmado pela BrasilAPI
+    if (body.cnpj_full_data?.opcao_pelo_simples !== undefined) {
+      const isOptante = body.cnpj_full_data.opcao_pelo_simples === true
+                        && !body.cnpj_full_data.data_exclusao_do_simples
+      autoDocuments.push({
+        supplier_id:  supplier.id,
+        type:         '62',
+        label:        'Comprovante de Deferimento do Simples Nacional',
+        source:       'AUTO',
+        status:       isOptante ? 'VALID' : 'MISSING',
+        storage_path: null,
+        metadata: {
+          auto_collect: true,
+          source: 'BrasilAPI',
+          optante: isOptante,
+          data_opcao: body.cnpj_full_data.data_opcao_pelo_simples || null,
+          data_exclusao: body.cnpj_full_data.data_exclusao_do_simples || null,
+          note: isOptante
+            ? 'Optante confirmado pela Receita Federal via BrasilAPI'
+            : 'Empresa não optante pelo Simples Nacional',
+        },
+      })
+    }
+
+    // Análise CNAEs — doc 61 (dados já capturados, backoffice analisa)
+    if (body.cnpj_full_data?.cnae_fiscal) {
+      autoDocuments.push({
+        supplier_id:  supplier.id,
+        type:         '61',
+        label:        'Analise CNAES',
+        source:       'AUTO',
+        status:       'VALID',
+        storage_path: null,
+        metadata: {
+          auto_collect: true,
+          source: 'BrasilAPI',
+          cnae_principal: body.cnpj_full_data.cnae_fiscal,
+          cnae_descricao: body.cnpj_full_data.cnae_fiscal_descricao,
+          cnaes_secundarios: body.cnpj_full_data.cnaes_secundarios || [],
+        },
+      })
+    }
+
+    // Cartão CNPJ — doc 37 (já criado no Documents.jsx mas garantimos aqui também)
+    autoDocuments.push({
+      supplier_id:  supplier.id,
+      type:         '37',
+      label:        'Cartão de Inscrição no CNPJ',
+      source:       'AUTO',
+      status:       body.cnpj_full_data?.descricao_situacao_cadastral === 'ATIVA' ? 'VALID' : 'PENDING',
+      storage_path: null,
+      metadata: {
+        auto_collect: true,
+        source: 'BrasilAPI',
+        situacao: body.cnpj_full_data?.descricao_situacao_cadastral || 'DESCONHECIDA',
+        data_abertura: body.cnpj_full_data?.data_inicio_atividade || null,
+      },
+    })
+
+    // Insere todos os documentos auto-coletados
+    if (autoDocuments.length > 0) {
+      for (const doc of autoDocuments) {
+        await supabaseAdmin.from('documents')
+          .upsert(doc, { onConflict: 'supplier_id,type' })
+          .catch(e => console.warn(`Auto-doc ${doc.type} warn:`, e.message))
+      }
+      console.log(`⚡ ${autoDocuments.length} documento(s) auto-coletado(s) para ${supplier.id}`)
+    }
+
     // 2. Persiste consulta CNPJ completa para análise do backoffice
     //    Dados: QSA, CNAEs, endereços, capital social, histórico de situações
     if (body.cnpj_full_data || body.sanctions_result) {
@@ -85,7 +159,14 @@ exports.handler = async (event) => {
           supplier_id:    supplier.id,
           cnpj_data:      body.cnpj_full_data    || null,
           sanctions_data: body.sanctions_result  || null,
-          has_sanctions:  !!(body.sanctions_result?.ceis?.length || body.sanctions_result?.cnep?.length),
+          has_sanctions:  !!(
+              (body.sanctions_result?.ceis?.length  || 0) +
+              (body.sanctions_result?.cnep?.length  || 0)
+            ) > 0,
+          sanctions_history: {
+            ceis: body.sanctions_result?.ceisHistory || [],
+            cnep: body.sanctions_result?.cnepHistory || [],
+          },
           consulted_at:   new Date().toISOString(),
         })
       } catch (cnpjErr) {
