@@ -93,17 +93,46 @@ exports.handler = async (event) => {
     // Sanções — captura o raw para logging e diagnóstico
     const rawSanctions = { ceis: [], cnep: [] }
 
+    // Extrai e filtra por CNPJ exato — a API pode retornar registros de filiais
+    // ou do grupo econômico inteiro ao buscar pela raiz do CNPJ (8 dígitos)
+    const cnpjNums = cnpj.replace(/\D/g, '') // 14 dígitos limpos
+
+    function extractAndFilterByCnpj(body) {
+      if (!Array.isArray(body)) return []
+      return body.filter(record => {
+        // Campo que contém o CNPJ do sancionado (varia por endpoint)
+        const cnpjRecord = (
+          record.cnpjSancionado ||
+          record.cpfCnpj ||
+          record.numeroCnpj ||
+          ''
+        ).replace(/\D/g, '')
+        // Se não tem CNPJ no registro, mantém por precaução
+        if (!cnpjRecord) return true
+        // Verifica correspondência exata dos 14 dígitos
+        return cnpjRecord === cnpjNums
+      })
+    }
+
     if (ceisRes.status === 'fulfilled' && ceisRes.value.ok) {
       try {
         const body = await ceisRes.value.json()
-        rawSanctions.ceis = Array.isArray(body) ? body : []
+        const all = Array.isArray(body) ? body : []
+        rawSanctions.ceis = extractAndFilterByCnpj(all)
+        if (all.length !== rawSanctions.ceis.length) {
+          console.log(`[sanctions] CEIS: ${all.length} registros brutos → ${rawSanctions.ceis.length} após filtro CNPJ exato`)
+        }
       } catch { rawSanctions.ceis = [] }
     }
 
     if (cnepRes.status === 'fulfilled' && cnepRes.value.ok) {
       try {
         const body = await cnepRes.value.json()
-        rawSanctions.cnep = Array.isArray(body) ? body : []
+        const all = Array.isArray(body) ? body : []
+        rawSanctions.cnep = extractAndFilterByCnpj(all)
+        if (all.length !== rawSanctions.cnep.length) {
+          console.log(`[sanctions] CNEP: ${all.length} registros brutos → ${rawSanctions.cnep.length} após filtro CNPJ exato`)
+        }
       } catch { rawSanctions.cnep = [] }
     }
 
