@@ -44,8 +44,14 @@ function filterActiveSanctions(list, supplierCnpj) {
     // A API do Portal da Transparência pode retornar sanções de outras filiais
     // (mesmo grupo econômico). Descarta qualquer registro que não seja do CNPJ exato.
     if (cnpjNums) {
-      const cnpjRecord = (s.cnpjSancionado || s.cpfCnpj || s.numeroCnpj || '')
-        .replace(/\D/g, '')
+      // O CNPJ do sancionado pode estar aninhado em diferentes campos
+      const cnpjRecord = (
+        s.sancionado?.codigoFormatado ||
+        s.pessoa?.cnpjFormatado       ||
+        s.cnpjSancionado              ||
+        s.cpfCnpj                     ||
+        ''
+      ).replace(/\D/g, '')
       if (cnpjRecord && cnpjRecord !== cnpjNums) return false
     }
 

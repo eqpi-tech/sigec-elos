@@ -76,10 +76,10 @@ exports.handler = async (event) => {
       fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
         headers: { 'Accept': 'application/json', 'User-Agent': 'SIGEC-ELOS/1.0' },
       }),
-      fetch(`https://api.portaldatransparencia.gov.br/api-de-dados/ceis?cnpjSancionado=${cnpj}&pagina=1`, {
+      fetch(`https://api.portaldatransparencia.gov.br/api-de-dados/ceis?codigoSancionado=${cnpj}&pagina=1`, {
         headers: { 'chave-api-dados': apiKey, 'Accept': 'application/json' },
       }),
-      fetch(`https://api.portaldatransparencia.gov.br/api-de-dados/cnep?cnpjSancionado=${cnpj}&pagina=1`, {
+      fetch(`https://api.portaldatransparencia.gov.br/api-de-dados/cnep?codigoSancionado=${cnpj}&pagina=1`, {
         headers: { 'chave-api-dados': apiKey, 'Accept': 'application/json' },
       }),
     ])
@@ -97,19 +97,19 @@ exports.handler = async (event) => {
     // ou do grupo econômico inteiro ao buscar pela raiz do CNPJ (8 dígitos)
     const cnpjNums = cnpj.replace(/\D/g, '') // 14 dígitos limpos
 
+    // Valida que cada registro retornado pertence ao CNPJ consultado.
+    // Com o parâmetro correto (codigoSancionado), a API já filtra na fonte,
+    // mas mantemos esta validação como camada de segurança.
     function extractAndFilterByCnpj(body) {
       if (!Array.isArray(body)) return []
       return body.filter(record => {
-        // Campo que contém o CNPJ do sancionado (varia por endpoint)
         const cnpjRecord = (
-          record.cnpjSancionado ||
-          record.cpfCnpj ||
-          record.numeroCnpj ||
+          record.sancionado?.codigoFormatado ||
+          record.pessoa?.cnpjFormatado       ||
           ''
         ).replace(/\D/g, '')
-        // Se não tem CNPJ no registro, mantém por precaução
+        // Se a API retornou registro sem CNPJ identificável, mantém por precaução
         if (!cnpjRecord) return true
-        // Verifica correspondência exata dos 14 dígitos
         return cnpjRecord === cnpjNums
       })
     }
