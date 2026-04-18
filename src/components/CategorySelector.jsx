@@ -5,7 +5,7 @@
 //   onChange: (Set<number>) => void
 //   showDocuments: boolean        — mostra preview dos docs exigidos
 import { useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase.js'
+import { supabase } from '../lib/supabase.js'
 import { categoriesApi } from '../services/api.js'
 import { Spinner } from './ui.jsx'
 
