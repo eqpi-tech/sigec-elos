@@ -5,6 +5,7 @@
 //   onChange: (Set<number>) => void
 //   showDocuments: boolean        — mostra preview dos docs exigidos
 import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase.js'
 import { categoriesApi } from '../services/api.js'
 import { Spinner } from './ui.jsx'
 
@@ -22,8 +23,10 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   const [search,    setSearch]    = useState('')
   const [aiSugs,    setAiSugs]    = useState([])
   const [aiLoading, setAiLoading] = useState(false)
-  const [showCustom, setShowCustom] = useState(false)
-  const [customName, setCustomName] = useState('')
+  const [showCustom, setShowCustom]       = useState(false)
+  const [customName, setCustomName]       = useState('')
+  const [customParent, setCustomParent]   = useState(null)  // id do parent: Serviços ou Materiais
+  const [savingCustom, setSavingCustom]   = useState(false)
   const [requiredDocs, setRequiredDocs] = useState([])
   const [loadingDocs, setLoadingDocs]   = useState(false)
   const [loading, setLoading] = useState(true)
@@ -152,6 +155,23 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
         return rows
       })
 
+      // Pré-carrega as árvores de todos os parents que ainda não foram carregadas
+      // para que o match possa encontrar filhos e netos
+      const unloadedParents = parents.filter(p => !trees[p.id])
+      if (unloadedParents.length > 0) {
+        const treeResults = await Promise.allSettled(
+          unloadedParents.map(p => categoriesApi.getTree(p.id))
+        )
+        treeResults.forEach((r, i) => {
+          if (r.status === 'fulfilled') {
+            const parentId = unloadedParents[i].id
+            setTrees(prev => ({ ...prev, [parentId]: r.value }))
+          }
+        })
+        // Pequena espera para o estado atualizar antes de buscar sugestões
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
       const res = await fetch('/.netlify/functions/ai-suggest-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,18 +188,53 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   }
 
   // ── Adicionar categoria customizada ──────────────────────────────────────
-  const handleAddCustom = () => {
-    if (!customName.trim()) return
-    // Notifica o pai com um ID negativo (flag para custom)
-    const tempId = -(Date.now())
-    // Armazena o nome para exibição
-    setCustomName('')
-    setShowCustom(false)
-    // Dispara onChange com o nome como string (tratado pelo Onboarding)
-    if (typeof onChange === 'function') {
-      // Passa o nome via onChange para o pai lidar com categoria customizada
-      onChange(selectedIds, { customCategory: customName.trim() })
+  const handleAddCustom = async () => {
+    if (!customName.trim() || !customParent) return
+    setSavingCustom(true)
+    try {
+      // Insere no banco como categoria pendente de aprovação pelo backoffice
+      const { data: newCat, error } = await supabase
+        .from('categories')
+        .insert({
+          name:        customName.trim(),
+          parent_id:   customParent,
+          is_custom:   true,
+          approved:    false,           // backoffice precisa aprovar
+          is_active:   true,
+        })
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message)
+
+      // Adiciona localmente ao tree do parent escolhido para aparecer imediatamente
+      setTrees(prev => {
+        const parentTree = prev[customParent] || { children: [], grandchildren: [] }
+        return {
+          ...prev,
+          [customParent]: {
+            ...parentTree,
+            children: [...(parentTree.children||[]), { id: newCat.id, name: newCat.name, parent_id: customParent }]
+          }
+        }
+      })
+
+      // Seleciona automaticamente a nova categoria
+      const next = new Set(selectedIds)
+      next.add(newCat.id)
+      onChange(next)
+
+      // Garante que o parent está expandido para o usuário ver
+      setExpanded(prev => { const n = new Set(prev); n.add(customParent); return n })
+
+      setCustomName('')
+      setCustomParent(null)
+      setShowCustom(false)
+    } catch (e) {
+      console.error('Erro ao salvar categoria:', e.message)
+      alert('Erro ao salvar: ' + e.message)
     }
+    setSavingCustom(false)
   }
 
   return (
@@ -208,12 +263,24 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           </div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             {aiSugs.map((sug, i) => {
-              // Find matching category
-              const match = parents.flatMap(p=>[p,...(p.children||[]).flatMap(c=>[c,...(c.children||[])])]).find(c=>c.name.toLowerCase()===sug.toLowerCase())
+              // Busca match em todos os nós carregados: parents + trees (lazy)
+              const allNodes = [
+                ...parents,
+                ...Object.values(trees).flatMap(t => [
+                  ...(t.children||[]),
+                  ...(t.grandchildren||[])
+                ])
+              ]
+              // Similaridade: exact → starts-with → contains
+              const sugLow = sug.toLowerCase()
+              const match = allNodes.find(c => c.name.toLowerCase() === sugLow)
+                         || allNodes.find(c => c.name.toLowerCase().startsWith(sugLow))
+                         || allNodes.find(c => sugLow.startsWith(c.name.toLowerCase()))
+                         || allNodes.find(c => c.name.toLowerCase().includes(sugLow) || sugLow.includes(c.name.toLowerCase().split(' ')[0]))
               if (!match) return null
-              const isSelected = selected.includes(match.id)
+              const isSelected = selectedIds.has(match.id)
               return (
-                <button key={i} onClick={()=>toggle(match.id)}
+                <button key={i} onClick={() => toggleLeaf(match.id)}
                   style={{ padding:'4px 12px', borderRadius:20, fontFamily:'DM Sans,sans-serif', fontSize:12, cursor:'pointer',
                     border:`1px solid ${isSelected?'#2E3192':'#c7d2fe'}`,
                     background: isSelected ? '#2E3192' : 'rgba(46,49,146,.06)',
@@ -317,25 +384,51 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       {/* Adicionar categoria customizada */}
       <div style={{ marginTop:12 }}>
         {showCustom ? (
-          <div style={{ display:'flex', gap:8 }}>
-            <input value={customName} onChange={e=>setCustomName(e.target.value)}
-              placeholder="Nome da nova categoria..."
-              style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
-                fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
-              onKeyDown={e=>{ if(e.key==='Enter') handleAddCustom() }}/>
-            <button onClick={handleAddCustom}
-              style={{ padding:'8px 16px', borderRadius:8, background:'#2E3192', color:'#fff',
-                border:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
-              Adicionar
-            </button>
-            <button onClick={()=>setShowCustom(false)}
-              style={{ padding:'8px 12px', borderRadius:8, background:'transparent', border:'1px solid #e2e4ef',
-                cursor:'pointer', color:'#9B9B9B', fontSize:12 }}>
-              Cancelar
-            </button>
+          <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.15)', borderRadius:10, padding:'14px' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#2E3192', marginBottom:10 }}>
+              Nova categoria — em qual grupo ela se encaixa?
+            </div>
+            {/* Seleção do grupo pai: Serviços ou Materiais */}
+            <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+              {parents.map(p => (
+                <button key={p.id} type="button" onClick={() => setCustomParent(p.id)}
+                  style={{ flex:1, padding:'8px', borderRadius:8, cursor:'pointer',
+                    border:`2px solid ${customParent===p.id?'#2E3192':'#e2e4ef'}`,
+                    background: customParent===p.id ? '#2E3192' : '#fff',
+                    color: customParent===p.id ? '#fff' : '#1a1c5e',
+                    fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <input value={customName} onChange={e=>setCustomName(e.target.value)}
+                placeholder="Nome da nova categoria..."
+                style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
+                  fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
+                onKeyDown={e=>{ if(e.key==='Enter'&&customParent) handleAddCustom() }}/>
+              <button onClick={handleAddCustom}
+                disabled={!customName.trim() || !customParent || savingCustom}
+                style={{ padding:'8px 16px', borderRadius:8,
+                  background: (!customName.trim()||!customParent||savingCustom) ? '#9B9B9B' : '#2E3192',
+                  color:'#fff', border:'none', cursor:'pointer',
+                  fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+                {savingCustom ? '⏳' : 'Adicionar'}
+              </button>
+              <button onClick={() => { setShowCustom(false); setCustomParent(null); setCustomName('') }}
+                style={{ padding:'8px 12px', borderRadius:8, background:'transparent',
+                  border:'1px solid #e2e4ef', cursor:'pointer', color:'#9B9B9B', fontSize:12 }}>
+                Cancelar
+              </button>
+            </div>
+            {!customParent && customName && (
+              <div style={{ fontSize:11, color:'#f59e0b', marginTop:6 }}>
+                ⚠️ Selecione o grupo (Serviços ou Materiais) antes de adicionar
+              </div>
+            )}
           </div>
         ) : (
-          <button onClick={()=>setShowCustom(true)}
+          <button onClick={() => setShowCustom(true)}
             style={{ fontSize:12, color:'#9B9B9B', background:'transparent', border:'1px dashed #d1d5db',
               borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', width:'100%' }}>
             + Não encontrou sua categoria? Clique para sugerir
