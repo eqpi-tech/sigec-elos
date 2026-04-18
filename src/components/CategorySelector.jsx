@@ -134,39 +134,35 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   }
 
   // ── Sugestão de categorias por CNAE via IA ──────────────────────────────────
+  // Chama Netlify Function (proxy) para evitar CORS — API key fica segura no servidor
   const suggestByAI = async () => {
     if (!cnpjData?.cnae_fiscal_descricao && !cnpjData?.cnae_fiscal) return
     setAiLoading(true)
     try {
-      // Monta lista plana de todas as categorias disponíveis
+      // Monta lista plana de todas as categorias visíveis no seletor
       const allNames = parents.flatMap(p => {
         const rows = [p.name]
-        Object.values(trees).forEach(t => {
+        const t = trees[p.id]
+        if (t) {
           ;(t.children||[]).forEach(c => {
             rows.push(c.name)
             ;(t.grandchildren||[]).filter(g=>g.parent_id===c.id).forEach(g=>rows.push(g.name))
           })
-        })
+        }
         return rows
       })
-      const cnaeText = cnpjData.cnae_fiscal_descricao || String(cnpjData.cnae_fiscal)
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+
+      const res = await fetch('/.netlify/functions/ai-suggest-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 300,
-          messages: [{
-            role: 'user',
-            content: `A empresa tem CNAE: "${cnaeText}". Das seguintes categorias: ${allNames.slice(0,80).join(', ')}. Sugira no máximo 5 mais relevantes. Responda APENAS com JSON sem markdown: {"sugestoes":["cat1","cat2"]}`
-          }]
+          cnae:          cnpjData.cnae_fiscal,
+          cnaeDescricao: cnpjData.cnae_fiscal_descricao,
+          categoryNames: allNames.slice(0, 120),
         })
       })
       const data = await res.json()
-      const text = data.content?.[0]?.text || '{}'
-      const clean = text.replace(/\`\`\`json?|\`\`\`/g,'').trim()
-      const parsed = JSON.parse(clean)
-      setAiSugs(parsed.sugestoes || [])
+      setAiSugs(data.sugestoes || [])
     } catch (e) { console.warn('AI suggest:', e.message) }
     setAiLoading(false)
   }
