@@ -13,6 +13,10 @@ const AUTO_COLLECT = {
   62: 'INSTANT',  // Simples Nacional — BrasilAPI
 }
 
+// Documentos que aceitam declaração de ISENÇÃO (ao invés de upload obrigatório)
+// Formato: doc.label deve conter as palavras-chave abaixo
+const ISENTO_KEYWORDS = ['inscrição estadual', 'inscrição municipal', 'ie estadual', 'im municipal', 'inscricao estadual', 'inscricao municipal']
+
 // Links diretos para emissão dos documentos que precisam de upload manual
 const DOC_LINKS = {
   7:  'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
@@ -208,6 +212,9 @@ export default function SupplierDocuments() {
     const isOnDemand= false // reservado para futura integração com proxy residencial
     const busy      = uploading === doc.id
     const busyCollect = collecting === doc.id
+    // Inscrição Estadual / Municipal: aceita declaração de ISENÇÃO
+    const isIsentoEligible = ISENTO_KEYWORDS.some(kw => (doc.name||doc.label||'').toLowerCase().includes(kw))
+    const isIsentoMarked = up?.metadata?.isento === true
 
     return (
       <div key={doc.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, background:cfg.bg, border:`1px solid ${cfg.bd}`, marginBottom:8 }}>
@@ -242,19 +249,42 @@ export default function SupplierDocuments() {
 
         {/* Upload manual (só para docs não automáticos) */}
         {!isInstant && !isOnDemand && (
-          <>
+          <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+            {/* Botão ISENTO para Inscrição Estadual/Municipal */}
+            {isIsentoEligible && (
+              <button
+                onClick={async () => {
+                  const newIsento = !isIsentoMarked
+                  const { error } = await supabase.from('documents').upsert({
+                    supplier_id: user.supplierId,
+                    type: String(doc.id),
+                    label: doc.name || doc.label,
+                    source: 'MANUAL',
+                    status: newIsento ? 'VALID' : 'MISSING',
+                    metadata: { isento: newIsento, note: newIsento ? 'Declarado isento pelo fornecedor' : null },
+                  }, { onConflict: 'supplier_id,type' })
+                  if (!error) { const d = await documentApi.list(user.supplierId); setUploaded(d) }
+                }}
+                style={{ padding:'4px 10px', borderRadius:8, border:'1px solid #9B9B9B',
+                  background: isIsentoMarked ? '#e0f2fe' : 'transparent',
+                  color: isIsentoMarked ? '#0369a1' : '#9B9B9B',
+                  fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, cursor:'pointer', whiteSpace:'nowrap' }}>
+                {isIsentoMarked ? '✓ Isento' : 'Isento'}
+              </button>
+            )}
             <input type="file" accept=".pdf,.jpg,.jpeg,.png"
               ref={el => fileRefs.current[doc.id] = el}
               style={{ display:'none' }}
               onChange={e => handleUpload(doc.id, doc.name, e.target.files[0])}
             />
             {busy ? <Spinner size={20}/> : (
-              <Button variant={status==='VALID'?'neutral':'orange'} size="sm"
-                onClick={() => fileRefs.current[doc.id]?.click()}>
-                {status==='VALID' ? '↑ Atualizar' : '↑ Enviar'}
+              <Button variant={status==='VALID'&&!isIsentoMarked?'neutral':'orange'} size="sm"
+                onClick={() => fileRefs.current[doc.id]?.click()}
+                disabled={isIsentoMarked}>
+                {status==='VALID' && !isIsentoMarked ? '↑ Atualizar' : '↑ Enviar'}
               </Button>
             )}
-          </>
+          </div>
         )}
       </div>
     )

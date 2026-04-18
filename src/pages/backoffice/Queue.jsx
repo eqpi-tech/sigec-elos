@@ -224,10 +224,58 @@ export function BackofficeAnalysis() {
       .finally(() => setLoading(false))
   }, [id])
 
-  const handleApprove = async () => { setProcessing(true); await adminApi.approveSeal(id,level); setDone('approved'); setProcessing(false) }
-  const handleReject  = async () => {
+  // Verifica documentos impeditivos antes de aprovar
+  const blockingMissing = data?.documents?.filter(d =>
+    d.source === 'REQUIRED' && d.status === 'MISSING'
+  ) || []
+  // Considera impeditivo apenas documentos obrigatórios não-auto que ainda não foram enviados
+  const hardBlocked = blockingMissing.filter(d => d.source !== 'AUTO' && !['37','61','62'].includes(String(d.type)))
+
+  const handleApprove = async () => {
+    if (hardBlocked.length > 0) {
+      alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
+      return
+    }
+    setProcessing(true)
+    await adminApi.approveSeal(id, level)
+    // Notificação de resultado
+    try {
+      await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: data.email,
+          subject: `✅ Parabéns! Seu Selo ELOS ${level} foi emitido`,
+          html: `<p>Olá, <strong>${data.razao_social}</strong>!</p>
+            <p>Sua homologação foi concluída com sucesso. Seu <strong>Selo ELOS ${level}</strong> está ativo e sua empresa já está visível no marketplace SIGEC-ELOS.</p>
+            <p><a href="${window.location.origin}/fornecedor/dashboard">Acessar meu painel →</a></p>`,
+        })
+      })
+    } catch (e) { console.warn('Email notif:', e.message) }
+    setDone('approved')
+    setProcessing(false)
+  }
+  const handleReject = async () => {
     if (!obs) { alert('Informe o motivo da rejeição'); return }
-    setProcessing(true); await adminApi.rejectSeal(id,obs); setDone('rejected'); setProcessing(false)
+    setProcessing(true)
+    await adminApi.rejectSeal(id, obs)
+    try {
+      await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: data.email,
+          subject: '❌ Atualização sobre sua homologação SIGEC-ELOS',
+          html: `<p>Olá, <strong>${data.razao_social}</strong>!</p>
+            <p>Após análise, sua solicitação de homologação foi <strong>reprovada</strong> pelo seguinte motivo:</p>
+            <blockquote style="border-left:4px solid #dc2626;padding-left:16px;color:#374151">${obs}</blockquote>
+            <p>Corrija as pendências e solicite uma nova análise pelo painel do fornecedor.</p>
+            <p><a href="${window.location.origin}/fornecedor/documentos">Acessar meus documentos →</a></p>`,
+        })
+      })
+    } catch (e) { console.warn('Email notif:', e.message) }
+    setDone('rejected')
+    setProcessing(false)
   }
   const handleDocAction = async (docId, status) => {
     setDocActions(prev=>({...prev,[docId]:'loading'}))
@@ -462,7 +510,7 @@ export function BackofficeAnalysis() {
 
             <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
               <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
-                {processing ? '⏳...' : `✅ Aprovar Selo ${level}`}
+                {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Aprovar Selo ${level}`}
               </Button>
               <Button variant="danger" full size="md" style={{ borderRadius:10 }} disabled={processing} onClick={handleReject}>
                 ❌ Rejeitar

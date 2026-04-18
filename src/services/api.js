@@ -242,7 +242,15 @@ export const marketplaceApi = {
       .eq('status', 'ACTIVE')
 
     if (state && state !== 'Todos') query = query.eq('state', state)
-    if (q) query = query.ilike('razao_social', `%${q}%`)
+    if (q) {
+      // Detecta se é busca por CNPJ (apenas números, 8+ dígitos)
+      const qNums = q.replace(/\D/g,'')
+      if (qNums.length >= 8) {
+        query = query.ilike('cnpj', `%${qNums}%`)
+      } else {
+        query = query.ilike('razao_social', `%${q}%`)
+      }
+    }
 
     const { data: suppliers, error } = await query
     if (error) throw new Error(error.message)
@@ -278,14 +286,28 @@ export const marketplaceApi = {
   getById: async (id) => {
     const { data, error } = await supabase
       .from('suppliers')
-      .select(`*, seals(*), documents(status, label, type, expires_at, source)`)
+      .select(`*, seals(*), plans(type,status), documents(status,label,type,expires_at,source,metadata), supplier_categories(category_id, categories(name,parent_id))`)
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
+    // Busca consulta CNPJ para dados ricos
+    const { data: cnpjRec } = await supabase
+      .from('cnpj_consultations')
+      .select('cnpj_data, has_sanctions, consulted_at')
+      .eq('supplier_id', id)
+      .order('consulted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
     return {
       ...data,
-      sealLevel:  data.seals?.[0]?.level  || 'Simples',
-      sealStatus: data.seals?.[0]?.status || 'PENDING',
+      sealLevel:   data.seals?.[0]?.level  || 'Simples',
+      sealStatus:  data.seals?.[0]?.status || 'PENDING',
+      sealScore:   data.seals?.[0]?.score  || 0,
+      sealIssuedAt: data.seals?.[0]?.issued_at || null,
+      planType:    data.plans?.[0]?.type   || null,
+      cnpjData:    cnpjRec?.cnpj_data || null,
+      hasSanctions: cnpjRec?.has_sanctions || false,
+      cnpjConsultedAt: cnpjRec?.consulted_at || null,
       score:      data.seals?.[0]?.score  || 0,
     }
   },

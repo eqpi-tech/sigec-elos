@@ -22,6 +22,7 @@ import BackofficeOverview from './pages/backoffice/Overview.jsx'
 import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
 import BackofficeCreateUser from './pages/backoffice/CreateUser.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
+import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
 

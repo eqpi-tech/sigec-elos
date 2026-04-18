@@ -210,10 +210,12 @@ exports.handler = async (event) => {
       .from('profiles')
       .update({ supplier_id: supplier.id })
       .eq('id', user.id)
+    if (profileError) console.error('Profile update error:', profileError)
 
-    if (profileError) {
-      console.error('Profile update error:', profileError)
-    }
+    // 3b. Registra em user_roles (suporte multi-perfil)
+    await supabaseAdmin.from('user_roles').upsert({
+      user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: true
+    }, { onConflict: 'user_id,role' })
 
     // 4. Salva categorias selecionadas
     const categoryIds = body.category_ids || []
