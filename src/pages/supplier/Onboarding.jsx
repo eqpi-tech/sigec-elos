@@ -8,7 +8,7 @@ import { Button, Spinner } from '../../components/ui.jsx'
 
 const PLAN_PRICES = { Simples: 290, Premium: 990 }
 
-const STEPS = ['Empresa','Categorias','Conta','Plano','Pagamento']
+const STEPS = ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
 
 export default function SupplierOnboarding() {
   const navigate = useNavigate()
@@ -91,8 +91,27 @@ export default function SupplierOnboarding() {
   const handlePayment = async () => {
     setLoading(true); setError('')
     try {
-      // 1. Cria conta no Supabase Auth
-      const authUser = await signup({ email, password, role: 'SUPPLIER', name })
+      // 1. Cria conta no Supabase Auth (ou loga se e-mail já existe com outra role)
+      let authUser = null
+      try {
+        authUser = await signup({ email, password, role: 'SUPPLIER', name })
+      } catch (signupErr) {
+        // E-mail já cadastrado (ex: comprador querendo ser também fornecedor)
+        // Tenta logar com as credenciais fornecidas
+        if (signupErr.message?.toLowerCase().includes('already registered') ||
+            signupErr.message?.toLowerCase().includes('already been registered') ||
+            signupErr.message?.toLowerCase().includes('user already exists')) {
+          try {
+            const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
+            if (loginErr) throw new Error('E-mail já cadastrado. Verifique a senha ou use outro e-mail.')
+            authUser = loginData.user
+          } catch {
+            throw new Error('E-mail já cadastrado com outra senha. Use o mesmo e-mail e senha da conta existente, ou use um e-mail diferente.')
+          }
+        } else {
+          throw signupErr
+        }
+      }
 
       // 2. Aguarda sessão ser estabelecida (pode levar alguns ms após signUp)
       let sessionToken = null
@@ -103,7 +122,7 @@ export default function SupplierOnboarding() {
       }
 
       if (!sessionToken) {
-        throw new Error('Sessão não iniciada. Certifique-se de que "Confirm email" está desativado no Supabase → Authentication → Settings.')
+        throw new Error('Sessão não iniciada. Verifique se "Confirm email" está desativado no Supabase → Authentication → Settings.')
       }
 
       // 3. Cria fornecedor via Netlify Function (service_role bypassa RLS)
@@ -355,7 +374,7 @@ export default function SupplierOnboarding() {
           )}
 
           {/* Step 4 — Plano */}
-          {step === 5 && (
+          {step === 4 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
 
@@ -375,13 +394,13 @@ export default function SupplierOnboarding() {
                 <strong style={{ fontFamily:'Montserrat,sans-serif' }}>{planType}</strong> · R$ {price.toLocaleString('pt-BR')}/ano (~R$ {monthly.toLocaleString('pt-BR')}/mês)
               </div>
               <div style={{ display:'flex', gap:8 }}>
-                <Button variant="neutral" full onClick={() => setStep(1)}>← Voltar</Button>
-                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(4)}>Ir para pagamento →</Button>
+                <Button variant="neutral" full onClick={() => setStep(3)}>← Voltar</Button>
+                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(5)}>Ir para pagamento →</Button>
               </div>
             </div>
           )}
 
-          {/* Step 4 — Pagamento */}
+          {/* Step 5 — Pagamento */}
           {step === 5 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Confirmar e pagar</div>
@@ -400,7 +419,7 @@ export default function SupplierOnboarding() {
               <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                 Boleto, PIX ou Cartão de crédito · Parcelamento em até 12x
               </div>
-              <button onClick={() => setStep(2)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>← Alterar plano</button>
+              <button onClick={() => setStep(4)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>← Alterar plano</button>
             </div>
           )}
         </div>
