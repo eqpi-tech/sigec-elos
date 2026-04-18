@@ -34,10 +34,15 @@ export function AuthProvider({ children }) {
     if (!authUser) { setUser(null); setLoading(false); return }
     try {
       // Busca todos os perfis do usuário (tabela user_roles — multi-perfil)
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role, supplier_id, buyer_id, is_primary')
-        .eq('user_id', authUser.id)
+      // Se a tabela não existir ainda (patch_003 pendente), faz fallback para profiles
+      let roles = null
+      try {
+        const { data: rolesData, error: rolesErr } = await supabase
+          .from('user_roles')
+          .select('role, supplier_id, buyer_id, is_primary')
+          .eq('user_id', authUser.id)
+        if (!rolesErr) roles = rolesData
+      } catch {}
 
       if (roles && roles.length > 0) {
         setRoleOptions(roles)
@@ -104,7 +109,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, reloadProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, reloadProfile, roleOptions, activeRole, switchRole }}>
       {children}
     </AuthContext.Provider>
   )

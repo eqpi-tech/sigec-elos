@@ -133,6 +133,59 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     })
   }
 
+  // ── Sugestão de categorias por CNAE via IA ──────────────────────────────────
+  const suggestByAI = async () => {
+    if (!cnpjData?.cnae_fiscal_descricao && !cnpjData?.cnae_fiscal) return
+    setAiLoading(true)
+    try {
+      // Monta lista plana de todas as categorias disponíveis
+      const allNames = parents.flatMap(p => {
+        const rows = [p.name]
+        Object.values(trees).forEach(t => {
+          ;(t.children||[]).forEach(c => {
+            rows.push(c.name)
+            ;(t.grandchildren||[]).filter(g=>g.parent_id===c.id).forEach(g=>rows.push(g.name))
+          })
+        })
+        return rows
+      })
+      const cnaeText = cnpjData.cnae_fiscal_descricao || String(cnpjData.cnae_fiscal)
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 300,
+          messages: [{
+            role: 'user',
+            content: `A empresa tem CNAE: "${cnaeText}". Das seguintes categorias: ${allNames.slice(0,80).join(', ')}. Sugira no máximo 5 mais relevantes. Responda APENAS com JSON sem markdown: {"sugestoes":["cat1","cat2"]}`
+          }]
+        })
+      })
+      const data = await res.json()
+      const text = data.content?.[0]?.text || '{}'
+      const clean = text.replace(/\`\`\`json?|\`\`\`/g,'').trim()
+      const parsed = JSON.parse(clean)
+      setAiSugs(parsed.sugestoes || [])
+    } catch (e) { console.warn('AI suggest:', e.message) }
+    setAiLoading(false)
+  }
+
+  // ── Adicionar categoria customizada ──────────────────────────────────────
+  const handleAddCustom = () => {
+    if (!customName.trim()) return
+    // Notifica o pai com um ID negativo (flag para custom)
+    const tempId = -(Date.now())
+    // Armazena o nome para exibição
+    setCustomName('')
+    setShowCustom(false)
+    // Dispara onChange com o nome como string (tratado pelo Onboarding)
+    if (typeof onChange === 'function') {
+      // Passa o nome via onChange para o pai lidar com categoria customizada
+      onChange(selectedIds, { customCategory: customName.trim() })
+    }
+  }
+
   return (
     <div>
       {/* Search + AI */}
@@ -264,7 +317,8 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           </div>
         </div>
       )}
-      {/* Add custom category */}
+
+      {/* Adicionar categoria customizada */}
       <div style={{ marginTop:12 }}>
         {showCustom ? (
           <div style={{ display:'flex', gap:8 }}>
@@ -272,7 +326,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
               placeholder="Nome da nova categoria..."
               style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
                 fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
-              onKeyDown={e=>e.key==='Enter'&&handleAddCustom()}/>
+              onKeyDown={e=>{ if(e.key==='Enter') handleAddCustom() }}/>
             <button onClick={handleAddCustom}
               style={{ padding:'8px 16px', borderRadius:8, background:'#2E3192', color:'#fff',
                 border:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
@@ -288,7 +342,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           <button onClick={()=>setShowCustom(true)}
             style={{ fontSize:12, color:'#9B9B9B', background:'transparent', border:'1px dashed #d1d5db',
               borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', width:'100%' }}>
-            + Não encontrou sua categoria? Adicionar nova categoria
+            + Não encontrou sua categoria? Clique para sugerir
           </button>
         )}
       </div>
@@ -327,34 +381,6 @@ function ChildGroup({ child, grandchildren, selectedIds, onToggle }) {
           ))}
         </div>
       )}
-      {/* Add custom category */}
-      <div style={{ marginTop:12 }}>
-        {showCustom ? (
-          <div style={{ display:'flex', gap:8 }}>
-            <input value={customName} onChange={e=>setCustomName(e.target.value)}
-              placeholder="Nome da nova categoria..."
-              style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
-                fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
-              onKeyDown={e=>e.key==='Enter'&&handleAddCustom()}/>
-            <button onClick={handleAddCustom}
-              style={{ padding:'8px 16px', borderRadius:8, background:'#2E3192', color:'#fff',
-                border:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
-              Adicionar
-            </button>
-            <button onClick={()=>setShowCustom(false)}
-              style={{ padding:'8px 12px', borderRadius:8, background:'transparent', border:'1px solid #e2e4ef',
-                cursor:'pointer', color:'#9B9B9B', fontSize:12 }}>
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <button onClick={()=>setShowCustom(true)}
-            style={{ fontSize:12, color:'#9B9B9B', background:'transparent', border:'1px dashed #d1d5db',
-              borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', width:'100%' }}>
-            + Não encontrou sua categoria? Adicionar nova categoria
-          </button>
-        )}
-      </div>
     </div>
   )
 }
