@@ -37,7 +37,9 @@ export default function SupplierOnboarding() {
     return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
   }
 
-  const [sanctionsConfirm, setSanctionsConfirm] = useState(false)
+  const [sanctionsConfirm, setSanctionsConfirm]   = useState(false)
+  const [termsAccepted, setTermsAccepted]         = useState(false)
+  const [dataSharingAccepted, setDataSharingAccepted] = useState(false)
 
   const handleCnpjLookup = async () => {
     setLookupLoading(true); setLookupError(''); setSanctionsConfirm(false)
@@ -46,12 +48,16 @@ export default function SupplierOnboarding() {
       setCnpjData(result.cnpj)
       setSanctions(result.sanctions)
 
-      const inactive = result.cnpj?.descricao_situacao_cadastral &&
-        result.cnpj.descricao_situacao_cadastral !== 'ATIVA'
+      // CNPJ não encontrado na Receita Federal
+      if (!result.cnpj || !result.cnpj.cnpj) {
+        setLookupError('❌  CNPJ não encontrado na Receita Federal. Verifique o número digitado.')
+        return
+      }
 
-      if (inactive) {
-        setLookupError(`⚠️  Situação cadastral: ${result.cnpj.descricao_situacao_cadastral}. Regularize o CNPJ antes de prosseguir.`)
-        return // bloqueia — não pode prosseguir com CNPJ inativo
+      const situacao = result.cnpj?.descricao_situacao_cadastral || ''
+      if (situacao && situacao !== 'ATIVA') {
+        setLookupError(`⚠️  Situação cadastral: ${situacao}. Regularize o CNPJ antes de prosseguir.`)
+        return
       }
 
       if (result.hasSanctions) {
@@ -70,7 +76,16 @@ export default function SupplierOnboarding() {
   const handleCreateAccount = async () => {
     if (password !== password2) { setError('As senhas não coincidem'); return }
     if (password.length < 8)    { setError('Senha deve ter pelo menos 8 caracteres'); return }
-    setStep(3); setError('')
+    setStep(3); setError('') // step 3 = termos
+  }
+
+  const handleAcceptTerms = () => {
+    if (!termsAccepted || !dataSharingAccepted) {
+      setError('Você precisa aceitar os Termos de Uso e a política de compartilhamento para continuar.')
+      return
+    }
+    setError('')
+    setStep(4) // step 4 = plano
   }
 
   const handlePayment = async () => {
@@ -108,8 +123,10 @@ export default function SupplierOnboarding() {
           city:              cnpjData?.municipio || '',
           phone:             cnpjData?.ddd_telefone_1 || null,
           employee_range:    cnpjData?.porte ? cnpjData.porte : null,
-          sanctions_checked: true,
-          sanctions_result:  sanctions,
+          sanctions_checked:      true,
+          sanctions_result:      sanctions,
+          terms_accepted:        true,
+          data_sharing_accepted: true,
           cnpj_full_data:    cnpjData || null,
           category_ids:      [...selectedCategories],
         }),
@@ -221,6 +238,7 @@ export default function SupplierOnboarding() {
                   selectedIds={selectedCategories}
                   onChange={setSelectedCategories}
                   showDocuments={true}
+                  cnpjData={cnpjData}
                 />
               </div>
               <div style={{ display:'flex', gap:8, marginTop:20 }}>
@@ -279,8 +297,65 @@ export default function SupplierOnboarding() {
             </div>
           )}
 
-          {/* Step 3 — Plano */}
+          {/* Step 3 — Termos de Uso */}
           {step === 3 && (
+            <div>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Termos de Uso</div>
+              <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:16 }}>Leia e aceite os termos antes de continuar</div>
+
+              <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'16px', marginBottom:16, maxHeight:200, overflowY:'auto' }}>
+                <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 8px' }}>TERMOS DE USO — SIGEC-ELOS</p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  Ao utilizar a plataforma SIGEC-ELOS, operada pela EQPI Tech, o Fornecedor concorda com os seguintes termos:
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  <strong>1. Veracidade das informações:</strong> O Fornecedor declara que todas as informações e documentos enviados são verdadeiros, autênticos e estão dentro da validade. A inserção de informações falsas ou documentos adulterados implicará no cancelamento imediato do Selo ELOS e poderá resultar em medidas legais.
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  <strong>2. Atualização documental:</strong> O Fornecedor compromete-se a manter seus documentos atualizados durante toda a vigência do plano, substituindo certidões vencidas no prazo de até 15 dias após o vencimento.
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  <strong>3. Suspensão do Selo:</strong> O descumprimento das obrigações documentais ou a identificação de irregularidades poderá resultar na suspensão ou cancelamento do Selo ELOS, sem direito a reembolso do valor pago.
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  <strong>4. Responsabilidade:</strong> A EQPI Tech atua como facilitadora do processo de pré-homologação e não se responsabiliza por decisões de contratação tomadas pelos Compradores com base nas informações da plataforma.
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                  <strong>5. Cancelamento:</strong> O plano pode ser cancelado a qualquer momento, sem reembolso proporcional. O acesso à plataforma permanece ativo até o final do período contratado.
+                </p>
+                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6 }}>
+                  <strong>6. Foro:</strong> As partes elegem o foro da Comarca de Belo Horizonte/MG para dirimir quaisquer controvérsias.
+                </p>
+              </div>
+
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:12, padding:'12px', background:'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${termsAccepted?'#2E3192':'#e2e4ef'}` }}>
+                <input type="checkbox" checked={termsAccepted} onChange={e=>setTermsAccepted(e.target.checked)} style={{ marginTop:2, accentColor:'#2E3192' }}/>
+                <span style={{ fontSize:13, color:'#374151' }}>
+                  Li e concordo com os <strong>Termos de Uso</strong> da plataforma SIGEC-ELOS e com a <strong>Política de Privacidade</strong> da EQPI Tech.
+                </span>
+              </label>
+
+              <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:16, padding:'12px', background:'rgba(244,126,47,.04)', borderRadius:10, border:`1px solid ${dataSharingAccepted?'#F47E2F':'#e2e4ef'}` }}>
+                <input type="checkbox" checked={dataSharingAccepted} onChange={e=>setDataSharingAccepted(e.target.checked)} style={{ marginTop:2, accentColor:'#F47E2F' }}/>
+                <span style={{ fontSize:13, color:'#374151' }}>
+                  Autorizo a <strong>publicação dos dados da minha empresa</strong> (razão social, CNPJ, categorias de atuação e selos conquistados) no marketplace SIGEC-ELOS, tornando-os visíveis para Compradores cadastrados na plataforma.
+                </span>
+              </label>
+
+              {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626' }}>{error}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                <Button variant="neutral" full onClick={() => { setStep(2); setError('') }}>← Voltar</Button>
+                <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
+                  disabled={!termsAccepted || !dataSharingAccepted}
+                  onClick={handleAcceptTerms}>
+                  Aceitar e Continuar →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4 — Plano */}
+          {step === 5 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
 
@@ -307,7 +382,7 @@ export default function SupplierOnboarding() {
           )}
 
           {/* Step 4 — Pagamento */}
-          {step === 4 && (
+          {step === 5 && (
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Confirmar e pagar</div>
               <div style={{ background:'rgba(46,49,146,.04)', borderRadius:14, padding:'16px 18px', marginBottom:20 }}>

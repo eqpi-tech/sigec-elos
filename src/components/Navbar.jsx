@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useState } from 'react'
 
 const NAVS = {
   SUPPLIER: [
@@ -13,17 +14,18 @@ const NAVS = {
     { path:'/comprador/cotacoes',     label:'Cotações',       icon:'📝' },
   ],
   ADMIN: [
-    { path:'/backoffice',             label:'Visão Geral',    icon:'⊞' },
-    { path:'/backoffice/fila',        label:'Fila de Análise',icon:'⏳' },
-    { path:'/backoffice/metricas',    label:'Métricas',       icon:'📊' },
-    { path:'/backoffice/criar-usuario',label:'+ Usuário',     icon:'👤' },
+    { path:'/backoffice',                label:'Visão Geral',    icon:'⊞' },
+    { path:'/backoffice/fila',           label:'Fila de Análise',icon:'⏳' },
+    { path:'/backoffice/homologados',    label:'Homologados',    icon:'✅' },
+    { path:'/backoffice/metricas',       label:'Métricas',       icon:'📊' },
+    { path:'/backoffice/criar-usuario',  label:'+ Usuário',      icon:'👤' },
   ],
 }
 const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', ADMIN:'Backoffice EQPI' }
 const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   ADMIN:'#7c3aed' }
 
 export default function Navbar() {
-  const { user, logout } = useAuth()
+  const { user, logout, roleOptions, activeRole, switchRole } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   if (!user) return null
@@ -57,6 +59,18 @@ export default function Navbar() {
         <div style={{ width:36,height:36,borderRadius:10,background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:13,fontFamily:'Montserrat,sans-serif' }}>
           {user.name?.slice(0,2).toUpperCase()}
         </div>
+        {roleOptions?.length > 1 && (
+          <select value={activeRole||''} onChange={e=>switchRole(e.target.value)}
+            style={{ padding:'5px 10px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)',
+              background:'rgba(255,255,255,.1)', color:'#fff', fontFamily:'Montserrat,sans-serif',
+              fontWeight:700, fontSize:11, cursor:'pointer', outline:'none' }}>
+            {roleOptions.map(r=>(
+              <option key={r.role} value={r.role} style={{ color:'#1a1c5e', background:'#fff' }}>
+                {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':'⚙️ Backoffice'}
+              </option>
+            ))}
+          </select>
+        )}
         <button onClick={handleLogout} style={{ background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.15)',color:'rgba(255,255,255,.6)',borderRadius:8,padding:'5px 12px',fontSize:11,fontFamily:'DM Sans,sans-serif',cursor:'pointer',transition:'all .15s' }}>Sair</button>
       </div>
     </nav>

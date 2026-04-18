@@ -85,15 +85,24 @@ export default function BackofficeCreateUser() {
 
         {/* Resultado */}
         {result && (
-          <div className="fade-in-up" style={{ marginTop:20, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:14, padding:'20px 24px' }}>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#15803d', marginBottom:12 }}>✅ Usuário criado!</div>
-            <div style={{ display:'grid', gap:8 }}>
-              {[['E-mail', result.email],['Perfil', ROLES.find(r=>r.value===role)?.label || role],['ID', result.userId?.slice(0,8)+'...']].map(([k,v])=>(
-                <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontFamily:'DM Sans,sans-serif' }}>
-                  <span style={{ color:'#9B9B9B' }}>{k}</span>
-                  <span style={{ fontWeight:600, color:'#1a1c5e' }}>{v}</span>
+          <div style={{ marginTop:20, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:14, padding:'20px 24px' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#15803d', marginBottom:16 }}>✅ Usuário criado com sucesso!</div>
+            {/* Senha em destaque */}
+            <div style={{ background:'#fff', border:'2px solid #2E3192', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Senha Gerada</div>
+              <div style={{ fontSize:22, fontFamily:'Courier New, monospace', fontWeight:700, color:'#2E3192', letterSpacing:2 }}>{result.password}</div>
+              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>⚠️ Anote esta senha — ela não será exibida novamente. Um e-mail também foi enviado ao usuário.</div>
+            </div>
+            <div style={{ display:'grid', gap:6 }}>
+              {[['E-mail', result.email||'-'], ['Perfil', result.role==='ADMIN'?'Backoffice':'Comprador']].map(([k,v])=>(
+                <div key={k} style={{ display:'flex', gap:10 }}>
+                  <span style={{ fontSize:12, color:'#9B9B9B', minWidth:80 }}>{k}</span>
+                  <span style={{ fontSize:12, color:'#15803d', fontWeight:600 }}>{v}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
               {result.tempPassword && (
                 <div style={{ marginTop:8, padding:'10px 14px', background:'rgba(245,158,11,.1)', borderRadius:10, border:'1px solid rgba(245,158,11,.3)' }}>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#92400e', marginBottom:4 }}>⚠ Senha temporária gerada</div>

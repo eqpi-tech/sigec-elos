@@ -14,11 +14,16 @@ const ICONS = {
   31432: '💼', DEFAULT: '📋',
 }
 
-export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true }) {
+export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null }) {
   const [parents, setParents]   = useState([])
   const [expanded, setExpanded] = useState(new Set()) // parent IDs expandidos
   const [trees, setTrees]       = useState({})        // parentId → { children, grandchildren }
   const [loadingTree, setLoadingTree] = useState(new Set())
+  const [search,    setSearch]    = useState('')
+  const [aiSugs,    setAiSugs]    = useState([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showCustom, setShowCustom] = useState(false)
+  const [customName, setCustomName] = useState('')
   const [requiredDocs, setRequiredDocs] = useState([])
   const [loadingDocs, setLoadingDocs]   = useState(false)
   const [loading, setLoading] = useState(true)
@@ -114,11 +119,67 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     </div>
   )
 
+  // Filter categories by search term
+  const filterCats = (list) => {
+    if (!search) return list
+    const q = search.toLowerCase()
+    return list.filter(p => {
+      const pMatch = p.name.toLowerCase().includes(q)
+      const cMatch = (p.children||[]).some(c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.children||[]).some(g => g.name.toLowerCase().includes(q))
+      )
+      return pMatch || cMatch
+    })
+  }
+
   return (
     <div>
+      {/* Search + AI */}
+      <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="🔍  Pesquisar categoria..."
+          style={{ flex:1, padding:'9px 14px', borderRadius:10, border:'1px solid #e2e4ef',
+            fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}/>
+        {cnpjData?.cnae_fiscal && (
+          <button onClick={suggestByAI} disabled={aiLoading}
+            style={{ padding:'9px 14px', borderRadius:10, border:'1px solid #2E3192',
+              background:'rgba(46,49,146,.06)', color:'#2E3192', fontFamily:'Montserrat,sans-serif',
+              fontWeight:700, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+            {aiLoading ? '⏳...' : '🤖 Sugerir por CNAE'}
+          </button>
+        )}
+      </div>
+
+      {/* AI suggestions chips */}
+      {aiSugs.length > 0 && (
+        <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.15)', borderRadius:10, padding:'10px 14px', marginBottom:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'#2E3192', fontFamily:'Montserrat,sans-serif', marginBottom:8 }}>
+            🤖 Sugestões baseadas no CNAE da sua empresa:
+          </div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {aiSugs.map((sug, i) => {
+              // Find matching category
+              const match = parents.flatMap(p=>[p,...(p.children||[]).flatMap(c=>[c,...(c.children||[])])]).find(c=>c.name.toLowerCase()===sug.toLowerCase())
+              if (!match) return null
+              const isSelected = selected.includes(match.id)
+              return (
+                <button key={i} onClick={()=>toggle(match.id)}
+                  style={{ padding:'4px 12px', borderRadius:20, fontFamily:'DM Sans,sans-serif', fontSize:12, cursor:'pointer',
+                    border:`1px solid ${isSelected?'#2E3192':'#c7d2fe'}`,
+                    background: isSelected ? '#2E3192' : 'rgba(46,49,146,.06)',
+                    color: isSelected ? '#fff' : '#2E3192' }}>
+                  {isSelected ? '✓ ' : '+ '}{sug}
+                </button>
+              )
+            }).filter(Boolean)}
+          </div>
+        </div>
+      )}
+
       {/* Categorias pai */}
       <div style={{ display:'grid', gap:8 }}>
-        {parents.map(parent => {
+        {filterCats(parents).map(parent => {
           const isOpen    = expanded.has(parent.id)
           const tree      = trees[parent.id]
           const isLoading = loadingTree.has(parent.id)
@@ -203,6 +264,34 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           </div>
         </div>
       )}
+      {/* Add custom category */}
+      <div style={{ marginTop:12 }}>
+        {showCustom ? (
+          <div style={{ display:'flex', gap:8 }}>
+            <input value={customName} onChange={e=>setCustomName(e.target.value)}
+              placeholder="Nome da nova categoria..."
+              style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
+                fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
+              onKeyDown={e=>e.key==='Enter'&&handleAddCustom()}/>
+            <button onClick={handleAddCustom}
+              style={{ padding:'8px 16px', borderRadius:8, background:'#2E3192', color:'#fff',
+                border:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+              Adicionar
+            </button>
+            <button onClick={()=>setShowCustom(false)}
+              style={{ padding:'8px 12px', borderRadius:8, background:'transparent', border:'1px solid #e2e4ef',
+                cursor:'pointer', color:'#9B9B9B', fontSize:12 }}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button onClick={()=>setShowCustom(true)}
+            style={{ fontSize:12, color:'#9B9B9B', background:'transparent', border:'1px dashed #d1d5db',
+              borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', width:'100%' }}>
+            + Não encontrou sua categoria? Adicionar nova categoria
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -238,6 +327,34 @@ function ChildGroup({ child, grandchildren, selectedIds, onToggle }) {
           ))}
         </div>
       )}
+      {/* Add custom category */}
+      <div style={{ marginTop:12 }}>
+        {showCustom ? (
+          <div style={{ display:'flex', gap:8 }}>
+            <input value={customName} onChange={e=>setCustomName(e.target.value)}
+              placeholder="Nome da nova categoria..."
+              style={{ flex:1, padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef',
+                fontFamily:'DM Sans,sans-serif', fontSize:13, outline:'none' }}
+              onKeyDown={e=>e.key==='Enter'&&handleAddCustom()}/>
+            <button onClick={handleAddCustom}
+              style={{ padding:'8px 16px', borderRadius:8, background:'#2E3192', color:'#fff',
+                border:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+              Adicionar
+            </button>
+            <button onClick={()=>setShowCustom(false)}
+              style={{ padding:'8px 12px', borderRadius:8, background:'transparent', border:'1px solid #e2e4ef',
+                cursor:'pointer', color:'#9B9B9B', fontSize:12 }}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button onClick={()=>setShowCustom(true)}
+            style={{ fontSize:12, color:'#9B9B9B', background:'transparent', border:'1px dashed #d1d5db',
+              borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', width:'100%' }}>
+            + Não encontrou sua categoria? Adicionar nova categoria
+          </button>
+        )}
+      </div>
     </div>
   )
 }

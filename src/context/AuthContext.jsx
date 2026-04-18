@@ -19,25 +19,46 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const [roleOptions, setRoleOptions] = useState([]) // para multi-perfil
+  const [activeRole, setActiveRole]   = useState(null)
+
+  const switchRole = (role) => {
+    const opt = roleOptions.find(r => r.role === role)
+    if (!opt) return
+    setActiveRole(role)
+    setUser(prev => ({ ...prev, role, supplier_id: opt.supplier_id, supplierId: opt.supplier_id, buyer_id: opt.buyer_id, buyerId: opt.buyer_id }))
+    localStorage.setItem('elos_active_role', role)
+  }
+
   const fetchProfile = async (authUser) => {
-    if (!authUser) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
+    if (!authUser) { setUser(null); setLoading(false); return }
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()   // maybeSingle: não lança 406 quando não há profile
-      setUser(buildUser(authUser, profile))
+      // Busca todos os perfis do usuário (tabela user_roles — multi-perfil)
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role, supplier_id, buyer_id, is_primary')
+        .eq('user_id', authUser.id)
+
+      if (roles && roles.length > 0) {
+        setRoleOptions(roles)
+        // Decide qual role ativar: salva preferência no localStorage
+        const saved = localStorage.getItem('elos_active_role')
+        const preferred = roles.find(r => r.role === saved) || roles.find(r => r.is_primary) || roles[0]
+        setActiveRole(preferred.role)
+        // Busca profile base
+        const { data: profile } = await supabase
+          .from('profiles').select('*').eq('id', authUser.id).maybeSingle()
+        setUser(buildUser(authUser, { ...profile, role: preferred.role, supplier_id: preferred.supplier_id, buyer_id: preferred.buyer_id }))
+      } else {
+        // Fallback: usa profiles legacy
+        const { data: profile } = await supabase
+          .from('profiles').select('*').eq('id', authUser.id).maybeSingle()
+        setUser(buildUser(authUser, profile))
+      }
     } catch (err) {
       console.warn('fetchProfile error:', err?.message)
       setUser(null)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   useEffect(() => {
