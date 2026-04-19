@@ -23,13 +23,15 @@ import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
 import BackofficeCreateUser from './pages/backoffice/CreateUser.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
 import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
+import LandingPage from './pages/LandingPage.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
 
 function RootRedirect() {
   const { user, loading } = useAuth()
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'100vh' }}><Spinner size={48}/></div>
-  if (!user) return <Navigate to="/login" replace />
+  // Usuário não logado → Landing Page (não redireciona para login)
+  if (!user) return <LandingPage />
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />
 }
 
