@@ -17,6 +17,7 @@ import SupplierCategories from './pages/supplier/Categories.jsx'
 import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
 import BuyerQuotations      from './pages/buyer/Quotations.jsx'
+import BuyerInvitations     from './pages/buyer/Invitations.jsx'
 
 import BackofficeOverview from './pages/backoffice/Overview.jsx'
 import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
