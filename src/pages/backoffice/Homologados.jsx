@@ -13,11 +13,15 @@ export function BackofficeHomologados() {
 
   useEffect(() => {
     supabase.from('suppliers')
-      .select(`*, seals(level, status, score, issued_at), plans(type, status)`)
-      .eq('status', 'ACTIVE')
+      .select(`*, seals!inner(level, status, score, issued_at), plans(type, status)`)
+      .eq('seals.status', 'ACTIVE')
       .order('created_at', { ascending: false })
       .then(({ data }) => {
-        const list = data || []
+        // Filtra client-side também para garantir — inclui qualquer fornecedor
+        // cujo selo está ATIVO ou cujo supplier.status é ACTIVE
+        const list = (data || []).filter(s =>
+          s.seals?.[0]?.status === 'ACTIVE' || s.status === 'ACTIVE'
+        )
         setSuppliers(list)
         setStats({
           total:     list.length,

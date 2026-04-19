@@ -204,14 +204,15 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     setSavingCustom(true)
     try {
       // Insere no banco como categoria pendente de aprovação pelo backoffice
+      // id é SERIAL (integer auto-increment) — não enviar, o banco gera automaticamente
       const { data: newCat, error } = await supabase
         .from('categories')
         .insert({
-          name:        customName.trim(),
-          parent_id:   customParent,
-          is_custom:   true,
-          approved:    false,           // backoffice precisa aprovar
-          is_active:   true,
+          name:      customName.trim(),
+          parent_id: customParent,
+          is_custom: true,
+          approved:  false,
+          is_active: true,
         })
         .select()
         .single()
@@ -275,6 +276,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             {aiSugs.map((sug, i) => {
               // Busca match em todos os nós carregados: parents + trees (lazy)
+              // Como a IA agora retorna nomes exatos (via índices), o match é direto
               const allNodes = [
                 ...parents,
                 ...Object.values(trees).flatMap(t => [
@@ -282,9 +284,10 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
                   ...(t.grandchildren||[])
                 ])
               ]
-              // Similaridade: exact → starts-with → contains
-              const sugLow = sug.toLowerCase()
-              const match = allNodes.find(c => c.name.toLowerCase() === sugLow)
+              // Normaliza acentos para comparação robusta
+              const norm = s => s.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+              const sugNorm = norm(sug)
+              const match = allNodes.find(c => norm(c.name) === sugNorm)
                          || allNodes.find(c => c.name.toLowerCase().startsWith(sugLow))
                          || allNodes.find(c => sugLow.startsWith(c.name.toLowerCase()))
                          || allNodes.find(c => c.name.toLowerCase().includes(sugLow) || sugLow.includes(c.name.toLowerCase().split(' ')[0]))

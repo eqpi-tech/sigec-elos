@@ -245,10 +245,34 @@ export function BackofficeAnalysis() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: data.user_id,  // send-email resolve o e-mail server-side via auth.admin
-          subject: `✅ Parabéns! Seu Selo ELOS ${level} foi emitido`,
-          html: `<p>Olá, <strong>${data.razao_social}</strong>!</p>
-            <p>Sua homologação foi concluída com sucesso. Seu <strong>Selo ELOS ${level}</strong> está ativo e sua empresa já está visível no marketplace SIGEC-ELOS.</p>
-            <p><a href="${window.location.origin}/fornecedor/dashboard">Acessar meu painel →</a></p>`,
+          subject: `✅ Parabéns! Selo ELOS ${level} emitido — ${data.razao_social}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+            <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
+              <h1 style="color:#fff;margin:0 0 4px;font-size:24px">SIGEC-ELOS</h1>
+              <p style="color:#C7D2FE;margin:0;font-size:13px">Plataforma de Homologação de Fornecedores</p>
+            </div>
+            <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
+              <div style="text-align:center;margin-bottom:24px">
+                <div style="font-size:48px">🏅</div>
+                <h2 style="color:#15803d;margin:8px 0 4px;font-size:20px">Homologação Aprovada!</h2>
+              </div>
+              <p style="color:#374151;margin:0 0 16px">Olá, <strong>${data.razao_social}</strong>!</p>
+              <p style="color:#374151;margin:0 0 20px">Sua empresa foi <strong>homologada</strong> e está apta a participar de processos de fornecimento com empresas compradoras da rede SIGEC-ELOS.</p>
+              <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
+                <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%;font-size:13px">Empresa</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">${data.razao_social}</td></tr>
+                <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">CNPJ</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px;font-family:monospace">${data.cnpj}</td></tr>
+                <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Nível do Selo</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:14px;color:#F47E2F;font-weight:bold">Selo ELOS ${level}</td></tr>
+                <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Data de Emissão</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">${new Date().toLocaleDateString('pt-BR')}</td></tr>
+              </table>
+              <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin-bottom:24px">
+                <p style="margin:0;font-size:13px;color:#15803d">✅ <strong>Sua empresa já está visível no marketplace</strong> para compradores qualificados da plataforma.</p>
+              </div>
+              <div style="text-align:center">
+                <a href="https://elos.eqpitech.com.br/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
+              </div>
+            </div>
+            <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div>
+          </div>`,
         })
       })
     } catch (e) { console.warn('Email notif:', e.message) }

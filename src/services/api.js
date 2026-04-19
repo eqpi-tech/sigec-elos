@@ -474,7 +474,9 @@ export const adminApi = {
       .eq('supplier_id', supplierId)
     if (sealErr) throw new Error(sealErr.message)
 
-    await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
+    const { error: suppErr } = await supabase
+      .from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
+    if (suppErr) console.warn('supplier status update (RLS?):', suppErr.message)
 
     // Recalcula score final no momento da aprovação
     const [{ data: allDocs }, { data: catRows }] = await Promise.all([
