@@ -284,33 +284,14 @@ export const marketplaceApi = {
   },
 
   getById: async (id) => {
-    const { data, error } = await supabase
-      .from('suppliers')
-      .select(`*, seals(*), plans(type,status), documents(status,label,type,expires_at,source,metadata), supplier_categories(category_id, categories(name,parent_id))`)
-      .eq('id', id)
-      .single()
-    if (error) throw new Error(error.message)
-    // Busca ÚLTIMA consulta CNPJ para dados ricos (sempre a mais recente)
-    const { data: cnpjRec } = await supabase
-      .from('cnpj_consultations')
-      .select('cnpj_data, sanctions_data, has_sanctions, consulted_at, cnpj')
-      .eq('supplier_id', id)
-      .order('consulted_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    return {
-      ...data,
-      sealLevel:       data.seals?.[0]?.level     || 'Simples',
-      sealStatus:      data.seals?.[0]?.status    || 'PENDING',
-      sealScore:       data.seals?.[0]?.score     || 0,
-      sealIssuedAt:    data.seals?.[0]?.issued_at || null,
-      planType:        data.plans?.[0]?.type      || null,
-      cnpjData:        cnpjRec?.cnpj_data         || null,
-      sanctionsData:   cnpjRec?.sanctions_data    || null,
-      hasSanctions:    cnpjRec?.has_sanctions     || false,
-      cnpjConsultedAt: cnpjRec?.consulted_at      || null,
-      score:           data.seals?.[0]?.score     || 0,
-    }
+    // Usa Netlify Function com service_role para contornar RLS do buyer
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || ''
+    const res = await fetch(`/.netlify/functions/get-supplier-profile?id=${id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error(`Erro ao carregar fornecedor: ${res.status}`)
+    return res.json()
   },
 }
 

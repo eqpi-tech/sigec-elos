@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { marketplaceApi, rfqApi } from '../../services/api.js'
+import { marketplaceApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { Button, Card, ScoreBar, StatusDot, Spinner } from '../../components/ui.jsx'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
@@ -148,7 +149,8 @@ export default function SupplierProfile() {
   const mobile = useIsMobile()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
-  const [rfqSent, setRfqSent] = useState(false)
+  const [inviteSent, setInviteSent] = useState(false)
+  const [inviting,   setInviting]   = useState(false)
   const [tab,     setTab]     = useState('dados')
 
   useEffect(() => {
@@ -157,6 +159,30 @@ export default function SupplierProfile() {
       .catch(e => console.error('[SupplierProfile] error:', e))
       .finally(() => setLoading(false))
   }, [id])
+
+  const sendInvite = async () => {
+    setInviting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token || ''
+      const res = await fetch('/.netlify/functions/send-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
+        body: JSON.stringify({
+          supplierId:           data.id,
+          // emails buscados server-side via user_roles → auth.users (email de login)
+          supplierRazaoSocial:  ss(cd.razao_social || data.razao_social),
+          supplierCnpj:         fmtCNPJ(cd.cnpj || data.cnpj || ''),
+          buyerId:              user.buyerId,
+          buyerName:            user.name || 'Comprador SIGEC-ELOS',
+          buyerEmail:           user.email || '',
+        })
+      })
+      if (!res.ok) throw new Error('Erro ao enviar convite')
+      setInviteSent(true)
+    } catch (e) { alert('Erro: ' + e.message) }
+    setInviting(false)
+  }
 
   if (loading) return <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'50vh'}}><Spinner size={48}/></div>
   if (!data)   return <div style={{padding:32,color:'#9B9B9B'}}>Fornecedor não encontrado.</div>
@@ -263,12 +289,20 @@ export default function SupplierProfile() {
           </div>
 
           <div style={{display:'flex',flexDirection:'column',gap:8,alignItems:'flex-end',flexShrink:0}}>
-            {rfqSent
-              ? <span style={{fontSize:12,color:'#22c55e',fontWeight:700}}>✅ Cotação enviada!</span>
-              : <Button variant="orange" onClick={async()=>{
-                  await rfqApi.send({supplierIds:[data.id],category:data.services?.[0]||'Geral',message:'',buyerId:user.buyerId})
-                  setRfqSent(true)
-                }}>📩 Solicitar Cotação</Button>
+            {inviteSent
+              ? (
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:12,color:'#22c55e',fontWeight:700,marginBottom:4}}>✅ Convite enviado!</div>
+                  <button onClick={()=>navigate('/comprador/convites')}
+                    style={{fontSize:11,color:'#2E3192',background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:8,padding:'4px 10px',cursor:'pointer',fontFamily:'DM Sans,sans-serif'}}>
+                    Ver convites →
+                  </button>
+                </div>
+              ) : (
+                <Button variant="orange" disabled={inviting} onClick={sendInvite}>
+                  {inviting ? '⏳...' : '🤝 Enviar Convite'}
+                </Button>
+              )
             }
             {data.cnpjConsultedAt && (
               <span style={{fontSize:10,color:'#9B9B9B',textAlign:'right'}}>

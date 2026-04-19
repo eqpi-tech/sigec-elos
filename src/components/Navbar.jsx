@@ -12,7 +12,7 @@ const NAVS = {
   ],
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
-    { path:'/comprador/cotacoes',    label:'Cotações',        icon:'📝' },
+    { path:'/comprador/convites',    label:'Convites',        icon:'🤝' },
   ],
   ADMIN: [
     { path:'/backoffice',                 label:'Visão Geral',     icon:'⊞' },
