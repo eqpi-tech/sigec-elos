@@ -413,6 +413,10 @@ export const adminApi = {
     const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
     if (!supplier) throw new Error('Fornecedor não encontrado')
 
+    // Guarda o user_id para que a notificação de e-mail seja buscada server-side
+    // (auth.admin.getUserById não está disponível no cliente — send-email faz o lookup)
+    const supplierEmail = null  // send-email receberá user_id e buscará o e-mail
+
     const uploadedDocs = docsRes.status === 'fulfilled' ? (docsRes.value.data || []) : []
     const uploadedByType = {}
     uploadedDocs.forEach(d => { uploadedByType[String(d.type)] = d })
@@ -456,6 +460,7 @@ export const adminApi = {
 
     return {
       ...supplier,
+      email:             supplierEmail,
       seals:             sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : [],
       documents:         fullDocList,
       cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,

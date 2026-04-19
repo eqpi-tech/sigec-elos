@@ -73,6 +73,7 @@ function AppRoutes() {
       <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
       <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
       <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']}><BackofficeCreateUser/></Protect>} />
+      <Route path="/backoffice/homologados"    element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>
