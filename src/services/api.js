@@ -290,25 +290,26 @@ export const marketplaceApi = {
       .eq('id', id)
       .single()
     if (error) throw new Error(error.message)
-    // Busca consulta CNPJ para dados ricos
+    // Busca ÚLTIMA consulta CNPJ para dados ricos (sempre a mais recente)
     const { data: cnpjRec } = await supabase
       .from('cnpj_consultations')
-      .select('cnpj_data, has_sanctions, consulted_at')
+      .select('cnpj_data, sanctions_data, has_sanctions, consulted_at, cnpj')
       .eq('supplier_id', id)
       .order('consulted_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     return {
       ...data,
-      sealLevel:   data.seals?.[0]?.level  || 'Simples',
-      sealStatus:  data.seals?.[0]?.status || 'PENDING',
-      sealScore:   data.seals?.[0]?.score  || 0,
-      sealIssuedAt: data.seals?.[0]?.issued_at || null,
-      planType:    data.plans?.[0]?.type   || null,
-      cnpjData:    cnpjRec?.cnpj_data || null,
-      hasSanctions: cnpjRec?.has_sanctions || false,
-      cnpjConsultedAt: cnpjRec?.consulted_at || null,
-      score:      data.seals?.[0]?.score  || 0,
+      sealLevel:       data.seals?.[0]?.level     || 'Simples',
+      sealStatus:      data.seals?.[0]?.status    || 'PENDING',
+      sealScore:       data.seals?.[0]?.score     || 0,
+      sealIssuedAt:    data.seals?.[0]?.issued_at || null,
+      planType:        data.plans?.[0]?.type      || null,
+      cnpjData:        cnpjRec?.cnpj_data         || null,
+      sanctionsData:   cnpjRec?.sanctions_data    || null,
+      hasSanctions:    cnpjRec?.has_sanctions     || false,
+      cnpjConsultedAt: cnpjRec?.consulted_at      || null,
+      score:           data.seals?.[0]?.score     || 0,
     }
   },
 }
