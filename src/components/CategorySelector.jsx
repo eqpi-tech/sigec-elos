@@ -204,15 +204,14 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     setSavingCustom(true)
     try {
       // Insere no banco como categoria pendente de aprovação pelo backoffice
-      // id é SERIAL (integer auto-increment) — não enviar, o banco gera automaticamente
       const { data: newCat, error } = await supabase
         .from('categories')
         .insert({
-          name:      customName.trim(),
-          parent_id: customParent,
-          is_custom: true,
-          approved:  false,
-          is_active: true,
+          name:        customName.trim(),
+          parent_id:   customParent,
+          is_custom:   true,
+          approved:    false,           // backoffice precisa aprovar
+          is_active:   true,
         })
         .select()
         .single()
