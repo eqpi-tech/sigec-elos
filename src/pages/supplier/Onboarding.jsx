@@ -11,6 +11,7 @@ const PLAN_PRICES = { Simples: 290, Premium: 990 }
 const STEPS = ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
 
 export default function SupplierOnboarding() {
+  const mobile = useIsMobile()
   const navigate = useNavigate()
   const { signup, reloadProfile } = useAuth()
 
@@ -378,7 +379,7 @@ export default function SupplierOnboarding() {
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
+              <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:12, marginBottom:20 }}>
                 {['Simples','Premium'].map(pt => (
                   <button key={pt} onClick={() => setPlanType(pt)} style={{ padding:'16px 12px', borderRadius:14, border:`2px solid ${planType===pt?(pt==='Premium'?'#ea580c':'#2E3192'):'#e2e4ef'}`, background:planType===pt?(pt==='Premium'?'rgba(244,126,47,.06)':'rgba(46,49,146,.06)'):'#fff', cursor:'pointer', textAlign:'center', transition:'all .15s' }}>
                     <div style={{ fontSize:22 }}>{pt==='Premium'?'⭐':'🏷️'}</div>

@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase.js'
 import { Badge, Seal, Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 export default function SupplierDashboard() {
+  const mobile = useIsMobile()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [supplier, setSupplier] = useState(null)
@@ -71,7 +72,7 @@ export default function SupplierDashboard() {
   const greeting    = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 
   return (
-    <div style={{ padding:'28px 32px', maxWidth:1200, margin:'0 auto' }}>
+    <div style={{ padding: mobile ? '16px' : '28px 32px', maxWidth:1200, margin:'0 auto' }}>
       <PageHeader
         title={`${greeting}, ${firstName}! 👋`}
         subtitle={`${supplier.razao_social} · CNPJ ${supplier.cnpj}`}
@@ -101,7 +102,7 @@ export default function SupplierDashboard() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
+      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:16, marginBottom:24 }}>
         <KpiCard label="Nível Atual"     value={supplier.sealLevel || 'Simples'} sub={`Score: ${supplier.score || 0}/100`} subColor="#9B9B9B" icon="🏷️" iconBg="rgba(46,49,146,.1)" />
         <KpiCard label="Docs Válidos"    value={`${docsOk}/${requiredDocsCount||docs.length||'?'}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
         <KpiCard label="Em Análise"      value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />

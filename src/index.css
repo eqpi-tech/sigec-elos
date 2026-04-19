@@ -1,0 +1,16 @@
+
+/* ── Responsive globals ───────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+/* Prevent horizontal overflow on mobile */
+body { overflow-x: hidden; }
+
+/* Better tap targets on mobile */
+@media (max-width: 768px) {
+  button, input, select, textarea { font-size: 16px !important; } /* prevents iOS zoom */
+  input[type="email"], input[type="password"], input[type="text"] { font-size: 16px !important; }
+}
+
+/* Smooth scrolling for anchor links */
+html { scroll-behavior: smooth; }

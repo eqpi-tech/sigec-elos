@@ -36,6 +36,7 @@ const STATUS_CONFIG = {
 }
 
 export default function SupplierDocuments() {
+  const mobile = useIsMobile()
   const { user }   = useAuth()
   const [supplier, setSupplier] = useState(null)
   const [reqDocs, setReqDocs]   = useState([])   // docs exigidos pelas categorias
@@ -291,7 +292,7 @@ export default function SupplierDocuments() {
   }
 
   return (
-    <div style={{ padding:'28px 32px', maxWidth:960, margin:'0 auto' }}>
+    <div style={{ padding: mobile ? '16px' : '28px 32px', maxWidth:960, margin:'0 auto' }}>
       {toast && (
         <div style={{ position:'fixed',top:80,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',padding:'12px 20px',borderRadius:12,zIndex:9999,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,boxShadow:'0 8px 24px rgba(0,0,0,.2)',maxWidth:340 }}>
           {toast.msg}
@@ -301,7 +302,7 @@ export default function SupplierDocuments() {
       <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
 
       {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:16, marginBottom:24 }}>
+      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap:16, marginBottom:24 }}>
         {[
           ['Válidos', okCount, '#22c55e', '✅'],
           ['Pendentes', totCount - okCount, totCount - okCount > 0 ? '#f59e0b' : '#22c55e', '⏳'],

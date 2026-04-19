@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useIsMobile } from '../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
 
 // ── Paleta ──────────────────────────────────────────────────────────────────
@@ -113,6 +114,8 @@ function ClientLogo({ name }) {
 // ── Landing Page principal ──────────────────────────────────────────────────
 export default function LandingPage() {
   const navigate = useNavigate()
+  const mobile = useIsMobile()
+  const [navOpen, setNavOpen] = useState(false)
   const [email,   setEmail]   = useState('')
   const [empresa, setEmpresa] = useState('')
   const [sending, setSending] = useState(false)
@@ -136,21 +139,40 @@ export default function LandingPage() {
     <div style={{ fontFamily:'DM Sans,sans-serif', overflowX:'hidden', background:'#fff' }}>
 
       {/* ── NAV ────────────────────────────────────────────────────────── */}
-      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, background:'rgba(13,18,64,.95)', backdropFilter:'blur(12px)', borderBottom:'1px solid rgba(255,255,255,.08)', padding:'0 5%', display:'flex', alignItems:'center', justifyContent:'space-between', height:80 }}>
+      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, background:'rgba(13,18,64,.95)', backdropFilter:'blur(12px)', borderBottom:'1px solid rgba(255,255,255,.08)', padding:'3%', display:'flex', alignItems:'center', justifyContent:'space-between', height:120 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:20, color:'#fff', letterSpacing:-0.5 }}>
-            <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:80, objectFit:'contain', objectPosition:'left', marginBottom:32 }} />
+            <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:80, objectFit:'contain', objectPosition:'left', marginBottom:5 }} />
           </div>
-          <span style={{ fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:'DM Sans,sans-serif', marginLeft:4 }}>by EQPI Tech</span>
         </div>
         <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-          <a href="#como-funciona" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Como funciona</a>
-          <a href="#planos" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Planos</a>
-          <a href="#compradores" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Compradores</a>
-          <button onClick={() => navigate('/login')}
-            style={{ padding:'9px 22px', borderRadius:10, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' }}>
-            Entrar
-          </button>
+          {mobile ? (
+            <>
+              <button onClick={() => setNavOpen(o=>!o)}
+                style={{ background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.15)', borderRadius:8, padding:'7px 12px', cursor:'pointer', color:'#fff', fontSize:18, lineHeight:1 }}>
+                {navOpen ? '✕' : '☰'}
+              </button>
+              {navOpen && (
+                <div style={{ position:'absolute', top:64, left:0, right:0, background:'rgba(13,18,64,.98)', backdropFilter:'blur(12px)', borderBottom:'1px solid rgba(255,255,255,.1)', padding:'16px 5%', display:'flex', flexDirection:'column', gap:12 }}>
+                  {[['#como-funciona','Como funciona'],['#planos','Planos'],['#compradores','Compradores']].map(([h,l]) => (
+                    <a key={h} href={h} onClick={() => setNavOpen(false)} style={{ color:'rgba(255,255,255,.8)', fontSize:16, textDecoration:'none', fontFamily:'DM Sans,sans-serif', padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,.06)' }}>{l}</a>
+                  ))}
+                  <button onClick={() => navigate('/login')} style={{ padding:'12px', borderRadius:10, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'none', cursor:'pointer', marginTop:4 }}>Entrar</button>
+                  <button onClick={() => navigate('/cadastro')} style={{ padding:'12px', borderRadius:10, background:'rgba(255,255,255,.08)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'1px solid rgba(255,255,255,.15)', cursor:'pointer' }}>Cadastrar →</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <a href="#como-funciona" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Como funciona</a>
+              <a href="#planos" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Planos</a>
+              <a href="#compradores" style={{ color:'rgba(255,255,255,.6)', fontSize:13, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Compradores</a>
+              <button onClick={() => navigate('/login')}
+                style={{ padding:'9px 22px', borderRadius:10, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' }}>
+                Entrar
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -190,10 +212,10 @@ export default function LandingPage() {
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
                 <div style={{ width:48, height:48, borderRadius:12, background:`linear-gradient(135deg, ${C.blue}, ${C.orange})`, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, color:'#fff', fontSize:22 }}>E</div>
                 <div>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, color:'#fff', fontSize:14 }}>Empresa Modelo LTDA</div>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, color:'#fff', fontSize:14 }}>Empresa LTDA</div>
                   <div style={{ fontSize:12, color:'rgba(255,255,255,.5)' }}>CNPJ 00.000.000/0001-00</div>
                 </div>
-                <div style={{ marginLeft:'auto', background:'rgba(34,197,94,.15)', border:'1px solid rgba(34,197,94,.3)', borderRadius:20, padding:'4px 12px', fontSize:11, color:'#22c55e', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>✓ ELOS Ativo</div>
+                <div style={{ marginLeft:'auto', background:'rgba(34,197,94,.15)', border:'1px solid rgba(34,197,94,.3)', borderRadius:20, padding:'4px 12px', fontSize:11, color:'#22c55e', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>ELOS</div>
               </div>
               {[['Cartão CNPJ','✅ Válido'],['CRF FGTS','✅ Regular'],['CND Federal','✅ Negativa'],['Contrato Social','✅ Atualizado']].map(([doc,s]) => (
                 <div key={doc} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,.06)', fontSize:13, color:'rgba(255,255,255,.7)' }}>
@@ -201,7 +223,7 @@ export default function LandingPage() {
                 </div>
               ))}
               <div style={{ marginTop:20, background:`linear-gradient(135deg, ${C.orange}, #ff9f50)`, borderRadius:12, padding:'14px 20px', textAlign:'center' }}>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, color:'#fff', fontSize:16 }}>🏅 Selo ELOS Simples</div>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, color:'#fff', fontSize:16 }}>🏅 Selo ELOS</div>
                 <div style={{ fontSize:12, color:'rgba(255,255,255,.8)', marginTop:4 }}>Visível no marketplace para compradores</div>
               </div>
             </div>

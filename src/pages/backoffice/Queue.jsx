@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
@@ -208,6 +209,7 @@ function SimplesCard({ cnpjData }) {
 
 // ─── Análise individual ───────────────────────────────────────────────────────
 export function BackofficeAnalysis() {
+  const mobile = useIsMobile()
   const { id } = useParams()
   const navigate = useNavigate()
   const [data, setData]         = useState(null)

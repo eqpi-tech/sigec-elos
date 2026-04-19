@@ -24,6 +24,7 @@ const STATES = ['Todos','AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','
 const SIZES = ['Todos','MEI','ME','EPP','Médio','Grande']
 
 export default function BuyerMarketplace() {
+  const mobile = useIsMobile()
   const navigate = useNavigate()
   const [banner, setBanner] = useState(true)
   const [stage, setStage]   = useState(1)
