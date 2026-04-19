@@ -126,13 +126,14 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   const filterCats = (list) => {
     if (!search) return list
     const q = search.toLowerCase()
+    // Busca em: pais + filhos (trees[p.id].children) + netos (trees[p.id].grandchildren)
     return list.filter(p => {
-      const pMatch = p.name.toLowerCase().includes(q)
-      const cMatch = (p.children||[]).some(c =>
-        c.name.toLowerCase().includes(q) ||
-        (c.children||[]).some(g => g.name.toLowerCase().includes(q))
-      )
-      return pMatch || cMatch
+      if (p.name.toLowerCase().includes(q)) return true
+      const tree = trees[p.id]
+      if (!tree) return false
+      const childMatch = (tree.children||[]).some(c => c.name.toLowerCase().includes(q))
+      const grandMatch = (tree.grandchildren||[]).some(g => g.name.toLowerCase().includes(q))
+      return childMatch || grandMatch
     })
   }
 
@@ -155,22 +156,31 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
         return rows
       })
 
-      // Pré-carrega as árvores de todos os parents que ainda não foram carregadas
-      // para que o match possa encontrar filhos e netos
-      const unloadedParents = parents.filter(p => !trees[p.id])
+      // Carrega todas as árvores de parents (parent_id = null) que ainda não foram carregadas
+      // Mantém um mapa local freshedTrees para uso imediato no match (evita race de setState)
+      const freshedTrees = { ...trees }
+      const unloadedParents = parents.filter(p => !freshedTrees[p.id])
       if (unloadedParents.length > 0) {
         const treeResults = await Promise.allSettled(
           unloadedParents.map(p => categoriesApi.getTree(p.id))
         )
         treeResults.forEach((r, i) => {
-          if (r.status === 'fulfilled') {
-            const parentId = unloadedParents[i].id
-            setTrees(prev => ({ ...prev, [parentId]: r.value }))
+          if (r.status === 'fulfilled' && r.value) {
+            freshedTrees[unloadedParents[i].id] = r.value
           }
         })
-        // Pequena espera para o estado atualizar antes de buscar sugestões
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Atualiza o estado React também (para uso futuro)
+        setTrees(freshedTrees)
       }
+
+      // Monta lista completa com TODOS os nós (pai + filhos + netos) usando freshedTrees
+      const allNodeNames = [
+        ...parents.map(p => p.name),
+        ...Object.values(freshedTrees).flatMap(t => [
+          ...(t.children||[]).map(c => c.name),
+          ...(t.grandchildren||[]).map(g => g.name),
+        ])
+      ]
 
       const res = await fetch('/.netlify/functions/ai-suggest-categories', {
         method: 'POST',
@@ -178,10 +188,11 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
         body: JSON.stringify({
           cnae:          cnpjData.cnae_fiscal,
           cnaeDescricao: cnpjData.cnae_fiscal_descricao,
-          categoryNames: allNames.slice(0, 120),
+          categoryNames: allNodeNames.slice(0, 150),
         })
       })
       const data = await res.json()
+      // Guarda freshedTrees para o match sincronizar com os chips renderizados
       setAiSugs(data.sugestoes || [])
     } catch (e) { console.warn('AI suggest:', e.message) }
     setAiLoading(false)
@@ -193,13 +204,17 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     setSavingCustom(true)
     try {
       // Insere no banco como categoria pendente de aprovação pelo backoffice
+      // Gera UUID no cliente — garante que id nunca será null
+      // (workaround para tabelas onde DEFAULT gen_random_uuid() pode não estar ativo)
+      const newId = crypto.randomUUID()
       const { data: newCat, error } = await supabase
         .from('categories')
         .insert({
+          id:          newId,
           name:        customName.trim(),
           parent_id:   customParent,
           is_custom:   true,
-          approved:    false,           // backoffice precisa aprovar
+          approved:    false,
           is_active:   true,
         })
         .select()

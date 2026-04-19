@@ -244,7 +244,7 @@ export function BackofficeAnalysis() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: data.email,
+          userId: data.user_id,  // send-email resolve o e-mail server-side via auth.admin
           subject: `✅ Parabéns! Seu Selo ELOS ${level} foi emitido`,
           html: `<p>Olá, <strong>${data.razao_social}</strong>!</p>
             <p>Sua homologação foi concluída com sucesso. Seu <strong>Selo ELOS ${level}</strong> está ativo e sua empresa já está visível no marketplace SIGEC-ELOS.</p>
@@ -264,7 +264,7 @@ export function BackofficeAnalysis() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: data.email,
+          userId: data.user_id,  // send-email resolve o e-mail server-side via auth.admin
           subject: '❌ Atualização sobre sua homologação SIGEC-ELOS',
           html: `<p>Olá, <strong>${data.razao_social}</strong>!</p>
             <p>Após análise, sua solicitação de homologação foi <strong>reprovada</strong> pelo seguinte motivo:</p>
