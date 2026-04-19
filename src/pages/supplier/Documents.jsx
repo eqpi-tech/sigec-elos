@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi, categoriesApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'

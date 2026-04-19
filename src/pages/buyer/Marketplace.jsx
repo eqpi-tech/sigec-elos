@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
 import { marketplaceApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, Spinner, SectionTitle } from '../../components/ui.jsx'

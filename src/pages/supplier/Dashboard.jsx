@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
