@@ -49,13 +49,39 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   useEffect(() => {
     if (!search || !parents.length) return
     const unloaded = parents.filter(p => !treesRef.current[p.id])
-    if (!unloaded.length) return
+    if (!unloaded.length) {
+      // Árvores já carregadas — auto-expande pais com match nos filhos
+      autoExpandMatching()
+      return
+    }
     Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id))).then(results => {
       const patch = {}
       results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
-      if (Object.keys(patch).length) setTrees(prev => ({ ...prev, ...patch }))
+      if (Object.keys(patch).length) {
+        setTrees(prev => {
+          const updated = { ...prev, ...patch }
+          treesRef.current = updated
+          return updated
+        })
+      }
+      autoExpandMatching()
     })
   }, [search, parents])
+
+  // Expande automaticamente pais cujos filhos/netos fazem match com a busca
+  const autoExpandMatching = () => {
+    if (!search) return
+    const q = norm(search)
+    const toExpand = parents
+      .filter(p => {
+        const tree = treesRef.current[p.id]
+        if (!tree) return false
+        return (tree.children||[]).some(c => norm(c.name).includes(q)) ||
+               (tree.grandchildren||[]).some(g => norm(g.name).includes(q))
+      })
+      .map(p => p.id)
+    if (toExpand.length > 0) setExpanded(prev => new Set([...prev, ...toExpand]))
+  }
 
   // Documentos exigidos
   useEffect(() => {
@@ -270,12 +296,26 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
                       </button>
                     </div>
                   )}
-                  {tree.children.map(child => {
-                    const gcs = tree.grandchildren?.filter(g => g.parent_id === child.id) || []
-                    return gcs.length === 0
-                      ? <CheckItem key={child.id} id={child.id} name={child.name} checked={selectedIds.has(child.id)} onChange={() => toggleLeaf(child.id)} />
-                      : <ChildGroup key={child.id} child={child} grandchildren={gcs} selectedIds={selectedIds} onToggle={toggleLeaf} />
-                  })}
+                  {tree.children
+                    .filter(child => {
+                      if (!search) return true
+                      const q = norm(search)
+                      if (norm(child.name).includes(q)) return true
+                      const gcs = tree.grandchildren?.filter(g => g.parent_id === child.id) || []
+                      return gcs.some(g => norm(g.name).includes(q))
+                    })
+                    .map(child => {
+                      const gcs = tree.grandchildren?.filter(g => g.parent_id === child.id) || []
+                      // Quando busca ativa, filtra também os netos
+                      const visibleGcs = search
+                        ? gcs.filter(g => norm(g.name).includes(norm(search)))
+                        : gcs
+                      return visibleGcs.length === 0 && gcs.length > 0
+                        ? null  // todos os netos filtrados — não mostra o grupo
+                        : gcs.length === 0
+                          ? <CheckItem key={child.id} id={child.id} name={child.name} checked={selectedIds.has(child.id)} onChange={() => toggleLeaf(child.id)} />
+                          : <ChildGroup key={child.id} child={child} grandchildren={visibleGcs.length ? visibleGcs : gcs} selectedIds={selectedIds} onToggle={toggleLeaf} />
+                    }).filter(Boolean)}
                 </div>
               )}
             </div>

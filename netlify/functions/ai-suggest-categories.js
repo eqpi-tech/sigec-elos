@@ -29,6 +29,10 @@ Retorne os NÚMEROS das categorias mais relevantes para essa empresa (1 a 5 cate
 Responda SOMENTE com JSON válido, sem texto adicional: {"indices":[1,5,12]}`
 
   try {
+    if (categoryNames.length === 0) {
+      return { statusCode:200, headers, body: JSON.stringify({ sugestoes:[] }) }
+    }
+
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -38,15 +42,15 @@ Responda SOMENTE com JSON válido, sem texto adicional: {"indices":[1,5,12]}`
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 100,
+        max_tokens: 256,   // aumentado — resposta JSON com até 10 índices
         messages: [{ role: 'user', content: prompt }]
       })
     })
 
     if (!res.ok) {
-      const err = await res.text()
-      console.error('[ai-suggest] API error', res.status, err.slice(0,200))
-      return { statusCode:200, headers, body: JSON.stringify({ sugestoes:[], error:`API ${res.status}` }) }
+      const errBody = await res.text()
+      console.error('[ai-suggest] API error', res.status, errBody.slice(0, 500))
+      return { statusCode:200, headers, body: JSON.stringify({ sugestoes:[], error:`API ${res.status}: ${errBody.slice(0,100)}` }) }
     }
 
     const data    = await res.json()

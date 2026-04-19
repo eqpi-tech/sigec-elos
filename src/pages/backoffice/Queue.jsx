@@ -325,6 +325,15 @@ export function BackofficeAnalysis() {
   const activeSancCnep = filterActiveSanctions(sanctions?.cnep || [], supplierCnpj)
   const hasActiveSanctions = activeSancCeis.length > 0 || activeSancCnep.length > 0
 
+  // Score dinâmico: docs VALID / total exigidos × 100
+  const allDocs        = data?.documents || []
+  const totalRequired  = allDocs.length
+  const validCount     = allDocs.filter(d => d.status === 'VALID').length
+  const liveScore      = totalRequired > 0 ? Math.round((validCount / totalRequired) * 100) : 0
+
+  // Guard: selo já emitido?
+  const sealAlreadyActive = data?.seals?.[0]?.status === 'ACTIVE'
+
   if (done) return (
     <div style={{ maxWidth:600,margin:'80px auto',padding:24,textAlign:'center' }}>
       <div style={{ fontSize:64,marginBottom:16 }}>{done==='approved'?'✅':'❌'}</div>
@@ -365,7 +374,7 @@ export function BackofficeAnalysis() {
                 {cnpjDat?.email && <div style={{ fontSize:12,color:'#2E3192',marginTop:2 }}>{safeStr(cnpjDat.email)}</div>}
               </div>
               <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:28,fontWeight:900,color:data.score>=70?'#22c55e':data.score>=50?'#f59e0b':'#ef4444',fontFamily:'Montserrat,sans-serif' }}>{data.score||0}</div>
+                <div style={{ fontSize:28,fontWeight:900,color:data.score>=70?'#22c55e':data.score>=50?'#f59e0b':'#ef4444',fontFamily:'Montserrat,sans-serif' }}>{liveScore}</div>
                 <div style={{ fontSize:10,color:'#9B9B9B' }}>Score ELOS</div>
               </div>
             </div>
@@ -533,9 +542,15 @@ export function BackofficeAnalysis() {
             </div>
 
             <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
-              <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
-                {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Aprovar Selo ${level}`}
-              </Button>
+              {sealAlreadyActive ? (
+                <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:10, padding:'12px 16px', textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                  ✅ Selo ELOS {data?.seals?.[0]?.level} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
+                </div>
+              ) : (
+                <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
+                  {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Aprovar Selo ${level}`}
+                </Button>
+              )}
               <Button variant="danger" full size="md" style={{ borderRadius:10 }} disabled={processing} onClick={handleReject}>
                 ❌ Rejeitar
               </Button>
