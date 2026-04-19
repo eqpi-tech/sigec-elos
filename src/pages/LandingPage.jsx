@@ -139,7 +139,7 @@ export default function LandingPage() {
       <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:100, background:'rgba(13,18,64,.95)', backdropFilter:'blur(12px)', borderBottom:'1px solid rgba(255,255,255,.08)', padding:'0 5%', display:'flex', alignItems:'center', justifyContent:'space-between', height:64 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:20, color:'#fff', letterSpacing:-0.5 }}>
-            SIGEC<span style={{ color:C.orange }}>-ELOS</span>
+            <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:80, objectFit:'contain', objectPosition:'left', marginBottom:32 }} />
           </div>
           <span style={{ fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:'DM Sans,sans-serif', marginLeft:4 }}>by EQPI Tech</span>
         </div>
