@@ -895,7 +895,7 @@ export const questionnaireApi = {
   listAll: async () => {
     const { data, error } = await supabase
       .from('questionnaires')
-      .select('*, clients(razao_social), questionnaire_questions(id)')
+      .select('*, clients(razao_social), questionnaire_questions(id, text, type, options, required, order_index)')
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
     return data || []
@@ -940,7 +940,6 @@ export const questionnaireApi = {
       .from('invitations')
       .select('client_id')
       .eq('supplier_id', supplierId)
-      .eq('status', 'REGISTERED')
     if (!invites?.length) return []
 
     const clientIds = [...new Set(invites.map(i => i.client_id).filter(Boolean))]

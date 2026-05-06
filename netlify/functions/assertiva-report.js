@@ -21,13 +21,18 @@ function formatCnpj(raw) {
 }
 
 function fmtMoney(n) {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return 'R$ ' + Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function fmtDate(d) {
-  if (!d) return '—'
+  if (!d) return '-'
   try { return new Date(d).toLocaleDateString('pt-BR') } catch { return String(d) }
+}
+
+// Remove caracteres fora do Latin-1 (WinAnsi) para compatibilidade com pdf-lib
+function safe(s) {
+  return String(s ?? '-').replace(/[^\x00-\xFF]/g, '-')
 }
 
 // ── OAuth2 para Assertiva ─────────────────────────────────────────────────────
@@ -101,10 +106,10 @@ async function buildPdf(reportData, supplier) {
   const HDR_H = 72
   page.drawRectangle({ x: 0, y: height - HDR_H, width, height: HDR_H, color: C_BLUE })
 
-  page.drawText('ELOS — Análise Restritiva PJ', {
+  page.drawText('ELOS - Analise Restritiva PJ', {
     x: MARGIN, y: height - 32, font: fBold, size: 16, color: C_WHITE,
   })
-  page.drawText(`Protocolo: ${cab.protocolo || '—'}`, {
+  page.drawText(`Protocolo: ${safe(cab.protocolo) || '-'}`, {
     x: MARGIN, y: height - 50, font: fReg, size: 9, color: rgb(0.8, 0.82, 0.95),
   })
   page.drawText(`Emitido em: ${fmtDate(cab.dataHora || new Date())}`, {
@@ -124,7 +129,7 @@ async function buildPdf(reportData, supplier) {
   const row = (label, value, alert = false) => {
     const vc = alert ? C_RED : C_DARK
     page.drawText(label + ':', { x: MARGIN + 8, y: curY, font: fBold, size: 9, color: vc, maxWidth: COL2 - MARGIN - 8 })
-    const valStr = String(value ?? '—').slice(0, 90)
+    const valStr = safe(value ?? '-').slice(0, 90)
     page.drawText(valStr, { x: COL2, y: curY, font: fReg, size: 9, color: vc, maxWidth: RMARGIN - COL2 })
     curY -= 15
   }
@@ -168,12 +173,12 @@ async function buildPdf(reportData, supplier) {
   })
 
   const scoreX = MARGIN + BADGE + 20
-  page.drawText(`Classe ${score.classe || '—'}`, { x: scoreX, y: curY, font: fBold, size: 11, color: scoreColor })
+  page.drawText(`Classe ${score.classe || '-'}`, { x: scoreX, y: curY, font: fBold, size: 11, color: scoreColor })
   curY -= 14
-  page.drawText(`Pontos: ${score.pontos != null ? score.pontos : '—'} / 1000`, { x: scoreX, y: curY, font: fReg, size: 9, color: C_DARK })
+  page.drawText(`Pontos: ${score.pontos != null ? score.pontos : '-'} / 1000`, { x: scoreX, y: curY, font: fReg, size: 9, color: C_DARK })
   curY -= 13
   if (score.faixa?.descricao || score.faixa?.titulo) {
-    page.drawText(score.faixa.descricao || score.faixa.titulo, { x: scoreX, y: curY, font: fReg, size: 9, color: C_GRAY, maxWidth: RMARGIN - scoreX })
+    page.drawText(safe(score.faixa.descricao || score.faixa.titulo), { x: scoreX, y: curY, font: fReg, size: 9, color: C_GRAY, maxWidth: RMARGIN - scoreX })
     curY -= 13
   }
   curY -= 8
@@ -190,7 +195,7 @@ async function buildPdf(reportData, supplier) {
     if (cartorios) row('Cartórios', cartorios)
   }
   if (!temProt) {
-    page.drawText('✓ Nenhum protesto registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
+    page.drawText('Nenhum protesto registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
     curY -= 14
   }
   curY -= 6
@@ -204,7 +209,7 @@ async function buildPdf(reportData, supplier) {
     row('Quantidade', qtdAcoes ?? 0, temAcoes)
     if (acoes.valor != null) row('Valor', fmtMoney(acoes.valor), temAcoes)
     if (!temAcoes) {
-      page.drawText('✓ Nenhuma ação judicial registrada', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
+      page.drawText('Nenhuma acao judicial registrada', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
       curY -= 14
     }
     curY -= 6
@@ -218,7 +223,7 @@ async function buildPdf(reportData, supplier) {
   row('Quantidade', qtdCheq, temCheq)
   if (cheques.valor != null) row('Valor Total', fmtMoney(cheques.valor), temCheq)
   if (!temCheq) {
-    page.drawText('✓ Nenhum cheque sem fundo registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
+    page.drawText('Nenhum cheque sem fundo registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
     curY -= 14
   }
   curY -= 6
@@ -232,7 +237,7 @@ async function buildPdf(reportData, supplier) {
     row('Quantidade', qtdDeb ?? 0, temDeb)
     if (debitos.valor != null) row('Valor Total', fmtMoney(debitos.valor), temDeb)
     if (!temDeb) {
-      page.drawText('✓ Nenhum débito registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
+      page.drawText('Nenhum debito registrado', { x: MARGIN + 8, y: curY, font: fReg, size: 9, color: rgb(0.13, 0.77, 0.37) })
       curY -= 14
     }
     curY -= 6
@@ -264,7 +269,7 @@ async function buildPdf(reportData, supplier) {
   const footerY  = 30
   lastPage.drawRectangle({ x: 0, y: 0, width, height: footerY + 10, color: C_LGRAY })
   lastPage.drawText(
-    `Relatório gerado em ${new Date().toLocaleString('pt-BR')} · Protocolo ${cab.protocolo || '—'} · Assertiva Soluções`,
+    `Relatorio gerado em ${new Date().toLocaleDateString('pt-BR')} - Protocolo ${safe(cab.protocolo) || '-'} - Assertiva Solucoes`,
     { x: MARGIN, y: 14, font: fReg, size: 7.5, color: C_GRAY, maxWidth: width - MARGIN * 2 }
   )
 
