@@ -130,7 +130,9 @@ async function handleClientInvitation(body, callerUser, h) {
 async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato }) {
   if (!process.env.RESEND_API_KEY) return
   const frontendUrl = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
-  const cadastroLink = `${frontendUrl}/cadastro?token=${invite.token}`
+  const cadastroLink = invite.token
+    ? `${frontendUrl}/cadastro?token=${invite.token}`
+    : `${frontendUrl}/cadastro`
   const tipoLabel = tipo_fornecedor === 'produto' ? 'Produto' : tipo_fornecedor === 'ambos' ? 'Produto & Serviço' : 'Serviço'
   const emailHtml = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">

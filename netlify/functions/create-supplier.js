@@ -228,24 +228,37 @@ exports.handler = async (event) => {
       if (catErr) console.warn('supplier_categories insert warn:', catErr.message)
     }
 
-    // 5. Vincula convite ao fornecedor recém-criado (pelo token do URL ou pelo e-mail)
+    // 5. Vincula convite ao fornecedor recém-criado (pelo token do URL, e-mail ou CNPJ)
     try {
       const cleanCnpj = cnpj.replace(/\D/g, '')
-      let inviteQuery = supabaseAdmin
-        .from('invitations')
-        .update({ status: 'REGISTERED', supplier_id: supplier.id })
-        .neq('status', 'REGISTERED')
 
       if (invitation_token) {
-        inviteQuery = inviteQuery.eq('token', invitation_token)
+        // Prioridade 1: token único do link de convite
+        await supabaseAdmin.from('invitations')
+          .update({ status: 'REGISTERED', supplier_id: supplier.id })
+          .eq('token', invitation_token)
+          .neq('status', 'REGISTERED')
       } else {
-        // Fallback: tenta pelo e-mail do usuário
+        // Fallback: tenta pelo e-mail E pelo CNPJ (convites antigos sem token)
         const { data: { user: currentUser } } = await supabaseAdmin.auth.admin.getUserById(user.id)
-        if (currentUser?.email) inviteQuery = inviteQuery.eq('supplier_email', currentUser.email)
-      }
+        const userEmail = currentUser?.email
 
-      const { error: invErr } = await inviteQuery
-      if (invErr) console.warn('invitation link warn:', invErr.message)
+        // Busca convites pendentes que combinam com e-mail ou CNPJ
+        const { data: matchingInvites } = await supabaseAdmin
+          .from('invitations')
+          .select('id')
+          .neq('status', 'REGISTERED')
+          .or(userEmail
+            ? `supplier_email.eq.${userEmail},supplier_cnpj.eq.${cleanCnpj}`
+            : `supplier_cnpj.eq.${cleanCnpj}`)
+
+        if (matchingInvites?.length > 0) {
+          const ids = matchingInvites.map(i => i.id)
+          await supabaseAdmin.from('invitations')
+            .update({ status: 'REGISTERED', supplier_id: supplier.id })
+            .in('id', ids)
+        }
+      }
     } catch (e) { console.warn('invitation link (não crítico):', e.message) }
 
     console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
