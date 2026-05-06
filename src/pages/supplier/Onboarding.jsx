@@ -1,20 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { cnpjApi, paymentsApi, categoriesApi } from '../../services/api.js'
+import { cnpjApi, paymentsApi, invitationsApi } from '../../services/api.js'
+// paymentsApi usado no fluxo não subsidiado (Stripe)
 import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
 const PLAN_PRICES = { Simples: 290, Premium: 990 }
 
-const STEPS = ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
-
 export default function SupplierOnboarding() {
   const mobile = useIsMobile()
   const navigate = useNavigate()
   const { signup, reloadProfile } = useAuth()
+
+  // Lê token do convite na URL (?token=xxx)
+  const inviteToken = new URLSearchParams(window.location.search).get('token')
+  const [invitation, setInvitation] = useState(null)
+  const isSubsidiado = !!invitation?.subsidiado
+
+  const STEPS = isSubsidiado
+    ? ['Empresa','Categorias','Conta','Termos']
+    : ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
 
   const [step, setStep]           = useState(0)
   const [cnpj, setCnpj]           = useState('')
@@ -33,6 +41,17 @@ export default function SupplierOnboarding() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+
+  // Busca convite pelo token e registra visualização
+  useEffect(() => {
+    if (!inviteToken) return
+    invitationsApi.getByToken(inviteToken)
+      .then(inv => {
+        setInvitation(inv)
+        if (inv.supplier_email) setEmail(inv.supplier_email)
+      })
+      .catch(e => console.warn('invitation lookup:', e.message))
+  }, [inviteToken])
 
   const formatCnpj = (v) => {
     const d = v.replace(/\D/g,'').slice(0,14)
@@ -87,77 +106,88 @@ export default function SupplierOnboarding() {
       return
     }
     setError('')
-    setStep(4) // step 4 = plano
+    if (isSubsidiado) {
+      handleSubsidiatedRegistration()
+    } else {
+      setStep(4) // step 4 = plano
+    }
+  }
+
+  // Cria auth + fornecedor; retorna sessionToken. Compartilhado entre fluxos.
+  const createAuthAndSupplier = async () => {
+    let authUser = null
+    try {
+      authUser = await signup({ email, password, role: 'SUPPLIER', name })
+    } catch (signupErr) {
+      if (signupErr.message?.toLowerCase().includes('already registered') ||
+          signupErr.message?.toLowerCase().includes('already been registered') ||
+          signupErr.message?.toLowerCase().includes('user already exists')) {
+        try {
+          const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
+          if (loginErr) throw new Error('E-mail já cadastrado. Verifique a senha ou use outro e-mail.')
+          authUser = loginData.user
+        } catch {
+          throw new Error('E-mail já cadastrado com outra senha. Use o mesmo e-mail e senha da conta existente, ou use um e-mail diferente.')
+        }
+      } else {
+        throw signupErr
+      }
+    }
+
+    let sessionToken = null
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 400))
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) { sessionToken = session.access_token; break }
+    }
+    if (!sessionToken) throw new Error('Sessão não iniciada. Verifique se "Confirm email" está desativado no Supabase → Authentication → Settings.')
+
+    const res = await fetch('/.netlify/functions/create-supplier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+      body: JSON.stringify({
+        cnpj:              cnpj.replace(/\D/g,''),
+        razao_social:      cnpjData?.razao_social || name,
+        nome_fantasia:     cnpjData?.nome_fantasia || null,
+        cnae_main:         cnpjData?.cnae_fiscal_descricao || '',
+        cnae_list:         cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
+        state:             cnpjData?.uf || '',
+        city:              cnpjData?.municipio || '',
+        phone:             cnpjData?.ddd_telefone_1 || null,
+        employee_range:    cnpjData?.porte ? cnpjData.porte : null,
+        sanctions_checked:      true,
+        sanctions_result:      sanctions,
+        terms_accepted:        true,
+        data_sharing_accepted: true,
+        cnpj_full_data:    cnpjData || null,
+        category_ids:      [...selectedCategories],
+        invitation_token:  inviteToken || undefined,
+      }),
+    })
+    const resData = await res.json()
+    if (!res.ok) throw new Error(resData.error || 'Erro ao criar fornecedor')
+    return { supplier: resData.supplier, sessionToken }
+  }
+
+  // Fluxo subsidiado: pula Stripe completamente
+  const handleSubsidiatedRegistration = async () => {
+    setLoading(true); setError('')
+    try {
+      const { supplier } = await createAuthAndSupplier()
+      await reloadProfile()
+      navigate('/fornecedor')
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+    }
   }
 
   const handlePayment = async () => {
     setLoading(true); setError('')
     try {
-      // 1. Cria conta no Supabase Auth (ou loga se e-mail já existe com outra role)
-      let authUser = null
-      try {
-        authUser = await signup({ email, password, role: 'SUPPLIER', name })
-      } catch (signupErr) {
-        // E-mail já cadastrado (ex: comprador querendo ser também fornecedor)
-        // Tenta logar com as credenciais fornecidas
-        if (signupErr.message?.toLowerCase().includes('already registered') ||
-            signupErr.message?.toLowerCase().includes('already been registered') ||
-            signupErr.message?.toLowerCase().includes('user already exists')) {
-          try {
-            const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
-            if (loginErr) throw new Error('E-mail já cadastrado. Verifique a senha ou use outro e-mail.')
-            authUser = loginData.user
-          } catch {
-            throw new Error('E-mail já cadastrado com outra senha. Use o mesmo e-mail e senha da conta existente, ou use um e-mail diferente.')
-          }
-        } else {
-          throw signupErr
-        }
-      }
+      const { supplier, sessionToken } = await createAuthAndSupplier()
 
-      // 2. Aguarda sessão ser estabelecida (pode levar alguns ms após signUp)
-      let sessionToken = null
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 400))
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.access_token) { sessionToken = session.access_token; break }
-      }
-
-      if (!sessionToken) {
-        throw new Error('Sessão não iniciada. Verifique se "Confirm email" está desativado no Supabase → Authentication → Settings.')
-      }
-
-      // 3. Cria fornecedor via Netlify Function (service_role bypassa RLS)
-      const res = await fetch('/.netlify/functions/create-supplier', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,
-        },
-        body: JSON.stringify({
-          cnpj:              cnpj.replace(/\D/g,''),
-          razao_social:      cnpjData?.razao_social || name,
-          nome_fantasia:     cnpjData?.nome_fantasia || null,
-          cnae_main:         cnpjData?.cnae_fiscal_descricao || '',
-          cnae_list:         cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
-          state:             cnpjData?.uf || '',
-          city:              cnpjData?.municipio || '',
-          phone:             cnpjData?.ddd_telefone_1 || null,
-          employee_range:    cnpjData?.porte ? cnpjData.porte : null,
-          sanctions_checked:      true,
-          sanctions_result:      sanctions,
-          terms_accepted:        true,
-          data_sharing_accepted: true,
-          cnpj_full_data:    cnpjData || null,
-          category_ids:      [...selectedCategories],
-        }),
-      })
-
-      const resData = await res.json()
-      if (!res.ok) throw new Error(resData.error || 'Erro ao criar fornecedor')
-      const supplier = resData.supplier
-
-      // 4. Redireciona para Stripe Checkout
+      // Redireciona para Stripe Checkout
       const priceYearly = PLAN_PRICES[planType]
       const { url } = await paymentsApi.createCheckout({
         planType, cnaeCount: 3,
@@ -324,6 +354,17 @@ export default function SupplierOnboarding() {
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Termos de Uso</div>
               <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:16 }}>Leia e aceite os termos antes de continuar</div>
 
+              {isSubsidiado && invitation?.sender_name && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>
+                    Homologação Subsidiada
+                  </div>
+                  <div style={{ fontSize:13, color:'#166534', fontFamily:'DM Sans,sans-serif' }}>
+                    O custo desta homologação será assumido por <strong>{invitation.sender_name}</strong>. Você não precisará realizar nenhum pagamento.
+                  </div>
+                </div>
+              )}
+
               <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'16px', marginBottom:16, maxHeight:200, overflowY:'auto' }}>
                 <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 8px' }}>TERMOS DE USO — SIGEC-ELOS</p>
                 <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
@@ -367,9 +408,9 @@ export default function SupplierOnboarding() {
               <div style={{ display:'flex', gap:8 }}>
                 <Button variant="neutral" full onClick={() => { setStep(2); setError('') }}>← Voltar</Button>
                 <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
-                  disabled={!termsAccepted || !dataSharingAccepted}
+                  disabled={!termsAccepted || !dataSharingAccepted || loading}
                   onClick={handleAcceptTerms}>
-                  Aceitar e Continuar →
+                  {loading ? <><Spinner size={16}/> Cadastrando...</> : isSubsidiado ? 'Finalizar Cadastro →' : 'Aceitar e Continuar →'}
                 </Button>
               </div>
             </div>

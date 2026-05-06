@@ -3,15 +3,23 @@ import { Button, Card, PageHeader } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 
 const ROLES = [
-  { value:'BUYER', label:'Comprador',  icon:'🔍', desc:'Acesso ao marketplace para buscar fornecedores' },
-  { value:'ADMIN', label:'Backoffice', icon:'⚙️', desc:'Acesso administrativo completo (EQPI Tech)' },
+  { value:'BUYER',  label:'Comprador', icon:'🔍', desc:'Acesso ao marketplace para buscar fornecedores e enviar convites simples' },
+  { value:'CLIENT', label:'Cliente',   icon:'🏢', desc:'Acesso completo ao processo de homologação dos seus fornecedores (HOC)' },
+  { value:'ADMIN',  label:'Backoffice',icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação de fornecedores (EQPI)' },
 ]
+
+function formatCnpj(v) {
+  const n = v.replace(/\D/g,'').slice(0,14)
+  return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, (_,a,b,c,d,e)=>
+    e ? `${a}.${b}.${c}/${d}-${e}` : d ? `${a}.${b}.${c}/${d}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a)
+}
 
 export default function BackofficeCreateUser() {
   const [name, setName]       = useState('')
   const [email, setEmail]     = useState('')
   const [org, setOrg]         = useState('')
-  const [role, setRole]       = useState('BUYER')
+  const [cnpj, setCnpj]       = useState('')
+  const [role, setRole]       = useState('CLIENT')
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState('')
@@ -25,12 +33,12 @@ export default function BackofficeCreateUser() {
       const res = await fetch('/.netlify/functions/admin-create-user', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-        body: JSON.stringify({ email, role, name, organization: org }),
+        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,'') }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setResult(data)
-      setName(''); setEmail(''); setOrg('')
+      setResult({ ...data, createdRole: role, createdOrg: org })
+      setName(''); setEmail(''); setOrg(''); setCnpj('')
     } catch (err) {
       setError(err.message)
     } finally { setLoading(false) }
@@ -39,16 +47,18 @@ export default function BackofficeCreateUser() {
   const inp = { width:'100%', padding:'11px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
   const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
 
+  const roleLabel = { BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice / Analista' }
+
   return (
     <div style={{ padding:'28px 32px', maxWidth:640, margin:'0 auto' }}>
-      <PageHeader title="Criar Usuário" subtitle="Adicionar novo comprador ou membro do backoffice" />
+      <PageHeader title="Criar Usuário" subtitle="Adicionar comprador, cliente ou membro do backoffice" />
 
       <Card style={{ borderRadius:16, padding:'24px 28px' }}>
         <form onSubmit={handleSubmit}>
 
           <div style={{ marginBottom:20 }}>
             <label style={lbl}>Tipo de acesso</label>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
               {ROLES.map(r => (
                 <button key={r.value} type="button" onClick={() => setRole(r.value)}
                   style={{ padding:'14px', borderRadius:12, textAlign:'left', cursor:'pointer',
@@ -62,8 +72,16 @@ export default function BackofficeCreateUser() {
             </div>
           </div>
 
+          {role === 'CLIENT' && (
+            <div style={{ marginBottom:16, background:'#EEF0FF', border:'1px solid #C7CAFF', borderRadius:10, padding:'10px 14px' }}>
+              <div style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
+                O Cliente terá acesso completo ao processo de homologação dos fornecedores que ele convidar — equivalente ao perfil HOC.
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom:16 }}>
-            <label style={lbl}>Nome completo</label>
+            <label style={lbl}>Nome do responsável</label>
             <input value={name} onChange={e=>setName(e.target.value)} placeholder="João da Silva" required style={inp} />
           </div>
 
@@ -72,10 +90,17 @@ export default function BackofficeCreateUser() {
             <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="usuario@empresa.com.br" required style={inp} />
           </div>
 
-          {role === 'BUYER' && (
+          {(role === 'BUYER' || role === 'CLIENT') && (
             <div style={{ marginBottom:16 }}>
-              <label style={lbl}>Empresa / Organização</label>
-              <input value={org} onChange={e=>setOrg(e.target.value)} placeholder="Vale S.A. — Suprimentos" style={inp} />
+              <label style={lbl}>{role === 'CLIENT' ? 'Razão Social da Empresa *' : 'Empresa / Organização'}</label>
+              <input value={org} onChange={e=>setOrg(e.target.value)} placeholder="Vale S.A." required={role === 'CLIENT'} style={inp} />
+            </div>
+          )}
+
+          {role === 'CLIENT' && (
+            <div style={{ marginBottom:16 }}>
+              <label style={lbl}>CNPJ da Empresa</label>
+              <input value={cnpj} onChange={e=>setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" style={inp} />
             </div>
           )}
 
@@ -114,10 +139,11 @@ export default function BackofficeCreateUser() {
 
             <div style={{ display:'grid', gap:6 }}>
               {[
-                ['E-mail', result.email || email],
-                ['Perfil', role === 'ADMIN' ? 'Backoffice / Analista' : 'Comprador'],
+                ['E-mail', email],
+                ['Perfil', roleLabel[result.createdRole]],
+                result.createdOrg ? ['Empresa', result.createdOrg] : null,
                 ['Status', 'Conta ativa — acesso imediato'],
-              ].map(([k, v]) => (
+              ].filter(Boolean).map(([k, v]) => (
                 <div key={k} style={{ display:'flex', gap:10 }}>
                   <span style={{ fontSize:12, color:'#9B9B9B', minWidth:80 }}>{k}</span>
                   <span style={{ fontSize:12, color:'#15803d', fontWeight:600 }}>{v}</span>

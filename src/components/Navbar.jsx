@@ -14,6 +14,11 @@ const NAVS = {
     { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
     { path:'/comprador/convites',    label:'Convites',        icon:'🤝' },
   ],
+  CLIENT: [
+    { path:'/cliente',               label:'Dashboard',       icon:'⊞' },
+    { path:'/cliente/fornecedores',  label:'Fornecedores',    icon:'🏭' },
+    { path:'/cliente/convites',      label:'Convites',        icon:'🤝' },
+  ],
   ADMIN: [
     { path:'/backoffice',                 label:'Visão Geral',     icon:'⊞' },
     { path:'/backoffice/fila',            label:'Fila',            icon:'⏳' },
@@ -22,8 +27,8 @@ const NAVS = {
     { path:'/backoffice/criar-usuario',   label:'+ Usuário',       icon:'👤' },
   ],
 }
-const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', ADMIN:'Backoffice' }
-const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   ADMIN:'#7c3aed' }
+const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice' }
+const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   CLIENT:'#059669', ADMIN:'#7c3aed' }
 
 export default function Navbar() {
   const { user, logout, roleOptions, activeRole, switchRole } = useAuth()
@@ -79,7 +84,7 @@ export default function Navbar() {
                 style={{ padding:'5px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)', background:'rgba(255,255,255,.1)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, cursor:'pointer', outline:'none' }}>
                 {roleOptions.map(r=>(
                   <option key={r.role} value={r.role} style={{ color:'#1a1c5e', background:'#fff' }}>
-                    {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':'⚙️ Backoffice'}
+                    {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
                   </option>
                 ))}
               </select>
@@ -131,7 +136,7 @@ export default function Navbar() {
               {roleOptions.map(r => (
                 <button key={r.role} onClick={() => { switchRole(r.role); setOpen(false) }}
                   style={{ width:'100%', padding:'10px', borderRadius:8, marginBottom:4, border:`1px solid ${r.role===activeRole?'rgba(255,255,255,.3)':'rgba(255,255,255,.1)'}`, background: r.role===activeRole?'rgba(255,255,255,.12)':'transparent', color:'rgba(255,255,255,.8)', fontFamily:'DM Sans,sans-serif', fontSize:13, cursor:'pointer', textAlign:'left' }}>
-                  {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':'⚙️ Backoffice'}
+                  {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
                 </button>
               ))}
             </div>

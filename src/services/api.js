@@ -638,3 +638,132 @@ export const categoriesApi = {
     return (data || []).map(r => r.categories).filter(Boolean)
   },
 }
+
+// ── Cliente (HOC) ─────────────────────────────────────────────────────────────
+export const clientApi = {
+  // Dashboard KPIs: fornecedores convidados por este cliente
+  getDashboard: async (clientId) => {
+    const { data: invites, error } = await supabase
+      .from('invitations')
+      .select('id, supplier_id, status, subsidiado, supplier_razao_social, supplier_cnpj, suppliers(id, razao_social, cnpj, city, state, status)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+
+    const all = invites || []
+    const supplierIds = all.map(i => i.supplier_id).filter(Boolean)
+
+    let seals = []
+    if (supplierIds.length) {
+      const { data: sealsData } = await supabase
+        .from('seals')
+        .select('supplier_id, level, status, score')
+        .in('supplier_id', supplierIds)
+      seals = sealsData || []
+    }
+    const sealMap = seals.reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
+
+    const enriched = all.map(i => ({
+      ...i,
+      seal: sealMap[i.supplier_id] || null,
+    }))
+
+    return {
+      invites: enriched,
+      total:       all.length,
+      registered:  all.filter(i => i.status === 'REGISTERED').length,
+      emAnalise:   enriched.filter(i => i.seal?.status === 'PENDING').length,
+      homologados: enriched.filter(i => i.seal?.status === 'ACTIVE').length,
+      subsidiados: all.filter(i => i.subsidiado).length,
+    }
+  },
+
+  // Lista fornecedores do cliente (via invitations)
+  getSuppliers: async (clientId) => {
+    const { data, error } = await supabase
+      .from('invitations')
+      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
+      .eq('client_id', clientId)
+      .eq('status', 'REGISTERED')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+
+    const all = data || []
+    const supplierIds = all.map(i => i.supplier_id).filter(Boolean)
+    if (!supplierIds.length) return []
+
+    const { data: seals } = await supabase
+      .from('seals')
+      .select('supplier_id, level, status, score')
+      .in('supplier_id', supplierIds)
+    const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
+
+    return all.map(i => ({
+      inviteId:    i.id,
+      supplierId:  i.supplier_id,
+      subsidiado:  i.subsidiado,
+      tipo:        i.tipo_fornecedor,
+      escopo:      i.escopo,
+      invitedAt:   i.created_at,
+      supplier:    i.suppliers,
+      seal:        sealMap[i.supplier_id] || null,
+    }))
+  },
+}
+
+// ── Invitations ───────────────────────────────────────────────────────────────
+export const invitationsApi = {
+  // Lista convites de um comprador
+  listByBuyer: async (buyerId) => {
+    const { data, error } = await supabase
+      .from('invitations')
+      .select('*')
+      .eq('buyer_id', buyerId)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // Lista convites de um cliente
+  listByClient: async (clientId) => {
+    const { data, error } = await supabase
+      .from('invitations')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // Envia convite (BUYER: simples | CLIENT/ADMIN: enriquecido)
+  send: async (payload, token) => {
+    const res = await fetch('/.netlify/functions/send-invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao enviar convite')
+    return data
+  },
+
+  // Reenvia e-mail de convite existente
+  resend: async (inviteId, token) => {
+    const res = await fetch('/.netlify/functions/send-invitation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ resendId: inviteId }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao reenviar convite')
+    return data
+  },
+
+  // Busca convite por token (sem auth — usado no onboarding)
+  getByToken: async (token) => {
+    const res = await fetch(`/.netlify/functions/get-invitation?token=${token}`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Convite inválido')
+    return data
+  },
+}

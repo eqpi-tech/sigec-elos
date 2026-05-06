@@ -82,7 +82,9 @@ export const PageHeader = ({ title,subtitle,action }) => (
       <h1 style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:22,color:'#1a1c5e' }}>{title}</h1>
       {subtitle && <p style={{ color:'#9B9B9B',fontSize:14,fontFamily:'DM Sans,sans-serif',marginTop:2 }}>{subtitle}</p>}
     </div>
-    {action}
+    {action && (action.label
+      ? <button onClick={action.onClick} style={{ background:'#2E3192',color:'#fff',border:'none',borderRadius:10,padding:'10px 20px',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer' }}>{action.label}</button>
+      : action)}
   </div>
 )
 
@@ -95,6 +97,8 @@ export const EmptyState = ({ icon,title,subtitle,action }) => (
     <div style={{ fontSize:48,marginBottom:12 }}>{icon}</div>
     <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:18,color:'#1a1c5e' }}>{title}</div>
     {subtitle && <div style={{ color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:6 }}>{subtitle}</div>}
-    {action && <div style={{ marginTop:16 }}>{action}</div>}
+    {action && <div style={{ marginTop:16 }}>{action.label
+      ? <button onClick={action.onClick} style={{ background:'#2E3192',color:'#fff',border:'none',borderRadius:10,padding:'10px 20px',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer' }}>{action.label}</button>
+      : action}</div>}
   </div>
 )

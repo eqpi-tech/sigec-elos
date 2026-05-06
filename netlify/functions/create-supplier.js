@@ -39,6 +39,7 @@ exports.handler = async (event) => {
       cnpj, razao_social, nome_fantasia, cnae_main, cnae_list,
       state, city, phone, services, certifications,
       sanctions_checked, sanctions_result,
+      invitation_token,
     } = body
 
     if (!cnpj || !razao_social) {
@@ -226,6 +227,26 @@ exports.handler = async (event) => {
         .insert(catRows)
       if (catErr) console.warn('supplier_categories insert warn:', catErr.message)
     }
+
+    // 5. Vincula convite ao fornecedor recém-criado (pelo token do URL ou pelo e-mail)
+    try {
+      const cleanCnpj = cnpj.replace(/\D/g, '')
+      let inviteQuery = supabaseAdmin
+        .from('invitations')
+        .update({ status: 'REGISTERED', supplier_id: supplier.id })
+        .neq('status', 'REGISTERED')
+
+      if (invitation_token) {
+        inviteQuery = inviteQuery.eq('token', invitation_token)
+      } else {
+        // Fallback: tenta pelo e-mail do usuário
+        const { data: { user: currentUser } } = await supabaseAdmin.auth.admin.getUserById(user.id)
+        if (currentUser?.email) inviteQuery = inviteQuery.eq('supplier_email', currentUser.email)
+      }
+
+      const { error: invErr } = await inviteQuery
+      if (invErr) console.warn('invitation link warn:', invErr.message)
+    } catch (e) { console.warn('invitation link (não crítico):', e.message) }
 
     console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
 

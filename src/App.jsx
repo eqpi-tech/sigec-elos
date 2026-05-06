@@ -26,7 +26,11 @@ import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.js
 import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 
-const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
+import ClientDashboard   from './pages/client/Dashboard.jsx'
+import ClientSuppliers   from './pages/client/Suppliers.jsx'
+import ClientInvitations from './pages/client/Invitations.jsx'
+
+const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
 function RootRedirect() {
   const { user, loading } = useAuth()
@@ -77,7 +81,12 @@ function AppRoutes() {
       <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
       <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
       <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']}><BackofficeCreateUser/></Protect>} />
-      <Route path="/backoffice/homologados"    element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
+      <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
+
+      {/* Cliente (HOC) */}
+      <Route path="/cliente"            element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
+      <Route path="/cliente/fornecedores" element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
+      <Route path="/cliente/convites"   element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>

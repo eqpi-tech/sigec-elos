@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
       name:       profile.name || authUser.email,
       supplierId: profile.supplier_id,
       buyerId:    profile.buyer_id,
+      clientId:   profile.client_id,
     }
   }
 
@@ -26,7 +27,13 @@ export function AuthProvider({ children }) {
     const opt = roleOptions.find(r => r.role === role)
     if (!opt) return
     setActiveRole(role)
-    setUser(prev => ({ ...prev, role, supplier_id: opt.supplier_id, supplierId: opt.supplier_id, buyer_id: opt.buyer_id, buyerId: opt.buyer_id }))
+    setUser(prev => ({
+      ...prev,
+      role,
+      supplier_id: opt.supplier_id, supplierId: opt.supplier_id,
+      buyer_id:    opt.buyer_id,    buyerId:    opt.buyer_id,
+      client_id:   opt.client_id,   clientId:   opt.client_id,
+    }))
     localStorage.setItem('elos_active_role', role)
   }
 
@@ -39,7 +46,7 @@ export function AuthProvider({ children }) {
       try {
         const { data: rolesData, error: rolesErr } = await supabase
           .from('user_roles')
-          .select('role, supplier_id, buyer_id, is_primary')
+          .select('role, supplier_id, buyer_id, client_id, is_primary')
           .eq('user_id', authUser.id)
         if (!rolesErr) roles = rolesData
       } catch {}
@@ -53,7 +60,7 @@ export function AuthProvider({ children }) {
         // Busca profile base
         const { data: profile } = await supabase
           .from('profiles').select('*').eq('id', authUser.id).maybeSingle()
-        setUser(buildUser(authUser, { ...profile, role: preferred.role, supplier_id: preferred.supplier_id, buyer_id: preferred.buyer_id }))
+        setUser(buildUser(authUser, { ...profile, role: preferred.role, supplier_id: preferred.supplier_id, buyer_id: preferred.buyer_id, client_id: preferred.client_id }))
       } else {
         // Fallback: usa profiles legacy
         const { data: profile } = await supabase

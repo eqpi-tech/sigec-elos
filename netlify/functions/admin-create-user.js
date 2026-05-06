@@ -1,6 +1,6 @@
 // netlify/functions/admin-create-user.js
-// Cria usuário (ADMIN ou BUYER) com geração de senha e envio de e-mail com credenciais
-// POST body: { name, email, role, organization? }
+// Cria usuário (ADMIN, BUYER ou CLIENT) com geração de senha e envio de e-mail com credenciais
+// POST body: { name, email, role, organization?, cnpj? }
 
 const { createClient } = require('@supabase/supabase-js')
 
@@ -33,9 +33,10 @@ exports.handler = async (event) => {
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode:400, headers, body: JSON.stringify({ error:'JSON inválido' }) } }
 
-  const { name, email, role, organization } = body
+  const { name, email, role, organization, cnpj } = body
   if (!name || !email || !role) return { statusCode:400, headers, body: JSON.stringify({ error:'name, email e role são obrigatórios' }) }
-  if (!['ADMIN','BUYER'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN ou BUYER' }) }
+  if (!['ADMIN','BUYER','CLIENT'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN, BUYER ou CLIENT' }) }
+  if (role === 'CLIENT' && !organization) return { statusCode:400, headers, body: JSON.stringify({ error:'organization (razão social) é obrigatório para CLIENT' }) }
 
   const password = generatePassword()
 
@@ -59,10 +60,33 @@ exports.handler = async (event) => {
 
     // 4. Se BUYER, cria registro na tabela buyers
     if (role === 'BUYER') {
-      await supabaseAdmin.from('buyers').insert({
+      const { data: buyer } = await supabaseAdmin.from('buyers').insert({
         user_id: newUser.user.id,
         razao_social: organization || name,
-      })
+      }).select('id').single()
+
+      // Atualiza user_roles com buyer_id
+      if (buyer) {
+        await supabaseAdmin.from('user_roles')
+          .update({ buyer_id: buyer.id })
+          .eq('user_id', newUser.user.id).eq('role', 'BUYER')
+      }
+    }
+
+    // 4b. Se CLIENT, cria registro na tabela clients
+    if (role === 'CLIENT') {
+      const { data: client } = await supabaseAdmin.from('clients').insert({
+        user_id: newUser.user.id,
+        razao_social: organization,
+        cnpj: cnpj || null,
+      }).select('id').single()
+
+      // Atualiza user_roles com client_id
+      if (client) {
+        await supabaseAdmin.from('user_roles')
+          .update({ client_id: client.id })
+          .eq('user_id', newUser.user.id).eq('role', 'CLIENT')
+      }
     }
 
     // 5. Envia e-mail com credenciais via Resend
@@ -78,7 +102,7 @@ exports.handler = async (event) => {
           <table style="width:100%;border-collapse:collapse;margin:24px 0">
             <tr>
               <td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%">Perfil</td>
-              <td style="padding:10px;border:1px solid #e2e8f0">${role === 'ADMIN' ? 'Analista Backoffice' : 'Comprador'}</td>
+              <td style="padding:10px;border:1px solid #e2e8f0">${role === 'ADMIN' ? 'Analista Backoffice' : role === 'CLIENT' ? 'Cliente' : 'Comprador'}</td>
             </tr>
             <tr>
               <td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold">E-mail</td>
