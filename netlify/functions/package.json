@@ -4,6 +4,7 @@
   "description": "Netlify serverless functions",
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "pdf-lib": "^1.17.1",
     "stripe": "^16.0.0"
   }
 }

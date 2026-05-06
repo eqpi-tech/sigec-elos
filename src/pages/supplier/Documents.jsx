@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, categoriesApi } from '../../services/api.js'
+import { supplierApi, documentApi, categoriesApi, assertivaApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
+
+// Relatório Assertiva 360 — emissão via API interna (on-demand)
+const ASSERTIVA_DOC_ID = 578
 
 // Documentos coletados automaticamente pelo sistema (por document_id do catálogo EQPI)
 // 'INSTANT'   = coletado no cadastro via BrasilAPI, sem interação do usuário
@@ -54,6 +57,19 @@ export default function SupplierDocuments() {
   const handleCollect = async (docId, docLabel) => {
     const link = DOC_LINKS[docId]
     if (link) window.open(link, '_blank')
+  }
+
+  const handleEmitirAssertiva = async (docId) => {
+    setCollecting(docId)
+    try {
+      await assertivaApi.generate()
+      const d = await documentApi.list(user.supplierId)
+      setUploaded(d)
+      showToast('✅ Relatório Assertiva emitido e salvo!')
+    } catch (err) {
+      showToast('Erro: ' + err.message, 'error')
+    }
+    setCollecting(null)
   }
 
   const loadAll = async () => {
@@ -209,10 +225,10 @@ export default function SupplierDocuments() {
     const up      = getDoc(doc.id)
     const status  = up?.status || 'MISSING'
     const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
-    const autoType  = AUTO_COLLECT[doc.id]  // 'INSTANT' | undefined
-    const isInstant = autoType === 'INSTANT'
-    const isOnDemand= false // reservado para futura integração com proxy residencial
-    const busy      = uploading === doc.id
+    const autoType   = AUTO_COLLECT[doc.id]      // 'INSTANT' | undefined
+    const isInstant  = autoType === 'INSTANT'
+    const isOnDemand = doc.id === ASSERTIVA_DOC_ID // emissão via API interna
+    const busy       = uploading === doc.id
     const busyCollect = collecting === doc.id
     // Inscrição Estadual / Municipal: aceita declaração de ISENÇÃO
     const isIsentoEligible = ISENTO_KEYWORDS.some(kw => (doc.name||doc.label||'').toLowerCase().includes(kw))
@@ -236,6 +252,12 @@ export default function SupplierDocuments() {
               Cert. nº {up.metadata.numeroCertificado} · {up.metadata.validadeInicio} a {up.metadata.validadeFim}
             </div>
           )}
+          {/* Metadados do Relatório Assertiva */}
+          {doc.id===ASSERTIVA_DOC_ID && up?.metadata?.protocolo && (
+            <div style={{ fontSize:10,color:'#9B9B9B',marginTop:3 }}>
+              Prot. {up.metadata.protocolo} · Classe {up.metadata.scoreClasse || '—'} · {up.metadata.scorePontos ?? '—'} pts
+            </div>
+          )}
         </div>
 
         {/* Link direto para emissão (documentos com site externo) */}
@@ -247,6 +269,17 @@ export default function SupplierDocuments() {
               🌐 Emitir
             </Button>
           </a>
+        )}
+
+        {/* Emissão via API Assertiva (on-demand, gera PDF automaticamente) */}
+        {isOnDemand && (
+          busyCollect
+            ? <Spinner size={20}/>
+            : <Button variant={status==='VALID'?'neutral':'orange'} size="sm"
+                onClick={() => handleEmitirAssertiva(doc.id)}
+                title="Gera o relatório de análise de crédito e restrições via Assertiva Soluções">
+                {status==='VALID' ? '↺ Atualizar' : '📊 Emitir'}
+              </Button>
         )}
 
         {/* Upload manual (só para docs não automáticos) */}
@@ -335,7 +368,7 @@ export default function SupplierDocuments() {
           </div>
           {reqDocs.map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial para download · PDF, JPG ou PNG · Máx 10MB
+            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
           </div>
         </Card>
       )}

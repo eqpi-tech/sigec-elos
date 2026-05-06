@@ -2,97 +2,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, assertivaApi } from '../../services/api.js'
+import { supplierApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Badge, Seal, Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
-
-const SCORE_CLASS_COLOR = { A:'#22c55e', B:'#84cc16', C:'#f59e0b', D:'#fb923c', E:'#ef4444', F:'#dc2626' }
-const SCORE_CLASS_LABEL = { A:'Excelente', B:'Bom', C:'Médio', D:'Baixo', E:'Alto risco', F:'Altíssimo risco' }
-
-function AssertivaCard({ report, loading, error, onGenerate }) {
-  const resposta = report?.report_data?.resposta || report?.resposta
-  const cabecalho = report?.report_data?.cabecalho || report?.cabecalho
-  const score = resposta?.score
-  const protestos = resposta?.protestosPublicos
-  const scoreColor = score?.classe ? SCORE_CLASS_COLOR[score.classe] || '#9B9B9B' : '#9B9B9B'
-
-  return (
-    <Card style={{ borderRadius:16, padding:'20px 24px', border:'1px solid rgba(46,49,146,.15)' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-        <div>
-          <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Análise Assertiva</div>
-          <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>Análise Restritiva PJ</div>
-        </div>
-        {report && (
-          <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            {new Date(report.generated_at).toLocaleDateString('pt-BR')}
-          </span>
-        )}
-      </div>
-
-      {!report && !loading && (
-        <div>
-          <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:12, lineHeight:1.5 }}>
-            Gere o relatório de análise de crédito e restrições da sua empresa para facilitar a aprovação em categorias que exigem esse documento.
-          </div>
-          {error && <div style={{ fontSize:12, color:'#dc2626', fontFamily:'DM Sans,sans-serif', marginBottom:8 }}>⚠ {error}</div>}
-          <Button variant="primary" full onClick={onGenerate}>
-            📊 Gerar Relatório Assertiva
-          </Button>
-        </div>
-      )}
-
-      {loading && (
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, padding:'12px 0' }}>
-          <Spinner size={28}/>
-          <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Consultando Assertiva...</div>
-        </div>
-      )}
-
-      {report && !loading && score && (
-        <div>
-          {/* Score */}
-          <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px', background:`${scoreColor}10`, borderRadius:10, border:`1px solid ${scoreColor}30`, marginBottom:10 }}>
-            <div style={{ width:40, height:40, borderRadius:10, background:scoreColor, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:900, fontSize:20, fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
-              {score.classe}
-            </div>
-            <div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:scoreColor }}>{SCORE_CLASS_LABEL[score.classe] || score.classe}</div>
-              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                {score.pontos} pontos · {score.faixa?.descricao || score.faixa?.titulo || ''}
-              </div>
-            </div>
-          </div>
-
-          {/* Protestos */}
-          {protestos && (
-            <div style={{ fontSize:11, color: protestos.qtdProtestos > 0 ? '#dc2626' : '#15803d', fontFamily:'DM Sans,sans-serif', marginBottom:8 }}>
-              {protestos.qtdProtestos > 0
-                ? `⚠ ${protestos.qtdProtestos} protesto(s) · R$ ${Number(protestos.valorTotal||0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`
-                : '✅ Sem protestos registrados'}
-            </div>
-          )}
-
-          {error && <div style={{ fontSize:12, color:'#dc2626', fontFamily:'DM Sans,sans-serif', marginBottom:8 }}>⚠ {error}</div>}
-          <Button variant="neutral" full size="sm" onClick={onGenerate}>
-            ↺ Atualizar Relatório
-          </Button>
-        </div>
-      )}
-    </Card>
-  )
-}
 
 export default function SupplierDashboard() {
   const mobile = useIsMobile()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [supplier,          setSupplier]          = useState(null)
-  const [docs,              setDocs]              = useState([])
-  const [loading,           setLoading]           = useState(true)
-  const [assertivaReport,   setAssertivaReport]   = useState(undefined) // undefined=não carregado, null=sem relatório
-  const [assertivaLoading,  setAssertivaLoading]  = useState(false)
-  const [assertivaError,    setAssertivaError]    = useState('')
+  const [supplier, setSupplier] = useState(null)
+  const [docs,     setDocs]     = useState([])
+  const [loading,  setLoading]  = useState(true)
 
   const { pathname } = useLocation()
 
@@ -119,8 +39,6 @@ export default function SupplierDashboard() {
           setRequiredDocsCount(unique.size)
         }
       } catch { /* não crítico */ }
-      // Carrega último relatório Assertiva (silencioso — não bloqueia o dashboard)
-      assertivaApi.getLast().then(setAssertivaReport).catch(() => setAssertivaReport(null))
     } finally { setLoading(false) }
   }, [user?.supplierId])
 
@@ -143,18 +61,6 @@ export default function SupplierDashboard() {
       </Button>
     </div>
   )
-
-  const handleGenerateAssertiva = async () => {
-    setAssertivaLoading(true)
-    setAssertivaError('')
-    try {
-      const result = await assertivaApi.generate()
-      setAssertivaReport(result.report)
-    } catch(e) {
-      setAssertivaError(e.message)
-    }
-    setAssertivaLoading(false)
-  }
 
   const docsOk      = docs.filter(d => d.status === 'VALID').length
   const docsWarn    = docs.filter(d => d.status === 'EXPIRING').length
@@ -303,13 +209,6 @@ export default function SupplierDashboard() {
             </Card>
           )}
 
-          {/* Relatório Assertiva */}
-          <AssertivaCard
-            report={assertivaReport}
-            loading={assertivaLoading}
-            error={assertivaError}
-            onGenerate={handleGenerateAssertiva}
-          />
         </div>
       </div>
     </div>
