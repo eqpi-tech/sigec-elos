@@ -72,14 +72,14 @@ export default function ClientDashboard() {
               return (
                 <div key={invite.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', background:'#f8faff', borderRadius:12, border:'1px solid #e2e4ef' }}>
                   <div style={{ width:40, height:40, borderRadius:10, background:'#EEF0FF', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:14, color:'#2E3192', flexShrink:0 }}>
-                    {sup?.razao_social?.slice(0,2).toUpperCase() || '??'}
+                    {(sup?.razao_social || invite.supplier_razao_social)?.slice(0,2).toUpperCase() || '??'}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                      {sup?.razao_social || invite.supplier_razao_social}
+                      {sup?.razao_social || invite.supplier_razao_social || '—'}
                     </div>
                     <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>
-                      {sup?.city && sup?.state ? `${sup.city} / ${sup.state}` : invite.supplier_cnpj}
+                      {sup?.city && sup?.state ? `${sup.city} / ${sup.state}` : (sup?.cnpj || invite.supplier_cnpj || '')}
                     </div>
                   </div>
                   {invite.subsidiado && (

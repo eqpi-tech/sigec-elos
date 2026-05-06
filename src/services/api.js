@@ -668,12 +668,18 @@ export const clientApi = {
       seal: sealMap[i.supplier_id] || null,
     }))
 
+    const homologados = enriched.filter(i => i.seal?.status === 'ACTIVE').length
+    // emAnalise: REGISTERED sem seal ACTIVE (fallback seguro se RLS bloquear seals)
+    const emAnalise = enriched.filter(i =>
+      i.status === 'REGISTERED' && i.seal?.status !== 'ACTIVE'
+    ).length
+
     return {
       invites: enriched,
       total:       all.length,
       registered:  all.filter(i => i.status === 'REGISTERED').length,
-      emAnalise:   enriched.filter(i => i.seal?.status === 'PENDING').length,
-      homologados: enriched.filter(i => i.seal?.status === 'ACTIVE').length,
+      emAnalise,
+      homologados,
       subsidiados: all.filter(i => i.subsidiado).length,
     }
   },
@@ -682,7 +688,7 @@ export const clientApi = {
   getSuppliers: async (clientId) => {
     const { data, error } = await supabase
       .from('invitations')
-      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
+      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
       .eq('client_id', clientId)
       .eq('status', 'REGISTERED')
       .order('created_at', { ascending: false })
@@ -699,14 +705,18 @@ export const clientApi = {
     const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
 
     return all.map(i => ({
-      inviteId:    i.id,
-      supplierId:  i.supplier_id,
-      subsidiado:  i.subsidiado,
-      tipo:        i.tipo_fornecedor,
-      escopo:      i.escopo,
-      invitedAt:   i.created_at,
-      supplier:    i.suppliers,
-      seal:        sealMap[i.supplier_id] || null,
+      inviteId:          i.id,
+      supplierId:        i.supplier_id,
+      subsidiado:        i.subsidiado,
+      tipo:              i.tipo_fornecedor,
+      escopo:            i.escopo,
+      invitedAt:         i.created_at,
+      // dados da invitation como fallback quando RLS bloqueia join com suppliers
+      inviteRazaoSocial: i.supplier_razao_social,
+      inviteCnpj:        i.supplier_cnpj,
+      supplier:          i.suppliers,
+      // se seal não carregou (RLS), assume PENDING (fornecedor registrado ainda não aprovado)
+      seal:              sealMap[i.supplier_id] || { status: 'PENDING', score: 0 },
     }))
   },
 }

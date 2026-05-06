@@ -24,9 +24,10 @@ export default function ClientSuppliers() {
 
   const filtered = suppliers.filter(s => {
     const q = search.toLowerCase()
-    const name = s.supplier?.razao_social?.toLowerCase() || ''
-    const cnpj = s.supplier?.cnpj || ''
+    const name = (s.supplier?.razao_social || s.inviteRazaoSocial || '').toLowerCase()
+    const cnpj = s.supplier?.cnpj || s.inviteCnpj || ''
     if (q && !name.includes(q) && !cnpj.includes(q)) return false
+    // seal.status tem fallback 'PENDING' no api.js, então o filtro sempre funciona
     if (filterStatus !== 'Todos' && s.seal?.status !== filterStatus) return false
     return true
   })
@@ -75,14 +76,14 @@ export default function ClientSuppliers() {
                 <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
                   {/* Avatar */}
                   <div style={{ width:48, height:48, borderRadius:12, background:'#EEF0FF', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:16, color:'#2E3192', flexShrink:0 }}>
-                    {sup?.razao_social?.slice(0,2).toUpperCase() || '??'}
+                    {(sup?.razao_social || item.inviteRazaoSocial)?.slice(0,2).toUpperCase() || '??'}
                   </div>
 
                   {/* Info */}
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
                       <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e' }}>
-                        {sup?.razao_social}
+                        {sup?.razao_social || item.inviteRazaoSocial || '—'}
                       </div>
                       {item.subsidiado && (
                         <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
@@ -97,7 +98,8 @@ export default function ClientSuppliers() {
                     </div>
 
                     <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:8 }}>
-                      CNPJ {sup?.cnpj} · {sup?.city}/{sup?.state}
+                      {(sup?.cnpj || item.inviteCnpj) && `CNPJ ${sup?.cnpj || item.inviteCnpj}`}
+                      {sup?.city && sup?.state && ` · ${sup.city}/${sup.state}`}
                       {item.tipo && ` · ${item.tipo === 'produto' ? 'Produto' : item.tipo === 'servico' ? 'Serviço' : 'Produto & Serviço'}`}
                     </div>
 
