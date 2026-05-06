@@ -13,7 +13,8 @@
       "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/swagger/credito/swagger.json\")",
       "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/swagger/oauth2/swagger.json\")",
       "Bash(python3 -c ' *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm install *)"
     ]
   }
 }
