@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
-import { PageHeader, Card, ScoreBar, Badge, Spinner, EmptyState } from '../../components/ui.jsx'
+import { PageHeader, Card, ScoreBar, Badge, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
 const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',   EXPIRED:'#9B9B9B' }
 
 export default function ClientSuppliers() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -120,12 +122,17 @@ export default function ClientSuppliers() {
                     )}
                   </div>
 
-                  {/* Convidado em */}
-                  <div style={{ flexShrink:0, textAlign:'right' }}>
-                    <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Convidado em</div>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>
-                      {item.invitedAt ? new Date(item.invitedAt).toLocaleDateString('pt-BR') : '—'}
+                  {/* Convidado em + Ver Processo */}
+                  <div style={{ flexShrink:0, textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8 }}>
+                    <div>
+                      <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Convidado em</div>
+                      <div style={{ fontSize:12, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>
+                        {item.invitedAt ? new Date(item.invitedAt).toLocaleDateString('pt-BR') : '—'}
+                      </div>
                     </div>
+                    <Button variant="primary" size="sm" onClick={() => navigate(`/cliente/fornecedor/${item.supplierId}`)}>
+                      Ver Processo →
+                    </Button>
                   </div>
                 </div>
               </Card>

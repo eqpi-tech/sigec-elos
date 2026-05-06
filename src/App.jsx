@@ -26,9 +26,10 @@ import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.js
 import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 
-import ClientDashboard   from './pages/client/Dashboard.jsx'
-import ClientSuppliers   from './pages/client/Suppliers.jsx'
-import ClientInvitations from './pages/client/Invitations.jsx'
+import ClientDashboard        from './pages/client/Dashboard.jsx'
+import ClientSuppliers        from './pages/client/Suppliers.jsx'
+import ClientInvitations      from './pages/client/Invitations.jsx'
+import ClientSupplierProcess  from './pages/client/SupplierProcess.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -84,9 +85,10 @@ function AppRoutes() {
       <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
 
       {/* Cliente (HOC) */}
-      <Route path="/cliente"            element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
-      <Route path="/cliente/fornecedores" element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
-      <Route path="/cliente/convites"   element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
+      <Route path="/cliente"                          element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
+      <Route path="/cliente/fornecedores"             element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
+      <Route path="/cliente/fornecedor/:supplierId"   element={<Protect roles={['CLIENT']}><ClientSupplierProcess/></Protect>} />
+      <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>

@@ -685,6 +685,59 @@ export const clientApi = {
   },
 
   // Lista fornecedores do cliente (via invitations)
+  // Processo completo de um fornecedor (leitura — reutiliza lógica do adminApi)
+  getSupplierProcess: async (supplierId, clientId) => {
+    const [supplierRes, sealsRes, docsRes, cnpjRes, catRes, inviteRes] = await Promise.allSettled([
+      supabase.from('suppliers').select('*').eq('id', supplierId).maybeSingle(),
+      supabase.from('seals').select('*').eq('supplier_id', supplierId),
+      supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
+      supabase.from('cnpj_consultations')
+        .select('id, supplier_id, cnpj, cnpj_data, sanctions_data, has_sanctions, consulted_at')
+        .eq('supplier_id', supplierId).order('consulted_at', { ascending: false }).limit(1),
+      supabase.from('supplier_categories').select('category_id').eq('supplier_id', supplierId),
+      supabase.from('invitations').select('escopo, tipo_fornecedor, subsidiado, contato, created_at')
+        .eq('supplier_id', supplierId).eq('client_id', clientId).maybeSingle(),
+    ])
+
+    const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
+    if (!supplier) throw new Error('Fornecedor não encontrado ou sem permissão de acesso')
+
+    const uploadedDocs = docsRes.status === 'fulfilled' ? (docsRes.value.data || []) : []
+    let fullDocList = [...uploadedDocs]
+
+    if (catRes.status === 'fulfilled' && catRes.value.data?.length) {
+      const catIds = catRes.value.data.map(r => r.category_id)
+      const { data: catDocRows } = await supabase
+        .from('category_documents')
+        .select('document_id, documents_catalog(id, name)')
+        .in('category_id', catIds)
+      if (catDocRows) {
+        const seen = new Set(uploadedDocs.map(d => String(d.type)))
+        catDocRows.forEach(row => {
+          const docId = String(row.document_id)
+          if (!seen.has(docId) && row.documents_catalog) {
+            seen.add(docId)
+            fullDocList.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.documents_catalog.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
+          }
+        })
+      }
+    }
+
+    fullDocList.sort((a, b) => {
+      if (a.status === 'MISSING' && b.status !== 'MISSING') return 1
+      if (a.status !== 'MISSING' && b.status === 'MISSING') return -1
+      return (a.label || '').localeCompare(b.label || '', 'pt-BR')
+    })
+
+    return {
+      ...supplier,
+      seals:             sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : [],
+      documents:         fullDocList,
+      cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,
+      invitation:        inviteRes.status === 'fulfilled' ? inviteRes.value.data : null,
+    }
+  },
+
   getSuppliers: async (clientId) => {
     const { data, error } = await supabase
       .from('invitations')

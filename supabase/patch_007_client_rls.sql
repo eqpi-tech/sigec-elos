@@ -45,3 +45,33 @@ CREATE POLICY "client_read_invited_documents" ON public.documents
         )
     )
   );
+
+-- CNPJ Consultations: CLIENT lê consultas dos fornecedores que convidou
+CREATE POLICY "client_read_invited_cnpj_consultations" ON public.cnpj_consultations
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.invitations i
+      WHERE i.supplier_id = cnpj_consultations.supplier_id
+        AND i.client_id IN (
+          SELECT ur.client_id FROM public.user_roles ur
+          WHERE ur.user_id = auth.uid()
+            AND ur.client_id IS NOT NULL
+        )
+    )
+  );
+
+-- Supplier Categories: CLIENT lê categorias dos fornecedores que convidou
+CREATE POLICY "client_read_invited_supplier_categories" ON public.supplier_categories
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.invitations i
+      WHERE i.supplier_id = supplier_categories.supplier_id
+        AND i.client_id IN (
+          SELECT ur.client_id FROM public.user_roles ur
+          WHERE ur.user_id = auth.uid()
+            AND ur.client_id IS NOT NULL
+        )
+    )
+  );
