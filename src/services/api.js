@@ -850,6 +850,36 @@ export const clientApi = {
   },
 }
 
+// ── Assertiva ─────────────────────────────────────────────────────────────────
+export const assertivaApi = {
+  // Busca o último relatório salvo (GET)
+  getLast: async (supplierId) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const url = supplierId
+      ? `/.netlify/functions/assertiva-report?supplierId=${supplierId}`
+      : '/.netlify/functions/assertiva-report'
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${session?.access_token}` },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao buscar relatório')
+    return data.report   // null se não existe
+  },
+
+  // Gera novo relatório (POST) — aceita supplierId para admin
+  generate: async (supplierId) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/assertiva-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      body: JSON.stringify(supplierId ? { supplierId } : {}),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao gerar relatório')
+    return data
+  },
+}
+
 // ── Questionários ────────────────────────────────────────────────────────────
 export const questionnaireApi = {
   listByClient: async (clientId) => {

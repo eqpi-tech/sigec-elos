@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
@@ -223,6 +223,9 @@ export function BackofficeAnalysis() {
   const [revertReason, setRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario'
   const [qaAnswers, setQaAnswers] = useState([])
+  const [assertivaReport,  setAssertivaReport]  = useState(undefined)
+  const [assertivaLoading, setAssertivaLoading] = useState(false)
+  const [assertivaError,   setAssertivaError]   = useState('')
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
@@ -231,7 +234,22 @@ export function BackofficeAnalysis() {
     questionnaireApi.getAnswersForSupplier(id)
       .then(setQaAnswers)
       .catch(() => {})
+    assertivaApi.getLast(id)
+      .then(setAssertivaReport)
+      .catch(() => setAssertivaReport(null))
   }, [id])
+
+  const handleGenerateAssertiva = async () => {
+    setAssertivaLoading(true)
+    setAssertivaError('')
+    try {
+      const result = await assertivaApi.generate(id)
+      setAssertivaReport(result.report)
+    } catch(e) {
+      setAssertivaError(e.message)
+    }
+    setAssertivaLoading(false)
+  }
 
   // Verifica documentos impeditivos antes de aprovar
   const blockingMissing = data?.documents?.filter(d =>
@@ -472,6 +490,93 @@ export function BackofficeAnalysis() {
               </div>
             </Card>
           )}
+
+          {/* Assertiva */}
+          <Card style={{ borderRadius:16,padding:'20px 24px',border:'1px solid rgba(46,49,146,.15)' }}>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+              <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+                <SectionTitle style={{ marginBottom:0 }}>Análise Assertiva</SectionTitle>
+                <span style={{ fontSize:10,background:'rgba(46,49,146,.08)',color:'#2E3192',padding:'3px 10px',borderRadius:20,fontFamily:'Montserrat,sans-serif',fontWeight:700 }}>Análise Restritiva PJ</span>
+              </div>
+              <Button variant="neutral" size="sm" disabled={assertivaLoading} onClick={handleGenerateAssertiva}>
+                {assertivaLoading ? '⏳ Consultando...' : assertivaReport ? '↺ Atualizar' : '📊 Gerar Relatório'}
+              </Button>
+            </div>
+            {assertivaError && <div style={{ fontSize:12,color:'#dc2626',marginBottom:10 }}>⚠ {assertivaError}</div>}
+            {assertivaReport === undefined && !assertivaLoading && (
+              <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>Carregando...</div>
+            )}
+            {assertivaReport === null && !assertivaLoading && (
+              <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>Nenhum relatório gerado ainda. Clique em "Gerar Relatório" para consultar.</div>
+            )}
+            {assertivaReport && (() => {
+              const resp = assertivaReport.report_data?.resposta || assertivaReport.resposta
+              const cab  = assertivaReport.report_data?.cabecalho || assertivaReport.cabecalho
+              const score = resp?.score
+              const protestos = resp?.protestosPublicos
+              const fatur = resp?.faturamentoEstimado
+              const consultas = resp?.ultimasConsultas
+              const SCOLOR = { A:'#22c55e',B:'#84cc16',C:'#f59e0b',D:'#fb923c',E:'#ef4444',F:'#dc2626' }
+              const SLABEL = { A:'Excelente',B:'Bom',C:'Médio',D:'Baixo',E:'Alto risco',F:'Altíssimo risco' }
+              const sc = score?.classe
+              return (
+                <div>
+                  <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginBottom:12 }}>
+                    Consultado: {new Date(assertivaReport.generated_at).toLocaleString('pt-BR')} · Protocolo: {assertivaReport.protocol||cab?.protocolo||'—'}
+                  </div>
+                  <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:14 }}>
+                    {/* Score */}
+                    {score && (
+                      <div style={{ padding:'12px',background:`${SCOLOR[sc]||'#9B9B9B'}10`,border:`1px solid ${SCOLOR[sc]||'#9B9B9B'}30`,borderRadius:10,gridColumn:'1' }}>
+                        <div style={{ fontSize:10,color:'#9B9B9B',marginBottom:4 }}>Score de Crédito</div>
+                        <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+                          <span style={{ fontSize:22,fontWeight:900,color:SCOLOR[sc]||'#9B9B9B',fontFamily:'Montserrat,sans-serif' }}>{sc}</span>
+                          <div>
+                            <div style={{ fontSize:11,fontWeight:700,color:SCOLOR[sc]||'#9B9B9B',fontFamily:'Montserrat,sans-serif' }}>{SLABEL[sc]}</div>
+                            <div style={{ fontSize:10,color:'#9B9B9B' }}>{score.pontos} pontos</div>
+                          </div>
+                        </div>
+                        {score.faixa?.descricao && <div style={{ fontSize:10,color:'#64748b',marginTop:4 }}>{score.faixa.descricao}</div>}
+                      </div>
+                    )}
+                    {/* Protestos */}
+                    {protestos && (
+                      <div style={{ padding:'12px',background:protestos.qtdProtestos>0?'rgba(239,68,68,.06)':'rgba(34,197,94,.06)',border:`1px solid ${protestos.qtdProtestos>0?'rgba(239,68,68,.2)':'rgba(34,197,94,.2)'}`,borderRadius:10 }}>
+                        <div style={{ fontSize:10,color:'#9B9B9B',marginBottom:4 }}>Protestos</div>
+                        <div style={{ fontSize:15,fontWeight:800,color:protestos.qtdProtestos>0?'#dc2626':'#15803d',fontFamily:'Montserrat,sans-serif' }}>{protestos.qtdProtestos}</div>
+                        {protestos.qtdProtestos>0 && <div style={{ fontSize:10,color:'#dc2626',marginTop:2 }}>R$ {Number(protestos.valorTotal||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>}
+                      </div>
+                    )}
+                    {/* Faturamento */}
+                    {fatur?.valor && (
+                      <div style={{ padding:'12px',background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.1)',borderRadius:10 }}>
+                        <div style={{ fontSize:10,color:'#9B9B9B',marginBottom:4 }}>Faturamento Est.</div>
+                        <div style={{ fontSize:12,fontWeight:700,color:'#1a1c5e',fontFamily:'Montserrat,sans-serif' }}>
+                          R$ {Number(fatur.valor).toLocaleString('pt-BR',{notation:'compact',maximumFractionDigits:1})}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Últimas consultas */}
+                  {consultas?.qtdUltConsultas > 0 && (
+                    <div style={{ fontSize:11,color:'#64748b',fontFamily:'DM Sans,sans-serif' }}>
+                      📋 {consultas.qtdUltConsultas} consulta{consultas.qtdUltConsultas>1?'s':''} recente{consultas.qtdUltConsultas>1?'s':''} · Última: {consultas.ultimaOcorrencia}
+                    </div>
+                  )}
+                  {protestos?.list?.length > 0 && (
+                    <div style={{ marginTop:10 }}>
+                      <div style={{ fontSize:10,fontWeight:700,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Protestos Detalhados</div>
+                      {protestos.list.map((p,i)=>(
+                        <div key={i} style={{ fontSize:11,padding:'8px 10px',background:'rgba(239,68,68,.04)',border:'1px solid rgba(239,68,68,.15)',borderRadius:8,marginBottom:4 }}>
+                          <strong>{p.cartorio}</strong> — {p.cidade}/{p.uf} · {p.data} · R$ {Number(p.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </Card>
 
           {/* Abas: Documentos | Questionário */}
           <Card style={{ borderRadius:16,padding:'20px 24px' }}>

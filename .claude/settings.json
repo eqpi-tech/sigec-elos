@@ -7,7 +7,13 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(node --check /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos/netlify/functions/create-supplier.js)"
+      "Bash(node --check /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos/netlify/functions/create-supplier.js)",
+      "WebFetch(domain:integracao.assertivasolucoes.com.br)",
+      "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/doc/\")",
+      "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/swagger/credito/swagger.json\")",
+      "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/swagger/oauth2/swagger.json\")",
+      "Bash(python3 -c ' *)",
+      "Bash(npx vite *)"
     ]
   }
 }
