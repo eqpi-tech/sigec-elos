@@ -24,6 +24,10 @@ import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
 import BackofficeCreateUser from './pages/backoffice/CreateUser.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
 import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
+import BackofficeProcessSearch  from './pages/backoffice/ProcessSearch.jsx'
+import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
+import BackofficeUsers          from './pages/backoffice/Users.jsx'
+import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 
 import ClientDashboard        from './pages/client/Dashboard.jsx'
@@ -69,6 +73,7 @@ function AppRoutes() {
       <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']}><SupplierPlans/></Protect>} />
       <Route path="/fornecedor/plano-ativo"    element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
       <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
+      <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']}><SupplierQuestionnaire/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
@@ -83,6 +88,9 @@ function AppRoutes() {
       <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
       <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']}><BackofficeCreateUser/></Protect>} />
       <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
+      <Route path="/backoffice/processos"        element={<Protect roles={['ADMIN']}><BackofficeProcessSearch/></Protect>} />
+      <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
+      <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']}><BackofficeUsers/></Protect>} />
 
       {/* Cliente (HOC) */}
       <Route path="/cliente"                          element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />

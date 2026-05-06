@@ -5,10 +5,11 @@ import { useIsMobile } from '../hooks/useIsMobile.js'
 
 const NAVS = {
   SUPPLIER: [
-    { path:'/fornecedor',            label:'Dashboard',       icon:'⊞' },
-    { path:'/fornecedor/documentos', label:'Documentos',      icon:'📋' },
-    { path:'/fornecedor/planos',     label:'Meu Plano',       icon:'⭐' },
-    { path:'/fornecedor/categorias', label:'Categorias',      icon:'📦' },
+    { path:'/fornecedor',               label:'Dashboard',   icon:'⊞' },
+    { path:'/fornecedor/documentos',    label:'Documentos',  icon:'📋' },
+    { path:'/fornecedor/questionario',  label:'Questionário',icon:'❓' },
+    { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐' },
+    { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦' },
   ],
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
@@ -23,7 +24,10 @@ const NAVS = {
     { path:'/backoffice',                 label:'Visão Geral',     icon:'⊞' },
     { path:'/backoffice/fila',            label:'Fila',            icon:'⏳' },
     { path:'/backoffice/homologados',     label:'Homologados',     icon:'✅' },
+    { path:'/backoffice/processos',       label:'Processos',       icon:'🔍' },
+    { path:'/backoffice/questionarios',   label:'Questionários',   icon:'❓' },
     { path:'/backoffice/metricas',        label:'Métricas',        icon:'📊' },
+    { path:'/backoffice/usuarios',         label:'Usuários',        icon:'👥' },
     { path:'/backoffice/criar-usuario',   label:'+ Usuário',       icon:'👤' },
   ],
 }

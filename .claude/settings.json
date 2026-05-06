@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(npm run *)",
-      "Bash(netlify --version)"
+      "Bash(netlify --version)",
+      "Bash(node --check /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos/netlify/functions/send-invitation.js)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(node --check /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos/netlify/functions/create-supplier.js)"
     ]
   }
 }

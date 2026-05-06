@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
@@ -219,11 +219,18 @@ export function BackofficeAnalysis() {
   const [done, setDone]         = useState(null)
   const [processing, setProcessing] = useState(false)
   const [docActions, setDocActions] = useState({})
+  const [revertModal, setRevertModal] = useState(false)
+  const [revertReason, setRevertReason] = useState('')
+  const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario'
+  const [qaAnswers, setQaAnswers] = useState([])
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
       .then(d => { setData(d); setLevel(d.seals?.[0]?.level||'Simples') })
       .finally(() => setLoading(false))
+    questionnaireApi.getAnswersForSupplier(id)
+      .then(setQaAnswers)
+      .catch(() => {})
   }, [id])
 
   // Verifica documentos impeditivos antes de aprovar
@@ -466,10 +473,52 @@ export function BackofficeAnalysis() {
             </Card>
           )}
 
-          {/* Documentos */}
+          {/* Abas: Documentos | Questionário */}
           <Card style={{ borderRadius:16,padding:'20px 24px' }}>
+            <div style={{ display:'flex',gap:0,marginBottom:20,borderBottom:'1px solid #e2e4ef' }}>
+              {[['docs','Documentos'],['questionario','Questionário']].map(([tab,label])=>(
+                <button key={tab} onClick={()=>setActiveTab(tab)}
+                  style={{ padding:'8px 18px',background:'none',border:'none',borderBottom:`2px solid ${activeTab===tab?'#2E3192':'transparent'}`,color:activeTab===tab?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:-1 }}>
+                  {label}{tab==='questionario'&&qaAnswers.length>0?` (${qaAnswers.length})`:''}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'questionario' && (
+              <div>
+                {qaAnswers.length === 0 ? (
+                  <div style={{ textAlign:'center',padding:'32px',color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    Nenhuma resposta de questionário registrada para este fornecedor.
+                  </div>
+                ) : (
+                  <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+                    {qaAnswers.map((a,i) => {
+                      const q = a.questionnaire_questions
+                      const clientName = q?.questionnaires?.clients?.razao_social
+                      const qTitle     = q?.questionnaires?.title
+                      const answer     = a.answer_boolean !== null && a.answer_boolean !== undefined
+                        ? (a.answer_boolean ? 'Sim' : 'Não')
+                        : (a.answer_text || '—')
+                      return (
+                        <div key={i} style={{ padding:'12px 14px',borderRadius:10,background:'#f8faff',border:'1px solid #e2e4ef' }}>
+                          <div style={{ fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginBottom:4 }}>
+                            {clientName} · {qTitle}
+                          </div>
+                          <div style={{ fontSize:13,fontWeight:600,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif',marginBottom:4 }}>{q?.text}</div>
+                          <div style={{ fontSize:13,color: a.answer_boolean===true?'#15803d':a.answer_boolean===false?'#dc2626':'#1a1c5e',fontWeight:600,fontFamily:'Montserrat,sans-serif' }}>
+                            {answer}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'docs' && (<>
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
-              <SectionTitle>Documentos para Validação</SectionTitle>
+              <SectionTitle style={{ marginBottom:0 }}>Documentos para Validação</SectionTitle>
               <div style={{ display:'flex',gap:8,fontSize:12 }}>
                 <span style={{ color:'#22c55e' }}>✓ {ok} ok</span>
                 {miss>0 && <span style={{ color:'#ef4444' }}>✕ {miss} pendente</span>}
@@ -505,6 +554,7 @@ export function BackofficeAnalysis() {
                 </div>
               )
             })}
+            </>)}
           </Card>
         </div>
 
@@ -545,9 +595,14 @@ export function BackofficeAnalysis() {
 
             <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
               {sealAlreadyActive ? (
-                <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:10, padding:'12px 16px', textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
-                  ✅ Selo ELOS {data?.seals?.[0]?.level} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
-                </div>
+                <>
+                  <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:10, padding:'12px 16px', textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                    ✅ Selo ELOS {data?.seals?.[0]?.level} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
+                  </div>
+                  <Button variant="danger" full size="sm" style={{ borderRadius:10 }} disabled={processing} onClick={() => setRevertModal(true)}>
+                    ↩ Reverter Análise
+                  </Button>
+                </>
               ) : (
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
                   {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Aprovar Selo ${level}`}
@@ -563,6 +618,40 @@ export function BackofficeAnalysis() {
           </Card>
         </div>
       </div>
+
+      {/* Modal Reverter Análise */}
+      {revertModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:32, maxWidth:480, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:8 }}>↩ Reverter Análise</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#64748b', marginBottom:16 }}>
+              O fornecedor voltará para a fila com status <strong>PENDENTE</strong>. O Selo ELOS será revogado e uma nova análise será necessária.
+            </div>
+            <textarea
+              value={revertReason} onChange={e => setRevertReason(e.target.value)}
+              placeholder="Motivo da reversão (obrigatório)..."
+              rows={3}
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, resize:'vertical', boxSizing:'border-box', marginBottom:16 }}
+            />
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => { setRevertModal(false); setRevertReason('') }}>Cancelar</Button>
+              <Button variant="danger" full disabled={!revertReason.trim() || processing} onClick={async () => {
+                if (!revertReason.trim()) return
+                setProcessing(true)
+                try {
+                  await adminApi.revertSeal(id, revertReason.trim())
+                  navigate('/backoffice/fila')
+                } catch(e) {
+                  alert('Erro ao reverter: ' + e.message)
+                  setProcessing(false)
+                }
+              }}>
+                {processing ? '⏳...' : 'Confirmar Reversão'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

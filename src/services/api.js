@@ -504,7 +504,83 @@ export const adminApi = {
     return { success: true }
   },
 
+  revertSeal: async (supplierId, reason) => {
+    const { error: sealErr } = await supabase
+      .from('seals')
+      .update({ status: 'PENDING', issued_at: null })
+      .eq('supplier_id', supplierId)
+    if (sealErr) throw new Error(sealErr.message)
+
+    const { error: suppErr } = await supabase
+      .from('suppliers').update({ status: 'PENDING' }).eq('id', supplierId)
+    if (suppErr) console.warn('supplier status revert (RLS?):', suppErr.message)
+
+    await supabase.from('audit_log').insert({
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      action: 'SEAL_REVERTED', entity_type: 'supplier', entity_id: supplierId,
+      metadata: { reason },
+    })
+    return { success: true }
+  },
+
+  suspendSupplier: async (supplierId, reason) => {
+    const { error: sealErr } = await supabase
+      .from('seals')
+      .update({ status: 'SUSPENDED', suspended_reason: reason })
+      .eq('supplier_id', supplierId)
+    if (sealErr) throw new Error(sealErr.message)
+
+    const { error: suppErr } = await supabase
+      .from('suppliers').update({ status: 'INACTIVE' }).eq('id', supplierId)
+    if (suppErr) console.warn('supplier status suspend (RLS?):', suppErr.message)
+
+    await supabase.from('audit_log').insert({
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      action: 'SUPPLIER_SUSPENDED', entity_type: 'supplier', entity_id: supplierId,
+      metadata: { reason },
+    })
+    return { success: true }
+  },
+
+  reactivateSupplier: async (supplierId) => {
+    const { error: sealErr } = await supabase
+      .from('seals')
+      .update({ status: 'ACTIVE', suspended_reason: null })
+      .eq('supplier_id', supplierId)
+    if (sealErr) throw new Error(sealErr.message)
+
+    const { error: suppErr } = await supabase
+      .from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
+    if (suppErr) console.warn('supplier status reactivate (RLS?):', suppErr.message)
+
+    await supabase.from('audit_log').insert({
+      user_id: (await supabase.auth.getUser()).data.user?.id,
+      action: 'SUPPLIER_REACTIVATED', entity_type: 'supplier', entity_id: supplierId,
+      metadata: {},
+    })
+    return { success: true }
+  },
+
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
+
+  getDocumentFarol: async () => {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)')
+      .not('expires_at', 'is', null)
+      .order('expires_at', { ascending: true })
+    if (error) throw new Error(error.message)
+
+    const docs   = data || []
+    const today  = new Date(); today.setHours(0, 0, 0, 0)
+    const todayE = new Date(); todayE.setHours(23, 59, 59, 999)
+
+    const vencidos = docs.filter(d => new Date(d.expires_at) < today)
+    const hoje     = docs.filter(d => { const dt = new Date(d.expires_at); return dt >= today && dt <= todayE })
+    const futuro   = docs.filter(d => new Date(d.expires_at) > todayE)
+
+    return { vencidos, hoje, futuro, all: docs }
+  },
 
   getMetrics: async () => {
     // Queries independentes com tratamento de erro individual
@@ -771,6 +847,113 @@ export const clientApi = {
       // se seal não carregou (RLS), assume PENDING (fornecedor registrado ainda não aprovado)
       seal:              sealMap[i.supplier_id] || { status: 'PENDING', score: 0 },
     }))
+  },
+}
+
+// ── Questionários ────────────────────────────────────────────────────────────
+export const questionnaireApi = {
+  listByClient: async (clientId) => {
+    const { data, error } = await supabase
+      .from('questionnaires')
+      .select('*, questionnaire_questions(id, text, type, options, required, order_index)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  listAll: async () => {
+    const { data, error } = await supabase
+      .from('questionnaires')
+      .select('*, clients(razao_social), questionnaire_questions(id)')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  create: async ({ clientId, title, description }) => {
+    const { data, error } = await supabase
+      .from('questionnaires')
+      .insert({ client_id: clientId, title, description })
+      .select().single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  update: async (id, updates) => {
+    const { error } = await supabase.from('questionnaires').update(updates).eq('id', id)
+    if (error) throw new Error(error.message)
+  },
+
+  remove: async (id) => {
+    const { error } = await supabase.from('questionnaires').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  },
+
+  addQuestion: async (questionnaireId, { text, type, options, required, orderIndex }) => {
+    const { data, error } = await supabase
+      .from('questionnaire_questions')
+      .insert({ questionnaire_id: questionnaireId, text, type, options: options || null, required: required ?? true, order_index: orderIndex || 0 })
+      .select().single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
+  removeQuestion: async (id) => {
+    const { error } = await supabase.from('questionnaire_questions').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  },
+
+  // Supplier: busca questionários dos clientes que o convidaram
+  getForSupplier: async (supplierId) => {
+    const { data: invites } = await supabase
+      .from('invitations')
+      .select('client_id')
+      .eq('supplier_id', supplierId)
+      .eq('status', 'REGISTERED')
+    if (!invites?.length) return []
+
+    const clientIds = [...new Set(invites.map(i => i.client_id).filter(Boolean))]
+    const { data, error } = await supabase
+      .from('questionnaires')
+      .select('*, clients(razao_social), questionnaire_questions(id, text, type, options, required, order_index)')
+      .in('client_id', clientIds)
+      .eq('active', true)
+    if (error) throw new Error(error.message)
+
+    // Busca respostas existentes
+    const questionIds = (data || []).flatMap(q => q.questionnaire_questions.map(qq => qq.id))
+    const { data: answers } = questionIds.length ? await supabase
+      .from('questionnaire_answers')
+      .select('question_id, answer_boolean, answer_text')
+      .eq('supplier_id', supplierId)
+      .in('question_id', questionIds) : { data: [] }
+
+    const answerMap = (answers || []).reduce((acc, a) => { acc[a.question_id] = a; return acc }, {})
+    return (data || []).map(q => ({
+      ...q,
+      questionnaire_questions: q.questionnaire_questions
+        .sort((a, b) => a.order_index - b.order_index)
+        .map(qq => ({ ...qq, existingAnswer: answerMap[qq.id] || null })),
+    }))
+  },
+
+  saveAnswer: async ({ questionId, supplierId, answerBoolean, answerText }) => {
+    const { error } = await supabase
+      .from('questionnaire_answers')
+      .upsert({ question_id: questionId, supplier_id: supplierId, answer_boolean: answerBoolean ?? null, answer_text: answerText ?? null, updated_at: new Date().toISOString() },
+        { onConflict: 'question_id,supplier_id' })
+    if (error) throw new Error(error.message)
+  },
+
+  // Admin/Client: respostas de um fornecedor específico
+  getAnswersForSupplier: async (supplierId) => {
+    const { data, error } = await supabase
+      .from('questionnaire_answers')
+      .select('*, questionnaire_questions(id, text, type, questionnaires(id, title, clients(razao_social)))')
+      .eq('supplier_id', supplierId)
+    if (error) throw new Error(error.message)
+    return data || []
   },
 }
 
