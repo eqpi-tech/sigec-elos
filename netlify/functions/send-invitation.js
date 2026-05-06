@@ -184,28 +184,55 @@ exports.handler = async (event) => {
 
   // MODO RESEND: reenvia e-mail do convite existente sem criar novo
   if (body.resendId) {
-    const { data: inv } = await supabaseAdmin
+    // Primeiro fetch com campos básicos (sempre existem)
+    const { data: inv, error: invErr } = await supabaseAdmin
       .from('invitations')
-      .select('id, token, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, contato, buyer_name, clients(razao_social), buyers(razao_social)')
+      .select('id, supplier_razao_social, supplier_email, supplier_cnpj, buyer_name, status')
       .eq('id', body.resendId)
       .maybeSingle()
-    if (!inv) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Convite não encontrado' }) }
+    if (invErr || !inv) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Convite não encontrado' }) }
 
-    const senderName = inv.clients?.razao_social || inv.buyers?.razao_social || inv.buyer_name || user.email
+    // Fetch dos campos opcionais (adicionados pelos patches — podem não existir ainda)
+    let token = null, senderName = inv.buyer_name || user.email
+    let tipo_fornecedor = null, subsidiado = false, escopo = null, contato = null
+    try {
+      const { data: extra } = await supabaseAdmin
+        .from('invitations')
+        .select('token, subsidiado, tipo_fornecedor, escopo, contato, clients(razao_social), buyers(razao_social)')
+        .eq('id', body.resendId)
+        .maybeSingle()
+      if (extra) {
+        token           = extra.token           ?? null
+        tipo_fornecedor = extra.tipo_fornecedor  ?? null
+        subsidiado      = extra.subsidiado       ?? false
+        escopo          = extra.escopo           ?? null
+        contato         = extra.contato          ?? null
+        senderName      = extra.clients?.razao_social || extra.buyers?.razao_social || senderName
+      }
+    } catch (_) { /* campos ainda não existem no schema — ignora */ }
+
     await sendClientEmail({
-      invite:         inv,
+      invite:         { ...inv, token },
       email:          inv.supplier_email,
       senderName,
       razao_social:   inv.supplier_razao_social,
-      tipo_fornecedor: inv.tipo_fornecedor,
-      subsidiado:     inv.subsidiado,
-      escopo:         inv.escopo,
-      contato:        inv.contato,
+      tipo_fornecedor,
+      subsidiado,
+      escopo,
+      contato,
     })
+
     // Reseta status para SENT se ainda não se cadastrou
-    await supabaseAdmin.from('invitations')
-      .update({ status: 'SENT', viewed_at: null })
-      .eq('id', inv.id).neq('status', 'REGISTERED')
+    // viewed_at pode não existir ainda (patch_006) — ignora erro silenciosamente
+    try {
+      await supabaseAdmin.from('invitations')
+        .update({ status: 'SENT', viewed_at: null })
+        .eq('id', inv.id).neq('status', 'REGISTERED')
+    } catch (_) {
+      await supabaseAdmin.from('invitations')
+        .update({ status: 'SENT' })
+        .eq('id', inv.id).neq('status', 'REGISTERED')
+    }
 
     return { statusCode:200, headers:h, body: JSON.stringify({ success:true, message:'Convite reenviado' }) }
   }
