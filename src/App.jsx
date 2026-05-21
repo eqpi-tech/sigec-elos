@@ -13,6 +13,7 @@ import SupplierDocuments  from './pages/supplier/Documents.jsx'
 import SupplierPlans      from './pages/supplier/Plans.jsx'
 import PlanSuccess        from './pages/supplier/PlanSuccess.jsx'
 import SupplierCategories from './pages/supplier/Categories.jsx'
+import SupplierProcess    from './pages/supplier/Process.jsx'
 
 import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
@@ -76,6 +77,7 @@ function AppRoutes() {
       <Route path="/fornecedor/plano-ativo"    element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
       <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
       <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']}><SupplierQuestionnaire/></Protect>} />
+      <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />

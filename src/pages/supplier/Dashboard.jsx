@@ -1,66 +1,67 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
-import { Badge, Seal, Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
+import { Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, SectionTitle } from '../../components/ui.jsx'
+import SealBadge from '../../components/SealBadge.jsx'
+
+const STATUS_COLORS = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#f59e0b', EXPIRED:'#9B9B9B' }
+const STATUS_LABELS = { ACTIVE:'Ativo', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
+const DOC_BG     = { VALID:'#f8fffe', EXPIRING:'#fffbeb', MISSING:'#fff5f5', PENDING:'#fff7ed', REJECTED:'#fff5f5' }
+const DOC_BORDER = { VALID:'#dcfce7', EXPIRING:'#fef3c7', MISSING:'#fee2e2', PENDING:'#fed7aa', REJECTED:'#fee2e2' }
 
 export default function SupplierDashboard() {
-  const mobile = useIsMobile()
+  const mobile   = useIsMobile()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [supplier, setSupplier] = useState(null)
-  const [docs,     setDocs]     = useState([])
-  const [seals,    setSeals]    = useState([])
-  const [loading,  setLoading]  = useState(true)
 
-  const { pathname } = useLocation()
-
-  const [requiredDocsCount, setRequiredDocsCount] = useState(0)
+  const [supplier, setSupplier]             = useState(null)
+  const [docs,     setDocs]                 = useState([])
+  const [seals,    setSeals]                = useState([])
+  const [requiredDocsCount, setRequired]    = useState(0)
+  const [loading,  setLoading]              = useState(true)
 
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
     setLoading(true)
     try {
-      const s = await supplierApi.me(user.supplierId)
+      const [s, d] = await Promise.all([
+        supplierApi.me(user.supplierId),
+        documentApi.list(user.supplierId),
+      ])
       setSupplier(s)
-      const d = await documentApi.list(user.supplierId)
       setDocs(d)
-      // Carteira de selos (multi-seal após patch_012)
-      const { data: sealsData } = await supabase
-        .from('seals')
-        .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, clients(razao_social)')
-        .eq('supplier_id', user.supplierId)
-        .order('issued_at', { ascending: false })
-      setSeals(sealsData || [])
-      // Busca contagem de documentos EXIGIDOS pelas categorias
-      // para usar como denominador correto no KPI
-      try {
-        const { data: catRows } = await supabase
-          .from('supplier_categories').select('category_id').eq('supplier_id', user.supplierId)
-        if (catRows?.length) {
-          const catIds = catRows.map(r => r.category_id)
-          const { data: catDocs } = await supabase
-            .from('category_documents').select('document_id').in('category_id', catIds)
-          const unique = new Set((catDocs||[]).map(r => r.document_id))
-          setRequiredDocsCount(unique.size)
-        }
-      } catch { /* não crítico */ }
+      // seals já vêm com clients(razao_social) do me() atualizado
+      setSeals(s.seals || [])
+
+      // Contagem de docs exigidos pelas categorias do fornecedor
+      const { data: catRows } = await supabase
+        .from('supplier_categories').select('category_id').eq('supplier_id', user.supplierId)
+      if (catRows?.length) {
+        const catIds = catRows.map(r => r.category_id)
+        const { data: catDocs } = await supabase
+          .from('category_documents').select('document_id').in('category_id', catIds)
+        setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
+      }
     } finally { setLoading(false) }
   }, [user?.supplierId])
 
-  // Recarrega quando supplierId muda (primeiro acesso após cadastro)
-  // ou quando volta do plano-ativo
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
+  if (loading) return (
+    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}>
+      <Spinner size={48}/>
+    </div>
+  )
 
-  // Fornecedor sem cadastro completo
   if (!user?.supplierId) return (
     <div style={{ padding:'60px 32px', textAlign:'center' }}>
       <div style={{ fontSize:64, marginBottom:16 }}>🏭</div>
-      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:22, color:'#1a1c5e', marginBottom:8 }}>Bem-vindo ao SIGEC-ELOS!</div>
+      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:22, color:'#1a1c5e', marginBottom:8 }}>
+        Bem-vindo ao SIGEC-ELOS!
+      </div>
       <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:15, color:'#9B9B9B', marginBottom:28, maxWidth:400, margin:'0 auto 28px' }}>
         Para aparecer no marketplace e iniciar a homologação, complete seu cadastro e escolha um plano.
       </div>
@@ -74,188 +75,214 @@ export default function SupplierDashboard() {
   const docsWarn    = docs.filter(d => d.status === 'EXPIRING').length
   const docsMissing = docs.filter(d => ['MISSING','REJECTED'].includes(d.status)).length
   const docsPending = docs.filter(d => d.status === 'PENDING').length
-  const total4progress = requiredDocsCount || Math.max(docs.length, 1)
-  const progress    = Math.round((docsOk / total4progress) * 100)
-  const firstName   = user.name?.split(' ')[0] || 'Bem-vindo'
-  const hour        = new Date().getHours()
-  const greeting    = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
+  const totalDocs   = requiredDocsCount || Math.max(docs.length, 1)
+
+  const firstName = user.name?.split(' ')[0] || 'Bem-vindo'
+  const hour      = new Date().getHours()
+  const greeting  = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
+
+  // Seal principal = SIGEC próprio (client_id = null) ou primeiro ativo
+  const sigecSeal   = seals.find(s => s.client_id === null)
+  const primarySeal = sigecSeal || seals[0]
+  const globalScore = primarySeal?.score || 0
+
+  // Processos de homologação = cada seal é um processo
+  const processes = seals.map(seal => {
+    const isSusp   = !!(seal.client_suspended_at || seal.status === 'SUSPENDED')
+    const effStatus = isSusp ? 'SUSPENDED' : (seal.status || 'PENDING')
+    const clientName = seal.clients?.razao_social || (seal.client_id ? 'Cliente' : 'SIGEC-ELOS')
+    const name       = seal.seal_name || (seal.client_id ? `Processo ${clientName}` : 'SIGEC Simples')
+    return { ...seal, effStatus, clientName, name }
+  })
 
   return (
     <div style={{ padding: mobile ? '16px' : '28px 32px', maxWidth:1200, margin:'0 auto' }}>
-      <PageHeader
-        title={`${greeting}, ${firstName}! 👋`}
-        subtitle={`${supplier.razao_social} · CNPJ ${supplier.cnpj}`}
-        action={supplier.sealLevel !== 'Premium' &&
-          <Button variant="orange" onClick={() => navigate('/fornecedor/planos')}>⭐ Upgrade para Premium</Button>
-        }
-      />
 
-      {/* Alert de documentos pendentes — só relevante se o selo já está ativo */}
-      {docsMissing > 0 && supplier?.sealStatus === 'ACTIVE' && (
-        <div className="fade-in-up" style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.25)', borderRadius:14, padding:'14px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#dc2626' }}>⚠ {docsMissing} documento(s) pendente(s) — Seu Selo pode ser suspenso.</span>
-          <Button variant="danger" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Resolver agora</Button>
+      {/* ── Header ── */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:mobile?20:24, color:'#1a1c5e' }}>
+            {greeting}, {firstName}! 👋
+          </div>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginTop:2 }}>
+            {supplier.razao_social} · CNPJ {supplier.cnpj}
+          </div>
         </div>
-      )}
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+          <div style={{ textAlign:'right' }}>
+            <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Score geral</div>
+            <div style={{ fontSize:22, fontWeight:900, color: globalScore>=70?'#22c55e':globalScore>=50?'#f59e0b':'#ef4444', fontFamily:'Montserrat,sans-serif', lineHeight:1 }}>
+              {globalScore}<span style={{ fontSize:13, color:'#9B9B9B', fontWeight:400 }}>/100</span>
+            </div>
+          </div>
+          <div style={{ width:80 }}>
+            <ScoreBar score={globalScore} />
+          </div>
+        </div>
+      </div>
 
-      {/* Status do plano */}
+      {/* ── Alertas ── */}
       {!supplier.activePlan && (
-        <div className="fade-in-up" style={{ background:'linear-gradient(135deg,#F47E2F,#ff9a52)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ background:'linear-gradient(135deg,#F47E2F,#ff9a52)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff' }}>Nenhum plano ativo</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'rgba(255,255,255,.8)' }}>Assine um plano para aparecer no marketplace e iniciar a homologação.</div>
           </div>
-          <Button variant="neutral" size="md" style={{ background:'#fff', color:'#ea580c' }} onClick={() => navigate('/fornecedor/planos')}>
+          <Button variant="neutral" size="md" style={{ background:'#fff', color:'#ea580c', flexShrink:0 }} onClick={() => navigate('/fornecedor/planos')}>
             Ver Planos →
           </Button>
         </div>
       )}
+      {docsMissing > 0 && supplier?.sealStatus === 'ACTIVE' && (
+        <div style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.25)', borderRadius:14, padding:'14px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#dc2626' }}>
+            ⚠ {docsMissing} documento(s) pendente(s) — Seu Selo pode ser suspenso.
+          </span>
+          <Button variant="danger" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Resolver agora</Button>
+        </div>
+      )}
 
-      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:16, marginBottom:24 }}>
-        <KpiCard label="Nível Atual"     value={supplier.sealLevel || 'Simples'} sub={`Score: ${supplier.score || 0}/100`} subColor="#9B9B9B" icon="🏷️" iconBg="rgba(46,49,146,.1)" />
-        <KpiCard label="Docs Válidos"    value={`${docsOk}/${requiredDocsCount||docs.length||'?'}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
-        <KpiCard label="Em Análise"      value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />
-        <KpiCard label="Status Seal"     value={supplier.sealStatus==='ACTIVE'?'Ativo':supplier.sealStatus==='PENDING'?'Pendente':'Inativo'} sub={`Nível ${supplier.sealLevel||'—'}`} subColor={supplier.sealStatus==='ACTIVE'?'#22c55e':'#f59e0b'} icon="✅" iconBg="rgba(34,197,94,.1)" />
+      {/* ── KPIs ── */}
+      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:16, marginBottom:28 }}>
+        <KpiCard label="Processos Ativos" value={processes.filter(p=>p.effStatus==='ACTIVE').length} sub={`de ${processes.length} total`} subColor="#9B9B9B" icon="🔄" iconBg="rgba(46,49,146,.1)" />
+        <KpiCard label="Docs Válidos"     value={`${docsOk}/${totalDocs}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
+        <KpiCard label="Em Análise"       value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />
+        <KpiCard label="Plano"            value={supplier.activePlan?.type||'—'} sub={supplier.activePlan?`Válido até ${supplier.activePlan.ends_at?.slice(0,10)||'—'}`:'Sem plano ativo'} subColor={supplier.activePlan?'#22c55e':'#ef4444'} icon="⭐" iconBg="rgba(244,126,47,.1)" />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:20 }}>
-        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-          {/* Progress banner */}
-          <div style={{ background:'linear-gradient(135deg,#2E3192,#3d40b5)', borderRadius:16, padding:'24px 28px', color:'#fff' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-              <div>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16 }}>Jornada para o Selo ELOS Premium</div>
-                <div style={{ fontSize:13, color:'rgba(255,255,255,.65)', marginTop:2 }}>Complete os requisitos para liberar o marketplace</div>
-              </div>
-              <Seal level={supplier.sealLevel || 'Simples'} size={64} />
-            </div>
-            <div style={{ marginBottom:16 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
-                <span style={{ fontSize:12, color:'rgba(255,255,255,.7)' }}>Progresso de documentação</span>
-                <span style={{ fontWeight:700, fontFamily:'Montserrat,sans-serif' }}>{progress}%</span>
-              </div>
-              <div style={{ height:8, borderRadius:8, background:'rgba(255,255,255,.15)', overflow:'hidden' }}>
-                <div style={{ width:`${progress}%`, height:'100%', borderRadius:8, background:'linear-gradient(90deg,#F47E2F,#ff9a52)', transition:'width .8s' }} />
-              </div>
-            </div>
-            <div style={{ display:'flex', gap:8 }}>
-              {[{l:'Cadastro',d:true},{l:'Plano',d:!!supplier.plans?.length},{l:'Documentos',d:docsOk>0&&docsMissing===0},{l:'Aprovação',d:supplier.sealStatus==='ACTIVE'}].map((s,i)=>(
-                <div key={i} style={{ flex:1, textAlign:'center', padding:'8px 6px', borderRadius:8, background:s.d?'rgba(255,255,255,.15)':'rgba(255,255,255,.06)', border:s.d?'1px solid rgba(255,255,255,.2)':'1px solid rgba(255,255,255,.08)' }}>
-                  <div style={{ fontSize:14 }}>{s.d?'✅':'⏳'}</div>
-                  <div style={{ fontSize:9, fontFamily:'Montserrat,sans-serif', fontWeight:600, marginTop:2, color:s.d?'#fff':'rgba(255,255,255,.4)' }}>{s.l}</div>
-                </div>
-              ))}
+      {/* ── Carteira de Selos ── */}
+      <Card style={{ borderRadius:16, padding:'24px 28px', marginBottom:24 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+          <div>
+            <SectionTitle>Carteira de Selos</SectionTitle>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:2 }}>
+              {seals.filter(s=>s.status==='ACTIVE').length} selo{seals.filter(s=>s.status==='ACTIVE').length!==1?'s':''} ativo{seals.filter(s=>s.status==='ACTIVE').length!==1?'s':''}
             </div>
           </div>
-
-          {/* Docs preview */}
-          {/* Msg de contexto quando em fase de homologação */}
-          {supplier.sealStatus === 'PENDING' && docsMissing > 0 && (
-            <div style={{ background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.1)',borderRadius:12,padding:'12px 16px',marginBottom:12,display:'flex',gap:10,alignItems:'center' }}>
-              <span style={{ fontSize:20 }}>📋</span>
-              <div>
-                <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e' }}>Documentação em andamento</div>
-                <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>{docsMissing} documento{docsMissing>1?'s':''} ainda pendente{docsMissing>1?'s':''} · Envie para agilizar a homologação</div>
-              </div>
-              <Button variant="orange" size="sm" style={{ marginLeft:'auto' }} onClick={()=>navigate('/fornecedor/documentos')}>Enviar →</Button>
-            </div>
-          )}
-          {docs.length > 0 && (
-            <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                <SectionTitle>Documentos Recentes</SectionTitle>
-                <Button variant="neutral" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Ver todos →</Button>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                {docs.slice(0,6).map((doc,i) => {
-                  const colors = {VALID:'#f8fffe',EXPIRING:'#fffbeb',MISSING:'#fff5f5',PENDING:'#fff7ed',REJECTED:'#fff5f5'}
-                  const borders = {VALID:'#dcfce7',EXPIRING:'#fef3c7',MISSING:'#fee2e2',PENDING:'#fed7aa',REJECTED:'#fee2e2'}
-                  return (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:10, background:colors[doc.status]||'#f8fffe', border:`1px solid ${borders[doc.status]||'#dcfce7'}` }}>
-                      <StatusDot status={doc.status} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1.2 }}>{doc.label}</div>
-                        <div style={{ fontSize:10, color:'#9B9B9B' }}>{doc.source==='AUTO'?'auto':'manual'}</div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </Card>
+          {supplier.sealLevel !== 'Premium' && (
+            <Button variant="orange" size="sm" onClick={() => navigate('/fornecedor/planos')}>⭐ Upgrade Premium</Button>
           )}
         </div>
-
-        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          {/* Score */}
-          <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-            <SectionTitle>Score de Conformidade</SectionTitle>
-            <div style={{ textAlign:'center', marginBottom:12 }}>
-              <div style={{ fontSize:48, fontWeight:900, color:supplier.score>=70?'#22c55e':supplier.score>=50?'#f59e0b':'#ef4444', fontFamily:'Montserrat,sans-serif', lineHeight:1 }}>{supplier.score||0}</div>
-              <div style={{ fontSize:12, color:'#9B9B9B' }}>de 100 pontos</div>
-            </div>
-            <ScoreBar score={supplier.score||0} />
-          </Card>
-
-          {/* Ações rápidas */}
-          <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-            <SectionTitle>Ações Rápidas</SectionTitle>
-            {[['📋','Enviar Documentos','/fornecedor/documentos'],['⭐','Ver Planos','/fornecedor/planos']].map(([icon,label,path],i)=>(
-              <button key={i} onClick={()=>navigate(path)} style={{ display:'flex', alignItems:'center', gap:10, width:'100%', background:'rgba(46,49,146,.05)', border:'1px solid rgba(46,49,146,.1)', color:'#2E3192', borderRadius:10, padding:'10px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:8, textAlign:'left', transition:'all .15s' }}>
-                <span>{icon}</span> {label}
-              </button>
+        {seals.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'28px 0', color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:14 }}>
+            <div style={{ fontSize:40, marginBottom:8 }}>🏅</div>
+            Seus selos aparecerão aqui após completar a homologação
+          </div>
+        ) : (
+          <div style={{ display:'flex', gap:24, flexWrap:'wrap', justifyContent: seals.length <= 3 ? 'flex-start' : 'space-around' }}>
+            {processes.map((seal, i) => (
+              <div key={seal.id || i} style={{ cursor:'pointer' }} onClick={() => navigate(`/fornecedor/processo/${seal.id}`)}>
+                <SealBadge seal={seal} size={mobile ? 'sm' : 'md'} showClient showScore />
+              </div>
             ))}
+          </div>
+        )}
+      </Card>
+
+      {/* ── Meus Processos ── */}
+      <div style={{ marginBottom:28 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>
+              Meus Processos de Homologação
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:2 }}>
+              Acompanhe o status de cada processo em detalhe
+            </div>
+          </div>
+          <Button variant="neutral" size="sm" onClick={() => navigate('/fornecedor/documentos')}>
+            📋 Gerenciar Docs
+          </Button>
+        </div>
+
+        {processes.length === 0 ? (
+          <Card style={{ borderRadius:14, padding:'32px', textAlign:'center' }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>🔄</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, color:'#1a1c5e', marginBottom:6 }}>
+              Nenhum processo iniciado
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
+              Complete o cadastro e aguarde um convite de homologação
+            </div>
           </Card>
-
-          {/* Info do plano */}
-          {supplier.activePlan && (
-            <Card style={{ borderRadius:16, padding:'20px 24px', background:'rgba(46,49,146,.03)', border:'1px solid rgba(46,49,146,.1)' }}>
-              <div style={{ fontSize:11, fontWeight:600, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Plano Ativo</div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{supplier.activePlan.type}</div>
-              <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                Válido até: {supplier.activePlan.ends_at?.slice(0,10) || '—'}
-              </div>
-            </Card>
-          )}
-
-          {/* Carteira de Selos (gamificação) */}
-          <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-            <SectionTitle>Carteira de Selos</SectionTitle>
-            {seals.length === 0 ? (
-              <div style={{ textAlign:'center', padding:'16px 0', color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:13 }}>
-                <div style={{ fontSize:32, marginBottom:6 }}>🏅</div>
-                Seus selos aparecerão aqui após a homologação
-              </div>
-            ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {seals.map((seal, i) => {
-                  const isSuspended  = seal.client_suspended_at || seal.status === 'SUSPENDED'
-                  const isExpired    = seal.status === 'EXPIRED'
-                  const isActive     = seal.status === 'ACTIVE' && !isSuspended
-                  const statusColor  = isActive ? '#22c55e' : isSuspended ? '#f59e0b' : '#9B9B9B'
-                  const statusLabel  = isActive ? 'Ativo' : isSuspended ? 'Suspenso' : isExpired ? 'Expirado' : seal.status
-                  const sealName     = seal.seal_name || (seal.client_id ? `Premium - ${seal.clients?.razao_social || seal.client_id.slice(0,8)}` : 'Simples')
-                  const expiresDate  = seal.expires_at?.slice(0,10)
-                  return (
-                    <div key={i} style={{ padding:'12px 14px', borderRadius:12, border:`1px solid ${isActive?'#dcfce7':isSuspended?'#fef3c7':'#e2e4ef'}`, background:isActive?'#f8fffe':isSuspended?'#fffbeb':'#f9f9fb' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
-                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', display:'flex', alignItems:'center', gap:6 }}>
-                          {isActive ? '🏅' : isSuspended ? '⚠️' : '🔒'} {sealName}
-                        </div>
-                        <span style={{ fontSize:10, fontWeight:700, color:statusColor, background:`${statusColor}18`, padding:'2px 8px', borderRadius:20 }}>{statusLabel}</span>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
+            {processes.map((proc, i) => {
+              const statusColor  = STATUS_COLORS[proc.effStatus] || '#9B9B9B'
+              const statusLabel  = STATUS_LABELS[proc.effStatus] || proc.effStatus
+              const scoreVal     = proc.score || 0
+              return (
+                <Card key={proc.id || i} style={{ borderRadius:14, padding:'20px 22px', display:'flex', flexDirection:'column', gap:12, border:`1px solid ${proc.effStatus==='ACTIVE'?'rgba(34,197,94,.2)':proc.effStatus==='SUSPENDED'?'rgba(245,158,11,.2)':'rgba(46,49,146,.1)'}` }}>
+                  {/* Header do card */}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <div>
+                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e', lineHeight:1.2 }}>
+                        {proc.name}
                       </div>
-                      <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', display:'flex', gap:8 }}>
-                        {seal.score > 0 && <span>Score: {seal.score}</span>}
-                        {expiresDate && <span>· Válido até {expiresDate}</span>}
+                      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>
+                        {proc.clientName}
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </Card>
+                    <span style={{ fontSize:10, fontWeight:700, color:statusColor, background:`${statusColor}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
+                      {statusLabel}
+                    </span>
+                  </div>
 
-        </div>
+                  {/* Score */}
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                      <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>Score</span>
+                      <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#1a1c5e' }}>{scoreVal}/100</span>
+                    </div>
+                    <ScoreBar score={scoreVal} />
+                  </div>
+
+                  {/* Docs resumo */}
+                  <div style={{ display:'flex', gap:8 }}>
+                    {[['✓',docsOk,'#22c55e'],['⏳',docsPending,'#f59e0b'],['✗',docsMissing,'#ef4444']].map(([icon,val,color],j) => (
+                      <div key={j} style={{ flex:1, textAlign:'center', padding:'5px', borderRadius:8, background:`${color}10`, border:`1px solid ${color}22` }}>
+                        <div style={{ fontSize:13 }}>{icon}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'Montserrat,sans-serif' }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Datas e CTA */}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+                      {proc.issued_at ? `Emitido ${proc.issued_at.slice(0,10)}` : proc.expires_at ? `Válido até ${proc.expires_at.slice(0,10)}` : 'Aguardando análise'}
+                    </div>
+                    <Button variant="primary" size="sm" onClick={() => navigate(`/fornecedor/processo/${proc.id}`)}>
+                      Ver Processo →
+                    </Button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
       </div>
+
+      {/* ── Documentos Recentes ── */}
+      {docs.length > 0 && (
+        <Card style={{ borderRadius:16, padding:'20px 24px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <SectionTitle>Documentos Recentes</SectionTitle>
+            <Button variant="neutral" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Ver todos →</Button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:8 }}>
+            {docs.slice(0,6).map((doc, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:10, background:DOC_BG[doc.status]||'#f8fffe', border:`1px solid ${DOC_BORDER[doc.status]||'#dcfce7'}` }}>
+                <StatusDot status={doc.status} />
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1.2 }}>{doc.label}</div>
+                  <div style={{ fontSize:10, color:'#9B9B9B' }}>{doc.source==='AUTO'?'automático':'manual'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

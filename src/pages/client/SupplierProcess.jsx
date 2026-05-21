@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
+import SealBadge from '../../components/SealBadge.jsx'
 
 function safeStr(val, fallback = '—') {
   if (val === null || val === undefined) return fallback
@@ -148,29 +149,20 @@ export default function ClientSupplierProcess() {
               </div>
             )}
           </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flexShrink:0 }}>
             {seal ? (
-              <>
-                <div style={{ fontSize:11, fontWeight:700, color:SEAL_COLOR[seal.status], background:`${SEAL_COLOR[seal.status]}18`, padding:'4px 12px', borderRadius:20, fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
-                  {SEAL_LABEL[seal.status]}
-                </div>
-                {seal.status === 'ACTIVE' && (
-                  <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                    Score {seal.score}% · {seal.level}
-                  </div>
-                )}
-              </>
+              <SealBadge seal={seal} size="sm" showClient={false} showScore />
             ) : (
               <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Aguardando análise</div>
             )}
             {inv?.subsidiado && (
-              <div style={{ marginTop:6, fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+              <div style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
                 SUBSIDIADO
               </div>
             )}
             {bankDoc && (
               <button onClick={handleOpenBank}
-                style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, background:'#1a1c5e', color:'#fff', border:'none', borderRadius:10, padding:'8px 14px', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+                style={{ display:'flex', alignItems:'center', gap:6, background:'#1a1c5e', color:'#fff', border:'none', borderRadius:10, padding:'8px 14px', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
                 🏦 Dados Bancários
               </button>
             )}

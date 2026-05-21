@@ -78,7 +78,7 @@ export const supplierApi = {
     // Queries separadas para evitar problema de RLS em joins embutidos
     const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('seals').select('*').eq('supplier_id', supplierId),
+      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
       supabase.from('plans').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
     ])
@@ -110,6 +110,38 @@ export const supplierApi = {
       .single()
     if (error) throw new Error(error.message)
     return data
+  },
+
+  getProcess: async (sealId, supplierId) => {
+    // 1. Busca o seal (e dados do cliente, se houver)
+    const sealRes = await supabase.from('seals')
+      .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, clients(razao_social, cnpj)')
+      .eq('id', sealId)
+      .single()
+    if (sealRes.error) throw new Error(sealRes.error.message)
+    const seal = sealRes.data
+
+    // 2. Busca docs + convite em paralelo
+    const [docsRes, invRes] = await Promise.all([
+      supabase.from('documents')
+        .select('*')
+        .eq('supplier_id', supplierId)
+        .order('created_at', { ascending: false }),
+      seal.client_id
+        ? supabase.from('invitations')
+            .select('escopo, contato, tipo_fornecedor, subsidiado, created_at, status')
+            .eq('supplier_id', supplierId)
+            .eq('client_id', seal.client_id)
+            .maybeSingle()
+        : { data: null },
+    ])
+
+    return {
+      seal,
+      documents: docsRes.data || [],
+      invitation: invRes.data || null,
+      isSigec: seal.client_id === null,
+    }
   },
 }
 

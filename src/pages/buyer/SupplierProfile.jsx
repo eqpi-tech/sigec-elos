@@ -4,6 +4,7 @@ import { marketplaceApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { Button, Card, ScoreBar, StatusDot, Spinner } from '../../components/ui.jsx'
+import SealBadge from '../../components/SealBadge.jsx'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 // ── Formatadores ─────────────────────────────────────────────────────────────
@@ -232,10 +233,14 @@ export default function SupplierProfile() {
       {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <Card style={{borderRadius:16,padding:mobile?'16px':'24px 28px',marginBottom:16}}>
         <div style={{display:'flex',alignItems:'flex-start',gap:16,flexWrap:mobile?'wrap':'nowrap'}}>
-          <div style={{width:58,height:58,borderRadius:14,background:`${sealColor}18`,display:'flex',alignItems:'center',
-            justifyContent:'center',fontWeight:900,fontSize:24,color:sealColor,flexShrink:0}}>
-            {razaoSocial?.[0]}
-          </div>
+          {seal ? (
+            <SealBadge seal={seal} size="sm" showClient={false} />
+          ) : (
+            <div style={{width:58,height:58,borderRadius:14,background:`${sealColor}18`,display:'flex',alignItems:'center',
+              justifyContent:'center',fontWeight:900,fontSize:24,color:sealColor,flexShrink:0}}>
+              {razaoSocial?.[0]}
+            </div>
+          )}
 
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6}}>
