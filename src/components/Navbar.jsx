@@ -29,8 +29,9 @@ const NAVS = {
     { path:'/backoffice/processos',       label:'Processos',       icon:'🔍' },
     { path:'/backoffice/questionarios',   label:'Questionários',   icon:'❓' },
     { path:'/backoffice/metricas',        label:'Métricas',        icon:'📊' },
-    { path:'/backoffice/usuarios',         label:'Usuários',        icon:'👥' },
-    { path:'/backoffice/criar-usuario',   label:'+ Usuário',       icon:'👤' },
+    { path:'/backoffice/usuarios',           label:'Usuários',        icon:'👥' },
+    { path:'/backoffice/criar-usuario',     label:'+ Usuário',       icon:'👤' },
+    { path:'/backoffice/fluxo-documentos',  label:'Fluxo Docs',      icon:'📂' },
   ],
 }
 const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice' }
