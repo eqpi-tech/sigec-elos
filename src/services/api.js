@@ -113,7 +113,7 @@ export const supplierApi = {
   },
 
   getProcess: async (sealId, supplierId) => {
-    // 1. Busca o seal (e dados do cliente, se houver)
+    // 1. Busca o seal
     const sealRes = await supabase.from('seals')
       .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, clients(razao_social, cnpj)')
       .eq('id', sealId)
@@ -121,7 +121,7 @@ export const supplierApi = {
     if (sealRes.error) throw new Error(sealRes.error.message)
     const seal = sealRes.data
 
-    // 2. Busca docs + convite em paralelo
+    // 2. Docs do fornecedor + convite em paralelo
     const [docsRes, invRes] = await Promise.all([
       supabase.from('documents')
         .select('*')
@@ -136,9 +136,66 @@ export const supplierApi = {
         : { data: null },
     ])
 
+    const uploadedDocs = docsRes.data || []
+    let documents
+
+    if (seal.client_id) {
+      // Processo de cliente: requisitos vindos do fluxo personalizado do cliente
+      const { data: flowRows } = await supabase
+        .from('client_document_flows')
+        .select('catalog_id, documents_catalog(id, name)')
+        .eq('client_id', seal.client_id)
+        .eq('required', true)
+
+      const requiredIds  = new Set((flowRows || []).map(r => String(r.catalog_id)))
+      const uploadedByType = {}
+      uploadedDocs.forEach(d => { uploadedByType[String(d.type)] = d })
+
+      // Uploaded que o cliente exige
+      documents = uploadedDocs.filter(d => requiredIds.has(String(d.type)))
+
+      // MISSING para requisitos ainda não enviados (deduplicado por catalog_id)
+      const uploadedTypes = new Set(documents.map(d => String(d.type)))
+      const seen = new Set()
+      ;(flowRows || []).forEach(row => {
+        const docId = String(row.catalog_id)
+        if (!uploadedTypes.has(docId) && !seen.has(docId) && row.documents_catalog) {
+          seen.add(docId)
+          documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.documents_catalog.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
+        }
+      })
+    } else {
+      // Processo SIGEC: requisitos vindos das categorias do fornecedor
+      documents = [...uploadedDocs]
+      const { data: catRows } = await supabase
+        .from('supplier_categories').select('category_id').eq('supplier_id', supplierId)
+      if (catRows?.length) {
+        const { data: catDocRows } = await supabase
+          .from('category_documents')
+          .select('document_id, documents_catalog(id, name)')
+          .in('category_id', catRows.map(r => r.category_id))
+        if (catDocRows) {
+          const seen = new Set(uploadedDocs.map(d => String(d.type)))
+          catDocRows.forEach(row => {
+            const docId = String(row.document_id)
+            if (!seen.has(docId) && row.documents_catalog) {
+              seen.add(docId)
+              documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.documents_catalog.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
+            }
+          })
+        }
+      }
+    }
+
+    documents.sort((a, b) => {
+      if (a.status === 'MISSING' && b.status !== 'MISSING') return 1
+      if (a.status !== 'MISSING' && b.status === 'MISSING') return -1
+      return (a.label || '').localeCompare(b.label || '', 'pt-BR')
+    })
+
     return {
       seal,
-      documents: docsRes.data || [],
+      documents,
       invitation: invRes.data || null,
       isSigec: seal.client_id === null,
     }

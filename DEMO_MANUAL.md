@@ -40,14 +40,38 @@ URL: **https://sigecelos.com.br**
 
 ## Passo 2 — Dashboard do Fornecedor
 
-Após o login você vê o painel principal. Destaque para o público:
+Após o login você vê o painel principal com duas seções principais:
 
-- **Jornada para o Selo ELOS Premium** — barra de progresso mostrando as etapas: Cadastro, Plano, Documentos, Aprovação
-- **4 KPIs no topo:** Nível atual, Documentos válidos, Em análise, Status do Selo
-- **Score de Conformidade** (painel direito) — número de 0 a 100 calculado automaticamente pela plataforma
+**Carteira de Selos**
+- Exibe uma **medalha circular** para cada processo de homologação do fornecedor
+- Bronze = Simples · Prata = Premium · Ouro = HOC
+- Selos ativos têm brilho (glow); em análise aparecem com cadeado 🔒; suspensos com ⚠️
+- Clique em qualquer medalha para navegar direto ao processo
 
-> Diga ao público: *"O fornecedor acompanha em tempo real o status da sua homologação.
-> Cada documento enviado aumenta o score e avança a jornada."*
+**Meus Processos**
+- Cards por processo: nome do cliente, nível, status, score, contagem de documentos
+- Botão **"Ver Processo →"** em cada card
+
+> Diga ao público: *"O fornecedor pode participar de múltiplos processos ao mesmo tempo —
+> o processo SIGEC próprio e um processo separado para cada empresa que o convidou,
+> cada um com suas próprias regras e documentos."*
+
+---
+
+## Passo 2b — Detalhe de um Processo
+
+1. No dashboard, clique em **"Ver Processo →"** de qualquer card (ou clique na medalha)
+2. A página abre em `/fornecedor/processo/:id` com três abas:
+   - **Visão Geral** — `SealBadge`, status, score, dados do convite (escopo, tipo de fornecimento, subsidiado, contato)
+   - **Documentos** — lista dos documentos com status (Aprovado, Em análise, Não enviado, Rejeitado)
+   - **Histórico** — auditoria futura
+3. Mostre a aba **Documentos** — destaque o resumo de aprovados / em análise / pendentes
+   - Para o processo SIGEC: mostra os documentos exigidos pelas categorias do próprio fornecedor
+   - Para processo de cliente (ex.: CSN, NEXA): mostra **somente os documentos que aquele cliente exige**, com base no fluxo configurado pelo backoffice
+
+> Diga ao público: *"Cada processo tem sua própria lista de documentos. O processo SIGEC
+> usa as categorias do fornecedor; o processo de cada cliente usa exatamente o que aquele
+> cliente configurou — podendo ter documentos a mais ou a menos que o padrão."*
 
 ---
 
@@ -181,9 +205,9 @@ Mostre a lista de fornecedores recentes com status.
 1. No menu, clique em **Fornecedores**
 2. Clique em um fornecedor da lista
 3. Mostre as abas disponíveis:
-   - **Resumo** — dados cadastrais, score, status do selo, informações do convite (escopo, subsidiado, tipo)
+   - **Resumo** — dados cadastrais, **Selo ELOS** (medalha colorida com status), score, informações do convite (escopo, subsidiado, tipo)
    - **Documentos** — lista completa com status de cada documento (Válido, Vencendo, Pendente, Rejeitado)
-   - **Inteligência CNPJ** — dados da Receita Federal, sanções, CNAEs
+   - **Inteligência CNPJ** — dados da Receita Federal, sanções, CNAEs com descrição ao passar o mouse
 
 > Diga ao público: *"O cliente acompanha o processo de homologação de cada fornecedor
 > em detalhe — sem precisar ligar para a EQPI ou esperar um relatório por e-mail."*
@@ -279,16 +303,34 @@ Mostre o **Farol de Documentos** (gráfico donut à direita):
 
 ---
 
+## Passo 7 — Fluxo de Documentos por Cliente (bônus se houver tempo)
+
+1. No menu, clique em **Fluxo Docs**
+2. Selecione um cliente no dropdown
+3. Mostre os **3 KPIs**: documentos removidos / adicionados / categorias modificadas vs. padrão
+4. No campo de busca, pesquise uma categoria (ex.: *"construção"* ou *"serviço"*)
+5. Clique em uma categoria para expandir
+6. Mostre os dois grupos:
+   - **Documentos Padrão** — checkboxes verdes; desmarcar remove o documento do fluxo deste cliente
+   - **Documentos Adicionais** — checkboxes cinzas; marcar inclui um documento extra fora do padrão
+7. Demonstre: desmarque um documento, veja ele mudar para vermelho e o KPI de "removidos" incrementar
+
+> Diga ao público: *"A EQPI define exatamente quais documentos cada cliente exige de seus
+> fornecedores. O padrão vem do catálogo EQPI, e o backoffice personaliza por cliente —
+> sem tocar em código, sem planilha."*
+
+---
+
 ---
 
 # Roteiro Resumido (versão 10 minutos total)
 
 | Perfil | Tempo | O que mostrar |
 |---|---|---|
-| Fornecedor | ~2 min | Dashboard + score + documentos automáticos + botão Assertiva |
+| Fornecedor | ~3 min | Carteira de Selos (medalhas) + detalhe de processo + documentos automáticos + botão Assertiva |
 | Comprador | ~2 min | Marketplace com filtros + perfil de fornecedor homologado + convite simples |
-| Cliente | ~3 min | Dashboard com KPIs + convite enriquecido (subsidiado, escopo) + processo do fornecedor |
-| Backoffice | ~3 min | Overview com Farol + análise na fila (docs + decisão) + busca de processos |
+| Cliente | ~3 min | Dashboard com KPIs + convite enriquecido (subsidiado, escopo) + processo do fornecedor c/ SealBadge |
+| Backoffice | ~3 min | Overview com Farol + análise na fila + busca de processos + fluxo de documentos por cliente |
 
 ---
 
@@ -308,6 +350,9 @@ Mostre o **Farol de Documentos** (gráfico donut à direita):
 
 **"Quantas categorias um fornecedor pode ter?"**
 > Múltiplas. Cada categoria exige um conjunto de documentos. O sistema consolida tudo automaticamente.
+
+**"Os documentos exigidos são iguais para todos os clientes?"**
+> Não. Cada cliente tem seu próprio fluxo de documentos, configurado pelo backoffice da EQPI. Um cliente pode exigir documentos adicionais ou dispensar documentos do padrão para um fornecedor específico. O fornecedor vê exatamente o que cada cliente pede, processo a processo.
 
 **"O que é subsidiado?"**
 > O cliente pode assumir o custo da homologação do fornecedor (plano anual). O campo fica marcado no convite e visível no painel do cliente.

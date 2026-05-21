@@ -189,13 +189,15 @@ export default function SupplierProcess() {
       {/* ── Tab: Documentos ── */}
       {tab === 'Documentos' && (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {/* Banner informativo */}
+          {/* Link para gestão de uploads */}
           <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.12)', borderRadius:12, padding:'10px 16px', display:'flex', gap:10, alignItems:'center' }}>
-            <span style={{ fontSize:18 }}>ℹ️</span>
+            <span style={{ fontSize:16 }}>📋</span>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1a1c5e' }}>
-              Em breve cada processo terá sua lista de documentos específica. Por enquanto, estes são os documentos da sua carteira geral.
+              {isSigec
+                ? 'Documentos exigidos pelas suas categorias cadastradas.'
+                : `Documentos exigidos por ${clientName} para este processo.`}
               <button onClick={() => navigate('/fornecedor/documentos')} style={{ background:'none', border:'none', color:'#2E3192', cursor:'pointer', fontWeight:700, fontSize:12, padding:'0 0 0 4px', fontFamily:'DM Sans,sans-serif' }}>
-                Gerenciar documentos →
+                Enviar / atualizar documentos →
               </button>
             </div>
           </div>
