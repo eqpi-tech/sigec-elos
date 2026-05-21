@@ -365,29 +365,51 @@ export default function SupplierOnboarding() {
                 </div>
               )}
 
-              <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'16px', marginBottom:16, maxHeight:200, overflowY:'auto' }}>
-                <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 8px' }}>TERMOS DE USO — SIGEC-ELOS</p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  Ao utilizar a plataforma SIGEC-ELOS, operada pela EQPI Tech, o Fornecedor concorda com os seguintes termos:
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  <strong>1. Veracidade das informações:</strong> O Fornecedor declara que todas as informações e documentos enviados são verdadeiros, autênticos e estão dentro da validade. A inserção de informações falsas ou documentos adulterados implicará no cancelamento imediato do Selo ELOS e poderá resultar em medidas legais.
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  <strong>2. Atualização documental:</strong> O Fornecedor compromete-se a manter seus documentos atualizados durante toda a vigência do plano, substituindo certidões vencidas no prazo de até 15 dias após o vencimento.
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  <strong>3. Suspensão do Selo:</strong> O descumprimento das obrigações documentais ou a identificação de irregularidades poderá resultar na suspensão ou cancelamento do Selo ELOS, sem direito a reembolso do valor pago.
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  <strong>4. Responsabilidade:</strong> A EQPI Tech atua como facilitadora do processo de pré-homologação e não se responsabiliza por decisões de contratação tomadas pelos Compradores com base nas informações da plataforma.
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
-                  <strong>5. Cancelamento:</strong> O plano pode ser cancelado a qualquer momento, sem reembolso proporcional. O acesso à plataforma permanece ativo até o final do período contratado.
-                </p>
-                <p style={{ fontSize:12, color:'#374151', lineHeight:1.6 }}>
-                  <strong>6. Foro:</strong> As partes elegem o foro da Comarca de Belo Horizonte/MG para dirimir quaisquer controvérsias.
-                </p>
+              {/* Identifica se o convite tem termos personalizados do cliente */}
+              {invitation?.client_terms && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:'#1d4ed8', fontFamily:'DM Sans,sans-serif' }}>
+                  📋 <strong>{invitation.sender_name}</strong> utiliza termos de uso específicos para esta homologação.
+                </div>
+              )}
+
+              <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'16px', marginBottom:16, maxHeight:220, overflowY:'auto' }}>
+                {invitation?.client_terms ? (
+                  // Termos personalizados do cliente — exibidos como texto pré-formatado
+                  <>
+                    <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 12px' }}>
+                      TERMOS DE HOMOLOGAÇÃO — {(invitation.sender_name || 'Cliente').toUpperCase()}
+                    </p>
+                    <pre style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:0, whiteSpace:'pre-wrap', fontFamily:'DM Sans,sans-serif' }}>
+                      {invitation.client_terms}
+                    </pre>
+                  </>
+                ) : (
+                  // Termos padrão SIGEC-ELOS
+                  <>
+                    <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 8px' }}>TERMOS DE USO — SIGEC-ELOS</p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      Ao utilizar a plataforma SIGEC-ELOS, operada pela EQPI Tech, o Fornecedor concorda com os seguintes termos:
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      <strong>1. Veracidade das informações:</strong> O Fornecedor declara que todas as informações e documentos enviados são verdadeiros, autênticos e estão dentro da validade. A inserção de informações falsas ou documentos adulterados implicará no cancelamento imediato do Selo ELOS e poderá resultar em medidas legais.
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      <strong>2. Atualização documental:</strong> O Fornecedor compromete-se a manter seus documentos atualizados durante toda a vigência do plano, substituindo certidões vencidas no prazo de até 15 dias após o vencimento.
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      <strong>3. Suspensão do Selo:</strong> O descumprimento das obrigações documentais ou a identificação de irregularidades poderá resultar na suspensão ou cancelamento do Selo ELOS, sem direito a reembolso do valor pago.
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      <strong>4. Responsabilidade:</strong> A EQPI Tech atua como facilitadora do processo de pré-homologação e não se responsabiliza por decisões de contratação tomadas pelos Compradores com base nas informações da plataforma.
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}>
+                      <strong>5. Cancelamento:</strong> O plano pode ser cancelado a qualquer momento, sem reembolso proporcional. O acesso à plataforma permanece ativo até o final do período contratado.
+                    </p>
+                    <p style={{ fontSize:12, color:'#374151', lineHeight:1.6 }}>
+                      <strong>6. Foro:</strong> As partes elegem o foro da Comarca de Belo Horizonte/MG para dirimir quaisquer controvérsias.
+                    </p>
+                  </>
+                )}
               </div>
 
               <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:12, padding:'12px', background:'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${termsAccepted?'#2E3192':'#e2e4ef'}` }}>

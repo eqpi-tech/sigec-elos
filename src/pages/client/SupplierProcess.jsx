@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi, documentApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
 
 function safeStr(val, fallback = '—') {
@@ -52,10 +53,14 @@ export default function ClientSupplierProcess() {
   const { supplierId } = useParams()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [data, setData]     = useState(null)
+  const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]   = useState('')
-  const [tab, setTab]       = useState('Resumo')
+  const [error, setError]     = useState('')
+  const [tab, setTab]         = useState('Resumo')
+  const [bankModal, setBankModal] = useState(false)
+  const [bankUrl, setBankUrl]   = useState(null)
+  const [bankLoading, setBankLoading] = useState(false)
+  const [cnaeMap, setCnaeMap] = useState({})
 
   useEffect(() => {
     if (!user?.clientId || !supplierId) return
@@ -64,6 +69,19 @@ export default function ClientSupplierProcess() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [supplierId, user?.clientId])
+
+  useEffect(() => {
+    const codes = data?.cnpj_consultation?.cnpj_data?.cnaes_secundarios?.map(c => String(c.codigo)).filter(Boolean)
+    if (!codes?.length) return
+    supabase.from('cnaes').select('codigo,descricao').in('codigo', codes)
+      .then(({ data: rows }) => {
+        if (!rows?.length) return
+        const m = {}
+        rows.forEach(r => { m[r.codigo] = r.descricao })
+        setCnaeMap(m)
+      })
+      .catch(() => {})
+  }, [data])
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:80 }}><Spinner size={40}/></div>
   if (error)   return <div style={{ padding:32, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>
@@ -86,6 +104,20 @@ export default function ClientSupplierProcess() {
   const score       = docs.length > 0 ? Math.round((validDocs / docs.length) * 100) : 0
 
   const inv = data.invitation
+
+  const bankDoc = docs.find(d => String(d.type) === '10' && d.storage_path)
+
+  const handleOpenBank = async () => {
+    if (!bankDoc) return
+    setBankLoading(true)
+    setBankModal(true)
+    try {
+      const url = await documentApi.getSignedUrl(bankDoc.storage_path)
+      setBankUrl(url)
+    } finally {
+      setBankLoading(false)
+    }
+  }
 
   const lbl  = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:4 }
   const val  = { fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', fontWeight:600 }
@@ -136,9 +168,49 @@ export default function ClientSupplierProcess() {
                 SUBSIDIADO
               </div>
             )}
+            {bankDoc && (
+              <button onClick={handleOpenBank}
+                style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, background:'#1a1c5e', color:'#fff', border:'none', borderRadius:10, padding:'8px 14px', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+                🏦 Dados Bancários
+              </button>
+            )}
           </div>
         </div>
       </Card>
+
+      {/* Modal Dados Bancários */}
+      {bankModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={() => { setBankModal(false); setBankUrl(null) }}>
+          <div style={{ background:'#fff', borderRadius:18, padding:'24px 28px', width:'min(92vw,700px)', maxHeight:'85vh', overflow:'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>🏦 Comprovante de Conta Bancária</div>
+              <button onClick={() => { setBankModal(false); setBankUrl(null) }}
+                style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'#9B9B9B', lineHeight:1 }}>✕</button>
+            </div>
+            {bankLoading ? (
+              <div style={{ textAlign:'center', padding:'40px 0' }}><Spinner size={32}/></div>
+            ) : bankUrl ? (
+              <div>
+                {/\.(jpg|jpeg|png|gif|webp)$/i.test(bankDoc.storage_path) ? (
+                  <img src={bankUrl} alt="Comprovante bancário" style={{ width:'100%', borderRadius:10 }} />
+                ) : (
+                  <iframe src={bankUrl} title="Comprovante bancário" style={{ width:'100%', height:500, border:'none', borderRadius:10 }} />
+                )}
+                <div style={{ marginTop:12, textAlign:'right' }}>
+                  <a href={bankUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, textDecoration:'none' }}>
+                    ↗ Abrir em nova aba
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign:'center', color:'#dc2626', padding:24 }}>Erro ao carregar documento.</div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Banner sanções */}
       {hasActiveSanctions && (
@@ -243,6 +315,34 @@ export default function ClientSupplierProcess() {
               </div>
             </Card>
           )}
+
+          {/* Endereço completo */}
+          {cnpjDat && (cnpjDat.logradouro || cnpjDat.municipio) && (() => {
+            const tipoLogr  = safeStr(cnpjDat.descricao_tipo_de_logradouro, '')
+            const rua       = [tipoLogr, cnpjDat.logradouro, cnpjDat.numero, cnpjDat.complemento].filter(Boolean).join(' ') || '—'
+            const bairro    = safeStr(cnpjDat.bairro)
+            const cidade    = safeStr(cnpjDat.municipio)
+            const uf        = safeStr(cnpjDat.uf)
+            const cep       = cnpjDat.cep ? String(cnpjDat.cep).replace(/^(\d{5})(\d{3})$/, '$1-$2') : '—'
+            return (
+              <Card style={{ borderRadius:14, padding:'18px 20px', gridColumn:'1 / -1' }}>
+                <SectionTitle>Endereço</SectionTitle>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                  {[
+                    ['Logradouro', rua],
+                    ['Bairro',     bairro],
+                    ['Cidade / UF', `${cidade} / ${uf}`],
+                    ['CEP',        cep],
+                  ].map(([l, v]) => (
+                    <div key={l} style={{ padding:'10px 12px', background:'#f8faff', borderRadius:10, border:'1px solid #e2e4ef' }}>
+                      <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>{l}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )
+          })()}
         </div>
       )}
 
@@ -383,7 +483,7 @@ export default function ClientSupplierProcess() {
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {cnpjDat.cnaes_secundarios.map((c,i) => (
-                          <span key={i} title={safeStr(c.descricao)} style={{ fontSize:11, background:'rgba(46,49,146,.07)', color:'#2E3192', padding:'3px 8px', borderRadius:20, fontFamily:'DM Sans,sans-serif', cursor:'default' }}>
+                          <span key={i} title={cnaeMap[String(c.codigo)] || safeStr(c.descricao)} style={{ fontSize:11, background:'rgba(46,49,146,.07)', color:'#2E3192', padding:'3px 8px', borderRadius:20, fontFamily:'DM Sans,sans-serif', cursor:'default' }}>
                             {safeStr(c.codigo)}
                           </span>
                         ))}

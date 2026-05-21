@@ -181,29 +181,68 @@ export default function SupplierDocuments() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  const ALLOWED_EXTS = ['pdf', 'jpg', 'jpeg', 'png', 'docx']
+  const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+
+  const validateZip = async (file) => {
+    // Importa JSZip dinamicamente (evita adicionar ao bundle principal)
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(file)
+    const entries = Object.keys(zip.files).filter(n => !zip.files[n].dir)
+    const bad = entries.filter(name => {
+      const ext = name.split('.').pop()?.toLowerCase()
+      return !ALLOWED_EXTS.includes(ext)
+    })
+    if (bad.length > 0) {
+      throw new Error(`ZIP contém arquivos não permitidos: ${bad.join(', ')}. Permitidos: ${ALLOWED_EXTS.join(', ')}`)
+    }
+    return entries
+  }
+
   const handleUpload = async (docId, docLabel, file) => {
     if (!file) return
-    if (file.size > 10*1024*1024) { showToast('Arquivo muito grande. Máx 10MB', 'error'); return }
-    const ok = ['application/pdf','image/jpeg','image/jpg','image/png']
-    if (!ok.includes(file.type)) { showToast('Use PDF, JPG ou PNG', 'error'); return }
+    if (file.size > 20*1024*1024) { showToast('Arquivo muito grande. Máx 20MB', 'error'); return }
+
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
+
+    if (isZip) {
+      try {
+        await validateZip(file)
+        showToast('✅ ZIP validado — enviando...', 'success')
+      } catch (err) {
+        showToast(err.message, 'error')
+        return
+      }
+    } else if (!ALLOWED_MIME.includes(file.type) && !ALLOWED_EXTS.includes(ext)) {
+      showToast(`Formato não permitido. Use: ${ALLOWED_EXTS.join(', ')} ou ZIP`, 'error')
+      return
+    }
 
     setUploading(docId)
     try {
       const typeKey = String(docId)
-      const uploaded = await documentApi.upload(user.supplierId, user.id, file, typeKey)
-      // Override label with catalog name
+      const uploadedDoc = await documentApi.upload(user.supplierId, user.id, file, typeKey)
       await supabase.from('documents')
         .update({ label: docLabel })
-        .eq('id', uploaded.id)
+        .eq('id', uploadedDoc.id)
 
       setUploaded(prev => {
         const i = prev.findIndex(d => d.type === typeKey)
-        return i >= 0 ? prev.map(d => d.type === typeKey ? { ...uploaded, label: docLabel } : d)
-                      : [...prev, { ...uploaded, label: docLabel }]
+        return i >= 0 ? prev.map(d => d.type === typeKey ? { ...uploadedDoc, label: docLabel } : d)
+                      : [...prev, { ...uploadedDoc, label: docLabel }]
       })
       showToast('✅ Documento enviado! Aguardando validação.')
     } catch (err) { showToast('Erro: ' + err.message, 'error') }
     finally { setUploading(null) }
+  }
+
+  const handleViewDoc = async (storagePath) => {
+    try {
+      const url = await documentApi.getSignedUrl(storagePath)
+      window.open(url, '_blank')
+    } catch (e) { showToast('Erro ao abrir documento', 'error') }
   }
 
   const getDoc = (docId) => uploaded.find(d => d.type === String(docId) || d.type === `CNPJ_CARD` && docId === 37)
@@ -246,6 +285,10 @@ export default function SupplierDocuments() {
             {up?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>vence {up.expires_at.slice(0,10)}</span>}
           </div>
           {up?.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {up.review_note}</div>}
+          {/* Indicador de reaproveitamento: documento aprovado previamente e reusado neste processo */}
+          {up?.reviewed_by && up?.status === 'VALID' && (
+            <div style={{ fontSize:10, color:'#0369a1', marginTop:2 }}>♻ Validado — aproveitado neste processo</div>
+          )}
           {/* Metadados do certificado FGTS */}
           {doc.id===7 && up?.metadata?.numeroCertificado && (
             <div style={{ fontSize:10,color:'#9B9B9B',marginTop:3 }}>
@@ -282,6 +325,15 @@ export default function SupplierDocuments() {
               </Button>
         )}
 
+        {/* Ver documento enviado (qualquer doc com arquivo) */}
+        {up?.storage_path && !isInstant && (
+          <Button variant="neutral" size="sm"
+            title="Visualizar documento enviado"
+            onClick={() => handleViewDoc(up.storage_path)}>
+            👁 Ver
+          </Button>
+        )}
+
         {/* Upload manual (só para docs não automáticos) */}
         {!isInstant && !isOnDemand && (
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
@@ -307,16 +359,19 @@ export default function SupplierDocuments() {
                 {isIsentoMarked ? '✓ Isento' : 'Isento'}
               </button>
             )}
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
               ref={el => fileRefs.current[doc.id] = el}
               style={{ display:'none' }}
               onChange={e => handleUpload(doc.id, doc.name, e.target.files[0])}
             />
             {busy ? <Spinner size={20}/> : (
-              <Button variant={status==='VALID'&&!isIsentoMarked?'neutral':'orange'} size="sm"
+              <Button
+                variant={up?.storage_path ? 'neutral' : 'orange'}
+                size="sm"
                 onClick={() => fileRefs.current[doc.id]?.click()}
-                disabled={isIsentoMarked}>
-                {status==='VALID' && !isIsentoMarked ? '↑ Atualizar' : '↑ Enviar'}
+                disabled={isIsentoMarked}
+                title={up?.storage_path ? 'Substituir pelo novo arquivo' : 'Enviar documento'}>
+                {up?.storage_path ? '↑ Substituir' : '↑ Enviar'}
               </Button>
             )}
           </div>

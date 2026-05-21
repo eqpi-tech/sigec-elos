@@ -12,6 +12,7 @@ export default function BackofficeQuestionnaires() {
   const [selected,      setSelected]      = useState(null) // questionário aberto
   const [loading,       setLoading]       = useState(true)
   const [saving,        setSaving]        = useState(false)
+  const [filterClient,  setFilterClient]  = useState('')  // filtro por cliente
 
   // Formulário novo questionário
   const [showForm,   setShowForm]   = useState(false)
@@ -93,6 +94,9 @@ export default function BackofficeQuestionnaires() {
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
 
   const questions = (selected?.questionnaire_questions || []).sort((a,b)=>a.order_index-b.order_index)
+  const filteredQuestionnaires = filterClient
+    ? questionnaires.filter(q => q.client_id === filterClient)
+    : questionnaires
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
@@ -101,6 +105,22 @@ export default function BackofficeQuestionnaires() {
         subtitle="Crie perguntas por cliente; fornecedores respondem no painel"
         action={<Button variant="primary" onClick={()=>setShowForm(true)}>+ Novo Questionário</Button>}
       />
+
+      {/* Filtro por cliente */}
+      <div style={{ marginBottom:20 }}>
+        <select
+          value={filterClient}
+          onChange={e => { setFilterClient(e.target.value); setSelected(null) }}
+          style={{ padding:'9px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', minWidth:260, background:'#fff' }}
+        >
+          <option value="">Todos os clientes ({questionnaires.length})</option>
+          {clients.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.razao_social} ({questionnaires.filter(q => q.client_id === c.id).length})
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Modal novo questionário */}
       {showForm && (
@@ -132,11 +152,12 @@ export default function BackofficeQuestionnaires() {
         {/* Lista de questionários */}
         <div>
           <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:10 }}>
-            {questionnaires.length} questionário{questionnaires.length!==1?'s':''}
+            {filteredQuestionnaires.length} questionário{filteredQuestionnaires.length!==1?'s':''}
+            {filterClient && ` do cliente selecionado`}
           </div>
-          {questionnaires.length === 0
-            ? <EmptyState icon="📋" title="Nenhum questionário" subtitle="Crie o primeiro clicando em + Novo Questionário"/>
-            : questionnaires.map(q => (
+          {filteredQuestionnaires.length === 0
+            ? <EmptyState icon="📋" title="Nenhum questionário" subtitle={filterClient ? 'Nenhum questionário para este cliente' : 'Crie o primeiro clicando em + Novo Questionário'}/>
+            : filteredQuestionnaires.map(q => (
               <div key={q.id}
                 onClick={()=>setSelected(q)}
                 style={{ padding:'12px 14px',borderRadius:12,marginBottom:8,cursor:'pointer',border:`1.5px solid ${selected?.id===q.id?'#2E3192':'#e2e4ef'}`,background:selected?.id===q.id?'rgba(46,49,146,.05)':'#fff',transition:'all .15s' }}>

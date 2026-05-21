@@ -16,9 +16,11 @@ const NAVS = {
     { path:'/comprador/convites',    label:'Convites',        icon:'🤝' },
   ],
   CLIENT: [
-    { path:'/cliente',               label:'Dashboard',       icon:'⊞' },
-    { path:'/cliente/fornecedores',  label:'Fornecedores',    icon:'🏭' },
-    { path:'/cliente/convites',      label:'Convites',        icon:'🤝' },
+    { path:'/cliente',                label:'Dashboard',       icon:'⊞' },
+    { path:'/cliente/fornecedores',   label:'Fornecedores',    icon:'🏭' },
+    { path:'/cliente/convites',       label:'Convites',        icon:'🤝' },
+    { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋' },
+    { path:'/cliente/configuracoes',  label:'Configurações',   icon:'⚙️' },
   ],
   ADMIN: [
     { path:'/backoffice',                 label:'Visão Geral',     icon:'⊞' },

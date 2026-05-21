@@ -12,6 +12,7 @@ export default function SupplierDashboard() {
   const navigate = useNavigate()
   const [supplier, setSupplier] = useState(null)
   const [docs,     setDocs]     = useState([])
+  const [seals,    setSeals]    = useState([])
   const [loading,  setLoading]  = useState(true)
 
   const { pathname } = useLocation()
@@ -26,6 +27,13 @@ export default function SupplierDashboard() {
       setSupplier(s)
       const d = await documentApi.list(user.supplierId)
       setDocs(d)
+      // Carteira de selos (multi-seal após patch_012)
+      const { data: sealsData } = await supabase
+        .from('seals')
+        .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, clients(razao_social)')
+        .eq('supplier_id', user.supplierId)
+        .order('issued_at', { ascending: false })
+      setSeals(sealsData || [])
       // Busca contagem de documentos EXIGIDOS pelas categorias
       // para usar como denominador correto no KPI
       try {
@@ -208,6 +216,43 @@ export default function SupplierDashboard() {
               </div>
             </Card>
           )}
+
+          {/* Carteira de Selos (gamificação) */}
+          <Card style={{ borderRadius:16, padding:'20px 24px' }}>
+            <SectionTitle>Carteira de Selos</SectionTitle>
+            {seals.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'16px 0', color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:13 }}>
+                <div style={{ fontSize:32, marginBottom:6 }}>🏅</div>
+                Seus selos aparecerão aqui após a homologação
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {seals.map((seal, i) => {
+                  const isSuspended  = seal.client_suspended_at || seal.status === 'SUSPENDED'
+                  const isExpired    = seal.status === 'EXPIRED'
+                  const isActive     = seal.status === 'ACTIVE' && !isSuspended
+                  const statusColor  = isActive ? '#22c55e' : isSuspended ? '#f59e0b' : '#9B9B9B'
+                  const statusLabel  = isActive ? 'Ativo' : isSuspended ? 'Suspenso' : isExpired ? 'Expirado' : seal.status
+                  const sealName     = seal.seal_name || (seal.client_id ? `Premium - ${seal.clients?.razao_social || seal.client_id.slice(0,8)}` : 'Simples')
+                  const expiresDate  = seal.expires_at?.slice(0,10)
+                  return (
+                    <div key={i} style={{ padding:'12px 14px', borderRadius:12, border:`1px solid ${isActive?'#dcfce7':isSuspended?'#fef3c7':'#e2e4ef'}`, background:isActive?'#f8fffe':isSuspended?'#fffbeb':'#f9f9fb' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', display:'flex', alignItems:'center', gap:6 }}>
+                          {isActive ? '🏅' : isSuspended ? '⚠️' : '🔒'} {sealName}
+                        </div>
+                        <span style={{ fontSize:10, fontWeight:700, color:statusColor, background:`${statusColor}18`, padding:'2px 8px', borderRadius:20 }}>{statusLabel}</span>
+                      </div>
+                      <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', display:'flex', gap:8 }}>
+                        {seal.score > 0 && <span>Score: {seal.score}</span>}
+                        {expiresDate && <span>· Válido até {expiresDate}</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
 
         </div>
       </div>

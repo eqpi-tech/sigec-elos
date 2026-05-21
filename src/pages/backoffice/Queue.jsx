@@ -3,6 +3,7 @@ import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi, questionnaireApi, assertivaApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
+import { supabase } from '../../lib/supabase.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -226,10 +227,23 @@ export function BackofficeAnalysis() {
   const [assertivaReport,  setAssertivaReport]  = useState(undefined)
   const [assertivaLoading, setAssertivaLoading] = useState(false)
   const [assertivaError,   setAssertivaError]   = useState('')
+  // Modal de aprovação de documento com data de expiração
+  const [approveModal, setApproveModal] = useState(null)  // { docId, docLabel }
+  const [approveExpiry, setApproveExpiry] = useState('')
+  const [approveNote, setApproveNote] = useState('')
+  const [autoFinalized, setAutoFinalized] = useState(null)  // 'approved' | 'rejected'
+  const [cnaeMap, setCnaeMap] = useState({})
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
-      .then(d => { setData(d); setLevel(d.seals?.[0]?.level||'Simples') })
+      .then(d => {
+        setData(d)
+        setLevel(d.seals?.[0]?.level || 'Simples')
+        // Sugere data de expiração = fim do plano do fornecedor
+        if (d.plan?.ends_at) setApproveExpiry(d.plan.ends_at.slice(0, 10))
+        // Email de início de análise (único por ciclo — deduplica via audit_log)
+        sendAnalysisStartEmail(d)
+      })
       .finally(() => setLoading(false))
     questionnaireApi.getAnswersForSupplier(id)
       .then(setQaAnswers)
@@ -238,6 +252,66 @@ export function BackofficeAnalysis() {
       .then(setAssertivaReport)
       .catch(() => setAssertivaReport(null))
   }, [id])
+
+  useEffect(() => {
+    const codes = data?.cnpj_consultation?.cnpj_data?.cnaes_secundarios?.map(c => String(c.codigo)).filter(Boolean)
+    if (!codes?.length) return
+    supabase.from('cnaes').select('codigo,descricao').in('codigo', codes)
+      .then(({ data: rows }) => {
+        if (!rows?.length) return
+        const m = {}
+        rows.forEach(r => { m[r.codigo] = r.descricao })
+        setCnaeMap(m)
+      })
+      .catch(() => {})
+  }, [data])
+
+  const sendAnalysisStartEmail = async (supplierData) => {
+    if (!supplierData?.user_id) return
+    try {
+      // Verifica se já enviamos este email hoje (audit_log)
+      const { data: existing } = await supabase
+        .from('audit_log')
+        .select('id')
+        .eq('entity_id', id)
+        .eq('action', 'ANALYSIS_STARTED')
+        .gte('created_at', new Date(Date.now() - 86400000).toISOString())
+        .limit(1)
+      if (existing?.length > 0) return
+      await supabase.from('audit_log').insert({
+        action: 'ANALYSIS_STARTED', entity_type: 'supplier', entity_id: id,
+        metadata: { razao_social: supplierData.razao_social },
+      })
+      // Envia email
+      await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: supplierData.user_id,
+          subject: '🔍 Sua homologação entrou em análise — SIGEC-ELOS',
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+            <div style="background:#2E3192;padding:28px;border-radius:12px 12px 0 0;text-align:center">
+              <h1 style="color:#fff;margin:0;font-size:22px">SIGEC-ELOS</h1>
+            </div>
+            <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none">
+              <p>Ola, <strong>${supplierData.razao_social}</strong>!</p>
+              <p>Sua solicitacao de homologacao esta sendo analisada pela equipe EQPI. Em breve voce recebera o resultado.</p>
+              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin:20px 0">
+                <strong style="color:#1d4ed8">O que acontece agora?</strong>
+                <ul style="margin:8px 0 0;padding-left:20px;color:#374151;font-size:13px">
+                  <li>Nossa equipe revisa cada documento enviado</li>
+                  <li>Se houver pendencias, voce sera notificado</li>
+                  <li>Ao final, voce recebe o resultado por email</li>
+                </ul>
+              </div>
+              <a href="https://sigecelos.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
+            </div>
+            <div style="background:#f8fafc;padding:14px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
+          </div>`,
+        }),
+      })
+    } catch (e) { console.warn('Email início análise:', e.message) }
+  }
 
   const handleGenerateAssertiva = async () => {
     setAssertivaLoading(true)
@@ -328,11 +402,65 @@ export function BackofficeAnalysis() {
     setDone('rejected')
     setProcessing(false)
   }
-  const handleDocAction = async (docId, status) => {
-    setDocActions(prev=>({...prev,[docId]:'loading'}))
-    await documentApi.updateStatus(docId, status, obs || 'Revisado pelo backoffice')
-    setDocActions(prev=>({...prev,[docId]:status}))
-    setData(prev => ({ ...prev, documents: prev.documents.map(d => d.id===docId?{...d,status}:d) }))
+  const openApproveModal = (doc) => {
+    setApproveModal({ docId: doc.id, docLabel: doc.label })
+    setApproveNote('')
+    // mantém a sugestão de expiração já definida no load
+  }
+
+  const handleDocApprove = async () => {
+    if (!approveModal) return
+    setDocActions(prev => ({ ...prev, [approveModal.docId]: 'loading' }))
+    setApproveModal(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/admin-approve-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          documentId: approveModal.docId,
+          status: 'VALID',
+          expiresAt: approveExpiry || undefined,
+          note: approveNote || 'Aprovado pelo backoffice',
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      setDocActions(prev => ({ ...prev, [approveModal.docId]: 'VALID' }))
+      setData(prev => ({
+        ...prev,
+        documents: prev.documents.map(d => d.id === approveModal.docId ? { ...d, status: 'VALID', expires_at: approveExpiry } : d),
+      }))
+      if (result.autoFinalized) setAutoFinalized(result.outcome)
+    } catch (e) {
+      alert('Erro ao aprovar: ' + e.message)
+      setDocActions(prev => ({ ...prev, [approveModal.docId]: undefined }))
+    }
+  }
+
+  const handleDocReject = async (docId, docLabel) => {
+    const motivo = prompt(`Motivo da rejeição — ${docLabel}`)
+    if (motivo === null) return
+    setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/admin-approve-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo || 'Rejeitado pelo backoffice' }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      setDocActions(prev => ({ ...prev, [docId]: 'REJECTED' }))
+      setData(prev => ({
+        ...prev,
+        documents: prev.documents.map(d => d.id === docId ? { ...d, status: 'REJECTED', review_note: motivo } : d),
+      }))
+      if (result.autoFinalized) setAutoFinalized(result.outcome)
+    } catch (e) {
+      alert('Erro ao rejeitar: ' + e.message)
+      setDocActions(prev => ({ ...prev, [docId]: undefined }))
+    }
   }
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
@@ -361,18 +489,27 @@ export function BackofficeAnalysis() {
   // Guard: selo já emitido?
   const sealAlreadyActive = data?.seals?.[0]?.status === 'ACTIVE'
 
-  if (done) return (
-    <div style={{ maxWidth:600,margin:'80px auto',padding:24,textAlign:'center' }}>
-      <div style={{ fontSize:64,marginBottom:16 }}>{done==='approved'?'✅':'❌'}</div>
-      <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:22,color:'#1a1c5e',marginBottom:8 }}>
-        {done==='approved'?`Selo ELOS ${level} emitido!`:'Solicitação rejeitada'}
+  if (done || autoFinalized) {
+    const outcome = done || autoFinalized
+    const isAuto  = !done && !!autoFinalized
+    return (
+      <div style={{ maxWidth:600,margin:'80px auto',padding:24,textAlign:'center' }}>
+        <div style={{ fontSize:64,marginBottom:16 }}>{outcome==='approved'?'✅':'❌'}</div>
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:22,color:'#1a1c5e',marginBottom:8 }}>
+          {outcome==='approved'?`Selo ELOS ${level} emitido!`:'Solicitação rejeitada'}
+        </div>
+        {isAuto && (
+          <div style={{ background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,padding:'10px 16px',marginBottom:16,fontSize:13,color:'#1d4ed8' }}>
+            ⚡ Homologação finalizada automaticamente após revisão de todos os documentos
+          </div>
+        )}
+        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:15,color:'#9B9B9B',marginBottom:24 }}>
+          {outcome==='approved'?'Fornecedor agora visível no marketplace.':`Notificação enviada ao fornecedor por e-mail.`}
+        </div>
+        <Button variant="primary" onClick={()=>navigate('/backoffice/fila')}>← Voltar à fila</Button>
       </div>
-      <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:15,color:'#9B9B9B',marginBottom:24 }}>
-        {done==='approved'?'Fornecedor agora visível no marketplace.':`Motivo: "${obs}"`}
-      </div>
-      <Button variant="primary" onClick={()=>navigate('/backoffice/fila')}>← Voltar à fila</Button>
-    </div>
-  )
+    )
+  }
 
   return (
     <div style={{ maxWidth:980,margin:'0 auto',padding:'24px' }}>
@@ -458,7 +595,7 @@ export function BackofficeAnalysis() {
                   </div>
                   <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
                     {cnpjDat.cnaes_secundarios.map((c,i)=>(
-                      <span key={i} title={safeStr(c.descricao)} style={{ fontSize:11,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'3px 8px',borderRadius:20,cursor:'default' }}>{safeStr(c.codigo)}</span>
+                      <span key={i} title={cnaeMap[String(c.codigo)] || safeStr(c.descricao)} style={{ fontSize:11,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'3px 8px',borderRadius:20,cursor:'default' }}>{safeStr(c.codigo)}</span>
                     ))}
                   </div>
                 </div>
@@ -651,8 +788,8 @@ export function BackofficeAnalysis() {
                   {status==='PENDING' && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
-                        <Button variant="success" size="sm" onClick={()=>handleDocAction(doc.id,'VALID')}>✓ Aprovar</Button>
-                        <Button variant="danger"  size="sm" onClick={()=>handleDocAction(doc.id,'REJECTED')}>✕ Rejeitar</Button>
+                        <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
+                        <Button variant="danger"  size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>✕ Rejeitar</Button>
                       </>}
                     </>
                   )}
@@ -753,6 +890,45 @@ export function BackofficeAnalysis() {
               }}>
                 {processing ? '⏳...' : 'Confirmar Reversão'}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Aprovar Documento com Data de Expiração */}
+      {approveModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:32, maxWidth:440, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#15803d', marginBottom:6 }}>✓ Aprovar Documento</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20 }}>{approveModal.docLabel}</div>
+
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
+                Válido até <span style={{ color:'#dc2626' }}>*</span>
+              </label>
+              <input
+                type="date"
+                value={approveExpiry}
+                onChange={e => setApproveExpiry(e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box' }}
+              />
+              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Sugestão: data de vencimento da assinatura do fornecedor</div>
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>Observação (opcional)</label>
+              <input
+                type="text"
+                value={approveNote}
+                onChange={e => setApproveNote(e.target.value)}
+                placeholder="Ex: Documento válido e dentro do prazo"
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}
+              />
+            </div>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => setApproveModal(null)}>Cancelar</Button>
+              <Button variant="success" full disabled={!approveExpiry} onClick={handleDocApprove}>✓ Confirmar Aprovação</Button>
             </div>
           </div>
         </div>

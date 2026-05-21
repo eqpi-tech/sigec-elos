@@ -34,6 +34,8 @@ import ClientDashboard        from './pages/client/Dashboard.jsx'
 import ClientSuppliers        from './pages/client/Suppliers.jsx'
 import ClientInvitations      from './pages/client/Invitations.jsx'
 import ClientSupplierProcess  from './pages/client/SupplierProcess.jsx'
+import ClientQuestionnaires   from './pages/client/Questionnaires.jsx'
+import ClientSettings         from './pages/client/Settings.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -97,6 +99,8 @@ function AppRoutes() {
       <Route path="/cliente/fornecedores"             element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
       <Route path="/cliente/fornecedor/:supplierId"   element={<Protect roles={['CLIENT']}><ClientSupplierProcess/></Protect>} />
       <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
+      <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']}><ClientQuestionnaires/></Protect>} />
+      <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']}><ClientSettings/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>

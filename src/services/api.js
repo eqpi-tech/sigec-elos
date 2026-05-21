@@ -829,7 +829,8 @@ export const clientApi = {
 
     const { data: seals } = await supabase
       .from('seals')
-      .select('supplier_id, level, status, score')
+      .select('supplier_id, level, status, score, seal_name, client_suspended_at')
+      .eq('client_id', clientId)
       .in('supplier_id', supplierIds)
     const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
 
@@ -840,13 +841,89 @@ export const clientApi = {
       tipo:              i.tipo_fornecedor,
       escopo:            i.escopo,
       invitedAt:         i.created_at,
-      // dados da invitation como fallback quando RLS bloqueia join com suppliers
       inviteRazaoSocial: i.supplier_razao_social,
       inviteCnpj:        i.supplier_cnpj,
       supplier:          i.suppliers,
-      // se seal não carregou (RLS), assume PENDING (fornecedor registrado ainda não aprovado)
       seal:              sealMap[i.supplier_id] || { status: 'PENDING', score: 0 },
     }))
+  },
+
+  // Vendor List — todos os fornecedores da base (para o cliente buscar e convidar)
+  getVendorList: async (clientId) => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('id, razao_social, cnpj, city, state, status')
+      .order('razao_social')
+    if (error) throw new Error(error.message)
+
+    // Busca IDs que já foram convidados por este cliente
+    const { data: invited } = await supabase
+      .from('invitations')
+      .select('supplier_id, status')
+      .eq('client_id', clientId)
+    const invitedMap = (invited || []).reduce((acc, i) => { acc[i.supplier_id] = i.status; return acc }, {})
+
+    // Busca selos ativos
+    const supplierIds = (data || []).map(s => s.id)
+    const { data: seals } = supplierIds.length
+      ? await supabase.from('seals').select('supplier_id, status, level, seal_name').in('supplier_id', supplierIds)
+      : { data: [] }
+    const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
+
+    return (data || []).map(s => ({
+      ...s,
+      seal:          sealMap[s.id] || null,
+      inviteStatus:  invitedMap[s.id] || null,  // null = nunca convidado por este cliente
+      isMySupplier:  !!invitedMap[s.id],
+    }))
+  },
+
+  // Termos de uso personalizados
+  getTerms: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/client-terms', {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error)
+    return json
+  },
+
+  saveTerms: async (terms) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/client-terms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ terms }),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error)
+    return json
+  },
+
+  // Inativar / reativar fornecedor (contexto do cliente)
+  inactivateSupplier: async (supplierId, reason) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/client-inactivate-supplier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ supplierId, action: 'suspend', reason }),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error)
+    return json
+  },
+
+  reactivateSupplier: async (supplierId) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/client-inactivate-supplier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ supplierId, action: 'reactivate' }),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error)
+    return json
   },
 }
 

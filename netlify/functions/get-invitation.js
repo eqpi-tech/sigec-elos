@@ -18,7 +18,7 @@ exports.handler = async (event) => {
 
   const { data: inv, error } = await supabaseAdmin
     .from('invitations')
-    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, viewed_at, clients(razao_social), buyers(razao_social)')
+    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, viewed_at, clients(razao_social, terms_content), buyers(razao_social)')
     .eq('token', token)
     .maybeSingle()
 
@@ -36,21 +36,24 @@ exports.handler = async (event) => {
       .eq('id', inv.id)
   }
 
-  const senderName = inv.clients?.razao_social || inv.buyers?.razao_social || null
+  const senderName  = inv.clients?.razao_social || inv.buyers?.razao_social || null
+  const clientTerms = inv.clients?.terms_content || null  // null = usar termos padrão
 
   return {
     statusCode: 200,
     headers: h,
     body: JSON.stringify({
-      id:                  inv.id,
-      status:              inv.status,
+      id:                    inv.id,
+      status:                inv.status,
       supplier_razao_social: inv.supplier_razao_social,
-      supplier_email:      inv.supplier_email,
-      supplier_cnpj:       inv.supplier_cnpj,
-      subsidiado:          inv.subsidiado,
-      tipo_fornecedor:     inv.tipo_fornecedor,
-      escopo:              inv.escopo,
-      sender_name:         senderName,
+      supplier_email:        inv.supplier_email,
+      supplier_cnpj:         inv.supplier_cnpj,
+      subsidiado:            inv.subsidiado,
+      tipo_fornecedor:       inv.tipo_fornecedor,
+      escopo:                inv.escopo,
+      sender_name:           senderName,
+      client_id:             inv.client_id,
+      client_terms:          clientTerms,  // termos personalizados do cliente (pode ser null)
     }),
   }
 }
