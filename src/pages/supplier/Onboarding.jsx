@@ -15,8 +15,12 @@ export default function SupplierOnboarding() {
   const navigate = useNavigate()
   const { signup, reloadProfile } = useAuth()
 
-  // Lê token do convite na URL (?token=xxx)
-  const inviteToken = new URLSearchParams(window.location.search).get('token')
+  // Lê params da URL: token de convite, CNPJ pré-preenchido, ref de landing page
+  const _params     = new URLSearchParams(window.location.search)
+  const inviteToken = _params.get('token')
+  const refSlug     = _params.get('ref')    // slug da landing page do cliente
+  const cnpjParam   = _params.get('cnpj')   // CNPJ pré-preenchido vindo da LP
+
   const [invitation, setInvitation] = useState(null)
   const isSubsidiado = !!invitation?.subsidiado
 
@@ -25,7 +29,11 @@ export default function SupplierOnboarding() {
     : ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
 
   const [step, setStep]           = useState(0)
-  const [cnpj, setCnpj]           = useState('')
+  const [cnpj, setCnpj]           = useState(() => {
+    if (!cnpjParam) return ''
+    const d = cnpjParam.replace(/\D/g,'').slice(0,14)
+    return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
+  })
   const [cnpjData, setCnpjData]   = useState(null)
   const [sanctions, setSanctions] = useState(null)
   const [lookupLoading, setLookupLoading] = useState(false)
@@ -162,6 +170,7 @@ export default function SupplierOnboarding() {
         cnpj_full_data:    cnpjData || null,
         category_ids:      [...selectedCategories],
         invitation_token:  inviteToken || undefined,
+        ref_slug:          refSlug || undefined,
       }),
     })
     const resData = await res.json()

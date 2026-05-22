@@ -30,7 +30,8 @@ import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
 import BackofficeUsers               from './pages/backoffice/Users.jsx'
 import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlows.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
-import LandingPage from './pages/LandingPage.jsx'
+import LandingPage   from './pages/LandingPage.jsx'
+import ClientPortal  from './pages/ClientPortal.jsx'
 
 import ClientDashboard        from './pages/client/Dashboard.jsx'
 import ClientSuppliers        from './pages/client/Suppliers.jsx'
@@ -69,6 +70,7 @@ function AppRoutes() {
       <Route path="/login"            element={<Login/>} />
       <Route path="/cadastro"         element={<SupplierOnboarding/>} />
       <Route path="/redefinir-senha"  element={<ResetPassword/>} />
+      <Route path="/portal/:slug"     element={<ClientPortal/>} />
       <Route path="/"                 element={<RootRedirect/>} />
 
       {/* Supplier */}

@@ -40,6 +40,7 @@ exports.handler = async (event) => {
       state, city, phone, services, certifications,
       sanctions_checked, sanctions_result,
       invitation_token,
+      ref_slug,
     } = body
 
     if (!cnpj || !razao_social) {
@@ -260,6 +261,29 @@ exports.handler = async (event) => {
         }
       }
     } catch (e) { console.warn('invitation link (não crítico):', e.message) }
+
+    // 5b. Se veio de landing page de cliente (?ref=slug), cria vínculo client_id ↔ supplier
+    if (ref_slug) {
+      try {
+        const { data: lp } = await supabaseAdmin
+          .from('client_landing_pages')
+          .select('client_id')
+          .eq('slug', ref_slug)
+          .eq('is_active', true)
+          .single()
+
+        if (lp?.client_id) {
+          await supabaseAdmin.from('invitations').insert({
+            client_id:        lp.client_id,
+            supplier_id:      supplier.id,
+            supplier_cnpj:    cnpj.replace(/\D/g, ''),
+            status:           'REGISTERED',
+            invited_by_role:  'CLIENT',
+          })
+          console.log(`🔗 Fornecedor vinculado ao cliente via LP slug="${ref_slug}"`)
+        }
+      } catch (e) { console.warn('LP invitation link (não crítico):', e.message) }
+    }
 
     console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
 

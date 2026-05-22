@@ -35,3 +35,7 @@ yarn-error.log*
 
 # Netlify
 .netlify/
+
+# Migration scripts — contêm credenciais
+scripts/hoc_migration_config.json
+scripts/migration_*.log
