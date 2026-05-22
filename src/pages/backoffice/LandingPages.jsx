@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { adminApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
@@ -14,9 +14,77 @@ function slugify(str) {
 
 const EMPTY_FORM = {
   slug: '', company_name: '', logo_url: '', hero_image_url: '',
-  accent_color: '#F47E2F', description: '', compliance_url: '',
+  accent_color: '#F47E2F', secondary_color: '#1B2A4A', description: '', compliance_url: '',
   website_url: '', linkedin_url: '', contact_email: '', phone: '',
   badges: [], is_active: true,
+}
+
+function ClientSearchCombo({ clients, value, onChange }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  const selected = clients.find(c => c.id === value)
+
+  const filtered = useMemo(() => {
+    const lq = q.trim().toLowerCase()
+    if (!lq) return clients.slice(0, 20)
+    return clients.filter(c =>
+      (c.razao_social || '').toLowerCase().includes(lq) ||
+      (c.nome_fantasia || '').toLowerCase().includes(lq)
+    ).slice(0, 20)
+  }, [clients, q])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQ('') }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function select(c) { onChange(c.id); setOpen(false); setQ('') }
+  function clear(e) { e.stopPropagation(); onChange(''); setQ(''); setOpen(false) }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <div style={{ position:'relative' }}>
+        <input
+          value={open ? q : (selected ? (selected.nome_fantasia || selected.razao_social) : '')}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => { setOpen(true); setQ('') }}
+          placeholder="Buscar cliente por nome..."
+          style={{ width:'100%', padding:'10px 40px 10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff' }}
+        />
+        {value
+          ? <button onClick={clear} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:16, lineHeight:1 }}>✕</button>
+          : <span style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', color:'#9B9B9B', pointerEvents:'none' }}>▾</span>
+        }
+      </div>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:200, maxHeight:260, overflowY:'auto' }}>
+          {filtered.length === 0
+            ? <div style={{ padding:'12px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>Nenhum cliente encontrado</div>
+            : filtered.map(c => (
+              <button key={c.id} onMouseDown={() => select(c)}
+                style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', display:'block' }}>
+                {c.nome_fantasia || c.razao_social}
+                {c.nome_fantasia && c.razao_social !== c.nome_fantasia && (
+                  <span style={{ display:'block', fontSize:11, color:'#9B9B9B' }}>{c.razao_social}</span>
+                )}
+              </button>
+            ))
+          }
+          {!q.trim() && clients.length > 20 && (
+            <div style={{ padding:'8px 14px', fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', borderTop:'1px solid #f0f0f5', textAlign:'center' }}>
+              {clients.length - 20} clientes adicionais — refine a busca para filtrar
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function FieldLabel({ children, required }) {
@@ -125,13 +193,7 @@ export default function BackofficeLandingPages() {
       {/* Seletor */}
       <Card style={{ borderRadius:16, padding:'22px 28px', marginBottom:24 }}>
         <SectionTitle style={{ marginBottom:10 }}>Selecionar Cliente</SectionTitle>
-        <select value={selClient} onChange={e => setSelClient(e.target.value)}
-          style={{ ...inp, cursor:'pointer' }}>
-          <option value="">— Selecione um cliente —</option>
-          {clients.map(c => (
-            <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>
-          ))}
-        </select>
+        <ClientSearchCombo clients={clients} value={selClient} onChange={setSelClient}/>
         {selClient && lp && (
           <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color:'#9B9B9B' }}>URL:</span>
@@ -242,9 +304,10 @@ export default function BackofficeLandingPages() {
               )}
             </div>
 
-            {/* Accent color */}
+            {/* Primary color */}
             <div>
-              <FieldLabel>Cor de Destaque</FieldLabel>
+              <FieldLabel>Cor Principal</FieldLabel>
+              <div style={hint}>Botões, destaques e ícones — padrão: laranja</div>
               <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                 <input type="color" value={form.accent_color || '#F47E2F'}
                   onChange={e => setForm(prev => ({ ...prev, accent_color: e.target.value }))}
@@ -252,6 +315,21 @@ export default function BackofficeLandingPages() {
                 <input {...f('accent_color')} placeholder="#F47E2F"
                   style={{ ...inp, width:110, flex:'none' }}/>
                 <div style={{ width:38, height:38, borderRadius:8, background: form.accent_color||'#F47E2F',
+                  border:'1px solid #e2e4ef', flexShrink:0 }}/>
+              </div>
+            </div>
+
+            {/* Secondary color */}
+            <div>
+              <FieldLabel>Cor Secundária</FieldLabel>
+              <div style={hint}>Fundos escuros e seções — padrão: azul</div>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <input type="color" value={form.secondary_color || '#1B2A4A'}
+                  onChange={e => setForm(prev => ({ ...prev, secondary_color: e.target.value }))}
+                  style={{ width:44, height:38, border:'1px solid #e2e4ef', borderRadius:8, cursor:'pointer', padding:2, flexShrink:0 }}/>
+                <input {...f('secondary_color')} placeholder="#1B2A4A"
+                  style={{ ...inp, width:110, flex:'none' }}/>
+                <div style={{ width:38, height:38, borderRadius:8, background: form.secondary_color||'#1B2A4A',
                   border:'1px solid #e2e4ef', flexShrink:0 }}/>
               </div>
             </div>

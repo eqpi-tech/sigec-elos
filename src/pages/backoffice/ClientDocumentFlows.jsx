@@ -1,6 +1,74 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { Card, Spinner, SectionTitle } from '../../components/ui.jsx'
+import { Card, Spinner, PageHeader } from '../../components/ui.jsx'
+
+function ClientSearchCombo({ clients, value, onChange }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  const selected = clients.find(c => c.id === value)
+
+  const filtered = useMemo(() => {
+    const lq = q.trim().toLowerCase()
+    if (!lq) return clients.slice(0, 20)
+    return clients.filter(c =>
+      (c.razao_social || '').toLowerCase().includes(lq) ||
+      (c.nome_fantasia || '').toLowerCase().includes(lq)
+    ).slice(0, 20)
+  }, [clients, q])
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQ('') }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function select(c) { onChange(c.id); setOpen(false); setQ('') }
+  function clear(e) { e.stopPropagation(); onChange(''); setQ(''); setOpen(false) }
+
+  return (
+    <div ref={ref} style={{ position:'relative' }}>
+      <div style={{ position:'relative' }}>
+        <input
+          value={open ? q : (selected ? (selected.nome_fantasia || selected.razao_social) : '')}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => { setOpen(true); setQ('') }}
+          placeholder="Buscar cliente por nome..."
+          style={{ width:'100%', padding:'10px 40px 10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff' }}
+        />
+        {value
+          ? <button onClick={clear} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:16, lineHeight:1 }}>✕</button>
+          : <span style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', color:'#9B9B9B', pointerEvents:'none' }}>▾</span>
+        }
+      </div>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:200, maxHeight:260, overflowY:'auto' }}>
+          {filtered.length === 0
+            ? <div style={{ padding:'12px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>Nenhum cliente encontrado</div>
+            : filtered.map(c => (
+              <button key={c.id} onMouseDown={() => select(c)}
+                style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', display:'block' }}>
+                {c.nome_fantasia || c.razao_social}
+                {c.nome_fantasia && c.razao_social !== c.nome_fantasia && (
+                  <span style={{ display:'block', fontSize:11, color:'#9B9B9B' }}>{c.razao_social}</span>
+                )}
+              </button>
+            ))
+          }
+          {!q.trim() && clients.length > 20 && (
+            <div style={{ padding:'8px 14px', fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', borderTop:'1px solid #f0f0f5', textAlign:'center' }}>
+              {clients.length - 20} clientes adicionais — refine a busca para filtrar
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function BackofficeClientDocumentFlows() {
   const [clients,     setClients]     = useState([])
@@ -169,19 +237,16 @@ export default function BackofficeClientDocumentFlows() {
 
   return (
     <div style={{ padding:'24px 32px', maxWidth:960, margin:'0 auto' }}>
-      <SectionTitle>Fluxo de Documentos por Cliente</SectionTitle>
+      <PageHeader title="Fluxo de Homologação" subtitle="Configuração de documentos por cliente"/>
 
       {/* Client selector */}
       <Card style={{ borderRadius:14, padding:'20px 24px', marginBottom:20 }}>
         <span style={lbl}>Cliente</span>
-        <select
+        <ClientSearchCombo
+          clients={clients}
           value={clientId}
-          onChange={e => { setClientId(e.target.value); setSearch(''); setExpanded(new Set()) }}
-          style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', background:'#fff', cursor:'pointer' }}
-        >
-          <option value="">Selecione um cliente...</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.razao_social}</option>)}
-        </select>
+          onChange={id => { setClientId(id); setSearch(''); setExpanded(new Set()) }}
+        />
       </Card>
 
       {clientId && (

@@ -159,7 +159,21 @@ export default function ClientPortal() {
     )
   }
 
-  const accent      = client.accent_color || '#F47E2F'
+  const accent    = client.accent_color    || '#F47E2F'
+  const secondary = client.secondary_color || '#1B2A4A'
+  const secondaryDark = (() => {
+    const h = secondary.replace('#', '')
+    const n = parseInt(h, 16)
+    const r = Math.round(((n >> 16) & 0xff) * 0.5).toString(16).padStart(2, '0')
+    const g = Math.round(((n >>  8) & 0xff) * 0.5).toString(16).padStart(2, '0')
+    const b = Math.round(( n        & 0xff) * 0.5).toString(16).padStart(2, '0')
+    return `#${r}${g}${b}`
+  })()
+  const secondaryNavbar = (() => {
+    const h = secondaryDark.replace('#', '')
+    const n = parseInt(h, 16)
+    return `rgba(${(n>>16)&0xff},${(n>>8)&0xff},${n&0xff},0.97)`
+  })()
   const companyName = client.company_name
   const font        = `'Outfit', sans-serif`
   const fontDisplay = `'Playfair Display', serif`
@@ -224,7 +238,7 @@ export default function ClientPortal() {
       {/* ═══ NAVBAR ═══ */}
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        background: scrolled ? 'rgba(13,27,42,0.97)' : 'transparent',
+        background: scrolled ? secondaryNavbar : 'transparent',
         backdropFilter: scrolled ? 'blur(12px)' : 'none',
         borderBottom: scrolled ? '1px solid rgba(255,255,255,0.08)' : 'none',
         transition: 'all 0.35s', padding: mobile ? '12px 20px' : '14px 48px',
@@ -260,7 +274,7 @@ export default function ClientPortal() {
       <header style={{
         position: 'relative', minHeight: mobile ? 'auto' : '100vh',
         display: 'flex', alignItems: 'center',
-        background: 'linear-gradient(135deg, #0D1B2A 0%, #1B2A4A 50%, #0D1B2A 100%)',
+        background: `linear-gradient(135deg, ${secondaryDark} 0%, ${secondary} 50%, ${secondaryDark} 100%)`,
         overflow: 'hidden', paddingTop: mobile ? 100 : 0, paddingBottom: mobile ? 60 : 0,
       }}>
         {client.hero_image_url && (
@@ -276,7 +290,7 @@ export default function ClientPortal() {
         }} />
         <div style={{
           position: 'absolute', bottom: '-15%', left: '-5%', width: 400, height: 400,
-          borderRadius: '50%', background: 'radial-gradient(circle, rgba(91,127,165,0.12), transparent 70%)',
+          borderRadius: '50%', background: `radial-gradient(circle, ${secondary}1E, transparent 70%)`,
         }} />
 
         <div style={{
@@ -346,7 +360,7 @@ export default function ClientPortal() {
               </button>
               <button className="tab-btn" onClick={() => setActiveTab('login')}
                 style={{ flex: 1, borderRadius: 0,
-                  background: activeTab === 'login' ? '#1B2A4A' : 'rgba(255,255,255,0.04)',
+                  background: activeTab === 'login' ? secondary : 'rgba(255,255,255,0.04)',
                   color: activeTab === 'login' ? '#fff' : 'rgba(255,255,255,0.5)' }}>
                 Já sou Fornecedor
               </button>
@@ -462,7 +476,7 @@ export default function ClientPortal() {
       </Section>
 
       {/* ═══ COMO FUNCIONA ═══ */}
-      <Section id="processo" dark>
+      <Section id="processo" dark style={{ background: secondaryDark }}>
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
           <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: accent, textTransform: 'uppercase' }}>
             Como funciona
@@ -529,7 +543,7 @@ export default function ClientPortal() {
                 ))}
               </ul>
               <button className="btn-primary" onClick={() => document.getElementById('cadastro')?.scrollIntoView({ behavior: 'smooth' })}
-                style={{ width: '100%', background: plan.popular ? accent : '#1B2A4A' }}>
+                style={{ width: '100%', background: plan.popular ? accent : secondary }}>
                 {plan.cta}
               </button>
             </div>
@@ -546,7 +560,7 @@ export default function ClientPortal() {
         <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row',
           alignItems: 'center', justifyContent: 'center', gap: mobile ? 20 : 48, textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: '#0D1B2A',
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: secondaryDark,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: accent, fontWeight: 800, fontSize: 13, fontFamily: font }}>
               eQ
@@ -570,7 +584,7 @@ export default function ClientPortal() {
       </Section>
 
       {/* ═══ CTA FINAL ═══ */}
-      <Section dark style={{ background: 'linear-gradient(135deg, #0D1B2A, #1B2A4A)', textAlign: 'center', padding: '80px 24px' }}>
+      <Section dark style={{ background: `linear-gradient(135deg, ${secondaryDark}, ${secondary})`, textAlign: 'center', padding: '80px 24px' }}>
         <h2 style={{ fontFamily: fontDisplay, fontSize: mobile ? 28 : 40,
           fontWeight: 700, color: '#fff', marginBottom: 16 }}>
           Pronto para ser fornecedor da {companyName}?
@@ -597,7 +611,7 @@ export default function ClientPortal() {
       </Section>
 
       {/* ═══ FOOTER ═══ */}
-      <footer style={{ background: '#060D16', padding: '40px 24px', textAlign: 'center',
+      <footer style={{ background: secondaryDark, padding: '40px 24px', textAlign: 'center',
         borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto' }}>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap', marginBottom: 20 }}>

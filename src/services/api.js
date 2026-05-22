@@ -440,8 +440,17 @@ export const adminApi = {
     if (sealsErr) throw new Error(sealsErr.message)
     if (!sealsData?.length) return []
 
+    // Deduplicar por supplier_id — um fornecedor pode ter vários selos PENDING (um por cliente)
+    const _seen = new Set()
+    const deduped = sealsData.filter(s => {
+      if (!s.supplier_id || _seen.has(s.supplier_id)) return false
+      _seen.add(s.supplier_id)
+      return true
+    })
+    if (!deduped.length) return []
+
     // Passo 2: documentos separado (não existe FK seals→documents, só suppliers→documents)
-    const supplierIds = sealsData.map(s => s.supplier_id).filter(Boolean)
+    const supplierIds = deduped.map(s => s.supplier_id)
     const { data: docsData } = await supabase
       .from('documents')
       .select('supplier_id, type, label, status')
@@ -453,7 +462,7 @@ export const adminApi = {
       return acc
     }, {})
 
-    return sealsData.map(s => ({
+    return deduped.map(s => ({
       id:          s.suppliers?.id,
       razaoSocial: s.suppliers?.razao_social,
       cnpj:        s.suppliers?.cnpj,

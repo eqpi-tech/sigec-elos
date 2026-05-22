@@ -22,7 +22,7 @@ const hint = { fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', ma
 
 const EMPTY_LP = {
   slug:'', company_name:'', logo_url:'', hero_image_url:'',
-  accent_color:'#F47E2F', description:'', compliance_url:'',
+  accent_color:'#F47E2F', secondary_color:'#1B2A4A', description:'', compliance_url:'',
   website_url:'', linkedin_url:'', contact_email:'', phone:'',
   badges:[], is_active:true,
 }
@@ -265,9 +265,10 @@ export default function ClientSettings() {
                 )}
               </div>
 
-              {/* Accent color */}
+              {/* Primary color */}
               <div>
-                <FieldLabel>Cor de Destaque</FieldLabel>
+                <FieldLabel>Cor Principal</FieldLabel>
+                <div style={hint}>Botões, destaques e ícones — padrão: laranja</div>
                 <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                   <input type="color" value={lpForm.accent_color || '#F47E2F'}
                     onChange={e => setLpForm(prev => ({ ...prev, accent_color: e.target.value }))}
@@ -275,6 +276,21 @@ export default function ClientSettings() {
                   <input {...lpF('accent_color')} placeholder="#F47E2F"
                     style={{ ...inp, width:110, flex:'none' }}/>
                   <div style={{ width:38, height:38, borderRadius:8, background: lpForm.accent_color||'#F47E2F',
+                    border:'1px solid #e2e4ef', flexShrink:0 }}/>
+                </div>
+              </div>
+
+              {/* Secondary color */}
+              <div>
+                <FieldLabel>Cor Secundária</FieldLabel>
+                <div style={hint}>Fundos escuros e seções — padrão: azul</div>
+                <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                  <input type="color" value={lpForm.secondary_color || '#1B2A4A'}
+                    onChange={e => setLpForm(prev => ({ ...prev, secondary_color: e.target.value }))}
+                    style={{ width:44, height:38, border:'1px solid #e2e4ef', borderRadius:8, cursor:'pointer', padding:2, flexShrink:0 }}/>
+                  <input {...lpF('secondary_color')} placeholder="#1B2A4A"
+                    style={{ ...inp, width:110, flex:'none' }}/>
+                  <div style={{ width:38, height:38, borderRadius:8, background: lpForm.secondary_color||'#1B2A4A',
                     border:'1px solid #e2e4ef', flexShrink:0 }}/>
                 </div>
               </div>
