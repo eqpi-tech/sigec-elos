@@ -29,6 +29,7 @@ import BackofficeProcessSearch  from './pages/backoffice/ProcessSearch.jsx'
 import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
 import BackofficeUsers               from './pages/backoffice/Users.jsx'
 import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlows.jsx'
+import BackofficeLandingPages        from './pages/backoffice/LandingPages.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import ClientPortal  from './pages/ClientPortal.jsx'
@@ -99,6 +100,7 @@ function AppRoutes() {
       <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
       <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']}><BackofficeUsers/></Protect>} />
       <Route path="/backoffice/fluxo-documentos" element={<Protect roles={['ADMIN']}><BackofficeClientDocumentFlows/></Protect>} />
+      <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']}><BackofficeLandingPages/></Protect>} />
 
       {/* Cliente (HOC) */}
       <Route path="/cliente"                          element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />

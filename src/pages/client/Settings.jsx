@@ -1,13 +1,46 @@
 import { useState, useEffect } from 'react'
 import { clientApi } from '../../services/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
+function FieldLabel({ children, required }) {
+  return (
+    <div style={{ fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
+      {children}{required && <span style={{ color:'#ef4444', marginLeft:2 }}>*</span>}
+    </div>
+  )
+}
+
+const inp = {
+  width:'100%', padding:'10px 14px', borderRadius:10,
+  border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif',
+  fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff',
+}
+
+const EMPTY_LP = {
+  slug:'', company_name:'', logo_url:'', hero_image_url:'',
+  accent_color:'#F47E2F', description:'', compliance_url:'',
+  website_url:'', linkedin_url:'', contact_email:'',
+  badges:[], is_active:true,
+}
+
 export default function ClientSettings() {
+  const { user } = useAuth()
+
+  // ── Terms ──
   const [terms,    setTerms]    = useState('')
   const [original, setOriginal] = useState('')
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
+
+  // ── Landing page ──
+  const [lp,         setLp]         = useState(null)
+  const [lpForm,     setLpForm]     = useState(null)
+  const [lpLoading,  setLpLoading]  = useState(true)
+  const [lpSaving,   setLpSaving]   = useState(false)
+  const [lpSaved,    setLpSaved]    = useState(false)
+  const [badgeInput, setBadgeInput] = useState('')
 
   useEffect(() => {
     clientApi.getTerms()
@@ -15,35 +48,69 @@ export default function ClientSettings() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSave = async () => {
-    setSaving(true)
-    setSaved(false)
+  useEffect(() => {
+    if (!user?.clientId) { setLpLoading(false); return }
+    clientApi.getLandingPage(user.clientId)
+      .then(data => {
+        if (data) { setLp(data); setLpForm({ ...data }) }
+        else       setLpForm({ ...EMPTY_LP })
+      })
+      .finally(() => setLpLoading(false))
+  }, [user?.clientId])
+
+  const handleSaveTerms = async () => {
+    setSaving(true); setSaved(false)
     try {
       await clientApi.saveTerms(terms)
-      setOriginal(terms)
-      setSaved(true)
+      setOriginal(terms); setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch(e) { alert('Erro ao salvar: ' + e.message) }
     setSaving(false)
   }
 
-  const handleReset = () => {
+  const handleResetTerms = () => {
     if (!confirm('Restaurar para os termos padrão SIGEC-ELOS? Seus termos personalizados serão removidos.')) return
     setTerms('')
   }
 
+  const handleSaveLp = async () => {
+    if (!lpForm?.slug?.trim())         { alert('O slug é obrigatório.'); return }
+    if (!lpForm?.company_name?.trim()) { alert('O nome da empresa é obrigatório.'); return }
+    setLpSaving(true); setLpSaved(false)
+    try {
+      const result = await clientApi.saveLandingPage(user.clientId, lpForm)
+      setLp(result); setLpForm({ ...result })
+      setLpSaved(true); setTimeout(() => setLpSaved(false), 3000)
+    } catch(e) { alert('Erro ao salvar portal: ' + e.message) }
+    setLpSaving(false)
+  }
+
+  const lpF = (key) => ({
+    value: lpForm?.[key] ?? '',
+    onChange: e => setLpForm(prev => ({ ...prev, [key]: e.target.value })),
+  })
+
+  const addBadge = () => {
+    const t = badgeInput.trim()
+    if (t && !(lpForm.badges || []).includes(t))
+      setLpForm(prev => ({ ...prev, badges: [...(prev.badges || []), t] }))
+    setBadgeInput('')
+  }
+
   const isDirty = terms !== original
 
-  if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
+  if (loading) return (
+    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}>
+      <Spinner size={48}/>
+    </div>
+  )
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:900, margin:'0 auto' }}>
-      <PageHeader
-        title="Configurações"
-        subtitle="Personalize a experiência para seus fornecedores"
-      />
+      <PageHeader title="Configurações" subtitle="Personalize a experiência para seus fornecedores"/>
 
-      <Card style={{ borderRadius:16, padding:'28px 32px' }}>
+      {/* ── Termos de Uso ── */}
+      <Card style={{ borderRadius:16, padding:'28px 32px', marginBottom:24 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
           <div>
             <SectionTitle>Termos de Uso Personalizados</SectionTitle>
@@ -51,48 +118,195 @@ export default function ClientSettings() {
               Seu fornecedor verá estes termos durante o onboarding. Deixe em branco para usar os termos padrão do SIGEC-ELOS.
             </div>
           </div>
-          {!terms && (
-            <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', background:'#f0f0f0', borderRadius:20, padding:'4px 10px', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
-              Usando termos padrão
-            </div>
-          )}
-          {terms && (
-            <div style={{ fontSize:11, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.1)', borderRadius:20, padding:'4px 10px', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
-              Termos personalizados ativos
-            </div>
-          )}
+          {!terms
+            ? <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', background:'#f0f0f0', borderRadius:20, padding:'4px 10px', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>Usando termos padrão</div>
+            : <div style={{ fontSize:11, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.1)', borderRadius:20, padding:'4px 10px', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>Termos personalizados ativos</div>
+          }
         </div>
-
-        {/* Info banner */}
         <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.15)', borderRadius:10, padding:'10px 14px', marginBottom:16, fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1a1c5e' }}>
           <strong>Dica:</strong> Inclua cláusulas específicas do seu processo de homologação, prazos, responsabilidades e requisitos legais. Novos convites passarão a exibir estes termos automaticamente.
         </div>
-
-        <textarea
-          value={terms}
-          onChange={e => setTerms(e.target.value)}
+        <textarea value={terms} onChange={e => setTerms(e.target.value)}
           placeholder="Cole aqui o texto dos seus Termos de Uso personalizados...&#10;&#10;Ex: Termos e Condições de Homologação de Fornecedores&#10;&#10;1. O fornecedor declara que as informações prestadas são verdadeiras...&#10;2. ..."
           rows={20}
-          style={{ width:'100%', padding:'14px 16px', borderRadius:12, border:'1px solid #e2e4ef', fontFamily:'DM Mono,monospace,DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', resize:'vertical', lineHeight:1.6, boxSizing:'border-box', outline:'none' }}
-        />
-
+          style={{ width:'100%', padding:'14px 16px', borderRadius:12, border:'1px solid #e2e4ef', fontFamily:'DM Mono,monospace,DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', resize:'vertical', lineHeight:1.6, boxSizing:'border-box', outline:'none' }}/>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:16 }}>
-          <button onClick={handleReset}
+          <button onClick={handleResetTerms}
             style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:13, fontFamily:'DM Sans,sans-serif', textDecoration:'underline', padding:0 }}>
             Restaurar termos padrão
           </button>
-
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            {saved && (
-              <span style={{ color:'#22c55e', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
-                ✓ Salvo com sucesso
-              </span>
-            )}
-            <Button variant="primary" disabled={saving || !isDirty} onClick={handleSave}>
+            {saved && <span style={{ color:'#22c55e', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>✓ Salvo com sucesso</span>}
+            <Button variant="primary" disabled={saving || !isDirty} onClick={handleSaveTerms}>
               {saving ? '⏳ Salvando...' : 'Salvar Termos'}
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* ── Portal de Fornecedores ── */}
+      <Card style={{ borderRadius:16, padding:'28px 32px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+          <div>
+            <SectionTitle>Portal de Fornecedores</SectionTitle>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:4, maxWidth:520 }}>
+              Configure sua landing page pública. Fornecedores que se cadastrarem pelo portal serão automaticamente vinculados à sua conta.
+            </div>
+          </div>
+          {lp && (
+            <a href={`/portal/${lp.slug}`} target="_blank" rel="noreferrer"
+              style={{ fontSize:13, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap', flexShrink:0, textDecoration:'none' }}>
+              Visualizar portal ↗
+            </a>
+          )}
+        </div>
+
+        {lpLoading ? (
+          <div style={{ display:'flex', justifyContent:'center', padding:'30px' }}><Spinner size={36}/></div>
+        ) : lpForm && (
+          <>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px 24px' }}>
+
+              {/* Slug */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <FieldLabel required>URL do Portal (slug)</FieldLabel>
+                <div style={{ display:'flex', alignItems:'center' }}>
+                  <span style={{ padding:'10px 12px', background:'#f4f5f9', border:'1px solid #e2e4ef', borderRight:'none',
+                    borderRadius:'10px 0 0 10px', fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap', flexShrink:0 }}>
+                    /portal/
+                  </span>
+                  <input {...lpF('slug')} placeholder="meu-portal" disabled={!!lp}
+                    style={{ ...inp, borderRadius:'0 10px 10px 0', background: lp?'#f9f9f9':'#fff', color: lp?'#9B9B9B':'#1a1c5e' }}/>
+                </div>
+                {!!lp && <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>O slug não pode ser alterado após a criação.</div>}
+              </div>
+
+              {/* Company name */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <FieldLabel required>Nome da Empresa</FieldLabel>
+                <input {...lpF('company_name')} placeholder="Ex: Kinross Brasil Mineração" style={inp}/>
+              </div>
+
+              {/* Logo */}
+              <div>
+                <FieldLabel>URL do Logo</FieldLabel>
+                <input {...lpF('logo_url')} placeholder="https://..." style={inp}/>
+                {lpForm.logo_url && (
+                  <img src={lpForm.logo_url} alt=""
+                    style={{ marginTop:8, height:36, objectFit:'contain', maxWidth:'100%', border:'1px solid #e2e4ef', borderRadius:8, padding:4, display:'block' }}
+                    onError={e => e.target.style.display='none'}/>
+                )}
+              </div>
+
+              {/* Hero image */}
+              <div>
+                <FieldLabel>URL da Imagem de Capa</FieldLabel>
+                <input {...lpF('hero_image_url')} placeholder="https://..." style={inp}/>
+                {lpForm.hero_image_url && (
+                  <img src={lpForm.hero_image_url} alt=""
+                    style={{ marginTop:8, height:36, objectFit:'cover', width:'100%', border:'1px solid #e2e4ef', borderRadius:8, display:'block' }}
+                    onError={e => e.target.style.display='none'}/>
+                )}
+              </div>
+
+              {/* Accent color */}
+              <div>
+                <FieldLabel>Cor de Destaque</FieldLabel>
+                <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                  <input type="color" value={lpForm.accent_color || '#F47E2F'}
+                    onChange={e => setLpForm(prev => ({ ...prev, accent_color: e.target.value }))}
+                    style={{ width:44, height:38, border:'1px solid #e2e4ef', borderRadius:8, cursor:'pointer', padding:2, flexShrink:0 }}/>
+                  <input {...lpF('accent_color')} placeholder="#F47E2F"
+                    style={{ ...inp, width:110, flex:'none' }}/>
+                  <div style={{ width:38, height:38, borderRadius:8, background: lpForm.accent_color||'#F47E2F', border:'1px solid #e2e4ef', flexShrink:0 }}/>
+                </div>
+              </div>
+
+              {/* Contact email */}
+              <div>
+                <FieldLabel>E-mail de Contato</FieldLabel>
+                <input {...lpF('contact_email')} type="email" placeholder="contato@empresa.com.br" style={inp}/>
+              </div>
+
+              {/* Website */}
+              <div>
+                <FieldLabel>Website</FieldLabel>
+                <input {...lpF('website_url')} placeholder="https://empresa.com.br" style={inp}/>
+              </div>
+
+              {/* LinkedIn */}
+              <div>
+                <FieldLabel>LinkedIn</FieldLabel>
+                <input {...lpF('linkedin_url')} placeholder="https://linkedin.com/company/..." style={inp}/>
+              </div>
+
+              {/* Compliance */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <FieldLabel>URL do Portal de Compliance</FieldLabel>
+                <input {...lpF('compliance_url')} placeholder="https://..." style={inp}/>
+              </div>
+
+              {/* Description */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <FieldLabel>Descrição da Empresa</FieldLabel>
+                <textarea value={lpForm.description || ''}
+                  onChange={e => setLpForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows={4} placeholder="Apresentação da empresa para os fornecedores..."
+                  style={{ ...inp, resize:'vertical' }}/>
+              </div>
+
+              {/* Badges */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <FieldLabel>Selos e Certificações</FieldLabel>
+                {(lpForm.badges || []).length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }}>
+                    {lpForm.badges.map(b => (
+                      <span key={b} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(46,49,146,.08)',
+                        color:'#2E3192', padding:'4px 10px 4px 12px', borderRadius:20, fontSize:12, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                        {b}
+                        <button onClick={() => setLpForm(prev => ({ ...prev, badges: prev.badges.filter(x => x !== b) }))}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', padding:0, fontSize:16, lineHeight:1, display:'flex', alignItems:'center' }}>
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:8 }}>
+                  <input value={badgeInput}
+                    onChange={e => setBadgeInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addBadge() } }}
+                    placeholder="Ex: ISO 9001, GPTW, FSC..."
+                    style={{ ...inp, flex:1 }}/>
+                  <Button variant="neutral" size="sm" onClick={addBadge}>+ Adicionar</Button>
+                </div>
+              </div>
+
+              {/* is_active toggle */}
+              <div style={{ gridColumn:'1/-1' }}>
+                <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none' }}>
+                  <input type="checkbox"
+                    checked={lpForm.is_active ?? true}
+                    onChange={e => setLpForm(prev => ({ ...prev, is_active: e.target.checked }))}
+                    style={{ width:18, height:18, cursor:'pointer' }}/>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>Portal ativo</div>
+                    <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+                      Quando inativo, o portal não aparece publicamente para novos cadastros.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12, marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
+              {lpSaved && <span style={{ fontSize:12, fontWeight:700, color:'#22c55e', fontFamily:'Montserrat,sans-serif' }}>✓ Salvo com sucesso</span>}
+              <Button variant="primary" disabled={lpSaving} onClick={handleSaveLp}>
+                {lpSaving ? '⏳ Salvando...' : lp ? 'Salvar Portal' : 'Criar Portal'}
+              </Button>
+            </div>
+          </>
+        )}
       </Card>
     </div>
   )

@@ -32,6 +32,7 @@ const NAVS = {
     { path:'/backoffice/usuarios',           label:'Usuários',        icon:'👥' },
     { path:'/backoffice/criar-usuario',     label:'+ Usuário',       icon:'👤' },
     { path:'/backoffice/fluxo-documentos',  label:'Fluxo Docs',      icon:'📂' },
+    { path:'/backoffice/landing-pages',     label:'Portais LP',      icon:'🌐' },
   ],
 }
 const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice' }

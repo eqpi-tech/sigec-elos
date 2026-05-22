@@ -704,6 +704,43 @@ export const adminApi = {
     }
   },
 
+  listClients: async () => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id, razao_social, nome_fantasia')
+      .order('razao_social')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  getClientLandingPage: async (clientId) => {
+    const { data } = await supabase
+      .from('client_landing_pages')
+      .select('*')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    return data || null
+  },
+
+  saveClientLandingPage: async (clientId, fields) => {
+    const { id, ...rest } = fields
+    if (id) {
+      const { data, error } = await supabase
+        .from('client_landing_pages')
+        .update(rest)
+        .eq('id', id)
+        .select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+    const { data, error } = await supabase
+      .from('client_landing_pages')
+      .insert({ client_id: clientId, ...rest })
+      .select().single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+
   createUser: async ({ email, role, name, password }) => {
     const res = await fetch('/.netlify/functions/admin-create-user', {
       method: 'POST',
@@ -1013,6 +1050,34 @@ export const clientApi = {
     const json = await res.json()
     if (!res.ok) throw new Error(json.error)
     return json
+  },
+
+  getLandingPage: async (clientId) => {
+    const { data } = await supabase
+      .from('client_landing_pages')
+      .select('*')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    return data || null
+  },
+
+  saveLandingPage: async (clientId, fields) => {
+    const { id, ...rest } = fields
+    if (id) {
+      const { data, error } = await supabase
+        .from('client_landing_pages')
+        .update(rest)
+        .eq('id', id)
+        .select().single()
+      if (error) throw new Error(error.message)
+      return data
+    }
+    const { data, error } = await supabase
+      .from('client_landing_pages')
+      .insert({ client_id: clientId, ...rest })
+      .select().single()
+    if (error) throw new Error(error.message)
+    return data
   },
 }
 
