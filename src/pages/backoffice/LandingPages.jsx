@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { adminApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 function slugify(str) {
@@ -14,7 +15,7 @@ function slugify(str) {
 const EMPTY_FORM = {
   slug: '', company_name: '', logo_url: '', hero_image_url: '',
   accent_color: '#F47E2F', description: '', compliance_url: '',
-  website_url: '', linkedin_url: '', contact_email: '',
+  website_url: '', linkedin_url: '', contact_email: '', phone: '',
   badges: [], is_active: true,
 }
 
@@ -32,6 +33,8 @@ const inp = {
   fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff',
 }
 
+const hint = { fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:6, lineHeight:1.5 }
+
 export default function BackofficeLandingPages() {
   const [clients,    setClients]    = useState([])
   const [selClient,  setSelClient]  = useState('')
@@ -42,6 +45,10 @@ export default function BackofficeLandingPages() {
   const [saving,     setSaving]     = useState(false)
   const [saved,      setSaved]      = useState(false)
   const [badgeInput, setBadgeInput] = useState('')
+  const [uploadingField, setUploadingField] = useState(null) // 'logo' | 'hero' | null
+
+  const logoRef = useRef(null)
+  const heroRef = useRef(null)
 
   useEffect(() => {
     adminApi.listClients().then(setClients).finally(() => setLoading(false))
@@ -67,6 +74,23 @@ export default function BackofficeLandingPages() {
     value: form?.[key] ?? '',
     onChange: e => setForm(prev => ({ ...prev, [key]: e.target.value })),
   })
+
+  const uploadImage = async (file, formKey) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const allowed = ['jpg','jpeg','png','webp','svg']
+    if (!allowed.includes(ext)) { alert('Formato não suportado. Use JPG, PNG, WEBP ou SVG.'); return }
+    if (file.size > 5 * 1024 * 1024) { alert('Arquivo muito grande. Tamanho máximo: 5 MB.'); return }
+    const fieldTag = formKey === 'logo_url' ? 'logo' : 'hero'
+    setUploadingField(fieldTag)
+    try {
+      const path = `${selClient}/${fieldTag}-${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('client-lp').upload(path, file, { upsert: true })
+      if (error) throw new Error(error.message)
+      const { data } = supabase.storage.from('client-lp').getPublicUrl(path)
+      setForm(prev => ({ ...prev, [formKey]: data.publicUrl }))
+    } catch (e) { alert('Erro no upload: ' + e.message) }
+    setUploadingField(null)
+  }
 
   const handleSave = async () => {
     if (!form?.slug?.trim())         { alert('O slug é obrigatório.'); return }
@@ -98,7 +122,7 @@ export default function BackofficeLandingPages() {
       <PageHeader title="Portais de Fornecedores"
         subtitle="Landing pages públicas personalizáveis por cliente"/>
 
-      {/* Seletor de cliente */}
+      {/* Seletor */}
       <Card style={{ borderRadius:16, padding:'22px 28px', marginBottom:24 }}>
         <SectionTitle style={{ marginBottom:10 }}>Selecionar Cliente</SectionTitle>
         <select value={selClient} onChange={e => setSelClient(e.target.value)}
@@ -115,7 +139,8 @@ export default function BackofficeLandingPages() {
               style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
               /portal/{lp.slug} ↗
             </a>
-            <span style={{ fontSize:11, fontWeight:700, color: lp.is_active ? '#22c55e' : '#9B9B9B',
+            <span style={{ fontSize:11, fontWeight:700,
+              color: lp.is_active ? '#22c55e' : '#9B9B9B',
               background: lp.is_active ? 'rgba(34,197,94,.1)' : '#f0f0f0',
               padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
               {lp.is_active ? 'Ativo' : 'Inativo'}
@@ -147,22 +172,20 @@ export default function BackofficeLandingPages() {
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px 24px' }}>
+
             {/* Slug */}
             <div style={{ gridColumn:'1/-1' }}>
               <FieldLabel required>URL do Portal (slug)</FieldLabel>
               <div style={{ display:'flex', alignItems:'center' }}>
                 <span style={{ padding:'10px 12px', background:'#f4f5f9', border:'1px solid #e2e4ef', borderRight:'none',
-                  borderRadius:'10px 0 0 10px', fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap', flexShrink:0 }}>
+                  borderRadius:'10px 0 0 10px', fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif',
+                  whiteSpace:'nowrap', flexShrink:0 }}>
                   /portal/
                 </span>
                 <input {...f('slug')} placeholder="meu-cliente" disabled={!!lp}
                   style={{ ...inp, borderRadius:'0 10px 10px 0', background: lp?'#f9f9f9':'#fff', color: lp?'#9B9B9B':'#1a1c5e' }}/>
               </div>
-              {!!lp && (
-                <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                  O slug não pode ser alterado após a criação.
-                </div>
-              )}
+              {!!lp && <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>O slug não pode ser alterado após a criação.</div>}
             </div>
 
             {/* Company name */}
@@ -173,23 +196,49 @@ export default function BackofficeLandingPages() {
 
             {/* Logo */}
             <div>
-              <FieldLabel>URL do Logo</FieldLabel>
+              <FieldLabel>Logo da Empresa</FieldLabel>
+              <div style={hint}>PNG ou SVG com fundo transparente · máx. 5 MB · dimensão ideal: 240 × 80 px</div>
               <input {...f('logo_url')} placeholder="https://..." style={inp}/>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>ou</span>
+                <button type="button" disabled={uploadingField === 'logo'} onClick={() => logoRef.current?.click()}
+                  style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:8,
+                    padding:'5px 12px', fontSize:12, color: uploadingField==='logo'?'#9B9B9B':'#2E3192',
+                    cursor: uploadingField==='logo'?'not-allowed':'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                  {uploadingField === 'logo' ? '⏳ Enviando...' : '⬆ Fazer upload'}
+                </button>
+                <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                  style={{ display:'none' }}
+                  onChange={e => { const fl = e.target.files?.[0]; if (fl) uploadImage(fl, 'logo_url'); e.target.value = '' }}/>
+              </div>
               {form.logo_url && (
-                <img src={form.logo_url} alt=""
-                  style={{ marginTop:8, height:40, objectFit:'contain', maxWidth:'100%', border:'1px solid #e2e4ef', borderRadius:8, padding:4, display:'block' }}
-                  onError={e => e.target.style.display='none'}/>
+                <img src={form.logo_url} alt="" onError={e => e.target.style.display='none'}
+                  style={{ marginTop:8, height:40, objectFit:'contain', maxWidth:'100%',
+                    border:'1px solid #e2e4ef', borderRadius:8, padding:4, display:'block' }}/>
               )}
             </div>
 
-            {/* Hero image */}
+            {/* Hero */}
             <div>
-              <FieldLabel>URL da Imagem de Capa</FieldLabel>
+              <FieldLabel>Imagem de Capa (hero)</FieldLabel>
+              <div style={hint}>JPG ou PNG · máx. 5 MB · 1440 × 600 px recomendado · aparece com baixa opacidade no fundo</div>
               <input {...f('hero_image_url')} placeholder="https://..." style={inp}/>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>ou</span>
+                <button type="button" disabled={uploadingField === 'hero'} onClick={() => heroRef.current?.click()}
+                  style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:8,
+                    padding:'5px 12px', fontSize:12, color: uploadingField==='hero'?'#9B9B9B':'#2E3192',
+                    cursor: uploadingField==='hero'?'not-allowed':'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                  {uploadingField === 'hero' ? '⏳ Enviando...' : '⬆ Fazer upload'}
+                </button>
+                <input ref={heroRef} type="file" accept="image/jpeg,image/png,image/webp"
+                  style={{ display:'none' }}
+                  onChange={e => { const fl = e.target.files?.[0]; if (fl) uploadImage(fl, 'hero_image_url'); e.target.value = '' }}/>
+              </div>
               {form.hero_image_url && (
-                <img src={form.hero_image_url} alt=""
-                  style={{ marginTop:8, height:40, objectFit:'cover', width:'100%', border:'1px solid #e2e4ef', borderRadius:8, display:'block' }}
-                  onError={e => e.target.style.display='none'}/>
+                <img src={form.hero_image_url} alt="" onError={e => e.target.style.display='none'}
+                  style={{ marginTop:8, height:40, objectFit:'cover', width:'100%',
+                    border:'1px solid #e2e4ef', borderRadius:8, display:'block' }}/>
               )}
             </div>
 
@@ -202,8 +251,15 @@ export default function BackofficeLandingPages() {
                   style={{ width:44, height:38, border:'1px solid #e2e4ef', borderRadius:8, cursor:'pointer', padding:2, flexShrink:0 }}/>
                 <input {...f('accent_color')} placeholder="#F47E2F"
                   style={{ ...inp, width:110, flex:'none' }}/>
-                <div style={{ width:38, height:38, borderRadius:8, background: form.accent_color||'#F47E2F', border:'1px solid #e2e4ef', flexShrink:0 }}/>
+                <div style={{ width:38, height:38, borderRadius:8, background: form.accent_color||'#F47E2F',
+                  border:'1px solid #e2e4ef', flexShrink:0 }}/>
               </div>
+            </div>
+
+            {/* Phone */}
+            <div>
+              <FieldLabel>Telefone da Empresa</FieldLabel>
+              <input {...f('phone')} placeholder="(11) 3000-0000" style={inp}/>
             </div>
 
             {/* Contact email */}
@@ -245,11 +301,14 @@ export default function BackofficeLandingPages() {
               {(form.badges || []).length > 0 && (
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }}>
                   {form.badges.map(b => (
-                    <span key={b} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(46,49,146,.08)',
-                      color:'#2E3192', padding:'4px 10px 4px 12px', borderRadius:20, fontSize:12, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                    <span key={b} style={{ display:'inline-flex', alignItems:'center', gap:6,
+                      background:'rgba(46,49,146,.08)', color:'#2E3192',
+                      padding:'4px 10px 4px 12px', borderRadius:20,
+                      fontSize:12, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
                       {b}
                       <button onClick={() => setForm(prev => ({ ...prev, badges: prev.badges.filter(x => x !== b) }))}
-                        style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', padding:0, fontSize:16, lineHeight:1, display:'flex', alignItems:'center' }}>
+                        style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B',
+                          padding:0, fontSize:16, lineHeight:1, display:'flex', alignItems:'center' }}>
                         ×
                       </button>
                     </span>
@@ -267,8 +326,8 @@ export default function BackofficeLandingPages() {
             </div>
           </div>
 
-          {/* Footer */}
-          <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12, marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
+          <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12,
+            marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
             {saved && <span style={{ fontSize:12, fontWeight:700, color:'#22c55e', fontFamily:'Montserrat,sans-serif' }}>✓ Salvo com sucesso</span>}
             <Button variant="primary" disabled={saving} onClick={handleSave}>
               {saving ? '⏳ Salvando...' : lp ? 'Salvar Alterações' : 'Criar Portal'}

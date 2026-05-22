@@ -1012,7 +1012,7 @@ export const clientApi = {
     })
     const json = await res.json()
     if (!res.ok) throw new Error(json.error)
-    return json
+    return json.terms ?? ''
   },
 
   saveTerms: async (terms) => {

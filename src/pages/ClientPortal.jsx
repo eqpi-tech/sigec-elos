@@ -585,7 +585,12 @@ export default function ClientPortal() {
           </a>
           {client.contact_email && (
             <a href={`mailto:${client.contact_email}`} className="btn-outline" style={{ fontSize: 16, padding: '16px 40px' }}>
-              Falar com a Empresa
+              ✉ Falar por E-mail
+            </a>
+          )}
+          {client.phone && (
+            <a href={`tel:${client.phone.replace(/\D/g,'')}`} className="btn-outline" style={{ fontSize: 16, padding: '16px 40px' }}>
+              📞 {client.phone}
             </a>
           )}
         </div>
@@ -606,6 +611,18 @@ export default function ClientPortal() {
               <a href={client.linkedin_url} target="_blank" rel="noopener noreferrer"
                 style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textDecoration: 'none' }}>
                 LinkedIn
+              </a>
+            )}
+            {client.contact_email && (
+              <a href={`mailto:${client.contact_email}`}
+                style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textDecoration: 'none' }}>
+                {client.contact_email}
+              </a>
+            )}
+            {client.phone && (
+              <a href={`tel:${client.phone.replace(/\D/g,'')}`}
+                style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textDecoration: 'none' }}>
+                {client.phone}
               </a>
             )}
             <a href="https://elos.eqpitech.com.br" target="_blank" rel="noopener noreferrer"

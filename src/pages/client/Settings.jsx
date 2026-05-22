@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { clientApi } from '../../services/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 function FieldLabel({ children, required }) {
@@ -17,10 +18,12 @@ const inp = {
   fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff',
 }
 
+const hint = { fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:6, lineHeight:1.5 }
+
 const EMPTY_LP = {
   slug:'', company_name:'', logo_url:'', hero_image_url:'',
   accent_color:'#F47E2F', description:'', compliance_url:'',
-  website_url:'', linkedin_url:'', contact_email:'',
+  website_url:'', linkedin_url:'', contact_email:'', phone:'',
   badges:[], is_active:true,
 }
 
@@ -35,12 +38,16 @@ export default function ClientSettings() {
   const [saved,    setSaved]    = useState(false)
 
   // ── Landing page ──
-  const [lp,         setLp]         = useState(null)
-  const [lpForm,     setLpForm]     = useState(null)
-  const [lpLoading,  setLpLoading]  = useState(true)
-  const [lpSaving,   setLpSaving]   = useState(false)
-  const [lpSaved,    setLpSaved]    = useState(false)
-  const [badgeInput, setBadgeInput] = useState('')
+  const [lp,             setLp]             = useState(null)
+  const [lpForm,         setLpForm]         = useState(null)
+  const [lpLoading,      setLpLoading]      = useState(true)
+  const [lpSaving,       setLpSaving]       = useState(false)
+  const [lpSaved,        setLpSaved]        = useState(false)
+  const [badgeInput,     setBadgeInput]     = useState('')
+  const [uploadingField, setUploadingField] = useState(null) // 'logo' | 'hero' | null
+
+  const logoRef = useRef(null)
+  const heroRef = useRef(null)
 
   useEffect(() => {
     clientApi.getTerms()
@@ -83,6 +90,23 @@ export default function ClientSettings() {
       setLpSaved(true); setTimeout(() => setLpSaved(false), 3000)
     } catch(e) { alert('Erro ao salvar portal: ' + e.message) }
     setLpSaving(false)
+  }
+
+  const uploadImage = async (file, formKey) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const allowed = ['jpg','jpeg','png','webp','svg']
+    if (!allowed.includes(ext)) { alert('Formato não suportado. Use JPG, PNG, WEBP ou SVG.'); return }
+    if (file.size > 5 * 1024 * 1024) { alert('Arquivo muito grande. Tamanho máximo: 5 MB.'); return }
+    const fieldTag = formKey === 'logo_url' ? 'logo' : 'hero'
+    setUploadingField(fieldTag)
+    try {
+      const path = `${user.clientId}/${fieldTag}-${Date.now()}.${ext}`
+      const { error } = await supabase.storage.from('client-lp').upload(path, file, { upsert: true })
+      if (error) throw new Error(error.message)
+      const { data } = supabase.storage.from('client-lp').getPublicUrl(path)
+      setLpForm(prev => ({ ...prev, [formKey]: data.publicUrl }))
+    } catch (e) { alert('Erro no upload: ' + e.message) }
+    setUploadingField(null)
   }
 
   const lpF = (key) => ({
@@ -155,7 +179,8 @@ export default function ClientSettings() {
           </div>
           {lp && (
             <a href={`/portal/${lp.slug}`} target="_blank" rel="noreferrer"
-              style={{ fontSize:13, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap', flexShrink:0, textDecoration:'none' }}>
+              style={{ fontSize:13, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600,
+                whiteSpace:'nowrap', flexShrink:0, textDecoration:'none' }}>
               Visualizar portal ↗
             </a>
           )}
@@ -172,7 +197,8 @@ export default function ClientSettings() {
                 <FieldLabel required>URL do Portal (slug)</FieldLabel>
                 <div style={{ display:'flex', alignItems:'center' }}>
                   <span style={{ padding:'10px 12px', background:'#f4f5f9', border:'1px solid #e2e4ef', borderRight:'none',
-                    borderRadius:'10px 0 0 10px', fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap', flexShrink:0 }}>
+                    borderRadius:'10px 0 0 10px', fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif',
+                    whiteSpace:'nowrap', flexShrink:0 }}>
                     /portal/
                   </span>
                   <input {...lpF('slug')} placeholder="meu-portal" disabled={!!lp}
@@ -189,23 +215,53 @@ export default function ClientSettings() {
 
               {/* Logo */}
               <div>
-                <FieldLabel>URL do Logo</FieldLabel>
+                <FieldLabel>Logo da Empresa</FieldLabel>
+                <div style={hint}>PNG ou SVG com fundo transparente · máx. 5 MB · dimensão ideal: 240 × 80 px</div>
                 <input {...lpF('logo_url')} placeholder="https://..." style={inp}/>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                  <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>ou</span>
+                  <button type="button" disabled={uploadingField === 'logo'} onClick={() => logoRef.current?.click()}
+                    style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:8,
+                      padding:'5px 12px', fontSize:12,
+                      color: uploadingField==='logo' ? '#9B9B9B' : '#2E3192',
+                      cursor: uploadingField==='logo' ? 'not-allowed' : 'pointer',
+                      fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                    {uploadingField === 'logo' ? '⏳ Enviando...' : '⬆ Fazer upload'}
+                  </button>
+                  <input ref={logoRef} type="file" accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                    style={{ display:'none' }}
+                    onChange={e => { const fl = e.target.files?.[0]; if (fl) uploadImage(fl, 'logo_url'); e.target.value = '' }}/>
+                </div>
                 {lpForm.logo_url && (
-                  <img src={lpForm.logo_url} alt=""
-                    style={{ marginTop:8, height:36, objectFit:'contain', maxWidth:'100%', border:'1px solid #e2e4ef', borderRadius:8, padding:4, display:'block' }}
-                    onError={e => e.target.style.display='none'}/>
+                  <img src={lpForm.logo_url} alt="" onError={e => e.target.style.display='none'}
+                    style={{ marginTop:8, height:36, objectFit:'contain', maxWidth:'100%',
+                      border:'1px solid #e2e4ef', borderRadius:8, padding:4, display:'block' }}/>
                 )}
               </div>
 
-              {/* Hero image */}
+              {/* Hero */}
               <div>
-                <FieldLabel>URL da Imagem de Capa</FieldLabel>
+                <FieldLabel>Imagem de Capa (hero)</FieldLabel>
+                <div style={hint}>JPG ou PNG · máx. 5 MB · 1440 × 600 px recomendado · aparece com baixa opacidade no fundo</div>
                 <input {...lpF('hero_image_url')} placeholder="https://..." style={inp}/>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6 }}>
+                  <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>ou</span>
+                  <button type="button" disabled={uploadingField === 'hero'} onClick={() => heroRef.current?.click()}
+                    style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:8,
+                      padding:'5px 12px', fontSize:12,
+                      color: uploadingField==='hero' ? '#9B9B9B' : '#2E3192',
+                      cursor: uploadingField==='hero' ? 'not-allowed' : 'pointer',
+                      fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                    {uploadingField === 'hero' ? '⏳ Enviando...' : '⬆ Fazer upload'}
+                  </button>
+                  <input ref={heroRef} type="file" accept="image/jpeg,image/png,image/webp"
+                    style={{ display:'none' }}
+                    onChange={e => { const fl = e.target.files?.[0]; if (fl) uploadImage(fl, 'hero_image_url'); e.target.value = '' }}/>
+                </div>
                 {lpForm.hero_image_url && (
-                  <img src={lpForm.hero_image_url} alt=""
-                    style={{ marginTop:8, height:36, objectFit:'cover', width:'100%', border:'1px solid #e2e4ef', borderRadius:8, display:'block' }}
-                    onError={e => e.target.style.display='none'}/>
+                  <img src={lpForm.hero_image_url} alt="" onError={e => e.target.style.display='none'}
+                    style={{ marginTop:8, height:36, objectFit:'cover', width:'100%',
+                      border:'1px solid #e2e4ef', borderRadius:8, display:'block' }}/>
                 )}
               </div>
 
@@ -218,8 +274,15 @@ export default function ClientSettings() {
                     style={{ width:44, height:38, border:'1px solid #e2e4ef', borderRadius:8, cursor:'pointer', padding:2, flexShrink:0 }}/>
                   <input {...lpF('accent_color')} placeholder="#F47E2F"
                     style={{ ...inp, width:110, flex:'none' }}/>
-                  <div style={{ width:38, height:38, borderRadius:8, background: lpForm.accent_color||'#F47E2F', border:'1px solid #e2e4ef', flexShrink:0 }}/>
+                  <div style={{ width:38, height:38, borderRadius:8, background: lpForm.accent_color||'#F47E2F',
+                    border:'1px solid #e2e4ef', flexShrink:0 }}/>
                 </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <FieldLabel>Telefone da Empresa</FieldLabel>
+                <input {...lpF('phone')} placeholder="(11) 3000-0000" style={inp}/>
               </div>
 
               {/* Contact email */}
@@ -261,11 +324,14 @@ export default function ClientSettings() {
                 {(lpForm.badges || []).length > 0 && (
                   <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }}>
                     {lpForm.badges.map(b => (
-                      <span key={b} style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(46,49,146,.08)',
-                        color:'#2E3192', padding:'4px 10px 4px 12px', borderRadius:20, fontSize:12, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                      <span key={b} style={{ display:'inline-flex', alignItems:'center', gap:6,
+                        background:'rgba(46,49,146,.08)', color:'#2E3192',
+                        padding:'4px 10px 4px 12px', borderRadius:20,
+                        fontSize:12, fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
                         {b}
                         <button onClick={() => setLpForm(prev => ({ ...prev, badges: prev.badges.filter(x => x !== b) }))}
-                          style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', padding:0, fontSize:16, lineHeight:1, display:'flex', alignItems:'center' }}>
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B',
+                            padding:0, fontSize:16, lineHeight:1, display:'flex', alignItems:'center' }}>
                           ×
                         </button>
                       </span>
@@ -282,7 +348,7 @@ export default function ClientSettings() {
                 </div>
               </div>
 
-              {/* is_active toggle */}
+              {/* is_active */}
               <div style={{ gridColumn:'1/-1' }}>
                 <label style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer', userSelect:'none' }}>
                   <input type="checkbox"
@@ -299,7 +365,8 @@ export default function ClientSettings() {
               </div>
             </div>
 
-            <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12, marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
+            <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12,
+              marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
               {lpSaved && <span style={{ fontSize:12, fontWeight:700, color:'#22c55e', fontFamily:'Montserrat,sans-serif' }}>✓ Salvo com sucesso</span>}
               <Button variant="primary" disabled={lpSaving} onClick={handleSaveLp}>
                 {lpSaving ? '⏳ Salvando...' : lp ? 'Salvar Portal' : 'Criar Portal'}
