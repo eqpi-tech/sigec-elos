@@ -666,23 +666,33 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   getDocumentFarol: async () => {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)')
-      .not('expires_at', 'is', null)
-      .order('expires_at', { ascending: true })
-      .range(0, 99999)
-    if (error) throw new Error(error.message)
+    // 3 queries paralelas por faixa de data — o max-rows do PostgREST (1000) não é problema
+    // porque vencidos e hoje têm poucos registros, e futuro só precisa do count
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
+    const isoStart   = todayStart.toISOString()
+    const isoEnd     = todayEnd.toISOString()
 
-    const docs   = data || []
-    const today  = new Date(); today.setHours(0, 0, 0, 0)
-    const todayE = new Date(); todayE.setHours(23, 59, 59, 999)
+    const docFields = 'id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)'
+    const [vencRes, hojeRes, futuroRes] = await Promise.allSettled([
+      supabase.from('documents').select(docFields)
+        .not('expires_at', 'is', null).lt('expires_at', isoStart)
+        .order('expires_at', { ascending: true }).range(0, 4999),
+      supabase.from('documents').select(docFields)
+        .not('expires_at', 'is', null).gte('expires_at', isoStart).lte('expires_at', isoEnd)
+        .order('expires_at', { ascending: true }).range(0, 4999),
+      supabase.from('documents').select('*', { count: 'exact', head: true })
+        .not('expires_at', 'is', null).gt('expires_at', isoEnd),
+    ])
 
-    const vencidos = docs.filter(d => new Date(d.expires_at) < today)
-    const hoje     = docs.filter(d => { const dt = new Date(d.expires_at); return dt >= today && dt <= todayE })
-    const futuro   = docs.filter(d => new Date(d.expires_at) > todayE)
+    const vencidos    = vencRes.status    === 'fulfilled' ? (vencRes.value.data    || []) : []
+    const hoje        = hojeRes.status    === 'fulfilled' ? (hojeRes.value.data    || []) : []
+    const futuroCount = futuroRes.status  === 'fulfilled' ? (futuroRes.value.count || 0)  : 0
 
-    return { vencidos, hoje, futuro, all: docs }
+    // futuro como array de tamanho correto — componente usa apenas .length para contagem/gráfico
+    const futuro = new Array(futuroCount)
+
+    return { vencidos, hoje, futuro, all: [...vencidos, ...hoje] }
   },
 
   getMetrics: async () => {
