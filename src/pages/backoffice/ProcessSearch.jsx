@@ -1,8 +1,64 @@
 // Análise de Processo — busca geral de todos os fornecedores (equivale à "Análise de Processo - Pesquisa" do HOC)
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
+
+function ClientSearchCombo({ clients, value, onChange }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const selected = clients.find(c => c.id === value)
+  const filtered = useMemo(() => {
+    const lq = q.trim().toLowerCase()
+    if (!lq) return clients.slice(0, 20)
+    return clients.filter(c => (c.razao_social || '').toLowerCase().includes(lq)).slice(0, 20)
+  }, [clients, q])
+  useEffect(() => {
+    if (!open) return
+    function h(e) { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setQ('') } }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+  function select(c) { onChange(c.id); setOpen(false); setQ('') }
+  function clear(e) { e.stopPropagation(); onChange(''); setQ(''); setOpen(false) }
+  return (
+    <div ref={ref} style={{ position:'relative', minWidth:200 }}>
+      <div style={{ position:'relative' }}>
+        <input
+          value={open ? q : (selected ? selected.razao_social : '')}
+          onChange={e => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => { setOpen(true); setQ('') }}
+          placeholder="Todos os clientes"
+          style={{ width:'100%', padding:'10px 36px 10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff' }}
+        />
+        {value
+          ? <button onClick={clear} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:15, lineHeight:1 }}>✕</button>
+          : <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', color:'#9B9B9B', pointerEvents:'none' }}>▾</span>
+        }
+      </div>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:200, maxHeight:240, overflowY:'auto' }}>
+          <button onMouseDown={() => { onChange(''); setOpen(false); setQ('') }}
+            style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: !value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', display:'block' }}>
+            Todos os clientes
+          </button>
+          {filtered.map(c => (
+            <button key={c.id} onMouseDown={() => select(c)}
+              style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', display:'block' }}>
+              {c.razao_social}
+            </button>
+          ))}
+          {!q.trim() && clients.length > 20 && (
+            <div style={{ padding:'8px 14px', fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', textAlign:'center' }}>
+              {clients.length - 20} clientes adicionais — refine a busca
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado' }
 const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B'  }
@@ -59,28 +115,46 @@ export default function BackofficeProcessSearch() {
 
     const ids = suppliers.map(s => s.id)
 
-    // Busca seals + invitations (para filtro por cliente)
+    // Selos: inclui client_id para vincular fornecedor↔cliente (dados HOC)
+    // Invitations: vínculo para dados nativos SIGEC
     const [sealsRes, invitesRes] = await Promise.allSettled([
-      supabase.from('seals').select('supplier_id, level, status, score, issued_at').in('supplier_id', ids),
+      supabase.from('seals')
+        .select('supplier_id, level, status, score, issued_at, client_id, clients(razao_social)')
+        .in('supplier_id', ids)
+        .range(0, 9999),
       filterClient
-        ? supabase.from('invitations').select('supplier_id, client_id, clients(razao_social)').in('supplier_id', ids).eq('client_id', filterClient)
-        : supabase.from('invitations').select('supplier_id, client_id, clients(razao_social)').in('supplier_id', ids),
+        ? supabase.from('invitations').select('supplier_id').in('supplier_id', ids).eq('client_id', filterClient)
+        : supabase.from('invitations').select('supplier_id, clients(razao_social)').in('supplier_id', ids),
     ])
 
-    const seals    = sealsRes.status    === 'fulfilled' ? (sealsRes.value.data    || []) : []
-    const invites  = invitesRes.status  === 'fulfilled' ? (invitesRes.value.data  || []) : []
+    const seals   = sealsRes.status   === 'fulfilled' ? (sealsRes.value.data   || []) : []
+    const invites = invitesRes.status === 'fulfilled' ? (invitesRes.value.data || []) : []
 
-    const sealMap   = seals.reduce((acc, s)  => { acc[s.supplier_id]  = s; return acc }, {})
-    const clientMap = invites.reduce((acc, i) => {
-      if (!acc[i.supplier_id]) acc[i.supplier_id] = []
-      const name = i.clients?.razao_social
-      if (name && !acc[i.supplier_id].includes(name)) acc[i.supplier_id].push(name)
-      return acc
-    }, {})
+    // Melhor selo por fornecedor: ACTIVE prevalece sobre PENDING/SUSPENDED
+    const sealMap = {}
+    seals.forEach(s => {
+      const sid = s.supplier_id
+      if (!sealMap[sid] || (s.status === 'ACTIVE' && sealMap[sid].status !== 'ACTIVE')) {
+        sealMap[sid] = s
+      }
+    })
 
-    // Se filtro por cliente ativo: só retorna suppliers que têm convite desse cliente
+    // Nomes de cliente por fornecedor: fonte primária = seals.client_id (HOC) + invitations (SIGEC)
+    const clientMap = {}
+    const addName = (sid, name) => {
+      if (!name) return
+      if (!clientMap[sid]) clientMap[sid] = []
+      if (!clientMap[sid].includes(name)) clientMap[sid].push(name)
+    }
+    seals.forEach(s => addName(s.supplier_id, s.clients?.razao_social))
+    if (!filterClient) invites.forEach(i => addName(i.supplier_id, i.clients?.razao_social))
+
+    // Filtro por cliente: union de seals.client_id (HOC) + invitations.client_id (SIGEC)
     const clientSupplierSet = filterClient
-      ? new Set(invites.map(i => i.supplier_id))
+      ? new Set([
+          ...seals.filter(s => s.client_id === filterClient).map(s => s.supplier_id),
+          ...invites.map(i => i.supplier_id),
+        ])
       : null
 
     let enriched = suppliers
@@ -121,13 +195,7 @@ export default function BackofficeProcessSearch() {
             style={{ flex:1, minWidth:220, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', outline:'none' }}
           />
           {clients.length > 0 && (
-            <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
-              style={{ padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', background:'#fff', cursor:'pointer' }}>
-              <option value="">Todos os clientes</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.razao_social}</option>
-              ))}
-            </select>
+            <ClientSearchCombo clients={clients} value={filterClient} onChange={setFilterClient}/>
           )}
           <Button variant="primary" onClick={handleSearch}>Pesquisar</Button>
         </div>

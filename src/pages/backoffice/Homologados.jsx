@@ -22,16 +22,28 @@ export function BackofficeHomologados() {
       .from('seals')
       .select('id, supplier_id, level, status, score, issued_at, suspended_reason, suppliers!inner(*)')
       .in('status', ['ACTIVE', 'SUSPENDED'])
-      .order('issued_at', { ascending: false })
+      .range(0, 9999)  // bypass limite padrão de 1000 linhas
+      .order('issued_at', { ascending: false, nullsFirst: false })
       .then(({ data, error }) => {
         if (error) { console.error('Homologados query:', error.message); setLoading(false); return }
-        const list = (data || []).map(seal => ({
+
+        // Deduplica por supplier_id: um fornecedor pode ter múltiplos selos (um por cliente HOC).
+        // Mantém o "melhor" selo: ACTIVE prevalece sobre SUSPENDED.
+        const bestSeal = {}
+        ;(data || []).forEach(seal => {
+          const sid = seal.supplier_id
+          if (!bestSeal[sid] || (seal.status === 'ACTIVE' && bestSeal[sid].status !== 'ACTIVE')) {
+            bestSeal[sid] = seal
+          }
+        })
+
+        const list = Object.values(bestSeal).map(seal => ({
           ...seal.suppliers,
-          seal_id:        seal.id,
-          seal_level:     seal.level,
-          seal_status:    seal.status,
-          seal_score:     seal.score,
-          seal_issued_at: seal.issued_at,
+          seal_id:          seal.id,
+          seal_level:       seal.level,
+          seal_status:      seal.status,
+          seal_score:       seal.score,
+          seal_issued_at:   seal.issued_at,
           suspended_reason: seal.suspended_reason,
         }))
         setSuppliers(list)

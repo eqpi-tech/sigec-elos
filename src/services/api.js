@@ -682,16 +682,19 @@ export const adminApi = {
 
   getMetrics: async () => {
     // Queries independentes com tratamento de erro individual
+    // Selos: busca supplier_ids e deduplica — um fornecedor pode ter N selos (um por cliente HOC)
     const [suppliersRes, activeSealsRes, pendingSealsRes, planRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*', { count: 'exact', head: true }),
-      supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'ACTIVE'),
-      supabase.from('seals').select('*', { count: 'exact', head: true }).eq('status', 'PENDING'),
+      supabase.from('seals').select('supplier_id').eq('status', 'ACTIVE').range(0, 9999),
+      supabase.from('seals').select('supplier_id').eq('status', 'PENDING').range(0, 9999),
       supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE'),
     ])
 
     const totalSuppliers  = suppliersRes.status === 'fulfilled'  ? (suppliersRes.value.count  || 0) : 0
-    const activeSeals     = activeSealsRes.status === 'fulfilled' ? (activeSealsRes.value.count || 0) : 0
-    const pendingAnalysis = pendingSealsRes.status === 'fulfilled'? (pendingSealsRes.value.count|| 0) : 0
+    const activeSeals     = activeSealsRes.status === 'fulfilled'
+      ? new Set((activeSealsRes.value.data || []).map(s => s.supplier_id)).size : 0
+    const pendingAnalysis = pendingSealsRes.status === 'fulfilled'
+      ? new Set((pendingSealsRes.value.data || []).map(s => s.supplier_id)).size : 0
     const planData        = planRes.status === 'fulfilled' ? (planRes.value.data || []) : []
 
     const mrrBrl = planData.reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)
