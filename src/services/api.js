@@ -345,15 +345,19 @@ export const marketplaceApi = {
     if (error) throw new Error(error.message)
     if (!suppliers?.length) return { data: [], total: 0 }
 
-    // Query 2: selos ativos (separado — evita problema de RLS em join embutido)
+    // Query 2: selos ativos em lotes de 150 — IN com centenas de UUIDs estoura URL do PostgREST
     const supplierIds = suppliers.map(s => s.id)
-    const { data: seals } = await supabase
-      .from('seals')
-      .select('supplier_id, level, status, score')
-      .in('supplier_id', supplierIds)
-      .eq('status', 'ACTIVE')
+    let sealsRaw = []
+    for (let i = 0; i < supplierIds.length; i += 150) {
+      const { data: batch } = await supabase
+        .from('seals')
+        .select('supplier_id, level, status, score')
+        .in('supplier_id', supplierIds.slice(i, i + 150))
+        .eq('status', 'ACTIVE')
+      if (batch) sealsRaw = sealsRaw.concat(batch)
+    }
 
-    const sealMap = (seals || []).reduce((acc, sl) => {
+    const sealMap = sealsRaw.reduce((acc, sl) => {
       acc[sl.supplier_id] = sl
       return acc
     }, {})
@@ -1024,57 +1028,24 @@ export const clientApi = {
     })
   },
 
-  // Todos os fornecedores — busca server-side com filtros (evita carregar 60k+ linhas)
-  // Requer search (≥2 chars) ou state para retornar resultados
-  getVendorList: async (clientId, { search = '', state = '' } = {}) => {
+  // Todos os fornecedores — usa Netlify function com service_role para bypassar RLS.
+  // Requer search (≥2 chars) ou state para retornar resultados (evita varredura de 60k+ linhas).
+  getVendorList: async (_clientId, { search = '', state = '' } = {}) => {
     const cleanSearch = search.trim()
-    const hasSearch   = cleanSearch.length >= 2
-    const hasState    = !!state
+    if (cleanSearch.length < 2 && !state) return []
 
-    if (!hasSearch && !hasState) return []
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || ''
 
-    let query = supabase
-      .from('suppliers')
-      .select('id, razao_social, cnpj, city, state, status')
-      .order('razao_social')
-      .range(0, 149)
+    const params = new URLSearchParams()
+    if (cleanSearch) params.set('search', cleanSearch)
+    if (state)       params.set('state', state)
 
-    if (hasSearch) {
-      const digits = cleanSearch.replace(/\D/g, '')
-      if (digits.length >= 8) {
-        query = query.ilike('cnpj', `%${digits}%`)
-      } else {
-        query = query.ilike('razao_social', `%${cleanSearch}%`)
-      }
-    }
-    if (hasState) query = query.eq('state', state)
-
-    const { data, error } = await query
-    if (error) throw new Error(error.message)
-    const suppliers = data || []
-    if (!suppliers.length) return []
-
-    const supplierIds = suppliers.map(s => s.id)
-
-    // Selos desses fornecedores (todos os clients) — identifica quem é meu
-    const { data: seals } = await supabase
-      .from('seals')
-      .select('supplier_id, status, level, seal_name, client_id')
-      .in('supplier_id', supplierIds)
-
-    const mySealMap = {}
-    const bestSealMap = {}
-    for (const s of (seals || [])) {
-      if (String(s.client_id) === String(clientId)) mySealMap[s.supplier_id] = s
-      if (!bestSealMap[s.supplier_id] || s.status === 'ACTIVE') bestSealMap[s.supplier_id] = s
-    }
-
-    return suppliers.map(s => ({
-      ...s,
-      seal:         bestSealMap[s.id] || null,
-      mySeal:       mySealMap[s.id]   || null,
-      isMySupplier: !!mySealMap[s.id],
-    }))
+    const res = await fetch(`/.netlify/functions/client-vendor-search?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error(`Erro ao buscar fornecedores: ${res.status}`)
+    return res.json()
   },
 
   // Termos de uso personalizados
