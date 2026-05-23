@@ -556,11 +556,16 @@ def migrate_documents(mysql_conn, sb: Client, dry_run: bool, s3_cfg: dict):
             continue
 
         try:
-            sb.table("documents").upsert(
-                doc_record,
-                on_conflict="supplier_id,hoc_arquivo_id"
-            ).execute()
-            inserted += 1
+            # Check-then-insert: evita depender de constraint parcial (erro 42P10 no PostgREST)
+            existing = sb.table("documents").select("id") \
+                .eq("supplier_id", supplier_id) \
+                .eq("hoc_arquivo_id", arquivo_id) \
+                .execute()
+            if existing.data:
+                inserted += 1  # já migrado (re-run seguro)
+            else:
+                sb.table("documents").insert(doc_record).execute()
+                inserted += 1
         except Exception as e:
             log.error(f"  ERRO doc arquivo_id={arquivo_id}: {e}")
             skipped += 1
