@@ -117,18 +117,22 @@ export default function BackofficeProcessSearch() {
 
     // Selos: inclui client_id para vincular fornecedor↔cliente (dados HOC)
     // Invitations: vínculo para dados nativos SIGEC
+    // Sem joins embutidos — nomes de cliente resolvidos pelo estado `clients` já carregado
     const [sealsRes, invitesRes] = await Promise.allSettled([
       supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id, clients(razao_social)')
+        .select('supplier_id, level, status, score, issued_at, client_id')
         .in('supplier_id', ids)
         .range(0, 9999),
       filterClient
         ? supabase.from('invitations').select('supplier_id').in('supplier_id', ids).eq('client_id', filterClient)
-        : supabase.from('invitations').select('supplier_id, clients(razao_social)').in('supplier_id', ids),
+        : supabase.from('invitations').select('supplier_id, client_id').in('supplier_id', ids),
     ])
 
     const seals   = sealsRes.status   === 'fulfilled' ? (sealsRes.value.data   || []) : []
     const invites = invitesRes.status === 'fulfilled' ? (invitesRes.value.data || []) : []
+
+    // Mapa UUID→nome usando o estado clients já carregado (evita join extra)
+    const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = c.razao_social; return acc }, {})
 
     // Melhor selo por fornecedor: ACTIVE prevalece sobre PENDING/SUSPENDED
     const sealMap = {}
@@ -139,15 +143,15 @@ export default function BackofficeProcessSearch() {
       }
     })
 
-    // Nomes de cliente por fornecedor: fonte primária = seals.client_id (HOC) + invitations (SIGEC)
+    // Nomes de cliente por fornecedor: seals.client_id (HOC) + invitations.client_id (SIGEC)
     const clientMap = {}
     const addName = (sid, name) => {
       if (!name) return
       if (!clientMap[sid]) clientMap[sid] = []
       if (!clientMap[sid].includes(name)) clientMap[sid].push(name)
     }
-    seals.forEach(s => addName(s.supplier_id, s.clients?.razao_social))
-    if (!filterClient) invites.forEach(i => addName(i.supplier_id, i.clients?.razao_social))
+    seals.forEach(s => addName(s.supplier_id, clientIdToName[s.client_id]))
+    if (!filterClient) invites.forEach(i => addName(i.supplier_id, clientIdToName[i.client_id]))
 
     // Filtro por cliente: union de seals.client_id (HOC) + invitations.client_id (SIGEC)
     const clientSupplierSet = filterClient
