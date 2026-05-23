@@ -22,11 +22,21 @@ export default function SupplierOnboarding() {
   const cnpjParam   = _params.get('cnpj')   // CNPJ pré-preenchido vindo da LP
 
   const [invitation, setInvitation] = useState(null)
-  const isSubsidiado = !!invitation?.subsidiado
+  const [existingSeal, setExistingSeal] = useState(null)      // { status:'ACTIVE' } se CNPJ já homologado
+  const [existingSupplier, setExistingSupplier] = useState(null) // { id } se CNPJ já em suppliers
 
-  const STEPS = isSubsidiado
+  const isSubsidiado    = !!invitation?.subsidiado
+  const isExistingActive = existingSeal?.status === 'ACTIVE'  // HOC migrado com processo ativo
+
+  // Fluxo com active seal: pula categorias e pagamento
+  const STEPS = isExistingActive
+    ? ['Empresa','Conta','Termos']
+    : isSubsidiado
     ? ['Empresa','Categorias','Conta','Termos']
     : ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
+
+  // Mapeamento de step real para step visual (isExistingActive pula step 1)
+  const visualStep = isExistingActive && step >= 2 ? step - 1 : step
 
   const [step, setStep]           = useState(0)
   const [cnpj, setCnpj]           = useState(() => {
@@ -72,6 +82,7 @@ export default function SupplierOnboarding() {
 
   const handleCnpjLookup = async () => {
     setLookupLoading(true); setLookupError(''); setSanctionsConfirm(false)
+    setExistingSeal(null); setExistingSupplier(null)
     try {
       const result = await cnpjApi.lookup(cnpj)
       setCnpjData(result.cnpj)
@@ -89,14 +100,30 @@ export default function SupplierOnboarding() {
         return
       }
 
-      if (result.hasSanctions) {
-        // Pausa o fluxo e exibe os botões de confirmação
-        setLookupError('⚠️  Este CNPJ consta em listas de sanções ativas (CEIS/CNEP). A homologação poderá ser negada ou condicionada pelo backoffice.')
-        setSanctionsConfirm(true)
-        return // não avança automaticamente
+      // Verifica presença no banco SIGEC (retornado pela função cnpj-lookup server-side)
+      const db = result.dbInfo || {}
+      if (db.isClient) {
+        setLookupError('🚫  Este CNPJ está registrado como cliente da plataforma. Para acessar, entre em contato: suporte@eqpitech.com.br')
+        return
       }
 
-      setStep(1) // CNPJ limpo — vai direto para categorias
+      if (db.isSupplier) {
+        setExistingSupplier({ id: db.supplierId })
+        if (db.hasActiveSeal) {
+          setExistingSeal({ status: 'ACTIVE' })
+          // Pula categorias e pagamento — vai direto para criação de conta
+          setStep(2)
+          return
+        }
+      }
+
+      if (result.hasSanctions) {
+        setLookupError('⚠️  Este CNPJ consta em listas de sanções ativas (CEIS/CNEP). A homologação poderá ser negada ou condicionada pelo backoffice.')
+        setSanctionsConfirm(true)
+        return
+      }
+
+      setStep(1) // CNPJ novo ou existente sem seal ativo — fluxo normal com categorias
     } catch (err) {
       setLookupError(err.message)
     } finally { setLookupLoading(false) }
@@ -114,7 +141,9 @@ export default function SupplierOnboarding() {
       return
     }
     setError('')
-    if (isSubsidiado) {
+    if (isExistingActive) {
+      handleExistingActiveRegistration()
+    } else if (isSubsidiado) {
       handleSubsidiatedRegistration()
     } else {
       setStep(4) // step 4 = plano
@@ -122,7 +151,7 @@ export default function SupplierOnboarding() {
   }
 
   // Cria auth + fornecedor; retorna sessionToken. Compartilhado entre fluxos.
-  const createAuthAndSupplier = async () => {
+  const createAuthAndSupplier = async ({ isExistingActive: isExAct = false } = {}) => {
     let authUser = null
     try {
       authUser = await signup({ email, password, role: 'SUPPLIER', name })
@@ -168,9 +197,10 @@ export default function SupplierOnboarding() {
         terms_accepted:        true,
         data_sharing_accepted: true,
         cnpj_full_data:    cnpjData || null,
-        category_ids:      [...selectedCategories],
-        invitation_token:  inviteToken || undefined,
-        ref_slug:          refSlug || undefined,
+        category_ids:       [...selectedCategories],
+        invitation_token:   inviteToken || undefined,
+        ref_slug:           refSlug || undefined,
+        is_existing_active: isExAct || undefined,
       }),
     })
     const resData = await res.json()
@@ -182,7 +212,20 @@ export default function SupplierOnboarding() {
   const handleSubsidiatedRegistration = async () => {
     setLoading(true); setError('')
     try {
-      const { supplier } = await createAuthAndSupplier()
+      await createAuthAndSupplier()
+      await reloadProfile()
+      navigate('/fornecedor')
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+    }
+  }
+
+  // Fluxo para fornecedor HOC com processo ativo: sem categorias e sem pagamento
+  const handleExistingActiveRegistration = async () => {
+    setLoading(true); setError('')
+    try {
+      await createAuthAndSupplier({ isExistingActive: true })
       await reloadProfile()
       navigate('/fornecedor')
     } catch (err) {
@@ -237,12 +280,12 @@ export default function SupplierOnboarding() {
           {STEPS.map((s,i) => (
             <div key={i} style={{ flex:1, display:'flex', alignItems:'center' }}>
               <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center' }}>
-                <div style={{ width:32, height:32, borderRadius:'50%', background:i<=step?'#F47E2F':'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:i<step?16:12, fontWeight:700, color:'#fff', fontFamily:'Montserrat,sans-serif', transition:'all .3s' }}>
-                  {i < step ? '✓' : i+1}
+                <div style={{ width:32, height:32, borderRadius:'50%', background:i<=visualStep?'#F47E2F':'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:i<visualStep?16:12, fontWeight:700, color:'#fff', fontFamily:'Montserrat,sans-serif', transition:'all .3s' }}>
+                  {i < visualStep ? '✓' : i+1}
                 </div>
-                <div style={{ fontSize:10, color:i===step?'#F47E2F':'rgba(255,255,255,.4)', fontFamily:'Montserrat,sans-serif', fontWeight:600, marginTop:4 }}>{s}</div>
+                <div style={{ fontSize:10, color:i===visualStep?'#F47E2F':'rgba(255,255,255,.4)', fontFamily:'Montserrat,sans-serif', fontWeight:600, marginTop:4 }}>{s}</div>
               </div>
-              {i < STEPS.length-1 && <div style={{ flex:1, height:2, background:i<step?'#F47E2F':'rgba(255,255,255,.15)', margin:'0 0 16px', transition:'background .3s' }} />}
+              {i < STEPS.length-1 && <div style={{ flex:1, height:2, background:i<visualStep?'#F47E2F':'rgba(255,255,255,.15)', margin:'0 0 16px', transition:'background .3s' }} />}
             </div>
           ))}
         </div>
@@ -261,6 +304,28 @@ export default function SupplierOnboarding() {
               {lookupError && (
                 <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 14px', marginTop:12, fontSize:13, color:'#c2410c' }}>{lookupError}</div>
               )}
+              {/* Empresa já homologada na base HOC */}
+              {isExistingActive && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginTop:16 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>
+                    ✅ Sua empresa já está homologada!
+                  </div>
+                  <div style={{ fontSize:13, color:'#166534', fontFamily:'DM Sans,sans-serif', marginBottom:12 }}>
+                    Encontramos sua empresa na base com processo ativo. Crie seu acesso e entre direto no painel — sem necessidade de pagamento.
+                  </div>
+                  <Button variant="orange" full onClick={() => setStep(2)}>
+                    Criar Acesso →
+                  </Button>
+                </div>
+              )}
+
+              {/* Empresa na base mas sem homologação ativa */}
+              {existingSupplier && !isExistingActive && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
+                  ⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.
+                </div>
+              )}
+
               {sanctionsConfirm ? (
                 <div style={{ marginTop:16 }}>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#92400e', marginBottom:12 }}>
@@ -270,12 +335,12 @@ export default function SupplierOnboarding() {
                     <Button variant="neutral" full onClick={() => { setSanctionsConfirm(false); setLookupError(''); setCnpjData(null) }}>
                       ← Usar outro CNPJ
                     </Button>
-                    <Button variant="orange" full onClick={() => { setSanctionsConfirm(false); setStep(1) }}>
+                    <Button variant="orange" full onClick={() => { setSanctionsConfirm(false); setStep(existingSupplier && !isExistingActive ? 2 : 1) }}>
                       Prosseguir mesmo assim →
                     </Button>
                   </div>
                 </div>
-              ) : (
+              ) : !isExistingActive && (
                 <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
                   disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
                   onClick={handleCnpjLookup}>
@@ -347,7 +412,7 @@ export default function SupplierOnboarding() {
               </div>
               {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626' }}>{error}</div>}
               <div style={{ display:'flex', gap:8 }}>
-                <Button variant="neutral" full onClick={() => setStep(0)}>← Voltar</Button>
+                <Button variant="neutral" full onClick={() => setStep(isExistingActive ? 0 : 1)}>← Voltar</Button>
                 <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
                   disabled={!name || !email || !password || !password2}
                   onClick={handleCreateAccount}>
@@ -362,6 +427,17 @@ export default function SupplierOnboarding() {
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Termos de Uso</div>
               <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:16 }}>Leia e aceite os termos antes de continuar</div>
+
+              {isExistingActive && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>
+                    Acesso sem pagamento
+                  </div>
+                  <div style={{ fontSize:13, color:'#166534', fontFamily:'DM Sans,sans-serif' }}>
+                    Sua empresa já está homologada. Você entrará direto no painel. Quando o processo vencer, será necessário renovar o plano.
+                  </div>
+                </div>
+              )}
 
               {isSubsidiado && invitation?.sender_name && (
                 <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginBottom:16 }}>

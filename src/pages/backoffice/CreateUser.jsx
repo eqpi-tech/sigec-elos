@@ -3,9 +3,9 @@ import { Button, Card, PageHeader } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 
 const ROLES = [
-  { value:'BUYER',  label:'Comprador', icon:'🔍', desc:'Acesso ao marketplace para buscar fornecedores e enviar convites simples' },
-  { value:'CLIENT', label:'Cliente',   icon:'🏢', desc:'Acesso completo ao processo de homologação dos seus fornecedores (HOC)' },
-  { value:'ADMIN',  label:'Backoffice',icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação de fornecedores (EQPI)' },
+  { value:'BUYER',  label:'Comprador', icon:'🔍', desc:'Acesso ao marketplace — requer análise prévia do time comercial' },
+  { value:'CLIENT', label:'Cliente',   icon:'🏢', desc:'Acesso completo ao HOC dos fornecedores — requer contrato assinado' },
+  { value:'ADMIN',  label:'Backoffice',icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação (EQPI)' },
 ]
 
 function formatCnpj(v) {
@@ -75,7 +75,15 @@ export default function BackofficeCreateUser() {
           {role === 'CLIENT' && (
             <div style={{ marginBottom:16, background:'#EEF0FF', border:'1px solid #C7CAFF', borderRadius:10, padding:'10px 14px' }}>
               <div style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
-                O Cliente terá acesso completo ao processo de homologação dos fornecedores que ele convidar — equivalente ao perfil HOC.
+                O Cliente terá acesso ao HOC dos seus fornecedores. Se o CNPJ já existir (migrado do HOC), a conta será vinculada ao registro existente — os fornecedores associados a esse cliente já ficarão visíveis.
+              </div>
+            </div>
+          )}
+
+          {role === 'BUYER' && (
+            <div style={{ marginBottom:16, background:'#FFF3E8', border:'1px solid #FDBA74', borderRadius:10, padding:'10px 14px' }}>
+              <div style={{ fontSize:12, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
+                O Comprador acessa o marketplace para buscar fornecedores certificados. Criação depende de análise comercial prévia.
               </div>
             </div>
           )}
@@ -99,8 +107,8 @@ export default function BackofficeCreateUser() {
 
           {role === 'CLIENT' && (
             <div style={{ marginBottom:16 }}>
-              <label style={lbl}>CNPJ da Empresa</label>
-              <input value={cnpj} onChange={e=>setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" style={inp} />
+              <label style={lbl}>CNPJ da Empresa *</label>
+              <input value={cnpj} onChange={e=>setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" required style={inp} />
             </div>
           )}
 
@@ -116,7 +124,8 @@ export default function BackofficeCreateUser() {
             </div>
           )}
 
-          <Button type="submit" variant="primary" full size="lg" style={{ borderRadius:12 }} disabled={loading}>
+          <Button type="submit" variant="primary" full size="lg" style={{ borderRadius:12 }}
+            disabled={loading || (role === 'CLIENT' && cnpj.replace(/\D/g,'').length !== 14)}>
             {loading ? '⏳ Criando...' : `✅ Criar ${ROLES.find(r=>r.value===role)?.label}`}
           </Button>
         </form>

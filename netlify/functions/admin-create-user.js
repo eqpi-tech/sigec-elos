@@ -37,6 +37,7 @@ exports.handler = async (event) => {
   if (!name || !email || !role) return { statusCode:400, headers, body: JSON.stringify({ error:'name, email e role são obrigatórios' }) }
   if (!['ADMIN','BUYER','CLIENT'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN, BUYER ou CLIENT' }) }
   if (role === 'CLIENT' && !organization) return { statusCode:400, headers, body: JSON.stringify({ error:'organization (razão social) é obrigatório para CLIENT' }) }
+  if (role === 'CLIENT' && !cnpj) return { statusCode:400, headers, body: JSON.stringify({ error:'cnpj é obrigatório para CLIENT' }) }
 
   const password = generatePassword()
 
@@ -73,13 +74,25 @@ exports.handler = async (event) => {
       }
     }
 
-    // 4b. Se CLIENT, cria registro na tabela clients
+    // 4b. Se CLIENT, upsert por CNPJ (suporta clientes antigos que voltam a assinar)
     if (role === 'CLIENT') {
-      const { data: client } = await supabaseAdmin.from('clients').insert({
-        user_id: newUser.user.id,
-        razao_social: organization,
-        cnpj: cnpj || null,
-      }).select('id').single()
+      const cleanCnpj = (cnpj || '').replace(/\D/g, '')
+      const { data: existingClient } = await supabaseAdmin
+        .from('clients').select('id').eq('cnpj', cleanCnpj).maybeSingle()
+
+      let client
+      if (existingClient) {
+        // Cliente já existe (ex: migrado do HOC) — atualiza user_id e razão social
+        await supabaseAdmin.from('clients').update({
+          user_id: newUser.user.id, razao_social: organization,
+        }).eq('id', existingClient.id)
+        client = existingClient
+      } else {
+        const { data: newClient } = await supabaseAdmin.from('clients').insert({
+          user_id: newUser.user.id, razao_social: organization, cnpj: cleanCnpj,
+        }).select('id').single()
+        client = newClient
+      }
 
       // Atualiza user_roles com client_id
       if (client) {

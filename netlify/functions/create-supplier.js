@@ -41,40 +41,65 @@ exports.handler = async (event) => {
       sanctions_checked, sanctions_result,
       invitation_token,
       ref_slug,
+      is_existing_active,
     } = body
 
     if (!cnpj || !razao_social) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'cnpj e razao_social são obrigatórios' }) }
     }
 
-    // 1. Cria o fornecedor com service_role (bypassa RLS)
-    const { data: supplier, error: supplierError } = await supabaseAdmin
-      .from('suppliers')
-      .insert({
-        user_id:          user.id,
-        cnpj:             cnpj.replace(/\D/g, ''),
-        razao_social,
-        nome_fantasia:    nome_fantasia || null,
-        cnae_main:        cnae_main || null,
-        cnae_list:        cnae_list || [],
-        state:            state || null,
-        city:             city || null,
-        phone:            phone || null,
-        services:         services || [],
-        certifications:   certifications || [],
-        status:           'PENDING',
-        sanctions_checked: !!sanctions_checked,
-        sanctions_result:  sanctions_result || null,
-      })
-      .select()
-      .single()
+    const cleanCnpj = cnpj.replace(/\D/g, '')
 
-    if (supplierError) {
-      // CNPJ duplicado
-      if (supplierError.code === '23505') {
-        return { statusCode: 409, headers, body: JSON.stringify({ error: 'Este CNPJ já está cadastrado na plataforma.' }) }
+    // 1. Verifica se CNPJ já existe — upsert em vez de insert cego
+    const { data: existingSupplier } = await supabaseAdmin
+      .from('suppliers').select('*').eq('cnpj', cleanCnpj).maybeSingle()
+
+    let supplier
+    let isNewSupplier = false
+
+    if (existingSupplier) {
+      // Fornecedor já existe (migrado do HOC ou cadastro anterior)
+      // Atualiza dados com informações frescas da Receita Federal
+      const updatePayload = {
+        razao_social,
+        nome_fantasia:   nome_fantasia   || existingSupplier.nome_fantasia,
+        cnae_main:       cnae_main       || existingSupplier.cnae_main,
+        cnae_list:       cnae_list?.length ? cnae_list : existingSupplier.cnae_list,
+        state:           state           || existingSupplier.state,
+        city:            city            || existingSupplier.city,
+        phone:           phone           || existingSupplier.phone,
       }
-      throw new Error(supplierError.message)
+      // Só reivindica user_id se ainda não tem dono (fornecedores importados do HOC)
+      if (!existingSupplier.user_id) updatePayload.user_id = user.id
+
+      const { data: updated } = await supabaseAdmin
+        .from('suppliers').update(updatePayload).eq('id', existingSupplier.id).select().single()
+      supplier = updated || existingSupplier
+    } else {
+      // Novo fornecedor — cria registro completo
+      isNewSupplier = true
+      const { data: newSupplier, error: supplierError } = await supabaseAdmin
+        .from('suppliers')
+        .insert({
+          user_id:           user.id,
+          cnpj:              cleanCnpj,
+          razao_social,
+          nome_fantasia:     nome_fantasia   || null,
+          cnae_main:         cnae_main       || null,
+          cnae_list:         cnae_list       || [],
+          state:             state           || null,
+          city:              city            || null,
+          phone:             phone           || null,
+          services:          services        || [],
+          certifications:    certifications  || [],
+          status:            'PENDING',
+          sanctions_checked: !!sanctions_checked,
+          sanctions_result:  sanctions_result || null,
+        })
+        .select()
+        .single()
+      if (supplierError) throw new Error(supplierError.message)
+      supplier = newSupplier
     }
 
     // 2a. Auto-valida documentos que podem ser confirmados pelo CNPJ lookup
@@ -193,18 +218,15 @@ exports.handler = async (event) => {
       // .catch para não bloquear o fluxo se falhar
     }
 
-    // 3. Cria o Seal inicial como PENDING
-    const { error: sealError } = await supabaseAdmin
-      .from('seals')
-      .insert({
-        supplier_id: supplier.id,
-        level:       'Simples',
-        status:      'PENDING',
-        score:       0,
-      })
-
-    if (sealError && sealError.code !== '23505') { // ignora duplicado
-      console.error('Seal create error:', sealError)
+    // 3. Cria Seal inicial apenas para fornecedores NOVOS
+    //    Para fornecedores já existentes (HOC ou cadastro anterior), mantém o seal existente
+    if (isNewSupplier) {
+      const { error: sealError } = await supabaseAdmin
+        .from('seals')
+        .insert({ supplier_id: supplier.id, level: 'Simples', status: 'PENDING', score: 0 })
+      if (sealError && sealError.code !== '23505') {
+        console.error('Seal create error:', sealError)
+      }
     }
 
     // 3. Vincula supplier_id ao perfil do usuário
@@ -214,10 +236,30 @@ exports.handler = async (event) => {
       .eq('id', user.id)
     if (profileError) console.error('Profile update error:', profileError)
 
-    // 3b. Registra em user_roles (suporte multi-perfil)
+    // 3b. Registra SUPPLIER em user_roles
     await supabaseAdmin.from('user_roles').upsert({
       user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: true
     }, { onConflict: 'user_id,role' })
+
+    // 3c. Todo fornecedor ganha também perfil BUYER para acessar o marketplace
+    try {
+      const { data: existingBuyer } = await supabaseAdmin
+        .from('buyers').select('id').eq('user_id', user.id).maybeSingle()
+      let buyerId = existingBuyer?.id
+      if (!existingBuyer) {
+        const { data: newBuyer } = await supabaseAdmin.from('buyers').insert({
+          user_id:      user.id,
+          razao_social: razao_social,
+          cnpj:         cleanCnpj,
+        }).select('id').single()
+        buyerId = newBuyer?.id
+      }
+      if (buyerId) {
+        await supabaseAdmin.from('user_roles').upsert({
+          user_id: user.id, role: 'BUYER', buyer_id: buyerId, is_primary: false
+        }, { onConflict: 'user_id,role' })
+      }
+    } catch (e) { console.warn('BUYER role setup (não crítico):', e.message) }
 
     // 4. Salva categorias selecionadas
     const categoryIds = body.category_ids || []

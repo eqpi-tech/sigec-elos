@@ -968,66 +968,112 @@ export const clientApi = {
   },
 
   getSuppliers: async (clientId) => {
-    const { data, error } = await supabase
-      .from('invitations')
-      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
-      .eq('client_id', clientId)
-      .eq('status', 'REGISTERED')
-      .order('created_at', { ascending: false })
-    if (error) throw new Error(error.message)
-
-    const all = data || []
-    const supplierIds = all.map(i => i.supplier_id).filter(Boolean)
-    if (!supplierIds.length) return []
-
-    const { data: seals } = await supabase
+    // Passo 1: busca via seals — inclui fornecedores migrados do HOC (seals.client_id)
+    // e fornecedores do fluxo novo (também têm seal.client_id após aceite do convite)
+    const { data: sealsData, error: sealsErr } = await supabase
       .from('seals')
-      .select('supplier_id, level, status, score, seal_name, client_suspended_at')
+      .select('supplier_id, level, status, score, seal_name, client_suspended_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
       .eq('client_id', clientId)
-      .in('supplier_id', supplierIds)
-    const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
+    if (sealsErr) throw new Error(sealsErr.message)
 
-    return all.map(i => ({
-      inviteId:          i.id,
-      supplierId:        i.supplier_id,
-      subsidiado:        i.subsidiado,
-      tipo:              i.tipo_fornecedor,
-      escopo:            i.escopo,
-      invitedAt:         i.created_at,
-      inviteRazaoSocial: i.supplier_razao_social,
-      inviteCnpj:        i.supplier_cnpj,
-      supplier:          i.suppliers,
-      seal:              sealMap[i.supplier_id] || { status: 'PENDING', score: 0 },
-    }))
+    const sealMap = {}
+    const supplierFromSeal = {}
+    for (const seal of (sealsData || [])) {
+      sealMap[seal.supplier_id] = {
+        supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
+        score: seal.score, seal_name: seal.seal_name, client_suspended_at: seal.client_suspended_at,
+      }
+      if (seal.suppliers) supplierFromSeal[seal.supplier_id] = seal.suppliers
+    }
+
+    // Passo 2: convites para dados extras (subsidiado, tipo, escopo, data)
+    const { data: invites } = await supabase
+      .from('invitations')
+      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj')
+      .eq('client_id', clientId)
+    const inviteMap = {}
+    for (const inv of (invites || [])) {
+      // Mantém o convite REGISTERED quando há múltiplos
+      if (!inviteMap[inv.supplier_id] || inv.status === 'REGISTERED') {
+        inviteMap[inv.supplier_id] = inv
+      }
+    }
+
+    // Passo 3: todos os supplier_ids únicos (via seal ou convite REGISTERED)
+    const registeredViaInvite = new Set(
+      (invites || []).filter(i => i.status === 'REGISTERED' && i.supplier_id).map(i => i.supplier_id)
+    )
+    const allIds = new Set([...Object.keys(sealMap), ...registeredViaInvite])
+
+    return [...allIds].map(sid => {
+      const seal   = sealMap[sid]
+      const invite = inviteMap[sid]
+      const sup    = supplierFromSeal[sid] || null
+      return {
+        inviteId:          invite?.id || null,
+        supplierId:        sid,
+        subsidiado:        invite?.subsidiado || false,
+        tipo:              invite?.tipo_fornecedor || null,
+        escopo:            invite?.escopo || null,
+        invitedAt:         invite?.created_at || null,
+        inviteRazaoSocial: invite?.supplier_razao_social || null,
+        inviteCnpj:        invite?.supplier_cnpj || null,
+        supplier:          sup,
+        seal:              seal || { status: 'PENDING', score: 0 },
+      }
+    })
   },
 
-  // Vendor List — todos os fornecedores da base (para o cliente buscar e convidar)
-  getVendorList: async (clientId) => {
-    const { data, error } = await supabase
+  // Todos os fornecedores — busca server-side com filtros (evita carregar 60k+ linhas)
+  // Requer search (≥2 chars) ou state para retornar resultados
+  getVendorList: async (clientId, { search = '', state = '' } = {}) => {
+    const cleanSearch = search.trim()
+    const hasSearch   = cleanSearch.length >= 2
+    const hasState    = !!state
+
+    if (!hasSearch && !hasState) return []
+
+    let query = supabase
       .from('suppliers')
       .select('id, razao_social, cnpj, city, state, status')
       .order('razao_social')
+      .range(0, 149)
+
+    if (hasSearch) {
+      const digits = cleanSearch.replace(/\D/g, '')
+      if (digits.length >= 8) {
+        query = query.ilike('cnpj', `%${digits}%`)
+      } else {
+        query = query.ilike('razao_social', `%${cleanSearch}%`)
+      }
+    }
+    if (hasState) query = query.eq('state', state)
+
+    const { data, error } = await query
     if (error) throw new Error(error.message)
+    const suppliers = data || []
+    if (!suppliers.length) return []
 
-    // Busca IDs que já foram convidados por este cliente
-    const { data: invited } = await supabase
-      .from('invitations')
-      .select('supplier_id, status')
-      .eq('client_id', clientId)
-    const invitedMap = (invited || []).reduce((acc, i) => { acc[i.supplier_id] = i.status; return acc }, {})
+    const supplierIds = suppliers.map(s => s.id)
 
-    // Busca selos ativos
-    const supplierIds = (data || []).map(s => s.id)
-    const { data: seals } = supplierIds.length
-      ? await supabase.from('seals').select('supplier_id, status, level, seal_name').in('supplier_id', supplierIds)
-      : { data: [] }
-    const sealMap = (seals || []).reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
+    // Selos desses fornecedores (todos os clients) — identifica quem é meu
+    const { data: seals } = await supabase
+      .from('seals')
+      .select('supplier_id, status, level, seal_name, client_id')
+      .in('supplier_id', supplierIds)
 
-    return (data || []).map(s => ({
+    const mySealMap = {}
+    const bestSealMap = {}
+    for (const s of (seals || [])) {
+      if (String(s.client_id) === String(clientId)) mySealMap[s.supplier_id] = s
+      if (!bestSealMap[s.supplier_id] || s.status === 'ACTIVE') bestSealMap[s.supplier_id] = s
+    }
+
+    return suppliers.map(s => ({
       ...s,
-      seal:          sealMap[s.id] || null,
-      inviteStatus:  invitedMap[s.id] || null,  // null = nunca convidado por este cliente
-      isMySupplier:  !!invitedMap[s.id],
+      seal:         bestSealMap[s.id] || null,
+      mySeal:       mySealMap[s.id]   || null,
+      isMySupplier: !!mySealMap[s.id],
     }))
   },
 

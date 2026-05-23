@@ -1,6 +1,8 @@
 // netlify/functions/cnpj-lookup.js
-// Consulta CNPJ na BrasilAPI e sanções no Portal da Transparência
+// Consulta CNPJ na BrasilAPI, sanções e verifica presença no banco de dados SIGEC
 // Chamado via: /.netlify/functions/cnpj-lookup?cnpj=00000000000000
+
+const { createClient } = require('@supabase/supabase-js')
 
 /**
  * Filtra apenas sanções COMPROVADAMENTE ATIVAS.
@@ -164,6 +166,32 @@ exports.handler = async (event) => {
       `hasSanctions=${hasSanctions}`
     )
 
+    // Verifica presença do CNPJ no banco SIGEC (server-side — bypassa RLS)
+    let dbInfo = { isClient: false, isSupplier: false, hasActiveSeal: false, supplierId: null }
+    try {
+      const supabaseAdmin = createClient(
+        process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      )
+      const [clientRes, supplierRes] = await Promise.allSettled([
+        supabaseAdmin.from('clients').select('id').eq('cnpj', cnpj).maybeSingle(),
+        supabaseAdmin.from('suppliers').select('id, status').eq('cnpj', cnpj).maybeSingle(),
+      ])
+      if (clientRes.value?.data) {
+        dbInfo.isClient = true
+      }
+      if (supplierRes.value?.data) {
+        dbInfo.isSupplier  = true
+        dbInfo.supplierId  = supplierRes.value.data.id
+        const { data: sealData } = await supabaseAdmin
+          .from('seals').select('status').eq('supplier_id', supplierRes.value.data.id)
+          .eq('status', 'ACTIVE').maybeSingle()
+        dbInfo.hasActiveSeal = !!sealData
+      }
+    } catch (dbErr) {
+      console.warn('[cnpj-lookup] DB check não crítico:', dbErr.message)
+    }
+
     return {
       statusCode: 200,
       headers,
@@ -172,7 +200,6 @@ exports.handler = async (event) => {
         sanctions: {
           ceis: activeCeis,  // Apenas sanções ativas
           cnep: activeCnep,
-          // Mantém o histórico completo separado para o backoffice
           ceisHistory: rawSanctions.ceis,
           cnepHistory: rawSanctions.cnep,
         },
@@ -187,7 +214,8 @@ exports.handler = async (event) => {
           dataOpcao:    cnpjData?.data_opcao_pelo_simples    || null,
           dataExclusao: cnpjData?.data_exclusao_do_simples   || null,
         },
-        mei: cnpjData?.opcao_pelo_mei === true,
+        mei:    cnpjData?.opcao_pelo_mei === true,
+        dbInfo,
       }),
     }
   } catch (err) {
