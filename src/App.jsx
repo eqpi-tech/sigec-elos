@@ -34,12 +34,13 @@ import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import ClientPortal  from './pages/ClientPortal.jsx'
 
-import ClientDashboard        from './pages/client/Dashboard.jsx'
-import ClientSuppliers        from './pages/client/Suppliers.jsx'
-import ClientInvitations      from './pages/client/Invitations.jsx'
-import ClientSupplierProcess  from './pages/client/SupplierProcess.jsx'
-import ClientQuestionnaires   from './pages/client/Questionnaires.jsx'
-import ClientSettings         from './pages/client/Settings.jsx'
+import ClientDashboard         from './pages/client/Dashboard.jsx'
+import ClientSuppliers         from './pages/client/Suppliers.jsx'
+import ClientInvitations       from './pages/client/Invitations.jsx'
+import ClientSupplierProcess   from './pages/client/SupplierProcess.jsx'
+import ClientSupplierDiscover  from './pages/client/SupplierDiscover.jsx'
+import ClientQuestionnaires    from './pages/client/Questionnaires.jsx'
+import ClientSettings          from './pages/client/Settings.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -103,9 +104,10 @@ function AppRoutes() {
       <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']}><BackofficeLandingPages/></Protect>} />
 
       {/* Cliente (HOC) */}
-      <Route path="/cliente"                          element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
-      <Route path="/cliente/fornecedores"             element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
-      <Route path="/cliente/fornecedor/:supplierId"   element={<Protect roles={['CLIENT']}><ClientSupplierProcess/></Protect>} />
+      <Route path="/cliente"                                element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
+      <Route path="/cliente/fornecedores"               element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
+      <Route path="/cliente/fornecedor/:supplierId"     element={<Protect roles={['CLIENT']}><ClientSupplierProcess/></Protect>} />
+      <Route path="/cliente/perfil-fornecedor/:id"      element={<Protect roles={['CLIENT']}><ClientSupplierDiscover/></Protect>} />
       <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
       <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']}><ClientQuestionnaires/></Protect>} />
       <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']}><ClientSettings/></Protect>} />

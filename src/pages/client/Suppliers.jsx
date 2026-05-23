@@ -393,7 +393,7 @@ export default function ClientSuppliers() {
                         <div style={{ flexShrink:0 }}>
                           {isLinked
                             ? <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/fornecedor/${s.id}`)}>Ver Processo</Button>
-                            : <Button variant="primary" size="sm" onClick={() => navigate('/cliente/convites')}>Convidar →</Button>
+                            : <Button variant="orange" size="sm" onClick={() => navigate(`/cliente/perfil-fornecedor/${s.id}`)}>Ver Perfil →</Button>
                           }
                         </div>
                       </div>
