@@ -449,12 +449,16 @@ export const adminApi = {
     })
     if (!deduped.length) return []
 
-    // Passo 2: documentos separado (não existe FK seals→documents, só suppliers→documents)
+    // Passo 2: documentos em lotes de 150 — IN clause com centenas de UUIDs estoura o limite de URL do PostgREST
     const supplierIds = deduped.map(s => s.supplier_id)
-    const { data: docsData } = await supabase
-      .from('documents')
-      .select('supplier_id, type, label, status')
-      .in('supplier_id', supplierIds)
+    let docsData = []
+    for (let i = 0; i < supplierIds.length; i += 150) {
+      const { data: batch } = await supabase
+        .from('documents')
+        .select('supplier_id, type, label, status')
+        .in('supplier_id', supplierIds.slice(i, i + 150))
+      if (batch) docsData = docsData.concat(batch)
+    }
 
     const docsBySupplier = (docsData || []).reduce((acc, d) => {
       acc[d.supplier_id] = acc[d.supplier_id] || []
@@ -667,6 +671,7 @@ export const adminApi = {
       .select('id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)')
       .not('expires_at', 'is', null)
       .order('expires_at', { ascending: true })
+      .range(0, 99999)
     if (error) throw new Error(error.message)
 
     const docs   = data || []

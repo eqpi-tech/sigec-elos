@@ -86,93 +86,126 @@ export default function BackofficeProcessSearch() {
     setLoading(true)
     setSearched(true)
 
-    const qTrim  = q.trim()
-    const qNums  = qTrim.replace(/\D/g, '')
+    const qTrim = q.trim()
+    const qNums = qTrim.replace(/\D/g, '')
+    const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = c.razao_social; return acc }, {})
 
-    // Query base: todos os suppliers
+    const buildSealMap = (seals) => {
+      const m = {}
+      seals.forEach(s => {
+        if (!m[s.supplier_id] || (s.status === 'ACTIVE' && m[s.supplier_id].status !== 'ACTIVE'))
+          m[s.supplier_id] = s
+      })
+      return m
+    }
+
+    const buildClientMap = (seals, invites) => {
+      const m = {}
+      const add = (sid, cid) => {
+        const name = clientIdToName[cid]
+        if (!name) return
+        if (!m[sid]) m[sid] = []
+        if (!m[sid].includes(name)) m[sid].push(name)
+      }
+      seals.forEach(s => add(s.supplier_id, s.client_id))
+      invites.forEach(i => add(i.supplier_id, i.client_id))
+      return m
+    }
+
+    // ── Fluxo A: filtro de cliente ────────────────────────────────────────────
+    // Busca por client_id nos selos (sem IN clause de IDs) — evita URL longa
+    if (filterClient) {
+      const [sealRes, invRes] = await Promise.allSettled([
+        supabase.from('seals')
+          .select('supplier_id, level, status, score, issued_at, client_id')
+          .eq('client_id', filterClient)
+          .range(0, 4999),
+        supabase.from('invitations')
+          .select('supplier_id, client_id')
+          .eq('client_id', filterClient),
+      ])
+
+      const clientSeals   = sealRes.status === 'fulfilled' ? (sealRes.value.data   || []) : []
+      const clientInvites = invRes.status  === 'fulfilled' ? (invRes.value.data    || []) : []
+
+      const supplierIdSet = new Set([
+        ...clientSeals.map(s => s.supplier_id),
+        ...clientInvites.map(i => i.supplier_id),
+      ])
+
+      if (!supplierIdSet.size) { setResults([]); setLoading(false); return }
+
+      // Busca dados dos fornecedores em lotes de 150 (URL segura)
+      const allIds = [...supplierIdSet]
+      let suppliers = []
+      for (let i = 0; i < allIds.length; i += 150) {
+        const batch = allIds.slice(i, i + 150)
+        let bq = supabase.from('suppliers')
+          .select('id, razao_social, cnpj, city, state, status, created_at')
+          .in('id', batch)
+        if (!showInactive) bq = bq.neq('status', 'INACTIVE')
+        if (qTrim) {
+          if (qNums.length >= 8) bq = bq.ilike('cnpj', `%${qNums}%`)
+          else bq = bq.ilike('razao_social', `%${qTrim}%`)
+        }
+        const { data } = await bq
+        if (data) suppliers = suppliers.concat(data)
+      }
+
+      const sealMap   = buildSealMap(clientSeals)
+      const clientMap = buildClientMap(clientSeals, clientInvites)
+
+      let enriched = suppliers.map(s => ({
+        ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
+      }))
+      if (filterType !== 'Todos')
+        enriched = enriched.filter(s => (s.seal?.status || 'PENDING') === filterType)
+
+      setResults(enriched)
+      setLoading(false)
+      return
+    }
+
+    // ── Fluxo B: busca por texto/CNPJ (sem filtro de cliente) ─────────────────
+    // Limita a 200 resultados para manter o IN clause dentro do tamanho seguro de URL
+    if (!qTrim) { setResults([]); setLoading(false); return }
+
     let suppQuery = supabase
       .from('suppliers')
       .select('id, razao_social, cnpj, city, state, status, created_at')
       .order('razao_social')
+      .limit(200)
 
-    if (!showInactive) {
-      suppQuery = suppQuery.neq('status', 'INACTIVE')
-    }
-
-    // Filtro por CNPJ ou razão social
-    if (qTrim) {
-      if (qNums.length >= 8) {
-        suppQuery = suppQuery.ilike('cnpj', `%${qNums}%`)
-      } else {
-        suppQuery = suppQuery.ilike('razao_social', `%${qTrim}%`)
-      }
-    }
+    if (!showInactive) suppQuery = suppQuery.neq('status', 'INACTIVE')
+    if (qNums.length >= 8) suppQuery = suppQuery.ilike('cnpj', `%${qNums}%`)
+    else suppQuery = suppQuery.ilike('razao_social', `%${qTrim}%`)
 
     const { data: suppliers, error } = await suppQuery
     if (error) { console.error(error); setLoading(false); return }
-
     if (!suppliers?.length) { setResults([]); setLoading(false); return }
 
+    // IDs limitados a 200 → URL segura para o IN clause
     const ids = suppliers.map(s => s.id)
-
-    // Selos: inclui client_id para vincular fornecedor↔cliente (dados HOC)
-    // Invitations: vínculo para dados nativos SIGEC
-    // Sem joins embutidos — nomes de cliente resolvidos pelo estado `clients` já carregado
     const [sealsRes, invitesRes] = await Promise.allSettled([
       supabase.from('seals')
         .select('supplier_id, level, status, score, issued_at, client_id')
-        .in('supplier_id', ids)
-        .range(0, 9999),
-      filterClient
-        ? supabase.from('invitations').select('supplier_id').in('supplier_id', ids).eq('client_id', filterClient)
-        : supabase.from('invitations').select('supplier_id, client_id').in('supplier_id', ids),
+        .in('supplier_id', ids),
+      supabase.from('invitations')
+        .select('supplier_id, client_id')
+        .in('supplier_id', ids),
     ])
 
     const seals   = sealsRes.status   === 'fulfilled' ? (sealsRes.value.data   || []) : []
     const invites = invitesRes.status === 'fulfilled' ? (invitesRes.value.data || []) : []
 
-    // Mapa UUID→nome usando o estado clients já carregado (evita join extra)
-    const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = c.razao_social; return acc }, {})
+    const sealMap   = buildSealMap(seals)
+    const clientMap = buildClientMap(seals, invites)
 
-    // Melhor selo por fornecedor: ACTIVE prevalece sobre PENDING/SUSPENDED
-    const sealMap = {}
-    seals.forEach(s => {
-      const sid = s.supplier_id
-      if (!sealMap[sid] || (s.status === 'ACTIVE' && sealMap[sid].status !== 'ACTIVE')) {
-        sealMap[sid] = s
-      }
-    })
-
-    // Nomes de cliente por fornecedor: seals.client_id (HOC) + invitations.client_id (SIGEC)
-    const clientMap = {}
-    const addName = (sid, name) => {
-      if (!name) return
-      if (!clientMap[sid]) clientMap[sid] = []
-      if (!clientMap[sid].includes(name)) clientMap[sid].push(name)
-    }
-    seals.forEach(s => addName(s.supplier_id, clientIdToName[s.client_id]))
-    if (!filterClient) invites.forEach(i => addName(i.supplier_id, clientIdToName[i.client_id]))
-
-    // Filtro por cliente: union de seals.client_id (HOC) + invitations.client_id (SIGEC)
-    const clientSupplierSet = filterClient
-      ? new Set([
-          ...seals.filter(s => s.client_id === filterClient).map(s => s.supplier_id),
-          ...invites.map(i => i.supplier_id),
-        ])
-      : null
-
-    let enriched = suppliers
-      .filter(s => !clientSupplierSet || clientSupplierSet.has(s.id))
-      .map(s => ({
-        ...s,
-        seal:    sealMap[s.id]   || null,
-        clients: clientMap[s.id] || [],
-      }))
-
-    // Filtro por status do selo
-    if (filterType !== 'Todos') {
+    let enriched = suppliers.map(s => ({
+      ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
+    }))
+    if (filterType !== 'Todos')
       enriched = enriched.filter(s => (s.seal?.status || 'PENDING') === filterType)
-    }
 
     setResults(enriched)
     setLoading(false)
