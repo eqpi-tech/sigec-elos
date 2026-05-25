@@ -35,10 +35,10 @@ export default function SupplierOnboarding() {
     ? ['Empresa','Categorias','Conta','Termos']
     : ['Empresa','Categorias','Conta','Termos','Plano','Pagamento']
 
+  const [step, setStep]           = useState(0)
+
   // Mapeamento de step real para step visual (isExistingActive pula step 1)
   const visualStep = isExistingActive && step >= 2 ? step - 1 : step
-
-  const [step, setStep]           = useState(0)
   const [cnpj, setCnpj]           = useState(() => {
     if (!cnpjParam) return ''
     const d = cnpjParam.replace(/\D/g,'').slice(0,14)
