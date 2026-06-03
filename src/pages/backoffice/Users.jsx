@@ -1,7 +1,7 @@
-// Gestão de Usuários — lista, bloqueia, desbloqueia, redefine senha, edita nome
+// Gestão de Usuários — lista, bloqueia, desbloqueia, redefine senha, edita nome, preço CLIENT
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
+import { Button, Card, Spinner, PageHeader } from '../../components/ui.jsx'
 
 const ROLE_LABEL = { ADMIN:'Backoffice', BUYER:'Comprador', CLIENT:'Cliente', SUPPLIER:'Fornecedor' }
 const ROLE_COLOR = { ADMIN:'#7c3aed',    BUYER:'#ea580c',   CLIENT:'#059669', SUPPLIER:'#2563eb' }
@@ -25,8 +25,10 @@ export default function BackofficeUsers() {
   const [filterStatus,setFilterStatus]= useState('Todos')   // Todos | Ativo | Bloqueado
   const [search,      setSearch]      = useState('')
   const [acting,      setActing]      = useState({})         // { [userId]: string }
-  const [editModal,   setEditModal]   = useState(null)       // { userId, currentName }
-  const [editName,    setEditName]    = useState('')
+  const [editModal,      setEditModal]      = useState(null)   // { userId, currentName }
+  const [editName,       setEditName]       = useState('')
+  const [clientPriceModal, setClientPriceModal] = useState(null) // { clientId, price, payer }
+  const [clientPriceSaving, setClientPriceSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,6 +55,20 @@ export default function BackofficeUsers() {
     await act(editModal.userId, 'update', { name: editName.trim() })
     setEditModal(null)
     setEditName('')
+  }
+
+  const saveClientPrice = async () => {
+    if (!clientPriceModal?.clientId) return
+    setClientPriceSaving(true)
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ homologation_price: Number(clientPriceModal.price), homologation_payer: clientPriceModal.payer })
+        .eq('id', clientPriceModal.clientId)
+      if (error) throw error
+      setClientPriceModal(null)
+    } catch (e) { alert('Erro: ' + e.message) }
+    finally { setClientPriceSaving(false) }
   }
 
   const filtered = users.filter(u => {
@@ -156,6 +172,15 @@ export default function BackofficeUsers() {
                         onClick={() => { setEditModal({ userId: u.id, currentName: u.name }); setEditName(u.name || '') }}>
                         ✏ Editar
                       </Button>
+                      {u.primaryRole === 'CLIENT' && u.clientId && (
+                        <Button variant="neutral" size="sm" disabled={isActing}
+                          onClick={async () => {
+                            const { data } = await supabase.from('clients').select('id,homologation_price,homologation_payer').eq('id', u.clientId).maybeSingle()
+                            setClientPriceModal({ clientId: u.clientId, price: data?.homologation_price ?? 390, payer: data?.homologation_payer ?? 'supplier' })
+                          }}>
+                          💰 Preço
+                        </Button>
+                      )}
                       <Button variant="neutral" size="sm"
                         disabled={isActing}
                         onClick={() => { if (confirm(`Enviar e-mail de redefinição de senha para ${u.email}?`)) act(u.id, 'reset-password') }}>
@@ -178,6 +203,51 @@ export default function BackofficeUsers() {
             })}
           </div>
         </>
+      )}
+
+      {/* Modal preço de homologação (CLIENT) */}
+      {clientPriceModal && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:17,color:'#1a1c5e',marginBottom:6 }}>💰 Preço de Homologação</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9B9B9B',marginBottom:20 }}>
+              Configuração do preço cobrado dos fornecedores convidados por este cliente.
+            </div>
+
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:5 }}>
+                Valor (R$)
+              </label>
+              <input type="number" min="0" step="0.01"
+                value={clientPriceModal.price}
+                onChange={e => setClientPriceModal(p => ({...p, price: e.target.value}))}
+                style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:14,boxSizing:'border-box' }}/>
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:5 }}>
+                Quem paga
+              </label>
+              <select value={clientPriceModal.payer} onChange={e => setClientPriceModal(p => ({...p, payer: e.target.value}))}
+                style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                <option value="supplier">Fornecedor paga</option>
+                <option value="client">Cliente subsidia (fornecedor não é cobrado)</option>
+              </select>
+              {clientPriceModal.payer === 'client' && (
+                <div style={{ fontSize:11,color:'#f59e0b',fontFamily:'DM Sans,sans-serif',marginTop:4 }}>
+                  ⚠ Com esta opção, o fornecedor não é cobrado. O cliente paga conforme contrato externo.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display:'flex',gap:8 }}>
+              <Button variant="neutral" full onClick={() => setClientPriceModal(null)}>Cancelar</Button>
+              <Button variant="primary" full disabled={clientPriceSaving} onClick={saveClientPrice}>
+                {clientPriceSaving ? <Spinner size={14}/> : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal editar nome */}

@@ -3,108 +3,148 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { paymentsApi } from '../../services/api.js'
 import { Button, Card, PageHeader, Spinner } from '../../components/ui.jsx'
 
-// Preço fixo por plano — sem variação por número de CNAEs
-const PLANS = [
-  { name:'Simples', icon:'🏷️', color:'#2563eb', highlight:false, price:290,
-    features:[
-      'Cartão CNPJ verificado automaticamente',
-      'Consulta CEIS, CNEP (listas de sanções)',
-      'Documentos básicos da categoria selecionada',
-      'Monitoramento mensal automático de certidões',
-      'Visibilidade no marketplace SIGEC-ELOS',
-      'Alertas de documentos vencendo',
-    ]
+const SEALS = [
+  {
+    type: 'verificado', name: 'ELOS Verificado', icon: '🔵', color: '#2E3192', highlight: false,
+    priceAnual: 199, priceMensal: 29,
+    badge: null,
+    features: [
+      'Verificação automática via Receita Federal e BrasilAPI',
+      'Consulta de sanções (CEIS, CNEP)',
+      'Perfil público no marketplace SIGEC-ELOS',
+      'Perfil Comprador Free incluído automaticamente',
+      'Alertas de vencimento de documentos',
+      'Monitoramento mensal automático',
+    ],
   },
-  { name:'Premium', icon:'⭐', color:'#ea580c', highlight:true, price:990,
-    features:[
-      'Tudo do Simples +',
+  {
+    type: 'homologado', name: 'ELOS Homologado', icon: '🏅', color: '#F47E2F', highlight: true,
+    priceAnual: 690, priceMensal: null,
+    badge: 'RECOMENDADO',
+    features: [
+      'Tudo do Verificado +',
+      'Análise humana pelo backoffice EQPI',
+      'Selo de Reputação: Bronze → Prata → Ouro',
+      'Prioridade de exibição no marketplace',
       'Documentos completos da categoria (todos os níveis)',
-      'Consulta SERASA + análise de crédito',
-      'Balanço patrimonial + DRE 2 anos',
-      'Atestados técnicos e certificações ISO/ESG',
-      'Prioridade nas buscas do marketplace',
-      'Consultoria de regularização inclusa',
-    ]
+      'Relatório Assertiva de análise de crédito',
+      'Balanço patrimonial e DRE (2 anos)',
+      'Elegível para processos de clientes HOC',
+    ],
   },
 ]
 
 export default function SupplierPlans() {
-  const { user }  = useAuth()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(null)
-  const [error, setError]     = useState('')
+  const [error,   setError]   = useState('')
+  const [billing, setBilling] = useState({ verificado: 'anual' })
 
-  const handleSubscribe = async (planType, price) => {
-    if (!user?.supplierId) {
-      setError('Complete o cadastro da empresa antes de assinar um plano.')
-      return
-    }
-    setLoading(planType); setError('')
+  const handleSubscribe = async (sealType, price, cycle) => {
+    if (!user?.supplierId) { setError('Complete o cadastro da empresa antes de assinar um plano.'); return }
+    const stripeType = cycle === 'mensal' ? 'verificado_mensal' : `${sealType}_anual`
+    setLoading(sealType); setError('')
     try {
       const { url } = await paymentsApi.createCheckout({
-        planType,
-        cnaeCount: 3,    // fixo — não é mais perguntado ao usuário
-        supplierId: user.supplierId,
-        userEmail:  user.email,
-        priceYearly: price,
+        planType: stripeType, cnaeCount: 3,
+        supplierId: user.supplierId, userEmail: user.email, priceYearly: price,
       })
       window.location.href = url
-    } catch (err) {
-      setError(err.message)
-      setLoading(null)
-    }
+    } catch (err) { setError(err.message); setLoading(null) }
   }
 
   return (
-    <div style={{ maxWidth:800, margin:'0 auto', padding:'32px 24px' }}>
-      <PageHeader title="Planos SIGEC-ELOS" subtitle="Escolha o plano ideal para sua empresa" />
+    <div style={{ maxWidth:860, margin:'0 auto', padding:'32px 24px' }}>
+      <PageHeader title="Selos SIGEC-ELOS" subtitle="Escolha o nível de homologação para sua empresa"/>
 
       {error && (
-        <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:12, padding:'12px 16px', marginBottom:20, fontSize:13, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>
-          {error}
-        </div>
+        <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:12, padding:'12px 16px', marginBottom:20, fontSize:13, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-        {PLANS.map(plan => {
-          const monthly = Math.ceil(plan.price / 12)
-          const busy    = loading === plan.name
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:24 }}>
+        {SEALS.map(seal => {
+          const cycle   = billing[seal.type] || 'anual'
+          const price   = cycle === 'mensal' ? seal.priceMensal : seal.priceAnual
+          const monthly = cycle === 'mensal' ? price : Math.ceil(price / 12)
+          const busy    = loading === seal.type
+
           return (
-            <div key={plan.name} style={{ background:'#fff', borderRadius:20, padding:'28px 24px', border:plan.highlight?`2px solid ${plan.color}`:'1px solid #e2e4ef', position:'relative', boxShadow:plan.highlight?`0 8px 32px rgba(244,126,47,.15)`:'0 2px 12px rgba(0,0,0,.04)' }}>
-              {plan.highlight && (
+            <div key={seal.type} style={{ background:'#fff', borderRadius:20, padding:'28px 24px', border:seal.highlight?`2px solid ${seal.color}`:'1px solid #e2e4ef', position:'relative', boxShadow:seal.highlight?`0 8px 32px rgba(244,126,47,.15)`:'0 2px 12px rgba(0,0,0,.04)' }}>
+              {seal.badge && (
                 <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:'linear-gradient(135deg,#F47E2F,#ff9a52)', color:'#fff', fontSize:11, fontWeight:800, letterSpacing:1, padding:'4px 16px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap' }}>
-                  ✦ MAIS POPULAR
+                  ✦ {seal.badge}
                 </div>
               )}
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-                <span style={{ fontSize:24 }}>{plan.icon}</span>
-                <div style={{ fontSize:20, fontWeight:800, color:plan.color, fontFamily:'Montserrat,sans-serif' }}>{plan.name}</div>
+                <span style={{ fontSize:26 }}>{seal.icon}</span>
+                <div style={{ fontSize:18, fontWeight:800, color:seal.color, fontFamily:'Montserrat,sans-serif' }}>{seal.name}</div>
               </div>
-              <div style={{ marginBottom:20 }}>
-                <div style={{ fontSize:36, fontWeight:900, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1 }}>
-                  R$ {plan.price.toLocaleString('pt-BR')}
+
+              {/* Periodicidade (só Verificado tem mensal) */}
+              {seal.priceMensal && (
+                <div style={{ display:'flex', gap:6, marginBottom:14 }}>
+                  {['anual','mensal'].map(c => (
+                    <button key={c} onClick={() => setBilling(p => ({...p, [seal.type]: c}))}
+                      style={{ flex:1, padding:'6px', borderRadius:8, border:`1.5px solid ${cycle===c?seal.color:'#e2e4ef'}`, background:cycle===c?`${seal.color}10`:'#fff', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:11, color:cycle===c?seal.color:'#9B9B9B', fontWeight:cycle===c?700:400 }}>
+                      {c === 'anual' ? 'Anual' : 'Mensal'}
+                    </button>
+                  ))}
                 </div>
-                <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                  /ano · ~R$ {monthly.toLocaleString('pt-BR')}/mês
+              )}
+
+              <div style={{ marginBottom:18 }}>
+                <div style={{ fontSize:34, fontWeight:900, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1 }}>
+                  R$ {price.toLocaleString('pt-BR')}
+                </div>
+                <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                  {cycle === 'mensal' ? '/mês' : `/ano · ~R$ ${monthly}/mês`}
                 </div>
               </div>
-              <div style={{ marginBottom:24 }}>
-                {plan.features.map((f,i) => (
-                  <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:8 }}>
-                    <span style={{ color:plan.color, fontSize:14, flexShrink:0 }}>✓</span>
-                    <span style={{ fontSize:13, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif', lineHeight:1.4 }}>{f}</span>
+
+              <div style={{ marginBottom:22 }}>
+                {seal.features.map((f, i) => (
+                  <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:7 }}>
+                    <span style={{ color:seal.color, fontSize:13, flexShrink:0, marginTop:1 }}>✓</span>
+                    <span style={{ fontSize:13, color:'#374151', fontFamily:'DM Sans,sans-serif', lineHeight:1.4 }}>{f}</span>
                   </div>
                 ))}
               </div>
-              <Button variant={plan.highlight?'orange':'primary'} full size="lg" style={{ borderRadius:12 }}
-                disabled={!!loading} onClick={() => handleSubscribe(plan.name, plan.price)}>
-                {busy ? <><Spinner size={16}/> Abrindo Stripe...</> : `Assinar ${plan.name} →`}
+
+              <Button variant={seal.highlight ? 'orange' : 'primary'} full size="lg" style={{ borderRadius:12 }}
+                disabled={!!loading} onClick={() => handleSubscribe(seal.type, price, cycle)}>
+                {busy ? <><Spinner size={16}/> Abrindo Stripe...</> : `Contratar ${seal.name} →`}
               </Button>
             </div>
           )
         })}
       </div>
 
-      <div style={{ textAlign:'center', marginTop:24, fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', padding:16, background:'#fff', borderRadius:12, border:'1px solid #e2e4ef' }}>
+      {/* Selo de Reputação — informativo */}
+      <Card style={{ borderRadius:16, padding:'20px 24px', background:'linear-gradient(135deg,#fff9f0,#fff)' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e', marginBottom:8 }}>
+          🏅 Selo de Reputação — Bronze · Prata · Ouro
+        </div>
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
+          O Selo de Reputação não é comprado — ele é <strong>conquistado</strong> dentro do ELOS Homologado.
+          É calculado com base na completude documental, tempo de casa, performance e indicadores ESG.
+          Ele rege seu posicionamento no ranking do marketplace.
+        </div>
+        <div style={{ display:'flex', gap:16 }}>
+          {[
+            ['🥉','Bronze','Ponto de entrada após homologação','#cd7f32'],
+            ['🥈','Prata','Documentação completa e histórico positivo','#9E9E9E'],
+            ['🥇','Ouro','Excelência comprovada em múltiplos critérios','#FFD700'],
+          ].map(([icon, tier, desc, color]) => (
+            <div key={tier} style={{ flex:1, textAlign:'center', padding:'12px 8px', background:`${color}12`, borderRadius:12, border:`1px solid ${color}44` }}>
+              <div style={{ fontSize:20 }}>{icon}</div>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color, marginTop:4 }}>{tier}</div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:10, color:'#64748b', marginTop:3, lineHeight:1.4 }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div style={{ textAlign:'center', marginTop:16, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
         🔒 Pagamento seguro via <strong style={{ color:'#1a1c5e' }}>Stripe</strong> · Boleto, PIX e Cartão em até 12x · Cancele quando quiser
       </div>
     </div>

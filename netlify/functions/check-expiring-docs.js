@@ -24,8 +24,51 @@ exports.handler = async (event) => {
     const now     = new Date()
     const in30d   = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     const in7d    = new Date(now.getTime() +  7 * 24 * 60 * 60 * 1000)
+    const in5d    = new Date(now.getTime() +  5 * 24 * 60 * 60 * 1000)
     const today   = now.toISOString().slice(0,10)
     const limit30 = in30d.toISOString().slice(0,10)
+
+    // ── Auto-renovação: documentos AUTO vencendo em ≤5 dias ──────────────────
+    const AUTO_DOC_TYPES = ['37','61','62','7'] // CNPJ, CNAEs, Simples Nacional, FGTS
+    const { data: autoExpiring } = await supabase
+      .from('documents')
+      .select('id, type, supplier_id, suppliers(id, cnpj, user_id)')
+      .in('type', AUTO_DOC_TYPES)
+      .eq('source', 'AUTO')
+      .in('status', ['VALID','EXPIRING'])
+      .lte('expires_at', in5d.toISOString())
+      .gte('expires_at', today)
+
+    if (autoExpiring?.length) {
+      console.log(`🔄 Auto-renovando ${autoExpiring.length} documento(s) AUTO...`)
+      const baseUrl = process.env.URL || process.env.FRONTEND_URL || 'https://sigecelos.com.br'
+
+      for (const doc of autoExpiring) {
+        try {
+          const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
+          if (!cnpj) continue
+
+          if (doc.type === '37' || doc.type === '61' || doc.type === '62') {
+            // Re-consulta BrasilAPI (collect-document lida com CNPJ, CNAEs, Simples)
+            await fetch(`${baseUrl}/.netlify/functions/collect-document`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+              body: JSON.stringify({ supplierId: doc.supplier_id, docType: doc.type, cnpj }),
+            })
+          } else if (doc.type === '7') {
+            // Re-consulta FGTS CRF
+            await fetch(`${baseUrl}/.netlify/functions/fgts-crf-lookup`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+              body: JSON.stringify({ supplierId: doc.supplier_id, cnpj }),
+            })
+          }
+          console.log(`  ✓ Renovado doc ${doc.type} para supplier ${doc.supplier_id}`)
+        } catch (e) {
+          console.warn(`  ✗ Falha ao renovar doc ${doc.type} para ${doc.supplier_id}:`, e.message)
+        }
+      }
+    }
 
     // Busca documentos VÁLIDOS que vencem nos próximos 30 dias
     const { data: expiringDocs, error } = await supabase

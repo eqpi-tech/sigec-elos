@@ -49,6 +49,8 @@ export default function SupplierDocuments() {
   const [uploading, setUploading] = useState(null)
   const [toast, setToast]       = useState(null)
   const fileRefs = useRef({})
+  const presentationRef = useRef(null)
+  const [uploadingPresentation, setUploadingPresentation] = useState(false)
 
   const [collecting, setCollecting] = useState(null)
 
@@ -245,6 +247,28 @@ export default function SupplierDocuments() {
     } catch (e) { showToast('Erro ao abrir documento', 'error') }
   }
 
+  const handlePresentationUpload = async (file) => {
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (!['pdf','pptx','ppt'].includes(ext)) {
+      showToast('Formato não permitido. Use PDF, PPTX ou PPT', 'error'); return
+    }
+    if (file.size > 50*1024*1024) { showToast('Arquivo muito grande. Máx 50MB', 'error'); return }
+    setUploadingPresentation(true)
+    try {
+      const doc = await documentApi.upload(user.supplierId, user.id, file, 'presentation')
+      // Apresentação é aprovada automaticamente — sem revisão do backoffice
+      await supabase.from('documents').update({ status: 'VALID', label: 'Apresentação da Empresa' }).eq('id', doc.id)
+      setUploaded(prev => {
+        const i = prev.findIndex(d => d.type === 'presentation')
+        const updated = { ...doc, status: 'VALID', label: 'Apresentação da Empresa' }
+        return i >= 0 ? prev.map((d, idx) => idx === i ? updated : d) : [...prev, updated]
+      })
+      showToast('✅ Apresentação enviada!')
+    } catch (err) { showToast('Erro: ' + err.message, 'error') }
+    finally { setUploadingPresentation(false) }
+  }
+
   const getDoc = (docId) => uploaded.find(d => d.type === String(docId) || d.type === `CNPJ_CARD` && docId === 37)
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
@@ -359,21 +383,27 @@ export default function SupplierDocuments() {
                 {isIsentoMarked ? '✓ Isento' : 'Isento'}
               </button>
             )}
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
-              ref={el => fileRefs.current[doc.id] = el}
-              style={{ display:'none' }}
-              onChange={e => handleUpload(doc.id, doc.name, e.target.files[0])}
-            />
-            {busy ? <Spinner size={20}/> : (
-              <Button
-                variant={up?.storage_path ? 'neutral' : 'orange'}
-                size="sm"
-                onClick={() => fileRefs.current[doc.id]?.click()}
-                disabled={isIsentoMarked}
-                title={up?.storage_path ? 'Substituir pelo novo arquivo' : 'Enviar documento'}>
-                {up?.storage_path ? '↑ Substituir' : '↑ Enviar'}
-              </Button>
-            )}
+            {/* Upload: permitido apenas para MISSING, REJECTED e EXPIRED */}
+            {['MISSING','REJECTED','EXPIRED'].includes(status) ? (
+              <>
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
+                  ref={el => fileRefs.current[doc.id] = el}
+                  style={{ display:'none' }}
+                  onChange={e => handleUpload(doc.id, doc.name, e.target.files[0])}
+                />
+                {busy ? <Spinner size={20}/> : (
+                  <Button variant="orange" size="sm"
+                    onClick={() => fileRefs.current[doc.id]?.click()}
+                    disabled={isIsentoMarked}>
+                    ↑ Enviar
+                  </Button>
+                )}
+              </>
+            ) : status === 'PENDING' ? (
+              <span style={{ fontSize:10, color:'#f59e0b', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>Em análise</span>
+            ) : status === 'VALID' ? (
+              <span style={{ fontSize:10, color:'#22c55e', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>✓ Aprovado</span>
+            ) : null}
           </div>
         )}
       </div>
@@ -400,6 +430,41 @@ export default function SupplierDocuments() {
           <Card key={l}><div style={{ display:'flex',alignItems:'center',gap:12 }}><div style={{ fontSize:28 }}>{i}</div><div><div style={{ fontSize:22,fontWeight:800,color:c,fontFamily:'Montserrat,sans-serif' }}>{v}</div><div style={{ fontSize:11,color:'#9B9B9B' }}>{l}</div></div></div></Card>
         ))}
       </div>
+
+      {/* ── Apresentação da Empresa ── */}
+      {(() => {
+        const presentation = uploaded.find(d => d.type === 'presentation')
+        return (
+          <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:44, height:44, borderRadius:12, background:'rgba(46,49,146,.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>📊</div>
+                <div>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>Apresentação da Empresa</div>
+                  <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
+                    {presentation
+                      ? `Enviada · ${(presentation.updated_at || presentation.created_at || '').slice(0,10)}`
+                      : 'PDF, PPTX ou PPT · Máx 50 MB · Aprovado automaticamente'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                {presentation?.storage_path && (
+                  <Button variant="neutral" size="sm" onClick={() => handleViewDoc(presentation.storage_path)}>👁 Ver</Button>
+                )}
+                <input type="file" accept=".pdf,.pptx,.ppt" ref={presentationRef} style={{ display:'none' }}
+                  onChange={e => handlePresentationUpload(e.target.files[0])}/>
+                {uploadingPresentation
+                  ? <Spinner size={20}/>
+                  : <Button variant={presentation ? 'neutral' : 'orange'} size="sm" onClick={() => presentationRef.current?.click()}>
+                      {presentation ? '↑ Atualizar' : '↑ Enviar apresentação'}
+                    </Button>
+                }
+              </div>
+            </div>
+          </Card>
+        )
+      })()}
 
       {/* Lista de documentos exigidos pelas categorias */}
       {reqDocs.length === 0 ? (

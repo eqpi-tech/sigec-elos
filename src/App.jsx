@@ -29,8 +29,10 @@ import BackofficeProcessSearch  from './pages/backoffice/ProcessSearch.jsx'
 import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
 import BackofficeUsers               from './pages/backoffice/Users.jsx'
 import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlows.jsx'
+import BackofficeDocumentAnalysis    from './pages/backoffice/DocumentAnalysis.jsx'
 import BackofficeLandingPages        from './pages/backoffice/LandingPages.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
+import SupplierTeam             from './pages/supplier/Team.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import ClientPortal  from './pages/ClientPortal.jsx'
 
@@ -41,6 +43,7 @@ import ClientSupplierProcess   from './pages/client/SupplierProcess.jsx'
 import ClientSupplierDiscover  from './pages/client/SupplierDiscover.jsx'
 import ClientQuestionnaires    from './pages/client/Questionnaires.jsx'
 import ClientSettings          from './pages/client/Settings.jsx'
+import ClientRFQ               from './pages/client/RFQ.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -83,6 +86,7 @@ function AppRoutes() {
       <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
       <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']}><SupplierQuestionnaire/></Protect>} />
       <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />
+      <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']}><SupplierTeam/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
@@ -100,7 +104,8 @@ function AppRoutes() {
       <Route path="/backoffice/processos"        element={<Protect roles={['ADMIN']}><BackofficeProcessSearch/></Protect>} />
       <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
       <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']}><BackofficeUsers/></Protect>} />
-      <Route path="/backoffice/fluxo-documentos" element={<Protect roles={['ADMIN']}><BackofficeClientDocumentFlows/></Protect>} />
+      <Route path="/backoffice/fluxo-documentos"    element={<Protect roles={['ADMIN']}><BackofficeClientDocumentFlows/></Protect>} />
+      <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
       <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']}><BackofficeLandingPages/></Protect>} />
 
       {/* Cliente (HOC) */}
@@ -111,6 +116,7 @@ function AppRoutes() {
       <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
       <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']}><ClientQuestionnaires/></Protect>} />
       <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']}><ClientSettings/></Protect>} />
+      <Route path="/cliente/rfq"                      element={<Protect roles={['CLIENT']}><ClientRFQ/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>

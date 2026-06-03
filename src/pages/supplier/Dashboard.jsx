@@ -22,6 +22,8 @@ export default function SupplierDashboard() {
   const [seals,    setSeals]                = useState([])
   const [requiredDocsCount, setRequired]    = useState(0)
   const [loading,  setLoading]              = useState(true)
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alertDocs,      setAlertDocs]      = useState([])
 
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
@@ -44,6 +46,15 @@ export default function SupplierDashboard() {
         const { data: catDocs } = await supabase
           .from('category_documents').select('document_id').in('category_id', catIds)
         setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
+      }
+
+      // Modal de alerta: mostra uma vez por sessão se há docs EXPIRED ou REJECTED
+      const sessionKey = `alert_shown_${user.supplierId}`
+      const urgent = d.filter(doc => doc.status === 'EXPIRED' || doc.status === 'REJECTED')
+      if (urgent.length > 0 && !sessionStorage.getItem(sessionKey)) {
+        sessionStorage.setItem(sessionKey, '1')
+        setAlertDocs(urgent)
+        setShowAlertModal(true)
       }
     } finally { setLoading(false) }
   }, [user?.supplierId])
@@ -282,6 +293,47 @@ export default function SupplierDashboard() {
             ))}
           </div>
         </Card>
+      )}
+      {/* Modal de alerta: documentos vencidos / rejeitados */}
+      {showAlertModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:28, maxWidth:480, width:'100%', boxShadow:'0 24px 80px rgba(0,0,0,.3)' }}>
+            <div style={{ fontSize:36, marginBottom:12, textAlign:'center' }}>⚠️</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:6, textAlign:'center' }}>
+              {alertDocs.length} documento{alertDocs.length !== 1 ? 's' : ''} precisam de atenção
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20, textAlign:'center' }}>
+              Documentos vencidos ou rejeitados podem suspender seu Selo ELOS.
+            </div>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:240, overflowY:'auto', marginBottom:20 }}>
+              {alertDocs.map((doc, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderRadius:10, background: doc.status === 'EXPIRED' ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.04)', border:`1px solid ${doc.status==='EXPIRED'?'rgba(239,68,68,.25)':'rgba(239,68,68,.15)'}` }}>
+                  <span style={{ fontSize:16 }}>{doc.status === 'EXPIRED' ? '🔴' : '🟡'}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, color:'#1a1c5e' }}>{doc.label}</div>
+                    <div style={{ fontSize:11, color: doc.status==='EXPIRED'?'#dc2626':'#d97706', fontFamily:'DM Sans,sans-serif' }}>
+                      {doc.status === 'EXPIRED' ? 'Vencido' : 'Rejeitado'}
+                      {doc.expires_at ? ` · ${doc.expires_at.slice(0,10)}` : ''}
+                      {doc.review_note ? ` · ${doc.review_note}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setShowAlertModal(false)}
+                style={{ flex:1, padding:'11px', borderRadius:10, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b' }}>
+                Ver depois
+              </button>
+              <button onClick={() => { setShowAlertModal(false); navigate('/fornecedor/documentos') }}
+                style={{ flex:2, padding:'11px', borderRadius:10, border:'none', background:'#dc2626', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#fff' }}>
+                Regularizar agora →
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

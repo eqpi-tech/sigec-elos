@@ -8,7 +8,14 @@ import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
-const PLAN_PRICES = { Simples: 290, Premium: 990 }
+const PLAN_PRICES = {
+  verificado:  199,
+  homologado:  690,
+  // legado — mantido para compatibilidade com fluxos existentes
+  Simples: 199,
+  Premium: 690,
+}
+const BILLING_PRICE = { verificado_mensal: 29 } // só Verificado tem opção mensal
 
 export default function SupplierOnboarding() {
   const mobile = useIsMobile()
@@ -55,7 +62,8 @@ export default function SupplierOnboarding() {
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
 
-  const [planType, setPlanType]   = useState('Simples')
+  const [planType, setPlanType]     = useState('homologado')  // 'verificado' | 'homologado'
+  const [billingCycle, setBilling]  = useState('anual')       // 'anual' | 'mensal' (só verificado)
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
@@ -67,6 +75,8 @@ export default function SupplierOnboarding() {
       .then(inv => {
         setInvitation(inv)
         if (inv.supplier_email) setEmail(inv.supplier_email)
+        // Convite de cliente → forçar Homologado
+        if (inv.client_id) setPlanType('homologado')
       })
       .catch(e => console.warn('invitation lookup:', e.message))
   }, [inviteToken])
@@ -240,12 +250,16 @@ export default function SupplierOnboarding() {
       const { supplier, sessionToken } = await createAuthAndSupplier()
 
       // Redireciona para Stripe Checkout
-      const priceYearly = PLAN_PRICES[planType]
+      // Se vier de convite de cliente, passa o token para usar o preço do contrato
+      const priceValue  = isMensal ? BILLING_PRICE.verificado_mensal : (invitation?.client_price || PLAN_PRICES[planType])
+      const stripeType  = isMensal ? 'verificado_mensal' : `${planType}_anual`
       const { url } = await paymentsApi.createCheckout({
-        planType, cnaeCount: 3,
-        supplierId: supplier.id,
-        userEmail:  email,
-        priceYearly,
+        planType:    stripeType,
+        cnaeCount:   3,
+        supplierId:  supplier.id,
+        userEmail:   email,
+        priceYearly: priceValue,
+        inviteToken: inviteToken || undefined,
       })
 
       window.location.href = url
@@ -256,8 +270,9 @@ export default function SupplierOnboarding() {
     }
   }
 
-  const price    = PLAN_PRICES[planType]
-  const monthly  = Math.ceil(price/12)
+  const isMensal = planType === 'verificado' && billingCycle === 'mensal'
+  const price    = isMensal ? BILLING_PRICE.verificado_mensal : PLAN_PRICES[planType]
+  const monthly  = isMensal ? price : Math.ceil(price / 12)
 
   const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box', transition:'all .15s' }
   const labelStyle = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
@@ -523,29 +538,63 @@ export default function SupplierOnboarding() {
             </div>
           )}
 
-          {/* Step 4 — Plano */}
+          {/* Step 4 — Escolha do Selo */}
           {step === 4 && (
             <div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Escolha seu plano</div>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Escolha seu Selo ELOS</div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>Selecione o nível de homologação desejado.</div>
 
-              <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap:12, marginBottom:20 }}>
-                {['Simples','Premium'].map(pt => (
-                  <button key={pt} onClick={() => setPlanType(pt)} style={{ padding:'16px 12px', borderRadius:14, border:`2px solid ${planType===pt?(pt==='Premium'?'#ea580c':'#2E3192'):'#e2e4ef'}`, background:planType===pt?(pt==='Premium'?'rgba(244,126,47,.06)':'rgba(46,49,146,.06)'):'#fff', cursor:'pointer', textAlign:'center', transition:'all .15s' }}>
-                    <div style={{ fontSize:22 }}>{pt==='Premium'?'⭐':'🏷️'}</div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:planType===pt?(pt==='Premium'?'#ea580c':'#2E3192'):'#1a1c5e', marginTop:4 }}>{pt}</div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:20, color:'#1a1c5e', marginTop:4 }}>
-                      R$ {PLAN_PRICES[pt].toLocaleString('pt-BR')}
+              {/* Verificado */}
+              <button onClick={() => setPlanType('verificado')} style={{ width:'100%', textAlign:'left', padding:'16px', borderRadius:14, border:`2px solid ${planType==='verificado'?'#2E3192':'#e2e4ef'}`, background:planType==='verificado'?'rgba(46,49,146,.05)':'#fff', cursor:'pointer', marginBottom:10, transition:'all .15s' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <span style={{ fontSize:28 }}>🔵</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>ELOS Verificado</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>
+                      Pré-homologação automática · Vitrine imediata no marketplace · Perfil Comprador incluso
                     </div>
-                    <div style={{ fontSize:11, color:'#9B9B9B' }}>/ano</div>
-                  </button>
-                ))}
-              </div>
-              <div style={{ background:'rgba(46,49,146,.04)', borderRadius:12, padding:'12px 16px', marginBottom:20, fontSize:13, fontFamily:'DM Sans,sans-serif', color:'#1a1c5e' }}>
-                <strong style={{ fontFamily:'Montserrat,sans-serif' }}>{planType}</strong> · R$ {price.toLocaleString('pt-BR')}/ano (~R$ {monthly.toLocaleString('pt-BR')}/mês)
-              </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#2E3192' }}>R$ 199<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                    <div style={{ fontSize:11, color:'#64748b' }}>ou R$ 29/mês</div>
+                  </div>
+                </div>
+                {planType === 'verificado' && (
+                  <div style={{ display:'flex', gap:8, marginTop:12, paddingTop:12, borderTop:'1px solid rgba(46,49,146,.12)' }}>
+                    {[['anual','R$ 199/ano (~R$ 17/mês)'],['mensal','R$ 29/mês']].map(([cycle, label]) => (
+                      <button key={cycle} onClick={e => { e.stopPropagation(); setBilling(cycle) }}
+                        style={{ flex:1, padding:'8px', borderRadius:10, border:`1.5px solid ${billingCycle===cycle?'#2E3192':'#e2e4ef'}`, background:billingCycle===cycle?'rgba(46,49,146,.08)':'#fff', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:12, color:billingCycle===cycle?'#2E3192':'#9B9B9B', fontWeight:billingCycle===cycle?700:400 }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </button>
+
+              {/* Homologado */}
+              <button onClick={() => setPlanType('homologado')} style={{ width:'100%', textAlign:'left', padding:'16px', borderRadius:14, border:`2px solid ${planType==='homologado'?'#F47E2F':'#e2e4ef'}`, background:planType==='homologado'?'rgba(244,126,47,.05)':'#fff', cursor:'pointer', marginBottom:20, transition:'all .15s' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <span style={{ fontSize:28 }}>🏅</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>ELOS Homologado</span>
+                      <span style={{ fontSize:9, fontWeight:700, color:'#F47E2F', background:'rgba(244,126,47,.12)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>RECOMENDADO</span>
+                    </div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>
+                      Homologação profissional com análise humana · Selo de reputação Bronze/Prata/Ouro · Prioridade no ranking
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ 690<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                  </div>
+                </div>
+              </button>
+
               <div style={{ display:'flex', gap:8 }}>
                 <Button variant="neutral" full onClick={() => setStep(3)}>← Voltar</Button>
-                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(5)}>Ir para pagamento →</Button>
+                <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => setStep(5)}>
+                  Ir para pagamento →
+                </Button>
               </div>
             </div>
           )}
@@ -555,7 +604,14 @@ export default function SupplierOnboarding() {
             <div>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:16 }}>Confirmar e pagar</div>
               <div style={{ background:'rgba(46,49,146,.04)', borderRadius:14, padding:'16px 18px', marginBottom:20 }}>
-                {[['Empresa', cnpjData?.razao_social || name], ['CNPJ', cnpj], ['Plano', planType], ['Valor', `R$ ${price.toLocaleString('pt-BR')}/ano`], ['E-mail', email]].map(([l,v]) => (
+                {[
+                  ['Empresa', cnpjData?.razao_social || name],
+                  ['CNPJ', cnpj],
+                  ['Selo', planType === 'verificado' ? 'ELOS Verificado' : 'ELOS Homologado'],
+                  ['Periodicidade', isMensal ? 'Mensal' : 'Anual'],
+                  ['Valor', isMensal ? `R$ ${price}/mês` : `R$ ${price.toLocaleString('pt-BR')}/ano`],
+                  ['E-mail', email],
+                ].map(([l,v]) => (
                   <div key={l} style={{ display:'flex', justifyContent:'space-between', marginBottom:8, fontSize:13, fontFamily:'DM Sans,sans-serif' }}>
                     <span style={{ color:'#9B9B9B' }}>{l}</span>
                     <span style={{ fontWeight:600, color:'#1a1c5e' }}>{v}</span>

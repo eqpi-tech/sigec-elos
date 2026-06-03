@@ -100,9 +100,9 @@ export default function BackofficeOverview() {
   const riskColor = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
   const farolSegments = farol ? [
-    { label:'Vencidos',         count: farol.vencidos.length, color:'#ef4444' },
-    { label:'Vencem hoje',      count: farol.hoje.length,     color:'#f59e0b' },
-    { label:'Vencimento futuro',count: farol.futuro.length,   color:'#22c55e' },
+    { label:'Vencidos',          count: farol.vencidos.length, color:'#ef4444' },
+    { label:'Vencem hoje',       count: farol.hoje.length,     color:'#f59e0b' },
+    { label:'Próximos 5 dias',   count: farol.futuro.length,   color:'#22c55e' },
   ] : []
 
   const atRisk = farol ? [...farol.vencidos, ...farol.hoje] : []
@@ -112,7 +112,7 @@ export default function BackofficeOverview() {
       <PageHeader title="Painel Backoffice" subtitle="EQPI Tech · Ecossistema SIGEC-ELOS"
         action={<div style={{ display:'flex',gap:8 }}>
           <Button variant="neutral" onClick={()=>navigate('/backoffice/criar-usuario')}>+ Novo Usuário</Button>
-          <Button variant="primary" onClick={()=>navigate('/backoffice/fila')}>Ver Fila</Button>
+          <Button variant="primary" onClick={()=>navigate('/backoffice/analise-documentos')}>📄 Analisar Documentos</Button>
         </div>}/>
 
       {/* KPIs */}
@@ -126,7 +126,7 @@ export default function BackofficeOverview() {
       {/* ── Farol de Documentos ── */}
       {farol && (
         <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <SectionTitle style={{ marginBottom:0 }}>Farol de Documentos</SectionTitle>
               {(farol.vencidos.length > 0 || farol.hoje.length > 0) && (
@@ -135,9 +135,12 @@ export default function BackofficeOverview() {
                 </span>
               )}
             </div>
-            <Button variant="neutral" size="sm" onClick={() => exportCsv(farol.all)}>
-              ⬇ Exportar CSV
+            <Button variant="primary" size="sm" onClick={() => navigate('/backoffice/analise-documentos')}>
+              📄 Analisar Documentos
             </Button>
+          </div>
+          <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:8, padding:'6px 10px' }}>
+            ℹ️ Exibindo documentos vencidos, que vencem hoje e nos <strong>próximos 5 dias</strong>. Documentos com vencimento além desse prazo não são listados aqui.
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:24, alignItems:'center' }}>
@@ -207,7 +210,7 @@ export default function BackofficeOverview() {
         <Card style={{ borderRadius:16, padding:'20px 24px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <SectionTitle>Fila de Análise</SectionTitle>
-            <Button variant="neutral" size="sm" onClick={()=>navigate('/backoffice/fila')}>Ver todos →</Button>
+            <Button variant="neutral" size="sm" onClick={()=>navigate('/backoffice/analise-documentos')}>Analisar →</Button>
           </div>
           {queue.length === 0
             ? <div style={{ textAlign:'center', padding:'30px', color:'#9B9B9B' }}>✅ Fila vazia</div>
@@ -244,7 +247,7 @@ export default function BackofficeOverview() {
           <div style={{ background:'linear-gradient(135deg,#2E3192,#3d40b5)', borderRadius:16, padding:'20px 24px', color:'#fff' }}>
             <SectionTitle style={{ color:'#fff', marginBottom:12 }}>Ações Rápidas</SectionTitle>
             {[
-              ['⏳','Fila de Análise',   '/backoffice/fila'],
+              ['📄','Análise de Docs',    '/backoffice/analise-documentos'],
               ['🏅','Homologados',        '/backoffice/homologados'],
               ['📊','Métricas',           '/backoffice/metricas'],
               ['👤','Criar Usuário',      '/backoffice/criar-usuario'],

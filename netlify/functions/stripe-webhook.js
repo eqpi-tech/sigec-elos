@@ -59,17 +59,42 @@ exports.handler = async (event) => {
 
       if (planErr) console.error('Plan upsert error:', planErr)
 
-      // Cria/atualiza o Selo como PENDING (backoffice ainda precisa aprovar)
+      // Mapear planType para seal_type
+      // verificado_anual / verificado_mensal → 'verificado' (ativa automaticamente)
+      // homologado_anual → 'homologado' (entra na fila, PENDING)
+      // legado Simples → verificado, Premium/HOC → homologado
+      const sealTypeMap = {
+        verificado_anual:  'verificado',
+        verificado_mensal: 'verificado',
+        homologado_anual:  'homologado',
+        Simples:           'verificado',
+        Premium:           'homologado',
+        HOC:               'homologado',
+      }
+      const sealType   = sealTypeMap[planType] || 'homologado'
+      // Verificado ativa imediatamente; Homologado entra na fila do backoffice
+      const sealStatus = sealType === 'verificado' ? 'ACTIVE' : 'PENDING'
+      const billingCycle = planType.includes('mensal') ? 'mensal' : 'anual'
+
+      // Cria/atualiza o Selo
       const { error: sealErr } = await supabase.from('seals').upsert({
-        supplier_id: supplierId,
-        level:       planType,
-        status:      'PENDING',
-        score:       0,
+        supplier_id:    supplierId,
+        level:          sealType === 'verificado' ? 'Simples' : 'Premium', // compatibilidade legada
+        seal_type:      sealType,
+        billing_cycle:  billingCycle,
+        status:         sealStatus,
+        score:          0,
+        ...(sealStatus === 'ACTIVE' ? { issued_at: new Date().toISOString() } : {}),
       }, { onConflict: 'supplier_id' })
 
       if (sealErr) console.error('Seal upsert error:', sealErr)
 
-      console.log(`✅ Plano ativado: ${supplierId} → ${planType}`)
+      // Verificado: atualizar status do supplier diretamente
+      if (sealType === 'verificado') {
+        await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
+      }
+
+      console.log(`✅ Plano ativado: ${supplierId} → ${planType} (${sealType}, ${sealStatus})`)
 
     // Envia e-mail de boas-vindas via Netlify Function send-email
     try {

@@ -222,7 +222,18 @@ export function BackofficeAnalysis() {
   const [docActions, setDocActions] = useState({})
   const [revertModal, setRevertModal] = useState(false)
   const [revertReason, setRevertReason] = useState('')
-  const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario'
+  const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
+  // Dados bancários
+  const [bankData,     setBankData]     = useState(null)  // { bank_name, bank_code, bank_agency, bank_account, account_type, pix_key }
+  const [bankLoading,  setBankLoading]  = useState(false)
+  const [bankSaving,   setBankSaving]   = useState(false)
+  const [bankAiLoading,setBankAiLoading]= useState(false)
+  // Dados financeiros DRE
+  const [dreList,      setDreList]      = useState([])    // array de { id, year, receita, ativo, passivo, lucro, ebitda, estoque }
+  const [dreLoading,   setDreLoading]   = useState(false)
+  const [dreEditing,   setDreEditing]   = useState(null)  // objeto em edição
+  const [dreSaving,    setDreSaving]    = useState(false)
+  const [dreAiLoading, setDreAiLoading] = useState(false)
   const [qaAnswers, setQaAnswers] = useState([])
   const [assertivaReport,  setAssertivaReport]  = useState(undefined)
   const [assertivaLoading, setAssertivaLoading] = useState(false)
@@ -233,6 +244,11 @@ export function BackofficeAnalysis() {
   const [approveNote, setApproveNote] = useState('')
   const [autoFinalized, setAutoFinalized] = useState(null)  // 'approved' | 'rejected'
   const [cnaeMap, setCnaeMap] = useState({})
+  // Modal de rejeição com motivos parametrizados
+  const [rejectDocModal, setRejectDocModal] = useState(null)   // { docId, docLabel }
+  const [rejectReasons,  setRejectReasons]  = useState([])
+  const [rejectCode,     setRejectCode]     = useState('')
+  const [rejectCustom,   setRejectCustom]   = useState('')
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
@@ -251,6 +267,15 @@ export function BackofficeAnalysis() {
     assertivaApi.getLast(id)
       .then(setAssertivaReport)
       .catch(() => setAssertivaReport(null))
+    // Carrega motivos de recusa parametrizados
+    adminApi.getRejectionReasons()
+      .then(setRejectReasons)
+      .catch(() => {})
+    // Carrega dados bancários e DRE
+    supabase.from('supplier_bank_accounts').select('*').eq('supplier_id', id).maybeSingle()
+      .then(({ data }) => setBankData(data || {}))
+    supabase.from('supplier_financials').select('*').eq('supplier_id', id).order('year', { ascending: false })
+      .then(({ data }) => setDreList(data || []))
   }, [id])
 
   useEffect(() => {
@@ -438,16 +463,25 @@ export function BackofficeAnalysis() {
     }
   }
 
-  const handleDocReject = async (docId, docLabel) => {
-    const motivo = prompt(`Motivo da rejeição — ${docLabel}`)
-    if (motivo === null) return
+  const handleDocReject = (docId, docLabel) => {
+    setRejectCode('')
+    setRejectCustom('')
+    setRejectDocModal({ docId, docLabel })
+  }
+
+  const confirmDocReject = async () => {
+    if (!rejectDocModal || !rejectCode) return
+    const { docId } = rejectDocModal
+    const selectedReason = rejectReasons.find(r => r.code === rejectCode)
+    const motivo = rejectCode === 'OUTRO' ? rejectCustom : (selectedReason?.label || 'Rejeitado pelo backoffice')
+    setRejectDocModal(null)
     setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo || 'Rejeitado pelo backoffice' }),
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
@@ -461,6 +495,81 @@ export function BackofficeAnalysis() {
       alert('Erro ao rejeitar: ' + e.message)
       setDocActions(prev => ({ ...prev, [docId]: undefined }))
     }
+  }
+
+  // ── Dados Bancários ──────────────────────────────────────────────────────────
+  const saveBankData = async () => {
+    if (!bankData) return
+    setBankSaving(true)
+    try {
+      const userId = (await supabase.auth.getUser()).data.user?.id
+      const { error } = await supabase.from('supplier_bank_accounts').upsert(
+        { ...bankData, supplier_id: id, verified_by: userId, verified_at: new Date().toISOString() },
+        { onConflict: 'supplier_id' }
+      )
+      if (error) throw error
+    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+    finally { setBankSaving(false) }
+  }
+
+  const extractBankWithAI = async () => {
+    const bankDoc = data?.documents?.find(d =>
+      (d.label?.toLowerCase().includes('banco') || d.label?.toLowerCase().includes('conta') || d.label?.toLowerCase().includes('bancár')) && d.storage_path
+    ) || data?.documents?.find(d => d.storage_path && d.status !== 'MISSING')
+    if (!bankDoc?.storage_path) { alert('Nenhum documento com arquivo encontrado para análise.'); return }
+    setBankAiLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/ai-extract-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ storagePath: bankDoc.storage_path, extractType: 'bank', supplierId: id }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      setBankData(prev => ({ ...(prev || {}), ...result.extracted }))
+    } catch (e) { alert('Erro na extração: ' + e.message) }
+    finally { setBankAiLoading(false) }
+  }
+
+  // ── DRE ──────────────────────────────────────────────────────────────────────
+  const saveDre = async () => {
+    if (!dreEditing) return
+    setDreSaving(true)
+    try {
+      const { id: dreId, supplier_id: _sid, verified_by: _vby, verified_at: _vat, created_at: _ca, updated_at: _ua, ...fields } = dreEditing
+      const userId = (await supabase.auth.getUser()).data.user?.id
+      if (dreId) {
+        const { error } = await supabase.from('supplier_financials')
+          .update({ ...fields, verified_by: userId, verified_at: new Date().toISOString() }).eq('id', dreId)
+        if (error) throw error
+        setDreList(prev => prev.map(d => d.id === dreId ? { ...d, ...fields } : d))
+      } else {
+        const { data: inserted, error } = await supabase.from('supplier_financials')
+          .insert({ ...fields, supplier_id: id, verified_by: userId, verified_at: new Date().toISOString() }).select().single()
+        if (error) throw error
+        setDreList(prev => [inserted, ...prev].sort((a, b) => b.year - a.year))
+      }
+      setDreEditing(null)
+    } catch (e) { alert('Erro ao salvar DRE: ' + e.message) }
+    finally { setDreSaving(false) }
+  }
+
+  const extractDreWithAI = async (storagePath) => {
+    if (!storagePath) { alert('Selecione um documento DRE com arquivo.'); return }
+    setDreAiLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/ai-extract-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ storagePath, extractType: 'dre', supplierId: id }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      setDreEditing(prev => ({ ...(prev || {}), ...result.extracted }))
+    } catch (e) { alert('Erro na extração: ' + e.message) }
+    finally { setDreAiLoading(false) }
   }
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
@@ -628,6 +737,20 @@ export function BackofficeAnalysis() {
             </Card>
           )}
 
+          {/* Categorias do Fornecedor */}
+          {data.categories?.length > 0 && (
+            <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16,border:'1px solid rgba(46,49,146,.15)' }}>
+              <SectionTitle style={{ marginBottom:12 }}>Categorias de Atuação</SectionTitle>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
+                {data.categories.map(cat => (
+                  <div key={cat.id} style={{ display:'flex',alignItems:'center',gap:6,background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:20,padding:'4px 12px' }}>
+                    <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Assertiva */}
           <Card style={{ borderRadius:16,padding:'20px 24px',border:'1px solid rgba(46,49,146,.15)' }}>
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
@@ -718,10 +841,17 @@ export function BackofficeAnalysis() {
           {/* Abas: Documentos | Questionário */}
           <Card style={{ borderRadius:16,padding:'20px 24px' }}>
             <div style={{ display:'flex',gap:0,marginBottom:20,borderBottom:'1px solid #e2e4ef' }}>
-              {[['docs','Documentos'],['questionario','Questionário']].map(([tab,label])=>(
+              {[
+                ['docs','Documentos'],
+                ['questionario','Questionário'],
+                ['banco','Dados Bancários'],
+                ['dre','DRE / Financeiro'],
+              ].map(([tab,label])=>(
                 <button key={tab} onClick={()=>setActiveTab(tab)}
                   style={{ padding:'8px 18px',background:'none',border:'none',borderBottom:`2px solid ${activeTab===tab?'#2E3192':'transparent'}`,color:activeTab===tab?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:-1 }}>
                   {label}{tab==='questionario'&&qaAnswers.length>0?` (${qaAnswers.length})`:''}
+                  {tab==='banco'&&bankData?.bank_name?` ✓`:''}
+                  {tab==='dre'&&dreList.length>0?` (${dreList.length})`:''}
                 </button>
               ))}
             </div>
@@ -785,11 +915,15 @@ export function BackofficeAnalysis() {
                   {doc.storage_path && (
                     <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
                   )}
-                  {status==='PENDING' && (
+                  {(status==='PENDING' || status==='VALID') && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
-                        <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
-                        <Button variant="danger"  size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>✕ Rejeitar</Button>
+                        {status==='PENDING' && (
+                          <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
+                        )}
+                        <Button variant="danger" size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>
+                          {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
+                        </Button>
                       </>}
                     </>
                   )}
@@ -797,6 +931,138 @@ export function BackofficeAnalysis() {
               )
             })}
             </>)}
+
+            {/* ── Aba: Dados Bancários ── */}
+            {activeTab === 'banco' && (
+              <div>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                  <SectionTitle style={{ marginBottom:0 }}>Dados Bancários</SectionTitle>
+                  <Button variant="neutral" size="sm" disabled={bankAiLoading} onClick={extractBankWithAI}>
+                    {bankAiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
+                  </Button>
+                </div>
+                {bankAiLoading && (
+                  <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginBottom:12 }}>
+                    Analisando documento com IA — aguarde alguns segundos...
+                  </div>
+                )}
+                {[
+                  ['bank_name',    'Nome do Banco',         'text',   'Ex: Banco do Brasil'],
+                  ['bank_code',    'Código COMPE',          'text',   'Ex: 001'],
+                  ['bank_agency',  'Agência',               'text',   'Ex: 1234'],
+                  ['bank_account', 'Conta c/ dígito',       'text',   'Ex: 12345-6'],
+                  ['pix_key',      'Chave PIX',             'text',   'CNPJ, e-mail, telefone ou aleatória'],
+                ].map(([field, label, type, placeholder]) => (
+                  <div key={field} style={{ marginBottom:12 }}>
+                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:4 }}>{label}</label>
+                    <input type={type} value={bankData?.[field] || ''} placeholder={placeholder}
+                      onChange={e => setBankData(p => ({ ...p, [field]: e.target.value }))}
+                      style={{ width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                  </div>
+                ))}
+                <div style={{ marginBottom:16 }}>
+                  <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:4 }}>Tipo de Conta</label>
+                  <select value={bankData?.account_type || ''} onChange={e => setBankData(p => ({ ...p, account_type: e.target.value }))}
+                    style={{ width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    <option value="">Selecione...</option>
+                    <option value="corrente">Corrente</option>
+                    <option value="poupanca">Poupança</option>
+                  </select>
+                </div>
+                {bankData?.verified_at && (
+                  <div style={{ fontSize:11,color:'#22c55e',fontFamily:'DM Sans,sans-serif',marginBottom:12 }}>
+                    ✓ Verificado em {bankData.verified_at.slice(0,10)}
+                  </div>
+                )}
+                <Button variant="primary" full disabled={bankSaving} onClick={saveBankData}>
+                  {bankSaving ? <Spinner size={14}/> : '💾 Salvar Dados Bancários'}
+                </Button>
+              </div>
+            )}
+
+            {/* ── Aba: DRE / Financeiro ── */}
+            {activeTab === 'dre' && (
+              <div>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                  <SectionTitle style={{ marginBottom:0 }}>DRE / Dados Financeiros</SectionTitle>
+                  <Button variant="orange" size="sm" onClick={() => setDreEditing({ year: new Date().getFullYear() - 1 })}>
+                    + Adicionar exercício
+                  </Button>
+                </div>
+
+                {dreList.length === 0 && !dreEditing && (
+                  <div style={{ textAlign:'center',padding:'24px',color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    Nenhum dado financeiro registrado ainda.
+                  </div>
+                )}
+
+                {dreList.map(dre => (
+                  <div key={dre.id} style={{ padding:'12px 16px',borderRadius:12,border:'1px solid #e2e4ef',marginBottom:8,background:'#fafbff' }}>
+                    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                      <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e' }}>
+                        Exercício {dre.year}
+                        {dre.verified_at && <span style={{ fontSize:10,color:'#22c55e',marginLeft:8 }}>✓ Verificado</span>}
+                      </div>
+                      <Button variant="neutral" size="sm" onClick={() => setDreEditing({ ...dre })}>Editar</Button>
+                    </div>
+                    <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:8 }}>
+                      {[['Receita',dre.receita],['Ativo',dre.ativo],['Passivo',dre.passivo],['Lucro',dre.lucro],['EBITDA',dre.ebitda],['Estoque',dre.estoque]].map(([l,v]) => (
+                        v != null && <div key={l}>
+                          <div style={{ fontSize:9,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,textTransform:'uppercase',letterSpacing:.5 }}>{l}</div>
+                          <div style={{ fontSize:12,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
+                            R$ {Number(v).toLocaleString('pt-BR',{minimumFractionDigits:0})}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {dreEditing && (
+                  <div style={{ padding:'16px',border:'2px solid #2E3192',borderRadius:14,background:'rgba(46,49,146,.03)',marginTop:8 }}>
+                    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+                      <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e' }}>
+                        {dreEditing.id ? `Editando exercício ${dreEditing.year}` : 'Novo exercício'}
+                      </div>
+                      {(() => {
+                        const dreDoc = data?.documents?.find(d =>
+                          (d.label?.toLowerCase().includes('dre') || d.label?.toLowerCase().includes('balanço') || d.label?.toLowerCase().includes('balanco')) && d.storage_path
+                        )
+                        return dreDoc ? (
+                          <Button variant="neutral" size="sm" disabled={dreAiLoading} onClick={() => extractDreWithAI(dreDoc.storage_path)}>
+                            {dreAiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
+                          </Button>
+                        ) : null
+                      })()}
+                    </div>
+                    <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+                      {[
+                        ['year',    'Ano de referência', 'number'],
+                        ['receita', 'Receita Bruta (R$)', 'number'],
+                        ['ativo',   'Total do Ativo (R$)', 'number'],
+                        ['passivo', 'Total do Passivo (R$)', 'number'],
+                        ['lucro',   'Lucro Líquido (R$)', 'number'],
+                        ['ebitda',  'EBITDA (R$)', 'number'],
+                        ['estoque', 'Estoque (R$)', 'number'],
+                      ].map(([field, label]) => (
+                        <div key={field}>
+                          <label style={{ display:'block',fontSize:10,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:3 }}>{label}</label>
+                          <input type="number" value={dreEditing[field] ?? ''} placeholder="0"
+                            onChange={e => setDreEditing(p => ({ ...p, [field]: e.target.value ? Number(e.target.value) : null }))}
+                            style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display:'flex',gap:8,marginTop:12 }}>
+                      <Button variant="neutral" full onClick={() => setDreEditing(null)}>Cancelar</Button>
+                      <Button variant="primary" full disabled={dreSaving} onClick={saveDre}>
+                        {dreSaving ? <Spinner size={14}/> : '💾 Salvar'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -929,6 +1195,48 @@ export function BackofficeAnalysis() {
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={() => setApproveModal(null)}>Cancelar</Button>
               <Button variant="success" full disabled={!approveExpiry} onClick={handleDocApprove}>✓ Confirmar Aprovação</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Rejeitar Documento com Motivos Parametrizados */}
+      {rejectDocModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:460, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:6 }}>✕ Rejeitar Documento</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20 }}>{rejectDocModal.docLabel}</div>
+
+            <div style={{ marginBottom:16 }}>
+              <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
+                Motivo da rejeição <span style={{ color:'#dc2626' }}>*</span>
+              </label>
+              <select value={rejectCode} onChange={e => setRejectCode(e.target.value)}
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}>
+                <option value="">Selecione um motivo...</option>
+                {rejectReasons.filter(r => r.applies_to !== 'seal').map(r => (
+                  <option key={r.code} value={r.code}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {rejectCode === 'OUTRO' && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>Descreva o motivo</label>
+                <textarea value={rejectCustom} onChange={e => setRejectCustom(e.target.value)}
+                  rows={3} placeholder="Informe o motivo detalhado..."
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, resize:'vertical', boxSizing:'border-box' }}
+                />
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => setRejectDocModal(null)}>Cancelar</Button>
+              <Button variant="danger" full
+                disabled={!rejectCode || (rejectCode === 'OUTRO' && !rejectCustom.trim())}
+                onClick={confirmDocReject}>
+                ✕ Confirmar Rejeição
+              </Button>
             </div>
           </div>
         </div>

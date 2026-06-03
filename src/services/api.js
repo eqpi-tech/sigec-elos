@@ -433,6 +433,69 @@ export const rfqApi = {
   },
 }
 
+// RFQ para CLIENT
+export const clientRfqApi = {
+  // Cria RFQ + insere respostas para todos os fornecedores elegíveis da categoria
+  create: async ({ clientId, title, description, categoryId, deadline }) => {
+    const { data: rfq, error } = await supabase
+      .from('rfqs')
+      .insert({ client_id: clientId, title, description, category_id: categoryId, deadline, requester_role: 'CLIENT', status: 'SENT' })
+      .select().single()
+    if (error) throw new Error(error.message)
+
+    // Busca fornecedores com selo ACTIVE que atuam nessa categoria
+    const { data: catSuppliers } = await supabase
+      .from('supplier_categories')
+      .select('supplier_id')
+      .eq('category_id', categoryId)
+
+    const supplierIds = [...new Set((catSuppliers || []).map(r => r.supplier_id))]
+    if (supplierIds.length > 0) {
+      const { data: activeSeals } = await supabase
+        .from('seals').select('supplier_id').eq('status','ACTIVE').in('supplier_id', supplierIds)
+      const eligible = [...new Set((activeSeals || []).map(s => s.supplier_id))]
+      if (eligible.length > 0) {
+        const responses = eligible.map(sid => ({ rfq_id: rfq.id, supplier_id: sid, status: 'SENT' }))
+        await supabase.from('rfq_responses').insert(responses)
+      }
+      rfq._eligibleCount = eligible.length
+    }
+    return rfq
+  },
+
+  list: async (clientId) => {
+    const { data } = await supabase
+      .from('rfqs')
+      .select('id, title, description, category_id, deadline, status, created_at, categories(name)')
+      .eq('client_id', clientId)
+      .eq('requester_role', 'CLIENT')
+      .order('created_at', { ascending: false })
+    return data || []
+  },
+
+  getResponses: async (rfqId) => {
+    const { data } = await supabase
+      .from('rfq_responses')
+      .select('id, status, message, price, created_at, updated_at, supplier_id, suppliers(id, razao_social, cnpj, city, state)')
+      .eq('rfq_id', rfqId)
+      .order('created_at')
+    return data || []
+  },
+
+  updateResponseStatus: async (responseId, status) => {
+    const { error } = await supabase.from('rfq_responses').update({ status, updated_at: new Date().toISOString() }).eq('id', responseId)
+    if (error) throw new Error(error.message)
+  },
+
+  getEligibleCount: async (categoryId) => {
+    const { data: catSuppliers } = await supabase.from('supplier_categories').select('supplier_id').eq('category_id', categoryId)
+    const ids = [...new Set((catSuppliers || []).map(r => r.supplier_id))]
+    if (!ids.length) return 0
+    const { count } = await supabase.from('seals').select('*', { count:'exact', head:true }).eq('status','ACTIVE').in('supplier_id', ids)
+    return count || 0
+  },
+}
+
 // ── Admin / Backoffice ────────────────────────────────────────────────────────
 export const adminApi = {
   getQueue: async () => {
@@ -494,8 +557,10 @@ export const adminApi = {
         .eq('supplier_id', supplierId)
         .order('consulted_at', { ascending: false })
         .limit(1),
-      // Busca categorias do fornecedor para calcular docs exigidos
-      supabase.from('supplier_categories').select('category_id').eq('supplier_id', supplierId),
+      // Busca categorias do fornecedor com nomes para exibição na ficha
+      supabase.from('supplier_categories')
+        .select('category_id, categories(id, name, parent_id)')
+        .eq('supplier_id', supplierId),
     ])
 
     const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
@@ -546,12 +611,17 @@ export const adminApi = {
       return (a.label||'').localeCompare(b.label||'', 'pt-BR')
     })
 
+    const categories = catRes.status === 'fulfilled'
+      ? (catRes.value.data || []).map(r => r.categories).filter(Boolean)
+      : []
+
     return {
       ...supplier,
       email:             supplierEmail,
       seals:             sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : [],
       documents:         fullDocList,
       cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,
+      categories,
     }
   },
 
@@ -669,13 +739,77 @@ export const adminApi = {
 
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
+  // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, expiresUntil, sortBy = 'expires_asc', page = 0, pageSize = 50 } = {}) => {
+    const today      = new Date(); today.setHours(0, 0, 0, 0)
+    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
+    const in5days    = new Date(today); in5days.setDate(in5days.getDate() + 5); in5days.setHours(23, 59, 59, 999)
+
+    let q = supabase
+      .from('documents')
+      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, suppliers(id, razao_social, cnpj)', { count: 'exact' })
+      .not('label', 'is', null)
+
+    // Filtro tipo de documento
+    if (docType) q = q.eq('type', String(docType))
+
+    // Filtro status
+    if (statusFilter === 'vencido')     q = q.eq('status', 'EXPIRED').not('expires_at','is',null).lt('expires_at', today.toISOString())
+    else if (statusFilter === 'hoje')   q = q.not('expires_at','is',null).gte('expires_at', today.toISOString()).lte('expires_at', todayEnd.toISOString())
+    else if (statusFilter === '5dias')  q = q.not('expires_at','is',null).gt('expires_at', todayEnd.toISOString()).lte('expires_at', in5days.toISOString())
+    else if (statusFilter === 'pendente') q = q.eq('status','PENDING')
+    else if (statusFilter === 'analise')  q = q.in('status',['PENDING','MISSING'])
+    else if (statusFilter && statusFilter !== 'todos') q = q.eq('status', statusFilter)
+
+    // Filtro vencimento até (date string YYYY-MM-DD)
+    if (expiresUntil) q = q.not('expires_at','is',null).lte('expires_at', new Date(expiresUntil + 'T23:59:59').toISOString())
+
+    // Ordenação
+    if (sortBy === 'expires_asc')   q = q.order('expires_at', { ascending: true,  nullsFirst: false })
+    else if (sortBy === 'expires_desc') q = q.order('expires_at', { ascending: false, nullsFirst: false })
+    else if (sortBy === 'status')   q = q.order('status', { ascending: true })
+    else                            q = q.order('created_at', { ascending: false })
+
+    // Paginação
+    q = q.range(page * pageSize, (page + 1) * pageSize - 1)
+
+    const { data, error, count } = await q
+    if (error) throw new Error(error.message)
+
+    let rows = data || []
+
+    // Filtro por nome/CNPJ do fornecedor (client-side — PostgREST não faz ilike em join)
+    if (supplierSearch?.trim()) {
+      const s = supplierSearch.trim().toLowerCase()
+      rows = rows.filter(d =>
+        d.suppliers?.razao_social?.toLowerCase().includes(s) ||
+        d.suppliers?.cnpj?.replace(/\D/g,'').includes(s.replace(/\D/g,''))
+      )
+    }
+
+    // Filtro por nome do cliente (via subquery: supplier → invitations → clients)
+    // Implementado na camada de componente (join complexo, baixo volume na prática)
+
+    return { rows, total: count || 0, page, pageSize }
+  },
+
+  getRejectionReasons: async () => {
+    const { data } = await supabase
+      .from('rejection_reasons')
+      .select('id, code, label, applies_to')
+      .eq('active', true)
+      .order('id')
+    return data || []
+  },
+
   getDocumentFarol: async () => {
-    // 3 queries paralelas por faixa de data — o max-rows do PostgREST (1000) não é problema
-    // porque vencidos e hoje têm poucos registros, e futuro só precisa do count
+    // Janela: vencidos + hoje + próximos 5 dias (reduz volume e foco operacional)
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
     const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
+    const in5days    = new Date(todayStart); in5days.setDate(in5days.getDate() + 5); in5days.setHours(23, 59, 59, 999)
     const isoStart   = todayStart.toISOString()
     const isoEnd     = todayEnd.toISOString()
+    const iso5days   = in5days.toISOString()
 
     const docFields = 'id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)'
     const [vencRes, hojeRes, futuroRes] = await Promise.allSettled([
@@ -685,18 +819,17 @@ export const adminApi = {
       supabase.from('documents').select(docFields)
         .not('expires_at', 'is', null).gte('expires_at', isoStart).lte('expires_at', isoEnd)
         .order('expires_at', { ascending: true }).range(0, 4999),
-      supabase.from('documents').select('*', { count: 'exact', head: true })
-        .not('expires_at', 'is', null).gt('expires_at', isoEnd),
+      // futuro = apenas próximos 5 dias (janela operacional definida)
+      supabase.from('documents').select(docFields)
+        .not('expires_at', 'is', null).gt('expires_at', isoEnd).lte('expires_at', iso5days)
+        .order('expires_at', { ascending: true }).range(0, 4999),
     ])
 
-    const vencidos    = vencRes.status    === 'fulfilled' ? (vencRes.value.data    || []) : []
-    const hoje        = hojeRes.status    === 'fulfilled' ? (hojeRes.value.data    || []) : []
-    const futuroCount = futuroRes.status  === 'fulfilled' ? (futuroRes.value.count || 0)  : 0
+    const vencidos = vencRes.status    === 'fulfilled' ? (vencRes.value.data    || []) : []
+    const hoje     = hojeRes.status    === 'fulfilled' ? (hojeRes.value.data    || []) : []
+    const futuro   = futuroRes.status  === 'fulfilled' ? (futuroRes.value.data  || []) : []
 
-    // futuro como array de tamanho correto — componente usa apenas .length para contagem/gráfico
-    const futuro = new Array(futuroCount)
-
-    return { vencidos, hoje, futuro, all: [...vencidos, ...hoje] }
+    return { vencidos, hoje, futuro, all: [...vencidos, ...hoje, ...futuro] }
   },
 
   getMetrics: async () => {

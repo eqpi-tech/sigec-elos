@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
       supplierId: profile.supplier_id,
       buyerId:    profile.buyer_id,
       clientId:   profile.client_id,
+      isPrimary:  profile.is_primary !== false, // master = true por padrão
     }
   }
 
@@ -60,7 +61,7 @@ export function AuthProvider({ children }) {
         // Busca profile base
         const { data: profile } = await supabase
           .from('profiles').select('*').eq('id', authUser.id).maybeSingle()
-        setUser(buildUser(authUser, { ...profile, role: preferred.role, supplier_id: preferred.supplier_id, buyer_id: preferred.buyer_id, client_id: preferred.client_id }))
+        setUser(buildUser(authUser, { ...profile, role: preferred.role, supplier_id: preferred.supplier_id, buyer_id: preferred.buyer_id, client_id: preferred.client_id, is_primary: preferred.is_primary }))
       } else {
         // Fallback: usa profiles legacy
         const { data: profile } = await supabase

@@ -39,16 +39,18 @@ exports.handler = async (event) => {
     if (action === 'list') {
       const [{ data: authUsers }, rolesRes, profilesRes] = await Promise.all([
         supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
-        supabaseAdmin.from('user_roles').select('user_id, role, is_primary'),
+        supabaseAdmin.from('user_roles').select('user_id, role, is_primary, client_id'),
         supabaseAdmin.from('profiles').select('id, name'),
       ])
 
       const roleMap    = {}
       const primaryMap = {}
+      const clientIdMap = {}
       ;(rolesRes.data || []).forEach(r => {
         if (!roleMap[r.user_id]) roleMap[r.user_id] = []
         roleMap[r.user_id].push(r.role)
         if (r.is_primary) primaryMap[r.user_id] = r.role
+        if (r.role === 'CLIENT' && r.client_id) clientIdMap[r.user_id] = r.client_id
       })
 
       const nameMap = {}
@@ -60,6 +62,7 @@ exports.handler = async (event) => {
         name:       nameMap[u.id] || u.user_metadata?.name || '—',
         roles:      roleMap[u.id]    || [],
         primaryRole:primaryMap[u.id] || (roleMap[u.id]?.[0]) || 'SUPPLIER',
+        clientId:   clientIdMap[u.id] || null,
         banned:     u.banned_until ? new Date(u.banned_until) > new Date() : false,
         bannedUntil:u.banned_until || null,
         createdAt:  u.created_at,
