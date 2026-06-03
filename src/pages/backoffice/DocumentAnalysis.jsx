@@ -281,7 +281,7 @@ export default function DocumentAnalysis() {
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
           {/* Cabeçalho da lista */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 110px 110px 130px', gap:12, padding:'6px 16px', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.3fr 100px 100px 120px', gap:8, padding:'6px 16px', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase' }}>
             <span>Fornecedor</span>
             <span>Documento</span>
             <span>Status</span>
@@ -301,10 +301,10 @@ export default function DocumentAnalysis() {
                 borderLeft: `3px solid ${STATUS_COLOR[status] || '#e2e4ef'}`,
                 opacity: status === 'VALID' || status === 'REJECTED' ? 0.75 : 1,
               }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 110px 110px 130px', gap:12, alignItems:'center' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.3fr 100px 100px 120px', gap:8, alignItems:'start' }}>
                   {/* Fornecedor */}
                   <div>
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e', wordBreak:'break-word', lineHeight:1.3 }}>
                       {doc.suppliers?.razao_social || '—'}
                     </div>
                     <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
@@ -314,7 +314,7 @@ export default function DocumentAnalysis() {
 
                   {/* Documento */}
                   <div>
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', wordBreak:'break-word', lineHeight:1.3 }}>
                       {doc.label}
                     </div>
                     <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>

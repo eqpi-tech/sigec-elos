@@ -5,7 +5,54 @@
 // com header Authorization: Bearer CRON_SECRET
 
 const { createClient } = require('@supabase/supabase-js')
-const { sendEmail, TEMPLATES } = require('./send-email')
+
+// send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
+// Usamos fetch direto para a API do Resend.
+async function sendEmailDirect({ to, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) { console.warn('[check-expiring-docs] RESEND_API_KEY ausente — e-mail não enviado'); return }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
+      to:   [to],
+      subject,
+      html,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Resend error ${res.status}: ${err.slice(0,200)}`)
+  }
+}
+
+function buildExpiringEmail(razaoSocial, documents) {
+  const rows = documents.map(d =>
+    `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">${d.label}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;color:#dc2626">${d.expires_at?.slice(0,10) || '—'}</td></tr>`
+  ).join('')
+  return {
+    subject: `[SIGEC-ELOS] Documentos vencendo — ${razaoSocial}`,
+    html: `
+      <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+        <h2 style="color:#2E3192">Documentos próximos ao vencimento</h2>
+        <p>Olá, <strong>${razaoSocial}</strong>.</p>
+        <p>Os seguintes documentos vencem em breve e precisam ser renovados para manter seu Selo ELOS ativo:</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <thead><tr style="background:#f4f5f9">
+            <th style="padding:8px 12px;text-align:left;font-size:12px">Documento</th>
+            <th style="padding:8px 12px;text-align:left;font-size:12px">Vencimento</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <a href="https://sigecelos.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+          Atualizar documentos →
+        </a>
+        <p style="color:#9B9B9B;font-size:12px;margin-top:24px">SIGEC-ELOS · EQPI Tech</p>
+      </div>
+    `,
+  }
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -71,12 +118,11 @@ exports.handler = async (event) => {
     }
 
     // Busca documentos VÁLIDOS que vencem nos próximos 30 dias
+    // Nota: NÃO tentamos fazer join com auth.users via PostgREST — buscamos e-mails
+    // separadamente via auth.admin.getUserById (mais confiável)
     const { data: expiringDocs, error } = await supabase
       .from('documents')
-      .select(`
-        id, type, label, expires_at, status, supplier_id,
-        suppliers(id, razao_social, user_id, users:auth_user_id(email))
-      `)
+      .select('id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id)')
       .eq('status', 'VALID')
       .gte('expires_at', today)
       .lte('expires_at', limit30)
@@ -137,11 +183,11 @@ exports.handler = async (event) => {
 
       // Envia e-mail de notificação
       try {
-        const { subject, html } = TEMPLATES.expiring({
-          razaoSocial: supplier.razao_social,
-          documents:   docs.map(d => ({ label: d.label, expires_at: d.expires_at })),
-        })
-        await sendEmail({ to: email, subject, html })
+        const { subject, html } = buildExpiringEmail(
+          supplier.razao_social,
+          docs.map(d => ({ label: d.label, expires_at: d.expires_at }))
+        )
+        await sendEmailDirect({ to: email, subject, html })
         sent++
         results.push({ supplierId, email, docs: docs.length, status: 'sent' })
       } catch (emailErr) {

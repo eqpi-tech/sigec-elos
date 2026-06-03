@@ -215,7 +215,7 @@ export function BackofficeAnalysis() {
   const navigate = useNavigate()
   const [data, setData]         = useState(null)
   const [loading, setLoading]   = useState(true)
-  const [level, setLevel]       = useState('Simples')
+  const [level, setLevel]       = useState('homologado')  // 'verificado' | 'homologado'
   const [obs, setObs]           = useState('')
   const [done, setDone]         = useState(null)
   const [processing, setProcessing] = useState(false)
@@ -223,6 +223,7 @@ export function BackofficeAnalysis() {
   const [revertModal, setRevertModal] = useState(false)
   const [revertReason, setRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
+  const [docAiModal, setDocAiModal] = useState(null)  // { doc, extractType: 'bank'|'dre' }
   // Dados bancários
   const [bankData,     setBankData]     = useState(null)  // { bank_name, bank_code, bank_agency, bank_account, account_type, pix_key }
   const [bankLoading,  setBankLoading]  = useState(false)
@@ -254,7 +255,7 @@ export function BackofficeAnalysis() {
     adminApi.getSealAnalysis(id)
       .then(d => {
         setData(d)
-        setLevel(d.seals?.[0]?.level || 'Simples')
+        setLevel(d.seals?.[0]?.seal_type || d.seals?.[0]?.level === 'Premium' ? 'homologado' : 'homologado')
         // Sugere data de expiração = fim do plano do fornecedor
         if (d.plan?.ends_at) setApproveExpiry(d.plan.ends_at.slice(0, 10))
         // Email de início de análise (único por ciclo — deduplica via audit_log)
@@ -570,6 +571,16 @@ export function BackofficeAnalysis() {
       setDreEditing(prev => ({ ...(prev || {}), ...result.extracted }))
     } catch (e) { alert('Erro na extração: ' + e.message) }
     finally { setDreAiLoading(false) }
+  }
+
+  // Detecta se o doc é de dados bancários ou DRE (para modal de extração IA)
+  function getDocAiType(doc) {
+    const label = (doc.label || '').toLowerCase()
+    if (label.includes('bancár') || label.includes('banco') || label.includes('conta corrente') || label.includes('conta poupan') || label.includes('comprovante de conta'))
+      return 'bank'
+    if (label.includes('dre') || label.includes('balanço') || label.includes('balanco') || label.includes('resultado do exerc') || label.includes('demonstração de resultado'))
+      return 'dre'
+    return null
   }
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
@@ -912,13 +923,29 @@ export function BackofficeAnalysis() {
                     </div>
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
-                  {doc.storage_path && (
-                    <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
-                  )}
-                  {(status==='PENDING' || status==='VALID') && (
+                  {(() => {
+                    const aiType = getDocAiType(doc)
+                    if (aiType && doc.storage_path) {
+                      // Docs bancários e DRE: botão especial que abre modal de extração IA
+                      return (
+                        <Button variant="primary" size="sm"
+                          onClick={() => {
+                            if (aiType === 'dre') setDreEditing({ year: new Date().getFullYear() - 1 })
+                            setDocAiModal({ doc, extractType: aiType })
+                          }}>
+                          🤖 Analisar
+                        </Button>
+                      )
+                    }
+                    // Docs normais: botão Ver
+                    return doc.storage_path ? (
+                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                    ) : null
+                  })()}
+                  {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
-                        {status==='PENDING' && (
+                        {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
                           <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
                         )}
                         <Button variant="danger" size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>
@@ -1085,20 +1112,38 @@ export function BackofficeAnalysis() {
             </div>
 
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:12,fontFamily:'Montserrat,sans-serif',fontWeight:600,color:'#1a1c5e',marginBottom:8 }}>Nível do Selo</div>
+              <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:8,letterSpacing:.5,textTransform:'uppercase' }}>Tipo de Selo</div>
               <div style={{ display:'flex',gap:8 }}>
-                {['Simples','Premium'].map(l=>(
-                  <button key={l} onClick={()=>setLevel(l)} style={{ flex:1,padding:'10px',borderRadius:10,border:`2px solid ${level===l?'#2E3192':'#e2e4ef'}`,background:level===l?'rgba(46,49,146,.08)':'#fff',color:level===l?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer' }}>
-                    {l==='Premium'?'⭐':'🏷️'} {l}
+                {[
+                  ['verificado','🔵 Verificado','Pré-homologação automática'],
+                  ['homologado','🏅 Homologado','Análise profissional'],
+                ].map(([val,label,desc])=>(
+                  <button key={val} onClick={()=>setLevel(val)}
+                    style={{ flex:1,padding:'10px 8px',borderRadius:10,border:`2px solid ${level===val?'#2E3192':'#e2e4ef'}`,background:level===val?'rgba(46,49,146,.08)':'#fff',cursor:'pointer',textAlign:'center' }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:12,color:level===val?'#2E3192':'#9B9B9B' }}>{label}</div>
+                    <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:2 }}>{desc}</div>
                   </button>
                 ))}
               </div>
             </div>
 
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:12,fontFamily:'Montserrat,sans-serif',fontWeight:600,color:'#1a1c5e',marginBottom:6 }}>Observação</div>
-              <textarea value={obs} onChange={e=>setObs(e.target.value)} placeholder="Observações ou motivo de rejeição..." rows={3}
-                style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',resize:'vertical',boxSizing:'border-box' }}/>
+              <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:6,letterSpacing:.5,textTransform:'uppercase' }}>Motivo de Rejeição</div>
+              <select value={obs.startsWith('_') ? obs : ''} onChange={e => {
+                  const v = e.target.value
+                  if (v && v !== 'OUTRO') setObs(rejectReasons.find(r=>r.code===v)?.label || '')
+                  else if (v === 'OUTRO') setObs('_outro_')
+                  else setObs('')
+                }}
+                style={{ width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:6 }}>
+                <option value="">Selecione ou escreva abaixo...</option>
+                {rejectReasons.filter(r=>r.applies_to!=='document').map(r=>(
+                  <option key={r.code} value={r.code}>{r.label}</option>
+                ))}
+              </select>
+              <textarea value={obs.startsWith('_outro_') ? '' : obs} onChange={e=>setObs(e.target.value)}
+                placeholder="Observações adicionais ou motivo personalizado..."
+                rows={2} style={{ width:'100%',padding:'9px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',resize:'vertical',boxSizing:'border-box' }}/>
             </div>
 
             <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
@@ -1113,7 +1158,7 @@ export function BackofficeAnalysis() {
                 </>
               ) : (
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
-                  {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Aprovar Selo ${level}`}
+                  {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Emitir Selo ELOS ${level === 'verificado' ? 'Verificado' : 'Homologado'}`}
                 </Button>
               )}
               <Button variant="danger" full size="md" style={{ borderRadius:10 }} disabled={processing} onClick={handleReject}>
@@ -1195,6 +1240,79 @@ export function BackofficeAnalysis() {
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={() => setApproveModal(null)}>Cancelar</Button>
               <Button variant="success" full disabled={!approveExpiry} onClick={handleDocApprove}>✓ Confirmar Aprovação</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Análise IA — Banco/DRE durante aprovação de documento */}
+      {docAiModal && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
+          <div style={{ background:'#fff',borderRadius:18,padding:28,maxWidth:560,width:'100%',boxShadow:'0 24px 80px rgba(0,0,0,.3)',maxHeight:'90vh',overflowY:'auto' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e',marginBottom:4 }}>
+              🤖 {docAiModal.extractType==='bank' ? 'Dados Bancários' : 'DRE / Dados Financeiros'}
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9B9B9B',marginBottom:16 }}>
+              {docAiModal.doc.label}
+            </div>
+
+            {/* Preview + botão IA */}
+            <div style={{ display:'flex',gap:8,marginBottom:20 }}>
+              <Button variant="neutral" size="sm" onClick={async()=>{
+                const url = await documentApi.getSignedUrl(docAiModal.doc.storage_path)
+                window.open(url,'_blank')
+              }}>👁 Ver documento</Button>
+              <Button variant="primary" size="sm"
+                disabled={docAiModal.extractType==='bank' ? bankAiLoading : dreAiLoading}
+                onClick={() => docAiModal.extractType==='bank' ? extractBankWithAI() : extractDreWithAI(docAiModal.doc.storage_path)}>
+                {(docAiModal.extractType==='bank' ? bankAiLoading : dreAiLoading)
+                  ? <><Spinner size={14}/> Extraindo...</>
+                  : '🤖 Extrair com IA'}
+              </Button>
+            </div>
+
+            {/* Campos banco */}
+            {docAiModal.extractType === 'bank' && (
+              <div>
+                {[['bank_name','Nome do Banco',''],['bank_code','Código COMPE','Ex: 001'],['bank_agency','Agência',''],['bank_account','Conta c/ dígito',''],['pix_key','Chave PIX','']].map(([field,label,placeholder])=>(
+                  <div key={field} style={{ marginBottom:10 }}>
+                    <label style={{ display:'block',fontSize:10,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:3 }}>{label}</label>
+                    <input value={bankData?.[field]||''} placeholder={placeholder} onChange={e=>setBankData(p=>({...p,[field]:e.target.value}))}
+                      style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                  </div>
+                ))}
+                <div style={{ marginBottom:14 }}>
+                  <label style={{ display:'block',fontSize:10,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:3 }}>Tipo de Conta</label>
+                  <select value={bankData?.account_type||''} onChange={e=>setBankData(p=>({...p,account_type:e.target.value}))}
+                    style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    <option value="">Selecione...</option><option value="corrente">Corrente</option><option value="poupanca">Poupança</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Campos DRE */}
+            {docAiModal.extractType === 'dre' && dreEditing && (
+              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+                {[['year','Ano'],['receita','Receita (R$)'],['ativo','Ativo (R$)'],['passivo','Passivo (R$)'],['lucro','Lucro (R$)'],['ebitda','EBITDA (R$)'],['estoque','Estoque (R$)']].map(([field,label])=>(
+                  <div key={field}>
+                    <label style={{ display:'block',fontSize:10,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:3 }}>{label}</label>
+                    <input type="number" value={dreEditing[field]??''} placeholder="0" onChange={e=>setDreEditing(p=>({...p,[field]:e.target.value?Number(e.target.value):null}))}
+                      style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display:'flex',gap:8,marginTop:20 }}>
+              <Button variant="neutral" full onClick={()=>setDocAiModal(null)}>Fechar</Button>
+              <Button variant="neutral" full disabled={docAiModal.extractType==='bank'?bankSaving:dreSaving}
+                onClick={()=>{ docAiModal.extractType==='bank' ? saveBankData() : saveDre() }}>
+                {(docAiModal.extractType==='bank'?bankSaving:dreSaving) ? <Spinner size={14}/> : '💾 Salvar dados'}
+              </Button>
+              <Button variant="success" full onClick={()=>{ setDocAiModal(null); openApproveModal(docAiModal.doc) }}>
+                ✓ Aprovar documento
+              </Button>
             </div>
           </div>
         </div>

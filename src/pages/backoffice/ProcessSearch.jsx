@@ -167,14 +167,13 @@ export default function BackofficeProcessSearch() {
     }
 
     // ── Fluxo B: busca por texto/CNPJ (sem filtro de cliente) ─────────────────
-    // Limita a 200 resultados para manter o IN clause dentro do tamanho seguro de URL
-    if (!qTrim) { setResults([]); setLoading(false); return }
-
+    // Sem texto e sem cliente → retorna os 50 mais recentes
+    const PAGE_LIMIT = 50
     let suppQuery = supabase
       .from('suppliers')
       .select('id, razao_social, cnpj, city, state, status, created_at')
-      .order('razao_social')
-      .limit(200)
+      .order(qTrim ? 'razao_social' : 'created_at', { ascending: !qTrim ? false : true })
+      .limit(qTrim ? 200 : PAGE_LIMIT)
 
     if (!showInactive) suppQuery = suppQuery.neq('status', 'INACTIVE')
     if (qNums.length >= 8) suppQuery = suppQuery.ilike('cnpj', `%${qNums}%`)
@@ -272,6 +271,11 @@ export default function BackofficeProcessSearch() {
         <>
           <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:12 }}>
             {results.length} fornecedor{results.length !== 1 ? 'es' : ''} encontrado{results.length !== 1 ? 's' : ''}
+            {results.length === 50 && !q.trim() && !filterClient && (
+              <span style={{ marginLeft:8, color:'#f59e0b', fontWeight:600 }}>
+                · Exibindo os 50 mais recentes — refine a busca para resultados específicos
+              </span>
+            )}
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {results.map((s, i) => {
