@@ -25,6 +25,148 @@ const SORT_OPTIONS = [
 const STATUS_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#9B9B9B', REJECTED:'#ef4444', EXPIRED:'#ef4444', EXPIRING:'#f59e0b' }
 const STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Rejeitado', EXPIRED:'Vencido', EXPIRING:'Vence em breve' }
 
+function getDocAiType(doc) {
+  const label = (doc.label || '').toLowerCase()
+  if (label.includes('bancár') || label.includes('banco') || label.includes('conta corrente') || label.includes('conta poupan') || label.includes('comprovante de conta'))
+    return 'bank'
+  if (label.includes('dre') || label.includes('balanço') || label.includes('balanco') || label.includes('resultado do exerc') || label.includes('demonstração de resultado'))
+    return 'dre'
+  return null
+}
+
+// Modal de extração IA para banco/DRE
+function DocAiModal({ doc, extractType, onApprove, onClose }) {
+  const [bankData,  setBankData]  = useState({})
+  const [dreData,   setDreData]   = useState({ year: new Date().getFullYear() - 1 })
+  const [aiLoading, setAiLoading] = useState(false)
+  const [saving,    setSaving]    = useState(false)
+
+  async function extractWithAI() {
+    setAiLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/ai-extract-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ storagePath: doc.storage_path, extractType, supplierId: doc.supplier_id }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      if (result.extracted) {
+        if (extractType === 'bank') setBankData(p => ({ ...p, ...result.extracted }))
+        else setDreData(p => ({ ...p, ...result.extracted }))
+      }
+      if (result.warning) alert('⚠️ ' + result.warning)
+    } catch (e) { alert('Erro na extração: ' + e.message) }
+    finally { setAiLoading(false) }
+  }
+
+  async function saveData() {
+    setSaving(true)
+    try {
+      const userId = (await supabase.auth.getUser()).data.user?.id
+      if (extractType === 'bank') {
+        const { error } = await supabase.from('supplier_bank_accounts').upsert(
+          { ...bankData, supplier_id: doc.supplier_id, verified_by: userId, verified_at: new Date().toISOString() },
+          { onConflict: 'supplier_id' }
+        )
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('supplier_financials')
+          .upsert({ ...dreData, supplier_id: doc.supplier_id, verified_by: userId, verified_at: new Date().toISOString() },
+            { onConflict: 'supplier_id,year' })
+        if (error) throw error
+      }
+      alert('Dados salvos com sucesso!')
+    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const inp = { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box', outline:'none' }
+  const lbl = { display:'block', fontSize:10, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', letterSpacing:.5, textTransform:'uppercase', marginBottom:3 }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', borderRadius:18, padding:28, maxWidth:540, width:'100%', boxShadow:'0 24px 80px rgba(0,0,0,.3)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:4 }}>
+          🤖 {extractType === 'bank' ? 'Dados Bancários' : 'DRE / Dados Financeiros'}
+        </div>
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:16 }}>
+          {doc.label} · {doc.suppliers?.razao_social}
+        </div>
+
+        <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+          <Button variant="neutral" size="sm" onClick={async () => {
+            const url = await documentApi.getSignedUrl(doc.storage_path)
+            window.open(url, '_blank')
+          }}>👁 Ver documento</Button>
+          <Button variant="primary" size="sm" disabled={aiLoading} onClick={extractWithAI}>
+            {aiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
+          </Button>
+        </div>
+
+        {extractType === 'bank' && (
+          <>
+            {[
+              ['bank_name',    'Nome do Banco',      ''],
+              ['bank_code',    'Código COMPE',        'Ex: 001'],
+              ['bank_agency',  'Agência',             ''],
+              ['bank_account', 'Conta c/ dígito',     ''],
+              ['pix_key',      'Chave PIX',           ''],
+            ].map(([field, label, placeholder]) => (
+              <div key={field} style={{ marginBottom:10 }}>
+                <label style={lbl}>{label}</label>
+                <input value={bankData[field] || ''} placeholder={placeholder}
+                  onChange={e => setBankData(p => ({ ...p, [field]: e.target.value }))} style={inp}/>
+              </div>
+            ))}
+            <div style={{ marginBottom:14 }}>
+              <label style={lbl}>Tipo de Conta</label>
+              <select value={bankData.account_type || ''} onChange={e => setBankData(p => ({ ...p, account_type: e.target.value }))}
+                style={{ ...inp }}>
+                <option value="">Selecione...</option>
+                <option value="corrente">Corrente</option>
+                <option value="poupanca">Poupança</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {extractType === 'dre' && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+            {[
+              ['year',    'Ano de referência'],
+              ['receita', 'Receita (R$)'],
+              ['ativo',   'Ativo (R$)'],
+              ['passivo', 'Passivo (R$)'],
+              ['lucro',   'Lucro (R$)'],
+              ['ebitda',  'EBITDA (R$)'],
+              ['estoque', 'Estoque (R$)'],
+            ].map(([field, label]) => (
+              <div key={field}>
+                <label style={lbl}>{label}</label>
+                <input type="number" value={dreData[field] ?? ''} placeholder="0"
+                  onChange={e => setDreData(p => ({ ...p, [field]: e.target.value ? Number(e.target.value) : null }))}
+                  style={inp}/>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8, marginTop:8 }}>
+          <Button variant="neutral" full onClick={onClose}>Fechar</Button>
+          <Button variant="neutral" full disabled={saving} onClick={saveData}>
+            {saving ? <Spinner size={14}/> : '💾 Salvar dados'}
+          </Button>
+          <Button variant="success" full onClick={() => { onApprove(doc); onClose() }}>
+            ✓ Aprovar documento
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Modal de rejeição com motivos parametrizados
 function RejectModal({ doc, reasons, onConfirm, onClose }) {
   const [reasonCode, setReasonCode] = useState('')
@@ -134,6 +276,7 @@ export default function DocumentAnalysis() {
   const [saving,      setSaving]      = useState(new Set())
   const [rejectModal, setRejectModal] = useState(null) // doc object
   const [approveModal,setApproveModal] = useState(null)
+  const [aiModal,     setAiModal]     = useState(null) // { doc, extractType }
 
   const PAGE_SIZE = 50
 
@@ -339,13 +482,21 @@ export default function DocumentAnalysis() {
                   </div>
 
                   {/* Ações */}
-                  <div style={{ display:'flex', gap:5, justifyContent:'flex-end' }}>
-                    {doc.storage_path && (
-                      <Button variant="neutral" size="sm" onClick={async () => {
-                        const url = await documentApi.getSignedUrl(doc.storage_path)
-                        window.open(url, '_blank')
-                      }}>👁</Button>
-                    )}
+                  <div style={{ display:'flex', gap:5, justifyContent:'flex-end', flexWrap:'wrap' }}>
+                    {doc.storage_path && (() => {
+                      const aiType = getDocAiType(doc)
+                      return aiType ? (
+                        <Button variant="primary" size="sm"
+                          onClick={() => setAiModal({ doc, extractType: aiType })}>
+                          🤖
+                        </Button>
+                      ) : (
+                        <Button variant="neutral" size="sm" onClick={async () => {
+                          const url = await documentApi.getSignedUrl(doc.storage_path)
+                          window.open(url, '_blank')
+                        }}>👁</Button>
+                      )
+                    })()}
                     {isSaving ? <Spinner size={16}/> : (
                       <>
                         {(status === 'PENDING' || status === 'MISSING' || status === 'EXPIRED' || status === 'EXPIRING') && (
@@ -380,6 +531,14 @@ export default function DocumentAnalysis() {
       {/* Modais */}
       {rejectModal  && <RejectModal  doc={rejectModal}  reasons={reasons} onConfirm={handleReject}  onClose={() => setRejectModal(null)}/>}
       {approveModal && <ApproveModal doc={approveModal} onConfirm={handleApprove} onClose={() => setApproveModal(null)}/>}
+      {aiModal && (
+        <DocAiModal
+          doc={aiModal.doc}
+          extractType={aiModal.extractType}
+          onApprove={doc => setApproveModal(doc)}
+          onClose={() => setAiModal(null)}
+        />
+      )}
     </div>
   )
 }

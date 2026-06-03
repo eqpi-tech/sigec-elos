@@ -528,7 +528,8 @@ export function BackofficeAnalysis() {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
-      setBankData(prev => ({ ...(prev || {}), ...result.extracted }))
+      if (result.extracted) setBankData(prev => ({ ...(prev || {}), ...result.extracted }))
+      if (result.warning) alert('⚠️ ' + result.warning)
     } catch (e) { alert('Erro na extração: ' + e.message) }
     finally { setBankAiLoading(false) }
   }
@@ -568,7 +569,8 @@ export function BackofficeAnalysis() {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
-      setDreEditing(prev => ({ ...(prev || {}), ...result.extracted }))
+      if (result.extracted) setDreEditing(prev => ({ ...(prev || {}), ...result.extracted }))
+      if (result.warning) alert('⚠️ ' + result.warning)
     } catch (e) { alert('Erro na extração: ' + e.message) }
     finally { setDreAiLoading(false) }
   }
