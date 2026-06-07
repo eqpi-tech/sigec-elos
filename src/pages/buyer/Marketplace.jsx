@@ -3,31 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { marketplaceApi, rfqApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
-import { Badge, Button, Card, ScoreBar, Spinner } from '../../components/ui.jsx'
-
-const STAGES = [
-  { n:1, label:'Categoria', icon:'📦' },
-  { n:2, label:'Região',    icon:'📍' },
-  { n:3, label:'Porte',     icon:'🏢' },
-  { n:4, label:'Selos',     icon:'✅' },
-  { n:5, label:'Revisão',   icon:'📋' },
-  { n:6, label:'Resultados',icon:'🎯' },
-]
+import { geocodeCep, getCityCoords, haversineKm } from '../../utils/geocoding.js'
+import { Button, ScoreBar, Spinner } from '../../components/ui.jsx'
 
 const STATES  = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
 const SIZES   = ['MEI','ME','EPP','Médio','Grande']
 const CERTS   = ['ISO 9001','ISO 14001','ISO 45001','PBQP-H','OHSAS 18001']
-const SEAL_TYPES = [
-  { v:'Todos',      i:'🔍', d:'Qualquer nível de homologação' },
-  { v:'verificado', i:'🔵', d:'Pré-homologação automática — CNPJ, certidões e documentos básicos verificados' },
-  { v:'homologado', i:'⭐', d:'Homologação profissional — análise humana, documentos técnicos e parecer' },
-]
+const RADIUS_OPTIONS = [25, 50, 100, 200, 500]
+const CAPITAL_MAX_DISPLAY = 10_000_000
 
+// ── RFQ Modal ────────────────────────────────────────────────────────────────
 function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
   const [category, setCategory] = useState('')
   const [message,  setMessage]  = useState('')
   const [sending,  setSending]  = useState(false)
-  const inp = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box', marginBottom:12 }
+  const inp = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box', marginBottom:12, outline:'none' }
 
   const send = async () => {
     if (!message.trim()) { alert('Escreva uma mensagem para os fornecedores.'); return }
@@ -42,29 +32,20 @@ function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>
-          📝 Solicitar Cotação
-        </div>
+        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>📝 Solicitar Cotação</div>
         <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:20 }}>
-          Será enviada para <strong style={{ color:'#2E3192' }}>{suppliers.length} fornecedor{suppliers.length !== 1 ? 'es' : ''}</strong> selecionado{suppliers.length !== 1 ? 's' : ''}.
+          Para <strong style={{ color:'#2E3192' }}>{suppliers.length} fornecedor{suppliers.length !== 1 ? 'es' : ''}</strong> selecionado{suppliers.length !== 1 ? 's' : ''}.
         </div>
-
         <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>Assunto / Categoria</div>
         <input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Serviço de manutenção elétrica" style={inp} />
-
         <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>Mensagem *</div>
         <textarea value={message} onChange={e => setMessage(e.target.value)}
-          placeholder="Descreva o que você precisa, prazo, volume estimado, local de entrega..."
-          rows={5} style={{ ...inp, resize:'vertical', fontFamily:'DM Sans,sans-serif' }} />
-
-        <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:20 }}>
-          Os fornecedores receberão sua solicitação e poderão responder com preço e mensagem.
-        </div>
-
-        <div style={{ display:'flex', gap:10 }}>
+          placeholder="Descreva o que precisa, prazo, volume, local..." rows={5}
+          style={{ ...inp, resize:'vertical' }} />
+        <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <Button variant="neutral" style={{ flex:1 }} onClick={onClose}>Cancelar</Button>
           <Button variant="primary" style={{ flex:1 }} onClick={send} disabled={sending}>
-            {sending ? '⏳ Enviando...' : '📨 Enviar para todos'}
+            {sending ? '⏳ Enviando...' : '📨 Enviar'}
           </Button>
         </div>
       </div>
@@ -72,401 +53,441 @@ function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
   )
 }
 
+// ── Seção colapsável do sidebar ───────────────────────────────────────────────
+function FilterSection({ title, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div style={{ borderBottom:'1px solid #f0f0f7', paddingBottom:open ? 16 : 0, marginBottom:16 }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width:'100%', display:'flex', justifyContent:'space-between', alignItems:'center', background:'none', border:'none', cursor:'pointer', padding:'0 0 12px', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e', textTransform:'uppercase', letterSpacing:.5 }}>
+        {title}
+        <span style={{ fontSize:14, color:'#9B9B9B', transform:open?'rotate(180deg)':'rotate(0deg)', transition:'transform .2s' }}>▾</span>
+      </button>
+      {open && children}
+    </div>
+  )
+}
+
+// ── Chip multi-select ─────────────────────────────────────────────────────────
+function MultiChip({ label, active, onClick, color = '#2E3192' }) {
+  return (
+    <button onClick={onClick} style={{
+      padding:'5px 10px', borderRadius:20, fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:600,
+      border:`1px solid ${active ? color : '#e2e4ef'}`,
+      background:active ? `${color}14` : '#fff',
+      color:active ? color : '#9B9B9B',
+      cursor:'pointer', whiteSpace:'nowrap', transition:'all .15s',
+    }}>
+      {active ? '✓ ' : ''}{label}
+    </button>
+  )
+}
+
+// ── Range slider capital social ───────────────────────────────────────────────
+function CapitalSlider({ min, max, onMin, onMax }) {
+  const fmt = v => v >= 1_000_000 ? `R$ ${(v/1_000_000).toFixed(0)}M` : v >= 1000 ? `R$ ${(v/1000).toFixed(0)}K` : `R$ ${v}`
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#9B9B9B', marginBottom:6 }}>
+        <span>{fmt(min ?? 0)}</span>
+        <span>{max == null || max >= CAPITAL_MAX_DISPLAY ? 'Sem limite' : fmt(max)}</span>
+      </div>
+      <input type="range" min={0} max={CAPITAL_MAX_DISPLAY} step={50000}
+        value={min ?? 0} onChange={e => onMin(Number(e.target.value) || undefined)}
+        style={{ width:'100%', marginBottom:4 }} />
+      <input type="range" min={0} max={CAPITAL_MAX_DISPLAY} step={50000}
+        value={max ?? CAPITAL_MAX_DISPLAY} onChange={e => onMax(Number(e.target.value) >= CAPITAL_MAX_DISPLAY ? undefined : Number(e.target.value))}
+        style={{ width:'100%' }} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function BuyerMarketplace() {
-  const navigate       = useNavigate()
-  const { user }       = useAuth()
-  const [banner,       setBanner]       = useState(true)
-  const [stage,        setStage]        = useState(1)
+  const navigate    = useNavigate()
+  const { user }    = useAuth()
+
+  // Dados estáticos
   const [dbCategories, setDbCategories] = useState([])
-  const [filters,      setFilters]      = useState({
-    categoryIds: [],   // multi-select — IDs das categorias do DB
-    q:           '',
-    states:      [],   // multi-select
-    sizes:       [],   // multi-select
-    sealType:    'Todos',
-    certs:       [],
-  })
+
+  // Filtros
+  const [q,             setQ]             = useState('')
+  const [cnae,          setCnae]          = useState('')
+  const [cityInput,     setCityInput]     = useState('')
+  const [states,        setStates]        = useState([])
+  const [categoryIds,   setCategoryIds]   = useState([])
+  const [sizes,         setSizes]         = useState([])
+  const [certs,         setCerts]         = useState([])
+  const [sealType,      setSealType]      = useState('Todos')
+  const [clientSealMin, setClientSealMin] = useState(0)
+  const [simples,       setSimples]       = useState(undefined)
+  const [capitalMin,    setCapitalMin]    = useState(undefined)
+  const [capitalMax,    setCapitalMax]    = useState(undefined)
+  // Geo
+  const [cepInput,      setCepInput]      = useState('')
+  const [geoRadius,     setGeoRadius]     = useState(50)
+  const [geoCenter,     setGeoCenter]     = useState(null)   // { lat, lng, city, state }
+  const [geoLoading,    setGeoLoading]    = useState(false)
+  const [geoError,      setGeoError]      = useState('')
+
+  // Resultados
   const [results,     setResults]     = useState([])
   const [loading,     setLoading]     = useState(false)
   const [searched,    setSearched]    = useState(false)
-  const [selectedMap, setSelectedMap] = useState({}) // id → supplier object
+  const [selectedMap, setSelectedMap] = useState({})
   const [showRfq,     setShowRfq]     = useState(false)
 
-  // Carrega categorias de nível raiz do banco
   useEffect(() => {
-    supabase
-      .from('categories')
-      .select('id, name')
-      .is('parent_id', null)
-      .order('name')
-      .limit(40)
+    supabase.from('categories').select('id, name').is('parent_id', null).order('name').limit(40)
       .then(({ data }) => setDbCategories(data || []))
   }, [])
 
-  const upd = (k, v) => setFilters(f => ({ ...f, [k]: v }))
+  const toggleArr = (setter, val) => setter(arr => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
+  const selectedList = Object.values(selectedMap)
 
-  const toggleArr = (key, val) => setFilters(f => {
-    const arr = f[key]
-    return { ...f, [key]: arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val] }
-  })
+  // Geocodificar CEP quando tiver 8 dígitos
+  useEffect(() => {
+    const clean = cepInput.replace(/\D/g, '')
+    if (clean.length !== 8) { setGeoCenter(null); setGeoError(''); return }
+    setGeoLoading(true); setGeoError('')
+    geocodeCep(clean)
+      .then(geo => { setGeoCenter(geo); if (!geo.lat) setGeoError('Coordenadas não encontradas para este CEP — filtro de raio desativado.') })
+      .catch(e => { setGeoError(e.message); setGeoCenter(null) })
+      .finally(() => setGeoLoading(false))
+  }, [cepInput])
 
-  const runSearch = async (overrides = {}) => {
-    const f = { ...filters, ...overrides }
+  const runSearch = async () => {
     setLoading(true); setSearched(true)
     try {
       const { data } = await marketplaceApi.search({
-        q:           f.q,
-        states:      f.states,
-        categoryIds: f.categoryIds,
-        sizes:       f.sizes,
-        sealType:    f.sealType,
-        certs:       f.certs,
+        q, cnae, city: cityInput, states, categoryIds, sizes, certs,
+        sealType, clientSealMin, simples, capitalMin, capitalMax,
       })
-      setResults(data || [])
-      setStage(6)
+
+      let list = data || []
+
+      // Filtro de geolocalização em JS (haversine)
+      if (geoCenter?.lat && geoCenter?.lng) {
+        list = list.map(s => {
+          // Usar lat/lng do DB se disponível, senão lookup por cidade
+          const lat = s.latitude  ?? getCityCoords(s.city, s.state)?.[0] ?? null
+          const lng = s.longitude ?? getCityCoords(s.city, s.state)?.[1] ?? null
+          const dist = (lat && lng) ? haversineKm(geoCenter.lat, geoCenter.lng, lat, lng) : null
+          return { ...s, _dist: dist }
+        })
+        .filter(s => s._dist == null || s._dist <= geoRadius)
+        .sort((a, b) => {
+          if (a._dist == null && b._dist == null) return (b.score || 0) - (a.score || 0)
+          if (a._dist == null) return 1
+          if (b._dist == null) return -1
+          return a._dist - b._dist
+        })
+      }
+
+      setResults(list)
     } finally { setLoading(false) }
   }
 
-  const quickSearch = async (sealType) => {
-    setBanner(false)
-    setFilters(f => ({ ...f, sealType }))
-    await runSearch({ sealType })
+  const resetFilters = () => {
+    setQ(''); setCnae(''); setCityInput(''); setStates([]); setCategoryIds([])
+    setSizes([]); setCerts([]); setSealType('Todos'); setClientSealMin(0)
+    setSimples(undefined); setCapitalMin(undefined); setCapitalMax(undefined)
+    setCepInput(''); setGeoCenter(null); setGeoError('')
   }
 
-  const toggleSelect = (s) => setSelectedMap(m => {
-    const next = { ...m }
-    if (next[s.id]) delete next[s.id]
-    else next[s.id] = s
-    return next
-  })
-
-  const selectedList = Object.values(selectedMap)
-
-  const chip = (active, color = '#2E3192') => ({
-    padding:'8px 14px', borderRadius:20,
-    border:`1px solid ${active ? color : '#e2e4ef'}`,
-    background:active ? `${color}12` : '#fff',
-    color:active ? color : '#9B9B9B',
-    cursor:'pointer', fontFamily:'Montserrat,sans-serif',
-    fontWeight:600, fontSize:12, whiteSpace:'nowrap', transition:'all .15s',
-  })
-  const sec = t => (
-    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, color:'#1a1c5e', marginBottom:12 }}>{t}</div>
-  )
-  const inp = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
-
-  const renderStage = () => {
-    // 1 — Categoria (multi-select do DB)
-    if (stage === 1) return (
-      <div>
-        {sec('Qual categoria de fornecedor você procura?')}
-        <div style={{ fontSize:12, color:'#9B9B9B', marginBottom:10 }}>Selecione uma ou mais categorias. Deixe em branco para buscar em todas.</div>
-        {dbCategories.length === 0
-          ? <div style={{ color:'#9B9B9B', fontSize:13 }}>Carregando categorias...</div>
-          : (
-            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:16 }}>
-              {dbCategories.map(c => (
-                <button key={c.id} onClick={() => toggleArr('categoryIds', c.id)}
-                  style={chip(filters.categoryIds.includes(c.id))}>
-                  {filters.categoryIds.includes(c.id) ? '✓ ' : ''}{c.name}
-                </button>
-              ))}
-            </div>
-          )
-        }
-        <input value={filters.q} onChange={e => upd('q', e.target.value)}
-          placeholder="Refine por nome, CNPJ ou palavra-chave específica..." style={inp} />
-        {filters.categoryIds.length > 0 && (
-          <div style={{ marginTop:8, fontSize:12, color:'#2E3192' }}>
-            {filters.categoryIds.length} categoria{filters.categoryIds.length !== 1 ? 's' : ''} selecionada{filters.categoryIds.length !== 1 ? 's' : ''}
-          </div>
-        )}
-      </div>
-    )
-
-    // 2 — Região (multi-select)
-    if (stage === 2) return (
-      <div>
-        {sec('Estados de atuação?')}
-        <div style={{ fontSize:12, color:'#9B9B9B', marginBottom:10 }}>Selecione um ou mais estados. Deixe em branco para buscar em todo o Brasil.</div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-          {STATES.map(s => (
-            <button key={s} onClick={() => toggleArr('states', s)} style={chip(filters.states.includes(s))}>
-              {filters.states.includes(s) ? '✓ ' : ''}{s}
-            </button>
-          ))}
-        </div>
-        {filters.states.length > 0 && (
-          <div style={{ marginTop:10, fontSize:12, color:'#2E3192' }}>
-            {filters.states.length} estado{filters.states.length !== 1 ? 's' : ''} selecionado{filters.states.length !== 1 ? 's' : ''}
-            {' — '}<button onClick={() => upd('states', [])} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
-          </div>
-        )}
-      </div>
-    )
-
-    // 3 — Porte (multi-select)
-    if (stage === 3) return (
-      <div>
-        {sec('Porte da empresa?')}
-        <div style={{ fontSize:12, color:'#9B9B9B', marginBottom:10 }}>Selecione um ou mais portes. Deixe em branco para qualquer porte.</div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-          {SIZES.map(s => (
-            <button key={s} onClick={() => toggleArr('sizes', s)} style={chip(filters.sizes.includes(s))}>
-              {filters.sizes.includes(s) ? '✓ ' : ''}{s}
-            </button>
-          ))}
-        </div>
-        {filters.sizes.length > 0 && (
-          <div style={{ marginTop:10, fontSize:12, color:'#2E3192' }}>
-            {filters.sizes.join(', ')}
-          </div>
-        )}
-      </div>
-    )
-
-    // 4 — Selos + Certs
-    if (stage === 4) return (
-      <div>
-        {sec('Nível de homologação SIGEC?')}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:24 }}>
-          {SEAL_TYPES.map(o => (
-            <button key={o.v} onClick={() => upd('sealType', o.v)}
-              style={{ padding:16, borderRadius:12, border:`2px solid ${filters.sealType === o.v ? '#2E3192' : '#e2e4ef'}`, background:filters.sealType === o.v ? 'rgba(46,49,146,.08)' : '#fff', cursor:'pointer', textAlign:'center', transition:'all .15s' }}>
-              <div style={{ fontSize:22 }}>{o.i}</div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:filters.sealType === o.v ? '#2E3192' : '#1a1c5e', marginTop:4, textTransform:'capitalize' }}>{o.v}</div>
-              <div style={{ fontSize:10, color:'#9B9B9B', marginTop:4, lineHeight:1.3 }}>{o.d}</div>
-            </button>
-          ))}
-        </div>
-        {sec('Certificações exigidas? (multi-select)')}
-        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-          {CERTS.map(c => (
-            <button key={c}
-              onClick={() => toggleArr('certs', c)}
-              style={chip(filters.certs.includes(c), '#ea580c')}>
-              {filters.certs.includes(c) ? '✓ ' : ''}{c}
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-
-    // 5 — Revisão
-    if (stage === 5) return (
-      <div>
-        {sec('Confirme os filtros antes de buscar')}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          {[
-            ['Categorias',    filters.categoryIds.length
-              ? `${filters.categoryIds.length} selecionada${filters.categoryIds.length !== 1 ? 's' : ''}`
-              : 'Todas'],
-            ['Busca livre',   filters.q || '—'],
-            ['Estados',       filters.states.length ? filters.states.join(', ') : 'Todos'],
-            ['Porte',         filters.sizes.length  ? filters.sizes.join(', ')  : 'Todos'],
-            ['Nível SIGEC',   filters.sealType === 'Todos' ? 'Qualquer' : filters.sealType],
-            ['Certificações', filters.certs.length ? filters.certs.join(', ') : '—'],
-          ].map(([k, v]) => (
-            <div key={k} style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, border:'1px solid rgba(46,49,146,.08)' }}>
-              <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', letterSpacing:.5 }}>{k}</div>
-              <div style={{ fontSize:13, fontFamily:'DM Sans,sans-serif', fontWeight:600, color:'#1a1c5e', marginTop:2 }}>{v}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  const sealBadge = (s) => {
+  const sealBadge = s => {
     if (s.sealType === 'homologado') return { label:'Homologado', color:'#F47E2F' }
     if (s.sealType === 'verificado') return { label:'Verificado',  color:'#2E3192' }
-    return { label: s.sealLevel || '—', color: '#9B9B9B' }
+    return { label:'—', color:'#9B9B9B' }
   }
 
+  const activeFilterCount = [
+    q, cnae, cityInput,
+    states.length > 0, categoryIds.length > 0, sizes.length > 0, certs.length > 0,
+    sealType !== 'Todos', clientSealMin > 0,
+    simples != null, capitalMin != null || capitalMax != null,
+    geoCenter?.lat,
+  ].filter(Boolean).length
+
+  const inpStyle = { width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', boxSizing:'border-box', outline:'none' }
+
   return (
-    <div style={{ display:'flex', height:'calc(100vh - 58px)', flexDirection:'column', overflow:'hidden' }}>
-      <div style={{ flex:1, overflowY:'auto', padding:'20px 28px', background:'#f4f5f9' }}>
+    <div style={{ display:'flex', height:'calc(100vh - 58px)', overflow:'hidden', background:'#f4f5f9' }}>
 
-        {/* Banner */}
-        {banner && (
-          <div style={{ background:'linear-gradient(135deg,#2E3192,#3d40b5)', borderRadius:16, padding:'20px 24px', marginBottom:20, display:'flex', justifyContent:'space-between', alignItems:'center', gap:16 }}>
-            <div style={{ display:'flex', gap:16, alignItems:'center' }}>
-              <div style={{ width:48, height:48, borderRadius:14, background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, flexShrink:0 }}>💡</div>
-              <div>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff', marginBottom:4 }}>Fornecedores Homologados Disponíveis</div>
-                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'rgba(255,255,255,.75)', lineHeight:1.5, maxWidth:520 }}>
-                  Temos fornecedores com análise humana completa, documentos técnicos e parecer aprovado.{' '}
-                  <button onClick={() => quickSearch('homologado')}
-                    style={{ background:'none', border:'none', color:'#F47E2F', fontWeight:700, cursor:'pointer', fontSize:13, padding:0, textDecoration:'underline' }}>
-                    Ver os Homologados disponíveis →
-                  </button>
-                </div>
-              </div>
-            </div>
-            <button onClick={() => setBanner(false)} style={{ background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.2)', borderRadius:8, color:'rgba(255,255,255,.6)', width:32, height:32, cursor:'pointer', fontSize:16, flexShrink:0 }}>✕</button>
+      {/* ── Sidebar de filtros ───────────────────────────────────────── */}
+      <div style={{ width:280, flexShrink:0, overflowY:'auto', background:'#fff', borderRight:'1px solid #e2e4ef', padding:'20px 16px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e' }}>Filtros</div>
+          {activeFilterCount > 0 && (
+            <button onClick={resetFilters} style={{ fontSize:11, color:'#ea580c', background:'none', border:'none', cursor:'pointer', fontWeight:700 }}>
+              Limpar ({activeFilterCount})
+            </button>
+          )}
+        </div>
+
+        {/* Busca livre */}
+        <FilterSection title="Busca" defaultOpen={true}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nome ou CNPJ..." style={{ ...inpStyle, marginBottom:8 }} />
+          <input value={cnae} onChange={e => setCnae(e.target.value)} placeholder="CNAE (descrição ou código)..." style={inpStyle} />
+        </FilterSection>
+
+        {/* Categoria */}
+        <FilterSection title="Categoria" defaultOpen={true}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {dbCategories.map(c => (
+              <MultiChip key={c.id} label={c.name} active={categoryIds.includes(c.id)}
+                onClick={() => toggleArr(setCategoryIds, c.id)} />
+            ))}
+            {dbCategories.length === 0 && <div style={{ fontSize:12, color:'#9B9B9B' }}>Carregando...</div>}
           </div>
-        )}
+        </FilterSection>
 
-        {/* Wizard */}
-        {!searched && (
-          <Card style={{ borderRadius:16, marginBottom:20 }}>
-            {/* Barra de progresso */}
-            <div style={{ display:'flex', alignItems:'center', marginBottom:28, overflowX:'auto' }}>
-              {STAGES.map((s, i) => (
-                <div key={s.n} style={{ display:'flex', alignItems:'center', flex: i < STAGES.length - 1 ? 1 : 'initial' }}>
-                  <div onClick={() => s.n <= stage && setStage(s.n)}
-                    style={{ display:'flex', flexDirection:'column', alignItems:'center', cursor: s.n <= stage ? 'pointer' : 'default', minWidth:54 }}>
-                    <div style={{ width:32, height:32, borderRadius:'50%', background: s.n < stage ? '#22c55e' : s.n === stage ? '#2E3192' : '#e2e4ef', display:'flex', alignItems:'center', justifyContent:'center', fontSize: s.n <= stage ? 14 : 12, border: s.n === stage ? '3px solid #3d40b5' : 'none', color: s.n <= stage ? '#fff' : '#9B9B9B', transition:'all .3s' }}>
-                      {s.n < stage ? '✓' : s.icon}
-                    </div>
-                    <div style={{ fontSize:9, fontFamily:'Montserrat,sans-serif', fontWeight:600, color: s.n === stage ? '#2E3192' : '#9B9B9B', marginTop:4, textAlign:'center' }}>{s.label}</div>
-                  </div>
-                  {i < STAGES.length - 1 && (
-                    <div style={{ flex:1, height:2, background: s.n < stage ? '#22c55e' : '#e2e4ef', margin:'0 4px 20px', transition:'background .3s' }} />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div style={{ minHeight:160 }}>{renderStage()}</div>
-
-            {stage < 6 && (
-              <div style={{ display:'flex', justifyContent:'space-between', marginTop:24, paddingTop:16, borderTop:'1px solid #e2e4ef' }}>
-                <Button variant="neutral" onClick={() => setStage(s => Math.max(1, s - 1))} disabled={stage === 1}>← Anterior</Button>
-                {stage < 5
-                  ? <Button variant="primary" onClick={() => setStage(s => s + 1)}>Próximo →</Button>
-                  : <Button variant="orange" size="lg" onClick={() => runSearch()}>{loading ? '⏳ Buscando...' : '🔍 Buscar Fornecedores'}</Button>
-                }
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Toolbar de resultados */}
-        {searched && (
-          <div style={{ display:'flex', gap:12, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
-            <div style={{ flex:1, minWidth:200, position:'relative' }}>
-              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:16, color:'#9B9B9B' }}>🔍</span>
-              <input value={filters.q}
-                onChange={e => upd('q', e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && runSearch()}
-                placeholder="Refinar por nome ou CNPJ e pressione Enter..."
-                style={{ width:'100%', padding:'11px 14px 11px 42px', borderRadius:12, border:'1px solid #e2e4ef', background:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }} />
-            </div>
-            <Button variant="neutral" onClick={() => { setSearched(false); setStage(1); setResults([]); setSelectedMap({}) }}>
-              Nova Pesquisa
-            </Button>
-            {selectedList.length > 0 && (
-              user?.buyerPlan === 'pro'
-                ? <Button variant="orange" onClick={() => setShowRfq(true)}>📝 Cotação ({selectedList.length})</Button>
-                : <button onClick={() => navigate('/comprador/plano')}
-                    style={{ padding:'9px 16px', borderRadius:10, border:'2px dashed #F47E2F', background:'rgba(244,126,47,.06)', color:'#F47E2F', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, cursor:'pointer' }}>
-                    🔒 RFQ — Exclusivo Pro → Assinar
-                  </button>
-            )}
+        {/* Localização */}
+        <FilterSection title="Estado" defaultOpen={false}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+            {STATES.map(s => (
+              <MultiChip key={s} label={s} active={states.includes(s)} onClick={() => toggleArr(setStates, s)} />
+            ))}
           </div>
-        )}
+          {states.length > 0 && (
+            <button onClick={() => setStates([])} style={{ marginTop:6, fontSize:11, color:'#ea580c', background:'none', border:'none', cursor:'pointer', fontWeight:700 }}>
+              Limpar estados
+            </button>
+          )}
+        </FilterSection>
 
-        {/* Resultados */}
-        {searched && (
-          loading
-            ? <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={48}/></div>
-            : (
-              <>
-                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <span>
-                    <strong style={{ color:'#1a1c5e' }}>{results.length}</strong> fornecedor{results.length !== 1 ? 'es' : ''} encontrado{results.length !== 1 ? 's' : ''}
-                    {results.length === 50 && <span style={{ color:'#F47E2F' }}> (exibindo os 50 primeiros — refine os filtros para resultados mais precisos)</span>}
+        <FilterSection title="Cidade" defaultOpen={false}>
+          <input value={cityInput} onChange={e => setCityInput(e.target.value)} placeholder="Ex: Belo Horizonte" style={inpStyle} />
+        </FilterSection>
+
+        {/* Geolocalização por CEP */}
+        <FilterSection title="Geolocalização (raio)" defaultOpen={false}>
+          <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:8, lineHeight:1.4 }}>
+            Digite seu CEP para encontrar fornecedores dentro de um raio em km.
+          </div>
+          <input value={cepInput} onChange={e => setCepInput(e.target.value.replace(/\D/g,'').slice(0,8))}
+            placeholder="00000000" maxLength={8}
+            style={{ ...inpStyle, marginBottom:8, letterSpacing:2, textAlign:'center' }} />
+          {geoLoading && <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:8 }}>Buscando localização...</div>}
+          {geoError  && <div style={{ fontSize:11, color:'#ea580c', marginBottom:8 }}>{geoError}</div>}
+          {geoCenter?.lat && !geoError && (
+            <div style={{ fontSize:11, color:'#22c55e', marginBottom:8 }}>
+              📍 {geoCenter.city} / {geoCenter.state}
+            </div>
+          )}
+          <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:6 }}>Raio: <strong style={{ color:'#2E3192' }}>{geoRadius} km</strong></div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+            {RADIUS_OPTIONS.map(r => (
+              <MultiChip key={r} label={`${r}km`} active={geoRadius === r} onClick={() => setGeoRadius(r)} color="#059669" />
+            ))}
+          </div>
+        </FilterSection>
+
+        {/* Empresa */}
+        <FilterSection title="Porte" defaultOpen={false}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+            {SIZES.map(s => (
+              <MultiChip key={s} label={s} active={sizes.includes(s)} onClick={() => toggleArr(setSizes, s)} />
+            ))}
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Capital Social" defaultOpen={false}>
+          <CapitalSlider min={capitalMin} max={capitalMax} onMin={setCapitalMin} onMax={setCapitalMax} />
+        </FilterSection>
+
+        <FilterSection title="Simples Nacional" defaultOpen={false}>
+          <div style={{ display:'flex', gap:6 }}>
+            {[['Todos', undefined],['Optante', true],['Não optante', false]].map(([label, val]) => (
+              <MultiChip key={label} label={label} active={simples === val}
+                onClick={() => setSimples(val)} color="#7c3aed" />
+            ))}
+          </div>
+        </FilterSection>
+
+        {/* Selos */}
+        <FilterSection title="Selos ELOS" defaultOpen={false}>
+          {[['Todos', 'Todos'],['Verificado', 'verificado'],['Homologado', 'homologado']].map(([label, val]) => (
+            <MultiChip key={val} label={label} active={sealType === val}
+              onClick={() => setSealType(val)} color="#F47E2F" />
+          ))}
+        </FilterSection>
+
+        <FilterSection title="Selos de Cliente" defaultOpen={false}>
+          <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:8 }}>Mín. de processos homologados em clientes</div>
+          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+            {[0,1,2,3,5].map(n => (
+              <MultiChip key={n} label={n === 0 ? 'Qualquer' : `${n}+`}
+                active={clientSealMin === n} onClick={() => setClientSealMin(n)} color="#059669" />
+            ))}
+          </div>
+        </FilterSection>
+
+        <FilterSection title="Certificações" defaultOpen={false}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+            {CERTS.map(c => (
+              <MultiChip key={c} label={c} active={certs.includes(c)}
+                onClick={() => toggleArr(setCerts, c)} color="#ea580c" />
+            ))}
+          </div>
+        </FilterSection>
+
+        <button onClick={runSearch} disabled={loading}
+          style={{ width:'100%', padding:'13px', borderRadius:12, background:loading ? '#e2e4ef' : 'linear-gradient(135deg,#2E3192,#3d40b5)', border:'none', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, cursor:loading ? 'not-allowed' : 'pointer', marginTop:4 }}>
+          {loading ? '⏳ Buscando...' : '🔍 Buscar Fornecedores'}
+        </button>
+      </div>
+
+      {/* ── Área de resultados ───────────────────────────────────────── */}
+      <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
+
+        {/* Header de resultados */}
+        {searched && !loading && (
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:10 }}>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B' }}>
+              <strong style={{ color:'#1a1c5e' }}>{results.length}</strong> fornecedor{results.length !== 1 ? 'es' : ''} encontrado{results.length !== 1 ? 's' : ''}
+              {results.length === 50 && <span style={{ color:'#F47E2F' }}> · máx. 50 exibidos</span>}
+              {geoCenter?.lat && <span style={{ color:'#059669' }}> · ordenado por distância</span>}
+            </div>
+            <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+              {selectedList.length > 0 && (
+                <>
+                  <span style={{ fontSize:12, color:'#2E3192', fontWeight:600 }}>
+                    {selectedList.length} selecionado{selectedList.length !== 1 ? 's' : ''}
+                    {' — '}
+                    <button onClick={() => setSelectedMap({})} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
                   </span>
-                  {selectedList.length > 0 && (
-                    <span style={{ fontSize:12, color:'#2E3192', fontWeight:600 }}>
-                      {selectedList.length} selecionado{selectedList.length !== 1 ? 's' : ''}
-                      {' — '}
-                      <button onClick={() => setSelectedMap({})} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
-                    </span>
+                  {user?.buyerPlan === 'pro'
+                    ? <Button variant="orange" onClick={() => setShowRfq(true)}>📝 Cotação ({selectedList.length})</Button>
+                    : <button onClick={() => navigate('/comprador/plano')}
+                        style={{ padding:'8px 14px', borderRadius:10, border:'2px dashed #F47E2F', background:'rgba(244,126,47,.06)', color:'#F47E2F', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+                        🔒 RFQ (Pro) → Assinar
+                      </button>
+                  }
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Estado inicial */}
+        {!searched && !loading && (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'60vh', textAlign:'center' }}>
+            <div style={{ fontSize:64, marginBottom:16 }}>🔍</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:22, color:'#1a1c5e', marginBottom:8 }}>
+              Marketplace de Fornecedores
+            </div>
+            <div style={{ fontSize:14, color:'#9B9B9B', maxWidth:400, lineHeight:1.6 }}>
+              Use os filtros ao lado para encontrar fornecedores homologados por CNAE, categoria, região, porte, selos e mais. Clique em <strong>Buscar Fornecedores</strong> para começar.
+            </div>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={48}/></div>
+        )}
+
+        {/* Sem resultados */}
+        {searched && !loading && results.length === 0 && (
+          <div style={{ textAlign:'center', padding:60 }}>
+            <div style={{ fontSize:48 }}>😕</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:18, color:'#1a1c5e', marginTop:12 }}>Nenhum fornecedor encontrado</div>
+            <div style={{ color:'#9B9B9B', marginTop:6 }}>Tente ajustar os filtros ou ampliar o raio de busca.</div>
+          </div>
+        )}
+
+        {/* Grid de cards */}
+        {searched && !loading && results.length > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(290px, 1fr))', gap:16 }}>
+            {results.map(s => {
+              const isSel  = !!selectedMap[s.id]
+              const badge  = sealBadge(s)
+              const dist   = s._dist != null ? Math.round(s._dist) : null
+
+              return (
+                <div key={s.id}
+                  style={{ background:'#fff', borderRadius:16, padding:18, border:isSel ? '2px solid #2E3192' : s.sealType === 'homologado' ? '2px solid rgba(244,126,47,.25)' : '1px solid #e2e4ef', boxShadow:isSel ? '0 4px 20px rgba(46,49,146,.15)' : '0 1px 6px rgba(46,49,146,.05)', transition:'all .2s' }}
+                  onMouseEnter={e => !isSel && (e.currentTarget.style.transform = 'translateY(-2px)')}
+                  onMouseLeave={e => (e.currentTarget.style.transform = 'none')}>
+
+                  {/* Header do card */}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+                    <div style={{ display:'flex', gap:10, alignItems:'center', minWidth:0 }}>
+                      <div style={{ width:40, height:40, borderRadius:10, background:'rgba(46,49,146,.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'#2E3192', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
+                        {s.razao_social?.[0]}
+                      </div>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1.2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.razao_social}</div>
+                        <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>{[s.city, s.state].filter(Boolean).join(' · ')}</div>
+                      </div>
+                    </div>
+                    <div style={{ flexShrink:0, marginLeft:8, textAlign:'right' }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:badge.color, background:`${badge.color}18`, padding:'3px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif', display:'block', whiteSpace:'nowrap' }}>
+                        {badge.label}
+                      </span>
+                      {s.clientSealCount > 0 && (
+                        <span style={{ fontSize:10, color:'#059669', fontWeight:600, display:'block', marginTop:3 }}>
+                          🏅 {s.clientSealCount} cliente{s.clientSealCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Score */}
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                    <span style={{ fontSize:10, color:'#9B9B9B' }}>Score:</span>
+                    <div style={{ flex:1 }}><ScoreBar score={s.score || 0}/></div>
+                  </div>
+
+                  {/* Tags */}
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:10, minHeight:20 }}>
+                    {s.cnae_main && (
+                      <span style={{ fontSize:9, background:'rgba(124,58,237,.08)', color:'#7c3aed', padding:'2px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif', fontWeight:600 }}>
+                        {s.cnae_main.length > 28 ? s.cnae_main.slice(0, 28) + '…' : s.cnae_main}
+                      </span>
+                    )}
+                    {s.simples_nacional === true && (
+                      <span style={{ fontSize:9, background:'rgba(34,197,94,.1)', color:'#16a34a', padding:'2px 7px', borderRadius:20, fontWeight:600 }}>Simples</span>
+                    )}
+                    {s.employee_range && (
+                      <span style={{ fontSize:9, background:'rgba(46,49,146,.07)', color:'#2E3192', padding:'2px 7px', borderRadius:20, fontWeight:600 }}>{s.employee_range}</span>
+                    )}
+                    {dist != null && (
+                      <span style={{ fontSize:9, background:'rgba(5,150,105,.1)', color:'#059669', padding:'2px 7px', borderRadius:20, fontWeight:600 }}>📍 {dist} km</span>
+                    )}
+                  </div>
+
+                  {/* Capital social */}
+                  {s.capital_social && (
+                    <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:8 }}>
+                      Capital: <strong style={{ color:'#1a1c5e' }}>
+                        {new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 }).format(s.capital_social)}
+                      </strong>
+                    </div>
                   )}
+
+                  {/* Ações */}
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
+                      onClick={() => navigate(`/comprador/fornecedor/${s.id}`)}>Ver Perfil</Button>
+                    <button onClick={() => setSelectedMap(m => { const n={...m}; if(n[s.id]) delete n[s.id]; else n[s.id]=s; return n })}
+                      style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel?'#2E3192':'#e2e4ef'}`, background:isSel?'rgba(46,49,146,.1)':'#fff', color:isSel?'#2E3192':'#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
+                      {isSel ? '✓' : '+'}
+                    </button>
+                  </div>
                 </div>
-
-                {results.length === 0 ? (
-                  <div style={{ textAlign:'center', padding:60 }}>
-                    <div style={{ fontSize:48 }}>🔍</div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:18, color:'#1a1c5e', marginTop:12 }}>Nenhum resultado</div>
-                    <div style={{ color:'#9B9B9B', marginTop:6 }}>Ajuste os filtros ou clique em Nova Pesquisa.</div>
-                  </div>
-                ) : (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:16 }}>
-                    {results.map(s => {
-                      const isSel = !!selectedMap[s.id]
-                      const badge = sealBadge(s)
-                      return (
-                        <div key={s.id}
-                          style={{ background:'#fff', borderRadius:16, padding:20, border:isSel ? `2px solid #2E3192` : s.sealType === 'homologado' ? '2px solid rgba(244,126,47,.3)' : '1px solid #e2e4ef', boxShadow:isSel ? '0 4px 20px rgba(46,49,146,.2)' : '0 1px 6px rgba(46,49,146,.06)', cursor:'pointer', transition:'all .2s' }}
-                          onMouseEnter={e => !isSel && (e.currentTarget.style.transform = 'translateY(-2px)')}
-                          onMouseLeave={e => (e.currentTarget.style.transform = 'none')}>
-                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
-                            <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                              <div style={{ width:44, height:44, borderRadius:12, background:'rgba(46,49,146,.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:700, color:'#2E3192', fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
-                                {s.razao_social?.[0]}
-                              </div>
-                              <div>
-                                <div style={{ fontSize:14, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', lineHeight:1.2 }}>{s.razao_social}</div>
-                                <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>{[s.city, s.state].filter(Boolean).join(' · ')}</div>
-                              </div>
-                            </div>
-                            <span style={{ fontSize:10, fontWeight:700, color:badge.color, background:`${badge.color}18`, padding:'3px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap', flexShrink:0 }}>
-                              {badge.label}
-                            </span>
-                          </div>
-
-                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                            <span style={{ fontSize:11, color:'#9B9B9B' }}>Score:</span>
-                            <div style={{ flex:1 }}><ScoreBar score={s.score || 0}/></div>
-                          </div>
-
-                          {s.employee_range && (
-                            <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:8 }}>
-                              Porte: <span style={{ color:'#1a1c5e', fontWeight:600 }}>{s.employee_range}</span>
-                            </div>
-                          )}
-
-                          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
-                            {(s.services || []).slice(0, 2).map((sv, i) => (
-                              <span key={i} style={{ fontSize:10, background:'rgba(46,49,146,.07)', color:'#2E3192', padding:'3px 8px', borderRadius:20 }}>{sv}</span>
-                            ))}
-                            {(s.certifications || []).slice(0, 1).map((c, i) => (
-                              <span key={i} style={{ fontSize:10, background:'rgba(34,197,94,.1)', color:'#16a34a', padding:'3px 8px', borderRadius:20 }}>✓ {c}</span>
-                            ))}
-                          </div>
-
-                          <div style={{ display:'flex', gap:8 }}>
-                            <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
-                              onClick={() => navigate(`/comprador/fornecedor/${s.id}`)}>Ver Perfil</Button>
-                            <button onClick={() => toggleSelect(s)}
-                              style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel ? '#2E3192' : '#e2e4ef'}`, background:isSel ? 'rgba(46,49,146,.1)' : '#fff', color:isSel ? '#2E3192' : '#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
-                              {isSel ? '✓ Selecionado' : '+ Cotação'}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </>
-            )
+              )
+            })}
+          </div>
         )}
       </div>
 
       {/* Modal RFQ */}
       {showRfq && (
-        <BuyerRFQModal
-          suppliers={selectedList}
-          user={user}
+        <BuyerRFQModal suppliers={selectedList} user={user}
           onClose={() => setShowRfq(false)}
-          onSent={() => {
-            setShowRfq(false)
-            setSelectedMap({})
-            alert(`Cotação enviada para ${selectedList.length} fornecedor${selectedList.length !== 1 ? 'es' : ''}!`)
-          }}
+          onSent={() => { setShowRfq(false); setSelectedMap({}); alert(`Cotação enviada para ${selectedList.length} fornecedor${selectedList.length !== 1 ? 'es' : ''}!`) }}
         />
       )}
     </div>

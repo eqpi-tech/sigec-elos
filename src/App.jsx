@@ -17,7 +17,6 @@ import SupplierProcess    from './pages/supplier/Process.jsx'
 
 import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
-import BuyerQuotations      from './pages/buyer/Quotations.jsx'
 import BuyerInvitations     from './pages/buyer/Invitations.jsx'
 import BuyerPlan            from './pages/buyer/BuyerPlan.jsx'
 
@@ -93,7 +92,6 @@ function AppRoutes() {
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
       <Route path="/comprador/fornecedor/:id"   element={<Protect roles={['BUYER']}><BuyerSupplierProfile/></Protect>} />
-      <Route path="/comprador/cotacoes"         element={<Protect roles={['BUYER']}><BuyerQuotations/></Protect>} />
       <Route path="/comprador/convites"         element={<Protect roles={['BUYER']}><BuyerInvitations/></Protect>} />
       <Route path="/comprador/plano"            element={<Protect roles={['BUYER']}><BuyerPlan/></Protect>} />
 
