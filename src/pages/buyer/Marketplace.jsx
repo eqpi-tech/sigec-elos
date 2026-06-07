@@ -198,7 +198,7 @@ export default function BuyerMarketplace() {
   const sealBadge = s => {
     if (s.sealType === 'homologado') return { label:'Homologado', color:'#F47E2F' }
     if (s.sealType === 'verificado') return { label:'Verificado',  color:'#2E3192' }
-    return { label:'—', color:'#9B9B9B' }
+    return { label:'Sem selo', color:'#9B9B9B' }
   }
 
   const activeFilterCount = [
