@@ -34,7 +34,32 @@ exports.handler = async (event) => {
     // ── Pagamento efetuado com sucesso ──────────────────────────────
     if (type === 'checkout.session.completed') {
       const session = data.object
-      const { supplierId, planType, cnaeCount, priceYearly } = session.metadata
+      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId } = session.metadata
+
+      // ── CASO: Comprador Pro ──────────────────────────────────────
+      if (planFor === 'buyer' && buyerUserId) {
+        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        const cycle     = planType?.includes('mensal') ? 'mensal' : 'anual'
+        const expires   = cycle === 'mensal'
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : expiresAt
+
+        const { error: buyerErr } = await supabase
+          .from('user_roles')
+          .update({
+            buyer_plan:               'pro',
+            buyer_plan_expires_at:    expires,
+            buyer_stripe_sub_id:      session.subscription || null,
+            buyer_stripe_customer_id: session.customer     || null,
+          })
+          .eq('user_id', buyerUserId)
+          .eq('role', 'BUYER')
+
+        if (buyerErr) console.error('Buyer plan update error:', buyerErr)
+        else console.log(`✅ Comprador Pro ativado: ${buyerUserId} (${cycle})`)
+
+        return { statusCode: 200, body: JSON.stringify({ received: true }) }
+      }
 
       if (!supplierId) {
         console.warn('Webhook: supplierId não encontrado na session metadata')
@@ -124,13 +149,31 @@ exports.handler = async (event) => {
     // ── Assinatura cancelada ────────────────────────────────────────
     if (type === 'customer.subscription.deleted') {
       const sub = data.object
-      const { data: plan } = await supabase
-        .from('plans').select('supplier_id').eq('stripe_sub_id', sub.id).single()
 
-      if (plan) {
-        await supabase.from('plans').update({ status: 'CANCELED' }).eq('stripe_sub_id', sub.id)
-        await supabase.from('seals').update({ status: 'SUSPENDED', suspended_reason: 'Assinatura cancelada' }).eq('supplier_id', plan.supplier_id)
-        console.log(`❌ Plano cancelado: ${plan.supplier_id}`)
+      // Verificar se é assinatura de Comprador Pro
+      const { data: buyerRole } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('buyer_stripe_sub_id', sub.id)
+        .eq('role', 'BUYER')
+        .maybeSingle()
+
+      if (buyerRole) {
+        await supabase
+          .from('user_roles')
+          .update({ buyer_plan: 'free', buyer_plan_expires_at: null, buyer_stripe_sub_id: null })
+          .eq('user_id', buyerRole.user_id)
+          .eq('role', 'BUYER')
+        console.log(`❌ Comprador Pro cancelado: ${buyerRole.user_id}`)
+      } else {
+        // É assinatura de fornecedor
+        const { data: plan } = await supabase
+          .from('plans').select('supplier_id').eq('stripe_sub_id', sub.id).single()
+        if (plan) {
+          await supabase.from('plans').update({ status: 'CANCELED' }).eq('stripe_sub_id', sub.id)
+          await supabase.from('seals').update({ status: 'SUSPENDED', suspended_reason: 'Assinatura cancelada' }).eq('supplier_id', plan.supplier_id)
+          console.log(`❌ Plano fornecedor cancelado: ${plan.supplier_id}`)
+        }
       }
     }
 

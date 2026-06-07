@@ -19,6 +19,7 @@ import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
 import BuyerQuotations      from './pages/buyer/Quotations.jsx'
 import BuyerInvitations     from './pages/buyer/Invitations.jsx'
+import BuyerPlan            from './pages/buyer/BuyerPlan.jsx'
 
 import BackofficeOverview from './pages/backoffice/Overview.jsx'
 import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
@@ -94,6 +95,7 @@ function AppRoutes() {
       <Route path="/comprador/fornecedor/:id"   element={<Protect roles={['BUYER']}><BuyerSupplierProfile/></Protect>} />
       <Route path="/comprador/cotacoes"         element={<Protect roles={['BUYER']}><BuyerQuotations/></Protect>} />
       <Route path="/comprador/convites"         element={<Protect roles={['BUYER']}><BuyerInvitations/></Protect>} />
+      <Route path="/comprador/plano"            element={<Protect roles={['BUYER']}><BuyerPlan/></Protect>} />
 
       {/* Backoffice */}
       <Route path="/backoffice"                 element={<Protect roles={['ADMIN']}><BackofficeOverview/></Protect>} />

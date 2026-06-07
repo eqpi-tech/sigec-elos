@@ -323,57 +323,94 @@ export const documentApi = {
 
 // ── Marketplace ───────────────────────────────────────────────────────────────
 export const marketplaceApi = {
-  search: async ({ level, state, category, q } = {}) => {
-    // Query 1: fornecedores ativos
+  search: async ({ sealType, states = [], categoryIds = [], q, sizes = [], certs = [] } = {}) => {
+    // Passo 1: se categorias selecionadas, obter supplier_ids qualificados via supplier_categories
+    let allowedSupplierIds = null
+    if (categoryIds.length > 0) {
+      const { data: catRows } = await supabase
+        .from('supplier_categories')
+        .select('supplier_id')
+        .in('category_id', categoryIds)
+      allowedSupplierIds = [...new Set((catRows || []).map(r => r.supplier_id))]
+      if (allowedSupplierIds.length === 0) return { data: [], total: 0 }
+    }
+
+    // Passo 2: query principal de fornecedores ativos (limite 50 no DB)
     let query = supabase
       .from('suppliers')
-      .select('id, razao_social, cnae_main, state, city, services, certifications, employee_range, revenue_range, status')
+      .select('id, razao_social, cnpj, cnae_main, state, city, services, certifications, employee_range, status')
       .eq('status', 'ACTIVE')
+      .limit(50)
 
-    if (state && state !== 'Todos') query = query.eq('state', state)
+    if (allowedSupplierIds) query = query.in('id', allowedSupplierIds)
+    if (states.length > 0) query = query.in('state', states)
     if (q) {
-      // Detecta se é busca por CNPJ (apenas números, 8+ dígitos)
       const qNums = q.replace(/\D/g,'')
-      if (qNums.length >= 8) {
-        query = query.ilike('cnpj', `%${qNums}%`)
-      } else {
-        query = query.ilike('razao_social', `%${q}%`)
-      }
+      if (qNums.length >= 8) query = query.ilike('cnpj', `%${qNums}%`)
+      else query = query.ilike('razao_social', `%${q}%`)
     }
 
     const { data: suppliers, error } = await query
     if (error) throw new Error(error.message)
     if (!suppliers?.length) return { data: [], total: 0 }
 
-    // Query 2: selos ativos em lotes de 150 — IN com centenas de UUIDs estoura URL do PostgREST
-    const supplierIds = suppliers.map(s => s.id)
+    // Filtro de porte em JS (employee_range vem da API BrasilAPI, não mapeável limpo pelo PostgREST)
+    let filtered = suppliers
+    if (sizes.length > 0) {
+      filtered = suppliers.filter(s => {
+        const er = (s.employee_range || '').toUpperCase()
+        return sizes.some(sz => {
+          if (sz === 'MEI')    return er.includes('MEI')
+          if (sz === 'ME')     return er.includes('MICRO EMPRESA') || er === 'ME'
+          if (sz === 'EPP')    return er.includes('PEQUENO PORTE') || er === 'EPP'
+          if (sz === 'Médio')  return er.includes('DEMAIS') || er.includes('MEDIO')
+          if (sz === 'Grande') return er.includes('GRANDE')
+          return false
+        })
+      })
+      if (!filtered.length) return { data: [], total: 0 }
+    }
+
+    // Passo 3: selos ativos em lotes de 150
+    const supplierIds = filtered.map(s => s.id)
     let sealsRaw = []
     for (let i = 0; i < supplierIds.length; i += 150) {
       const { data: batch } = await supabase
         .from('seals')
-        .select('supplier_id, level, status, score')
+        .select('supplier_id, level, seal_type, status, score')
         .in('supplier_id', supplierIds.slice(i, i + 150))
         .eq('status', 'ACTIVE')
       if (batch) sealsRaw = sealsRaw.concat(batch)
     }
 
+    // Cada fornecedor pode ter múltiplos selos; pegar o de maior score
     const sealMap = sealsRaw.reduce((acc, sl) => {
-      acc[sl.supplier_id] = sl
+      if (!acc[sl.supplier_id] || (sl.score || 0) > (acc[sl.supplier_id].score || 0)) {
+        acc[sl.supplier_id] = sl
+      }
       return acc
     }, {})
 
-    let results = suppliers
+    let results = filtered
       .map(s => ({
         ...s,
-        sealLevel:  sealMap[s.id]?.level  || 'Simples',
-        sealStatus: sealMap[s.id]?.status || 'PENDING',
-        score:      sealMap[s.id]?.score  || 0,
+        sealType:   sealMap[s.id]?.seal_type || null,
+        sealLevel:  sealMap[s.id]?.level     || null,
+        sealStatus: sealMap[s.id]?.status    || 'PENDING',
+        score:      sealMap[s.id]?.score     || 0,
       }))
-      .filter(s => s.sealStatus === 'ACTIVE') // só exibe quem tem selo ativo
+      .filter(s => s.sealStatus === 'ACTIVE')
 
-    if (level && level !== 'Todos') results = results.filter(s => s.sealLevel === level)
+    // Filtros em JS
+    if (sealType && sealType !== 'Todos') {
+      results = results.filter(s => s.sealType === sealType)
+    }
+    if (certs.length > 0 && !certs.includes('Nenhuma obrigatória')) {
+      results = results.filter(s => certs.every(c => (s.certifications || []).includes(c)))
+    }
 
-    return { data: results, total: results.length }
+    results.sort((a, b) => (b.score || 0) - (a.score || 0))
+    return { data: results.slice(0, 50), total: results.length }
   },
 
   getById: async (id) => {

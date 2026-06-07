@@ -15,6 +15,8 @@ const NAVS = {
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
     { path:'/comprador/convites',    label:'Convites',        icon:'🤝' },
+    { path:'/comprador/cotacoes',    label:'Minhas Cotações', icon:'📝' },
+    { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐' },
   ],
   CLIENT: [
     { path:'/cliente',                label:'Dashboard',       icon:'⊞' },
