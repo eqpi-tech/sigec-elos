@@ -129,7 +129,6 @@ export default function LandingPage() {
   const navLinks = [
     ['#como-funciona','Como funciona'],
     ['#planos','Planos'],
-    ['#compradores','Compradores'],
     ['#sobre','Sobre'],
   ]
 
@@ -150,9 +149,10 @@ export default function LandingPage() {
                 {navLinks.map(([h,l]) => (
                   <a key={h} href={h} onClick={() => setNavOpen(false)} style={{ color:'rgba(255,255,255,.75)', fontSize:16, textDecoration:'none', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,.05)' }}>{l}</a>
                 ))}
-                <div style={{ display:'flex', gap:10, marginTop:12 }}>
-                  <button onClick={() => navigate('/login')} style={{ flex:1, padding:'12px', borderRadius:10, background:'rgba(255,255,255,.08)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'1px solid rgba(255,255,255,.12)', cursor:'pointer' }}>Entrar</button>
-                  <button onClick={() => navigate('/cadastro')} style={{ flex:1, padding:'12px', borderRadius:10, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'none', cursor:'pointer' }}>Cadastrar →</button>
+                <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
+                  <button onClick={() => navigate('/login')} style={{ padding:'12px', borderRadius:10, background:'rgba(255,255,255,.08)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'1px solid rgba(255,255,255,.12)', cursor:'pointer' }}>Entrar</button>
+                  <button onClick={() => { setNavOpen(false); navigate('/cadastro?type=buyer') }} style={{ padding:'12px', borderRadius:10, background:'rgba(255,255,255,.12)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'1px solid rgba(255,255,255,.2)', cursor:'pointer' }}>🛒 Cadastrar como Comprador →</button>
+                  <button onClick={() => { setNavOpen(false); navigate('/cadastro') }} style={{ padding:'12px', borderRadius:10, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'none', cursor:'pointer' }}>🏭 Cadastrar como Fornecedor →</button>
                 </div>
               </div>
             )}
@@ -168,9 +168,13 @@ export default function LandingPage() {
               style={{ padding:'8px 20px', borderRadius:9, background:'rgba(255,255,255,.08)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:13, border:'1px solid rgba(255,255,255,.12)', cursor:'pointer', marginLeft:8 }}>
               Entrar
             </button>
+            <button onClick={() => navigate('/cadastro?type=buyer')}
+              style={{ padding:'8px 20px', borderRadius:9, background:'rgba(255,255,255,.1)', color:'rgba(255,255,255,.9)', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:13, border:'1px solid rgba(255,255,255,.2)', cursor:'pointer' }}>
+              Sou Comprador
+            </button>
             <button onClick={() => navigate('/cadastro')}
               style={{ padding:'8px 22px', borderRadius:9, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, border:'none', cursor:'pointer', boxShadow:`0 4px 16px ${C.orange}44` }}>
-              Cadastrar →
+              Sou Fornecedor →
             </button>
           </div>
         )}
@@ -444,7 +448,7 @@ export default function LandingPage() {
                     'Sem limite de buscas',
                   ]}
                   cta="Criar conta gratuita →"
-                  onCta={() => navigate('/cadastro')}
+                  onCta={() => navigate('/cadastro?type=buyer')}
                 />
               </FadeIn>
               <FadeIn delay={.15}>
@@ -466,7 +470,7 @@ export default function LandingPage() {
                     'Suporte prioritário',
                   ]}
                   cta="Assinar Comprador Pro →"
-                  onCta={() => navigate('/cadastro')}
+                  onCta={() => navigate('/cadastro?type=buyer')}
                 />
               </FadeIn>
               <FadeIn delay={.25}>
@@ -599,45 +603,94 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── COMPRADORES — CONTATO ─────────────────────────────────────────── */}
+      {/* ── COMPRADORES ──────────────────────────────────────────────────── */}
       <section id="compradores" style={{ padding:'100px 5%', background:'#fff' }}>
-        <div style={{ maxWidth:640, margin:'0 auto', textAlign:'center' }}>
+        <div style={{ maxWidth:980, margin:'0 auto' }}>
           <FadeIn>
-            <Badge>Para empresas e compradores</Badge>
-            <h2 style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:'clamp(24px,3.5vw,40px)', color:C.navy, margin:'0 0 14px', letterSpacing:-0.5 }}>
-              Quer acesso corporativo ou um portal exclusivo?
-            </h2>
-            <p style={{ fontSize:15, color:'#666', lineHeight:1.75, margin:'0 0 40px' }}>
-              Nossa equipe comercial explica como a ELOS se integra ao SIGEC-HOC e como estruturar seu processo de homologação com a plataforma.
-            </p>
-            {sent ? (
-              <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:16, padding:32 }}>
-                <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:18, color:'#15803d' }}>Recebemos seu interesse!</div>
-                <div style={{ fontSize:14, color:'#666', marginTop:8 }}>Nossa equipe comercial entrará em contato em até 1 dia útil.</div>
-              </div>
-            ) : (
-              <form onSubmit={handleContactSubmit} style={{ display:'flex', flexDirection:'column', gap:14, textAlign:'left' }}>
-                <div>
-                  <label style={{ display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:C.navy, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>E-mail corporativo *</label>
-                  <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@empresa.com.br"
-                    style={{ width:'100%', padding:'14px 16px', borderRadius:10, border:'1.5px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:15, outline:'none', boxSizing:'border-box', transition:'border .2s' }}
-                    onFocus={e => e.target.style.borderColor=C.blue} onBlur={e => e.target.style.borderColor='#e2e4ef'} />
-                </div>
-                <div>
-                  <label style={{ display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:C.navy, letterSpacing:.5, textTransform:'uppercase', marginBottom:6 }}>Empresa *</label>
-                  <input type="text" required value={empresa} onChange={e => setEmpresa(e.target.value)} placeholder="Nome da empresa"
-                    style={{ width:'100%', padding:'14px 16px', borderRadius:10, border:'1.5px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:15, outline:'none', boxSizing:'border-box', transition:'border .2s' }}
-                    onFocus={e => e.target.style.borderColor=C.blue} onBlur={e => e.target.style.borderColor='#e2e4ef'} />
-                </div>
-                <button type="submit" disabled={sending}
-                  style={{ padding:'16px', borderRadius:12, background:C.blue, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, border:'none', cursor:'pointer', boxShadow:`0 8px 24px ${C.blue}33` }}>
-                  {sending ? '⏳ Enviando...' : 'Solicitar contato comercial →'}
-                </button>
-                <p style={{ fontSize:12, color:C.grey, textAlign:'center', margin:0 }}>Retorno em até 1 dia útil · Sem compromisso</p>
-              </form>
-            )}
+            <div style={{ textAlign:'center', marginBottom:56 }}>
+              <Badge>Para compradores e empresas</Badge>
+              <h2 style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:'clamp(24px,3.5vw,42px)', color:C.navy, margin:'0 0 14px', letterSpacing:-0.5 }}>
+                Encontre fornecedores qualificados agora
+              </h2>
+              <p style={{ fontSize:16, color:'#666', lineHeight:1.75, margin:'0 auto', maxWidth:520 }}>
+                Escolha como quer usar a ELOS — acesso direto ao marketplace ou um portal corporativo com sua marca.
+              </p>
+            </div>
           </FadeIn>
+
+          <div style={{ display:'flex', gap:24, flexWrap:'wrap', alignItems:'stretch' }}>
+            {/* Card auto-cadastro comprador */}
+            <FadeIn delay={.05} style={{ flex:'1 1 380px' }}>
+              <div style={{ borderRadius:22, padding:36, background:`linear-gradient(150deg,${C.blue},${C.navy})`, height:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column' }}>
+                <div style={{ fontSize:40, marginBottom:16 }}>🛒</div>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:22, color:'#fff', marginBottom:8 }}>
+                  Sou Comprador
+                </div>
+                <div style={{ fontSize:14, color:'rgba(255,255,255,.65)', lineHeight:1.7, marginBottom:24, flex:1 }}>
+                  Cadastre-se agora e acesse o marketplace de fornecedores verificados. Conta gratuita, sem compromisso.
+                </div>
+                <ul style={{ listStyle:'none', padding:0, margin:'0 0 28px', display:'flex', flexDirection:'column', gap:8 }}>
+                  {[
+                    'Marketplace com +60 mil fornecedores',
+                    'Filtros por CNAE, região, selos e capital',
+                    'Envie convites e solicite homologações',
+                    'Plano Free · 100% gratuito para começar',
+                  ].map((f, i) => (
+                    <li key={i} style={{ display:'flex', gap:10, fontSize:13, color:'rgba(255,255,255,.8)', fontFamily:'DM Sans,sans-serif' }}>
+                      <span style={{ color:C.orange, fontWeight:700, flexShrink:0 }}>✓</span> {f}
+                    </li>
+                  ))}
+                </ul>
+                <button onClick={() => navigate('/cadastro?type=buyer')}
+                  style={{ width:'100%', padding:'16px', borderRadius:12, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, border:'none', cursor:'pointer', boxShadow:`0 8px 24px ${C.orange}55`, transition:'transform .2s' }}
+                  onMouseOver={e => e.currentTarget.style.transform='scale(1.02)'}
+                  onMouseOut={e => e.currentTarget.style.transform='scale(1)'}>
+                  Criar conta gratuita →
+                </button>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,.3)', textAlign:'center', marginTop:10 }}>Nenhum cartão necessário</div>
+              </div>
+            </FadeIn>
+
+            {/* Card contato comercial — portal corporativo */}
+            <FadeIn delay={.15} style={{ flex:'1 1 380px' }}>
+              <div style={{ borderRadius:22, padding:36, background:C.light, border:`2px solid ${C.blue}18`, height:'100%', boxSizing:'border-box', display:'flex', flexDirection:'column' }}>
+                <div style={{ fontSize:40, marginBottom:16 }}>🏢</div>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:22, color:C.navy, marginBottom:8 }}>
+                  Portal Corporativo
+                </div>
+                <div style={{ fontSize:14, color:'#666', lineHeight:1.7, marginBottom:24 }}>
+                  Sua empresa quer gerenciar homologações com sua marca? Fale com nossa equipe comercial e conheça o Portal ELOS integrado ao SIGEC-HOC.
+                </div>
+                {sent ? (
+                  <div style={{ background:'rgba(34,197,94,.1)', border:'1px solid #86efac', borderRadius:14, padding:24, textAlign:'center', flex:1, display:'flex', flexDirection:'column', justifyContent:'center' }}>
+                    <div style={{ fontSize:36, marginBottom:10 }}>✅</div>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:16, color:'#15803d' }}>Recebemos seu interesse!</div>
+                    <div style={{ fontSize:13, color:'#666', marginTop:6 }}>Nossa equipe entrará em contato em até 1 dia útil.</div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleContactSubmit} style={{ display:'flex', flexDirection:'column', gap:12, flex:1 }}>
+                    <div>
+                      <label style={{ display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:C.navy, letterSpacing:.5, textTransform:'uppercase', marginBottom:5 }}>E-mail corporativo *</label>
+                      <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@empresa.com.br"
+                        style={{ width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none', boxSizing:'border-box', transition:'border .2s' }}
+                        onFocus={e => e.target.style.borderColor=C.blue} onBlur={e => e.target.style.borderColor='#e2e4ef'} />
+                    </div>
+                    <div>
+                      <label style={{ display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:C.navy, letterSpacing:.5, textTransform:'uppercase', marginBottom:5 }}>Empresa *</label>
+                      <input type="text" required value={empresa} onChange={e => setEmpresa(e.target.value)} placeholder="Nome da empresa"
+                        style={{ width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none', boxSizing:'border-box', transition:'border .2s' }}
+                        onFocus={e => e.target.style.borderColor=C.blue} onBlur={e => e.target.style.borderColor='#e2e4ef'} />
+                    </div>
+                    <button type="submit" disabled={sending}
+                      style={{ marginTop:'auto', padding:'14px', borderRadius:12, background:C.blue, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, border:'none', cursor:'pointer', boxShadow:`0 6px 20px ${C.blue}33` }}>
+                      {sending ? '⏳ Enviando...' : 'Solicitar contato comercial →'}
+                    </button>
+                    <p style={{ fontSize:11, color:C.grey, textAlign:'center', margin:0 }}>Retorno em até 1 dia útil · Sem compromisso</p>
+                  </form>
+                )}
+              </div>
+            </FadeIn>
+          </div>
         </div>
       </section>
 
@@ -649,16 +702,21 @@ export default function LandingPage() {
             Pronto para entrar no<br/>universo <span style={{ color:C.orange }}>ELOS</span>?
           </h2>
           <p style={{ fontSize:16, color:'rgba(255,255,255,.6)', maxWidth:460, margin:'0 auto 40px', lineHeight:1.7 }}>
-            Cadastre-se grátis. Escolha seu plano depois. Comece hoje mesmo a construir sua reputação no marketplace B2B.
+            Fornecedor ou comprador — cadastre-se grátis e comece hoje mesmo.
           </p>
           <div style={{ display:'flex', gap:14, justifyContent:'center', flexWrap:'wrap' }}>
             <button onClick={() => navigate('/cadastro')}
-              style={{ padding:'17px 44px', borderRadius:13, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, border:'none', cursor:'pointer', boxShadow:`0 16px 48px ${C.orange}55`, transition:'transform .2s' }}
+              style={{ padding:'17px 40px', borderRadius:13, background:C.orange, color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, border:'none', cursor:'pointer', boxShadow:`0 16px 48px ${C.orange}55`, transition:'transform .2s' }}
               onMouseOver={e => e.currentTarget.style.transform='scale(1.05)'} onMouseOut={e => e.currentTarget.style.transform='scale(1)'}>
-              Cadastrar minha empresa — é grátis
+              🏭 Sou Fornecedor →
+            </button>
+            <button onClick={() => navigate('/cadastro?type=buyer')}
+              style={{ padding:'17px 40px', borderRadius:13, background:'rgba(255,255,255,.12)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, border:'1px solid rgba(255,255,255,.25)', cursor:'pointer', transition:'transform .2s' }}
+              onMouseOver={e => e.currentTarget.style.transform='scale(1.05)'} onMouseOut={e => e.currentTarget.style.transform='scale(1)'}>
+              🛒 Sou Comprador →
             </button>
             <button onClick={() => navigate('/login')}
-              style={{ padding:'17px 36px', borderRadius:13, background:'rgba(255,255,255,.07)', color:'rgba(255,255,255,.82)', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, border:'1px solid rgba(255,255,255,.15)', cursor:'pointer' }}>
+              style={{ padding:'17px 36px', borderRadius:13, background:'rgba(255,255,255,.05)', color:'rgba(255,255,255,.65)', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:14, border:'1px solid rgba(255,255,255,.1)', cursor:'pointer' }}>
               Já tenho conta →
             </button>
           </div>
@@ -674,7 +732,7 @@ export default function LandingPage() {
             <div style={{ fontSize:11, color:'rgba(255,255,255,.2)', marginTop:2 }}>CNPJ 21.270.860/0001-15 · São Paulo, SP</div>
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-            {[['Entrar',()=>navigate('/login')],['Cadastrar',()=>navigate('/cadastro')]].map(([l,fn]) => (
+            {[['Entrar',()=>navigate('/login')],['Fornecedor',()=>navigate('/cadastro')],['Comprador',()=>navigate('/cadastro?type=buyer')]].map(([l,fn]) => (
               <button key={l} onClick={fn} style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', cursor:'pointer', fontSize:12, fontFamily:'DM Sans,sans-serif' }}>{l}</button>
             ))}
             <a href="https://eqpitech.com.br" target="_blank" rel="noopener noreferrer" style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', fontSize:12, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>EQPI Tech</a>
