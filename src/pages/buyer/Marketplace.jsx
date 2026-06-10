@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { marketplaceApi, rfqApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { geocodeCep, getCityCoords, haversineKm } from '../../utils/geocoding.js'
 import { Button, ScoreBar, Spinner } from '../../components/ui.jsx'
+import CategoryFilter from '../../components/CategoryFilter.jsx'
+
+const SESSION_KEY = 'marketplace_state'
 
 const STATES  = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
 const SIZES   = ['MEI','ME','EPP','Médio','Grande']
@@ -107,40 +110,37 @@ export default function BuyerMarketplace() {
   const navigate    = useNavigate()
   const { user }    = useAuth()
 
-  // Dados estáticos
-  const [dbCategories, setDbCategories] = useState([])
+  // Restaura estado anterior se voltou da ficha do fornecedor
+  const _saved = (() => { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null') } catch { return null } })()
 
-  // Filtros
-  const [q,             setQ]             = useState('')
-  const [cnae,          setCnae]          = useState('')
-  const [cityInput,     setCityInput]     = useState('')
-  const [states,        setStates]        = useState([])
-  const [categoryIds,   setCategoryIds]   = useState([])
-  const [sizes,         setSizes]         = useState([])
-  const [certs,         setCerts]         = useState([])
-  const [sealType,      setSealType]      = useState('Todos')
-  const [clientSealMin, setClientSealMin] = useState(0)
-  const [simples,       setSimples]       = useState(undefined)
-  const [capitalMin,    setCapitalMin]    = useState(undefined)
-  const [capitalMax,    setCapitalMax]    = useState(undefined)
+  // Filtros — restaura do sessionStorage quando disponível
+  const [q,             setQ]             = useState(_saved?.q ?? '')
+  const [cnae,          setCnae]          = useState(_saved?.cnae ?? '')
+  const [cityInput,     setCityInput]     = useState(_saved?.cityInput ?? '')
+  const [states,        setStates]        = useState(_saved?.states ?? [])
+  // categoryIds usa Set para compatibilidade com CategoryFilter
+  const [categoryIds,   setCategoryIds]   = useState(() => new Set(_saved?.categoryIds ?? []))
+  const [sizes,         setSizes]         = useState(_saved?.sizes ?? [])
+  const [certs,         setCerts]         = useState(_saved?.certs ?? [])
+  const [sealType,      setSealType]      = useState(_saved?.sealType ?? 'Todos')
+  const [clientSealMin, setClientSealMin] = useState(_saved?.clientSealMin ?? 0)
+  const [simples,       setSimples]       = useState(_saved?.simples ?? undefined)
+  const [capitalMin,    setCapitalMin]    = useState(_saved?.capitalMin ?? undefined)
+  const [capitalMax,    setCapitalMax]    = useState(_saved?.capitalMax ?? undefined)
   // Geo
-  const [cepInput,      setCepInput]      = useState('')
-  const [geoRadius,     setGeoRadius]     = useState(50)
-  const [geoCenter,     setGeoCenter]     = useState(null)   // { lat, lng, city, state }
+  const [cepInput,      setCepInput]      = useState(_saved?.cepInput ?? '')
+  const [geoRadius,     setGeoRadius]     = useState(_saved?.geoRadius ?? 50)
+  const [geoCenter,     setGeoCenter]     = useState(_saved?.geoCenter ?? null)
   const [geoLoading,    setGeoLoading]    = useState(false)
   const [geoError,      setGeoError]      = useState('')
 
   // Resultados
-  const [results,     setResults]     = useState([])
+  const [results,     setResults]     = useState(_saved?.results ?? [])
+  const [total,       setTotal]       = useState(_saved?.total ?? 0)
   const [loading,     setLoading]     = useState(false)
-  const [searched,    setSearched]    = useState(false)
+  const [searched,    setSearched]    = useState(!!_saved?.results?.length)
   const [selectedMap, setSelectedMap] = useState({})
   const [showRfq,     setShowRfq]     = useState(false)
-
-  useEffect(() => {
-    supabase.from('categories').select('id, name').is('parent_id', null).order('name').limit(40)
-      .then(({ data }) => setDbCategories(data || []))
-  }, [])
 
   const toggleArr = (setter, val) => setter(arr => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
   const selectedList = Object.values(selectedMap)
@@ -156,11 +156,19 @@ export default function BuyerMarketplace() {
       .finally(() => setGeoLoading(false))
   }, [cepInput])
 
+  const saveState = (list, tot) => {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+      q, cnae, cityInput, states, categoryIds: [...categoryIds], sizes, certs,
+      sealType, clientSealMin, simples, capitalMin, capitalMax,
+      cepInput, geoRadius, geoCenter, results: list, total: tot,
+    }))
+  }
+
   const runSearch = async () => {
     setLoading(true); setSearched(true)
     try {
-      const { data } = await marketplaceApi.search({
-        q, cnae, city: cityInput, states, categoryIds, sizes, certs,
+      const { data, total: tot } = await marketplaceApi.search({
+        q, cnae, city: cityInput, states, categoryIds: [...categoryIds], sizes, certs,
         sealType, clientSealMin, simples, capitalMin, capitalMax,
       })
 
@@ -169,7 +177,6 @@ export default function BuyerMarketplace() {
       // Filtro de geolocalização em JS (haversine)
       if (geoCenter?.lat && geoCenter?.lng) {
         list = list.map(s => {
-          // Usar lat/lng do DB se disponível, senão lookup por cidade
           const lat = s.latitude  ?? getCityCoords(s.city, s.state)?.[0] ?? null
           const lng = s.longitude ?? getCityCoords(s.city, s.state)?.[1] ?? null
           const dist = (lat && lng) ? haversineKm(geoCenter.lat, geoCenter.lng, lat, lng) : null
@@ -185,14 +192,24 @@ export default function BuyerMarketplace() {
       }
 
       setResults(list)
+      setTotal(tot || list.length)
+      saveState(list, tot || list.length)
     } finally { setLoading(false) }
   }
 
+  const goToProfile = (id) => {
+    // salva estado atual antes de navegar
+    saveState(results, total)
+    navigate(`/comprador/fornecedor/${id}`)
+  }
+
   const resetFilters = () => {
-    setQ(''); setCnae(''); setCityInput(''); setStates([]); setCategoryIds([])
+    setQ(''); setCnae(''); setCityInput(''); setStates([]); setCategoryIds(new Set())
     setSizes([]); setCerts([]); setSealType('Todos'); setClientSealMin(0)
     setSimples(undefined); setCapitalMin(undefined); setCapitalMax(undefined)
     setCepInput(''); setGeoCenter(null); setGeoError('')
+    setResults([]); setTotal(0); setSearched(false)
+    sessionStorage.removeItem(SESSION_KEY)
   }
 
   const sealBadge = s => {
@@ -203,7 +220,7 @@ export default function BuyerMarketplace() {
 
   const activeFilterCount = [
     q, cnae, cityInput,
-    states.length > 0, categoryIds.length > 0, sizes.length > 0, certs.length > 0,
+    states.length > 0, categoryIds.size > 0, sizes.length > 0, certs.length > 0,
     sealType !== 'Todos', clientSealMin > 0,
     simples != null, capitalMin != null || capitalMax != null,
     geoCenter?.lat,
@@ -231,15 +248,9 @@ export default function BuyerMarketplace() {
           <input value={cnae} onChange={e => setCnae(e.target.value)} placeholder="CNAE (descrição ou código)..." style={inpStyle} />
         </FilterSection>
 
-        {/* Categoria */}
+        {/* Categoria — igual ao cadastro do fornecedor */}
         <FilterSection title="Categoria" defaultOpen={true}>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-            {dbCategories.map(c => (
-              <MultiChip key={c.id} label={c.name} active={categoryIds.includes(c.id)}
-                onClick={() => toggleArr(setCategoryIds, c.id)} />
-            ))}
-            {dbCategories.length === 0 && <div style={{ fontSize:12, color:'#9B9B9B' }}>Carregando...</div>}
-          </div>
+          <CategoryFilter selectedIds={categoryIds} onChange={setCategoryIds} />
         </FilterSection>
 
         {/* Localização */}
@@ -345,9 +356,11 @@ export default function BuyerMarketplace() {
         {searched && !loading && (
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:10 }}>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B' }}>
-              <strong style={{ color:'#1a1c5e' }}>{results.length}</strong> fornecedor{results.length !== 1 ? 'es' : ''} encontrado{results.length !== 1 ? 's' : ''}
-              {results.length === 50 && <span style={{ color:'#F47E2F' }}> · máx. 50 exibidos</span>}
-              {geoCenter?.lat && <span style={{ color:'#059669' }}> · ordenado por distância</span>}
+              {total > results.length
+                ? <>A busca retornou <strong style={{ color:'#F47E2F' }}>{total}</strong> registros — exibindo os <strong style={{ color:'#1a1c5e' }}>50</strong> primeiros. Refine os filtros para resultados mais precisos.</>
+                : <><strong style={{ color:'#1a1c5e' }}>{results.length}</strong> fornecedor{results.length !== 1 ? 'es' : ''} encontrado{results.length !== 1 ? 's' : ''}.</>
+              }
+              {geoCenter?.lat && <span style={{ color:'#059669' }}> Ordenado por proximidade.</span>}
             </div>
             <div style={{ display:'flex', gap:10, alignItems:'center' }}>
               {selectedList.length > 0 && (
@@ -470,7 +483,7 @@ export default function BuyerMarketplace() {
                   {/* Ações */}
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
-                      onClick={() => navigate(`/comprador/fornecedor/${s.id}`)}>Ver Perfil</Button>
+                      onClick={() => goToProfile(s.id)}>Ver Perfil</Button>
                     <button onClick={() => setSelectedMap(m => { const n={...m}; if(n[s.id]) delete n[s.id]; else n[s.id]=s; return n })}
                       style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel?'#2E3192':'#e2e4ef'}`, background:isSel?'rgba(46,49,146,.1)':'#fff', color:isSel?'#2E3192':'#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
                       {isSel ? '✓' : '+'}

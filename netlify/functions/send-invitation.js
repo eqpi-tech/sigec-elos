@@ -122,17 +122,36 @@ async function handleClientInvitation(body, callerUser, h) {
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 
-  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, h })
+  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id })
 
   return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, message:`Convite enviado para ${email}` }) }
 }
 
-async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato }) {
+async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id }) {
   if (!process.env.RESEND_API_KEY) return
   const frontendUrl = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
-  const cadastroLink = invite.token
+
+  // Convites de cliente caem na landing page personalizada do cliente
+  let cadastroLink = invite.token
     ? `${frontendUrl}/cadastro?token=${invite.token}`
     : `${frontendUrl}/cadastro`
+
+  if (invited_by_role === 'CLIENT' && (client_id || invite.client_id)) {
+    const cid = client_id || invite.client_id
+    try {
+      const { data: lp } = await supabaseAdmin
+        .from('client_landing_pages')
+        .select('slug')
+        .eq('client_id', cid)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (lp?.slug) {
+        cadastroLink = invite.token
+          ? `${frontendUrl}/${lp.slug}?token=${invite.token}`
+          : `${frontendUrl}/${lp.slug}`
+      }
+    } catch (e) { console.warn('[send-invitation] landing page lookup failed:', e.message) }
+  }
   const tipoLabel = tipo_fornecedor === 'produto' ? 'Produto' : tipo_fornecedor === 'ambos' ? 'Produto & Serviço' : 'Serviço'
   const emailHtml = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -197,31 +216,36 @@ exports.handler = async (event) => {
     // Fetch dos campos opcionais (adicionados pelos patches — podem não existir ainda)
     let token = null, senderName = inv.buyer_name || user.email
     let tipo_fornecedor = null, subsidiado = false, escopo = null, contato = null
+    let invited_by_role = null, resend_client_id = null
     try {
       const { data: extra } = await supabaseAdmin
         .from('invitations')
-        .select('token, subsidiado, tipo_fornecedor, escopo, contato, clients(razao_social), buyers(razao_social)')
+        .select('token, subsidiado, tipo_fornecedor, escopo, contato, invited_by_role, client_id, clients(razao_social), buyers(razao_social)')
         .eq('id', body.resendId)
         .maybeSingle()
       if (extra) {
-        token           = extra.token           ?? null
-        tipo_fornecedor = extra.tipo_fornecedor  ?? null
-        subsidiado      = extra.subsidiado       ?? false
-        escopo          = extra.escopo           ?? null
-        contato         = extra.contato          ?? null
-        senderName      = extra.clients?.razao_social || extra.buyers?.razao_social || senderName
+        token              = extra.token           ?? null
+        tipo_fornecedor    = extra.tipo_fornecedor  ?? null
+        subsidiado         = extra.subsidiado       ?? false
+        escopo             = extra.escopo           ?? null
+        contato            = extra.contato          ?? null
+        invited_by_role    = extra.invited_by_role  ?? null
+        resend_client_id   = extra.client_id        ?? null
+        senderName         = extra.clients?.razao_social || extra.buyers?.razao_social || senderName
       }
     } catch (_) { /* campos ainda não existem no schema — ignora */ }
 
     await sendClientEmail({
-      invite:         { ...inv, token },
-      email:          inv.supplier_email,
+      invite:          { ...inv, token, client_id: resend_client_id },
+      email:           inv.supplier_email,
       senderName,
-      razao_social:   inv.supplier_razao_social,
+      razao_social:    inv.supplier_razao_social,
       tipo_fornecedor,
       subsidiado,
       escopo,
       contato,
+      invited_by_role,
+      client_id:       resend_client_id,
     })
 
     // Reseta status para SENT se ainda não se cadastrou

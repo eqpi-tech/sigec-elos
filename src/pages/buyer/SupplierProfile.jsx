@@ -152,16 +152,49 @@ export default function SupplierProfile() {
   const [loading, setLoading] = useState(true)
   const [inviteSent, setInviteSent] = useState(false)
   const [inviting,   setInviting]   = useState(false)
-  const [tab,     setTab]     = useState('dados')
+  const [tab,        setTab]        = useState('dados')
+  // Modal de convite
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteObjective, setInviteObjective] = useState('') // 'contato' | 'homologacao'
+  const [inviteMsg,       setInviteMsg]       = useState('')
+
+  const SESSION_KEY = 'marketplace_state'
+  const hasMarketState = !!sessionStorage.getItem(SESSION_KEY)
+
+  const backToResults = () => {
+    // Estado já está no sessionStorage; Marketplace restaura ao montar
+    navigate('/comprador')
+  }
 
   useEffect(() => {
     marketplaceApi.getById(id)
-      .then(d => { console.log('[SupplierProfile] data:', d); setData(d) })
+      .then(d => { setData(d) })
       .catch(e => console.error('[SupplierProfile] error:', e))
       .finally(() => setLoading(false))
   }, [id])
 
+  // Templates de e-mail por objetivo
+  const getTemplate = (objective, supplierName, buyerName) => {
+    if (objective === 'contato') return `Olá, ${supplierName}!\n\nMeu nome é ${buyerName} e encontrei o perfil da sua empresa no marketplace SIGEC-ELOS.\n\nGostaria de entrar em contato para conhecer melhor os seus serviços e verificar possibilidades de parceria.\n\nFico à disposição para uma conversa.\n\nAtenciosamente,\n${buyerName}`
+    if (objective === 'homologacao') return `Olá, ${supplierName}!\n\nMeu nome é ${buyerName} e estou interessado em homologar a sua empresa para prestação de serviços ao nosso negócio.\n\nAtravés da plataforma SIGEC-ELOS, você poderá completar seu cadastro e documentação de forma digital e ágil.\n\nClique no link abaixo para iniciar o processo.\n\nAtenciosamente,\n${buyerName}`
+    return ''
+  }
+
+  const openInviteModal = () => {
+    setInviteObjective('')
+    setInviteMsg('')
+    setShowInviteModal(true)
+  }
+
+  const handleObjectiveChange = (obj) => {
+    setInviteObjective(obj)
+    const supp = ss(data?.cnpjData?.razao_social || data?.razao_social)
+    const buyer = user?.name || 'Comprador SIGEC-ELOS'
+    setInviteMsg(getTemplate(obj, supp, buyer))
+  }
+
   const sendInvite = async () => {
+    if (!inviteObjective) { alert('Selecione o objetivo do convite.'); return }
     setInviting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -170,17 +203,20 @@ export default function SupplierProfile() {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
         body: JSON.stringify({
-          supplierId:           data.id,
-          // emails buscados server-side via user_roles → auth.users (email de login)
-          supplierRazaoSocial:  ss(cd.razao_social || data.razao_social),
-          supplierCnpj:         fmtCNPJ(cd.cnpj || data.cnpj || ''),
-          buyerId:              user.buyerId,
-          buyerName:            user.name || 'Comprador SIGEC-ELOS',
-          buyerEmail:           user.email || '',
+          supplierId:          data.id,
+          supplierRazaoSocial: ss(data?.cnpjData?.razao_social || data?.razao_social),
+          supplierCnpj:        fmtCNPJ(data?.cnpj || ''),
+          buyerId:             user.buyerId,
+          buyerName:           user.name || 'Comprador SIGEC-ELOS',
+          buyerEmail:          user.email || '',
+          invited_by_role:     'BUYER',
+          objective:           inviteObjective,
+          customMessage:       inviteMsg,
         })
       })
       if (!res.ok) throw new Error('Erro ao enviar convite')
       setInviteSent(true)
+      setShowInviteModal(false)
     } catch (e) { alert('Erro: ' + e.message) }
     setInviting(false)
   }
@@ -226,8 +262,9 @@ export default function SupplierProfile() {
 
   return (
     <div style={{padding:mobile?'12px':'28px 32px',maxWidth:940,margin:'0 auto'}}>
-      <button onClick={()=>navigate(-1)} style={{fontSize:13,color:'#9B9B9B',background:'none',border:'none',cursor:'pointer',marginBottom:16,padding:0}}>
-        ← Voltar ao marketplace
+      <button onClick={hasMarketState ? backToResults : () => navigate('/comprador')}
+        style={{fontSize:13,color:'#2E3192',background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:8,padding:'6px 14px',cursor:'pointer',marginBottom:16,fontFamily:'DM Sans,sans-serif',fontWeight:600}}>
+        ← {hasMarketState ? 'Voltar ao resultado anterior' : 'Voltar ao marketplace'}
       </button>
 
       {/* ── HEADER ──────────────────────────────────────────────────────── */}
@@ -304,8 +341,8 @@ export default function SupplierProfile() {
                   </button>
                 </div>
               ) : (
-                <Button variant="orange" disabled={inviting} onClick={sendInvite}>
-                  {inviting ? '⏳...' : '🤝 Enviar Convite'}
+                <Button variant="orange" onClick={openInviteModal}>
+                  🤝 Enviar Convite
                 </Button>
               )
             }
@@ -541,6 +578,69 @@ export default function SupplierProfile() {
             </Section>
           )}
         </Card>
+      )}
+
+      {/* ── Modal de convite ──────────────────────────────────────────── */}
+      {showInviteModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div style={{background:'#fff',borderRadius:20,padding:28,width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:18,color:'#1a1c5e',marginBottom:6}}>🤝 Enviar Convite</div>
+            <div style={{fontSize:13,color:'#9B9B9B',marginBottom:20}}>Para: <strong style={{color:'#1a1c5e'}}>{razaoSocial}</strong></div>
+
+            {/* Objetivo */}
+            <div style={{fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:10}}>Objetivo do convite *</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:20}}>
+              {[
+                {val:'contato', label:'Fazer contato com o Fornecedor', desc:'Apresentação e exploração de oportunidades de parceria.'},
+                {val:'homologacao', label:'Solicitar homologação para prestação de serviços', desc:'O fornecedor será convidado a completar o cadastro e documentação na plataforma ELOS.'},
+              ].map(opt => (
+                <label key={opt.val} style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 14px',borderRadius:10,border:`1.5px solid ${inviteObjective===opt.val?'#2E3192':'#e2e4ef'}`,background:inviteObjective===opt.val?'rgba(46,49,146,.04)':'#fff',cursor:'pointer',transition:'all .15s'}}
+                  onClick={()=>handleObjectiveChange(opt.val)}>
+                  <input type="radio" checked={inviteObjective===opt.val} onChange={()=>handleObjectiveChange(opt.val)}
+                    style={{marginTop:2,accentColor:'#2E3192'}}/>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif'}}>{opt.label}</div>
+                    <div style={{fontSize:12,color:'#9B9B9B',marginTop:2}}>{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {/* Aviso de homologação → upsell para cliente */}
+            {inviteObjective === 'homologacao' && (
+              <div style={{background:'rgba(244,126,47,.07)',border:'1px solid rgba(244,126,47,.3)',borderRadius:10,padding:14,marginBottom:16,fontSize:12,color:'#92400e',lineHeight:1.55}}>
+                💡 <strong>Preços diferenciados disponíveis:</strong> Se sua empresa quiser oferecer condições especiais de homologação ou subsidiar o custo para seus fornecedores, a ELOS possui planos corporativos para isso.{' '}
+                <button onClick={async ()=>{
+                  const subject = encodeURIComponent('Interesse em plano corporativo SIGEC-ELOS')
+                  const body = encodeURIComponent(`Olá equipe EQPI Tech,\n\nSou ${user?.name||'comprador'} (${user?.email||''}) e tenho interesse em conhecer o plano corporativo do SIGEC-ELOS para subsidiar a homologação dos meus fornecedores.\n\nAguardo contato.\n\nAtenciosamente,\n${user?.name||''}`)
+                  window.open(`mailto:comercial@eqpitech.com.br?subject=${subject}&body=${body}`)
+                }} style={{background:'none',border:'none',color:'#F47E2F',cursor:'pointer',fontWeight:700,fontSize:12,padding:0,textDecoration:'underline'}}>
+                  Clique aqui para solicitar um contato com o comercial →
+                </button>
+              </div>
+            )}
+
+            {/* Prévia do e-mail */}
+            {inviteObjective && (
+              <>
+                <div style={{fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Prévia da mensagem (editável)</div>
+                <textarea value={inviteMsg} onChange={e=>setInviteMsg(e.target.value)} rows={6}
+                  style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',resize:'vertical',outline:'none',boxSizing:'border-box',marginBottom:16}}/>
+              </>
+            )}
+
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setShowInviteModal(false)}
+                style={{flex:1,padding:'11px',borderRadius:10,border:'1px solid #e2e4ef',background:'#fff',color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer'}}>
+                Cancelar
+              </button>
+              <button onClick={sendInvite} disabled={inviting||!inviteObjective}
+                style={{flex:2,padding:'11px',borderRadius:10,border:'none',background:inviting||!inviteObjective?'#e2e4ef':'#F47E2F',color:'#fff',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:inviting||!inviteObjective?'not-allowed':'pointer',transition:'background .15s'}}>
+                {inviting ? '⏳ Enviando...' : '📨 Enviar Convite'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
