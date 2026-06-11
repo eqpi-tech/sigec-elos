@@ -10,13 +10,18 @@ export const DEMO_FORNECEDOR = {
   visualizacoes30dias: 250,
   visualizacoesSemana: [23, 31, 18, 42, 38, 51, 47],
   documentos: [
-    { nome: 'Cartão CNPJ',       status: 'valid',   expira: null },
-    { nome: 'CND Federal',       status: 'valid',   expira: 'Jun/2026' },
-    { nome: 'CRF (FGTS)',        status: 'valid',   expira: 'Jul/2026' },
-    { nome: 'Certidão Municipal', status: 'valid',  expira: 'Mai/2026' },
-    { nome: 'Apólice de Seguro', status: 'pending', expira: null },
+    { nome: 'Cartão CNPJ',        status: 'VALID',   expira: null },
+    { nome: 'CND Federal',        status: 'VALID',   expira: 'Jun/2026' },
+    { nome: 'CRF (FGTS)',         status: 'VALID',   expira: 'Jul/2026' },
+    { nome: 'Certidão Municipal', status: 'VALID',   expira: 'Mai/2026' },
+    { nome: 'Apólice de Seguro',  status: 'PENDING', expira: null },
   ],
 }
+
+export const DEMO_PROCESSES = [
+  { id: 1, name: 'SIGEC Simples', client: 'SIGEC-ELOS',         status: 'ACTIVE',  score: 87, docsOk: 4, docsPending: 1, docsMissing: 0, date: 'Emitido 2025-01-15' },
+  { id: 2, name: 'Processo Horizonte', client: 'Horizonte Mineração', status: 'PENDING', score: 79, docsOk: 4, docsPending: 0, docsMissing: 1, date: 'Aguardando análise' },
+]
 
 export const DEMO_MARKETPLACE = [
   { id: 1, razaoSocial: 'Primatus Serviços Técnicos',  cidade: 'São Paulo',      uf: 'SP', categoria: 'Manutenção Industrial',  score: 92, selo: 'ELOS Verificado', destaque: true  },
@@ -32,13 +37,13 @@ export const DEMO_CLIENTE = {
   totalFornecedores: 128,
   verificados: 94,
   emAnalise: 23,
-  pendentes: 11,
+  subsidiados: 8,
   saudeGeral: 73,
-  processos: [
-    { empresa: 'Primatus Serviços Técnicos', categoria: 'Manutenção Industrial',   status: 'Homologado',    score: 92 },
-    { empresa: 'Ômega Engenharia Ltda',      categoria: 'Serviços Elétricos',      status: 'Em revisão',    score: 88 },
-    { empresa: 'Sulbras Serviços',           categoria: 'Manutenção Mecânica',     status: 'Homologado',    score: 79 },
-    { empresa: 'Norte Industrial Ltda',      categoria: 'Instalações Industriais', status: 'Doc. pendente', score: 74 },
-    { empresa: 'Inova Sistemas Ltda',        categoria: 'TI Industrial',           status: 'Em análise',    score: null },
+  fornecedoresRecentes: [
+    { empresa: 'Primatus Serviços Técnicos', initials: 'PS', cidade: 'São Paulo',  uf: 'SP', subsidiado: false, sealStatus: 'ACTIVE',  score: 92 },
+    { empresa: 'Ômega Engenharia Ltda',      initials: 'ÔE', cidade: 'BH',         uf: 'MG', subsidiado: true,  sealStatus: 'ACTIVE',  score: 88 },
+    { empresa: 'TechFix Industrial',          initials: 'TF', cidade: 'Campinas',   uf: 'SP', subsidiado: false, sealStatus: 'PENDING', score: null },
+    { empresa: 'Sulbras Serviços',            initials: 'SS', cidade: 'Porto Alegre', uf: 'RS', subsidiado: true, sealStatus: 'ACTIVE', score: 79 },
+    { empresa: 'Norte Industrial Ltda',       initials: 'NI', cidade: 'Parauapebas', uf: 'PA', subsidiado: false, sealStatus: 'PENDING', score: null },
   ],
 }
