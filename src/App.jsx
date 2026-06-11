@@ -36,6 +36,7 @@ import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import SupplierTeam             from './pages/supplier/Team.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import ClientPortal  from './pages/ClientPortal.jsx'
+import DemoPage      from './pages/DemoPage.jsx'
 
 import ClientDashboard         from './pages/client/Dashboard.jsx'
 import ClientSuppliers         from './pages/client/Suppliers.jsx'
@@ -77,6 +78,7 @@ function AppRoutes() {
       <Route path="/cadastro"         element={<SupplierOnboarding/>} />
       <Route path="/redefinir-senha"  element={<ResetPassword/>} />
       <Route path="/portal/:slug"     element={<ClientPortal/>} />
+      <Route path="/demo"             element={<DemoPage/>} />
       <Route path="/"                 element={<RootRedirect/>} />
 
       {/* Supplier */}
