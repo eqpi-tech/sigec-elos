@@ -1,4 +1,5 @@
-import { Card, Button, ScoreBar, StatusDot } from '../../components/ui.jsx'
+import { useState } from 'react'
+import { Card, Button, ScoreBar, StatusDot, Spinner } from '../../components/ui.jsx'
 import { DEMO_BUYER_SUPPLIER_PROFILE as P } from './demoData.js'
 
 const STATUS_C = { VALID:'#22c55e', EXPIRING:'#f59e0b', MISSING:'#ef4444', PENDING:'#f59e0b', REJECTED:'#ef4444' }
@@ -24,7 +25,80 @@ function Row({ label, value }) {
   )
 }
 
+function InviteModal({ onClose }) {
+  const [objective, setObjective] = useState('')
+  const [msg,       setMsg]       = useState('')
+  const [sending,   setSending]   = useState(false)
+  const [sent,      setSent]      = useState(false)
+
+  const templates = {
+    contato: `Olá, Primatus Serviços Técnicos!\n\nMeu nome é Ricardo Mendes e encontrei o perfil da sua empresa no marketplace SIGEC-ELOS.\n\nGostaria de entrar em contato para conhecer melhor os seus serviços e verificar possibilidades de parceria.\n\nAtenciosamente,\nRicardo Mendes`,
+    homologacao: `Olá, Primatus Serviços Técnicos!\n\nEstou interessado em homologar a sua empresa para prestação de serviços. Através do SIGEC-ELOS, você poderá completar seu cadastro e documentação de forma digital.\n\nAtenciosamente,\nRicardo Mendes`,
+  }
+
+  const selectObjective = (obj) => { setObjective(obj); setMsg(templates[obj]) }
+
+  const send = () => {
+    if (!objective) return
+    setSending(true)
+    setTimeout(() => { setSending(false); setSent(true) }, 900)
+  }
+
+  const inp = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box', outline:'none', color:'#1a1c5e' }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+        {sent ? (
+          <div style={{ textAlign:'center', padding:'12px 0' }}>
+            <div style={{ fontSize:52, marginBottom:12 }}>✅</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#15803d', marginBottom:6 }}>Convite enviado!</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>
+              Primatus Serviços Técnicos receberá um e-mail com o convite.
+            </div>
+            <Button variant="primary" full onClick={onClose}>Fechar</Button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>📨 Enviar Convite</div>
+            <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:16 }}>Para: <strong style={{ color:'#2E3192' }}>Primatus Serviços Técnicos Ltda</strong></div>
+
+            <div style={{ marginBottom:14 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Objetivo do convite</div>
+              <div style={{ display:'flex', gap:8 }}>
+                {[['contato','💬 Contato','Iniciar contato comercial'],['homologacao','🏅 Homologação','Solicitar homologação']].map(([val, label, desc]) => (
+                  <button key={val} onClick={() => selectObjective(val)}
+                    style={{ flex:1, padding:'12px', borderRadius:12, border:`2px solid ${objective===val?'#2E3192':'#e2e4ef'}`, background:objective===val?'rgba(46,49,146,.05)':'#fff', cursor:'pointer', textAlign:'left', transition:'all .15s' }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e' }}>{label}</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', marginTop:2 }}>{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {objective && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:5 }}>Mensagem</div>
+                <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
+                  style={{ ...inp, resize:'vertical' }}/>
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:10 }}>
+              <Button variant="neutral" style={{ flex:1 }} onClick={onClose}>Cancelar</Button>
+              <Button variant="primary" style={{ flex:1 }} disabled={!objective || sending} onClick={send}>
+                {sending ? <><Spinner size={14}/> Enviando...</> : '📨 Enviar'}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function DemoBuyerPerfil({ navigate }) {
+  const [showInvite, setShowInvite] = useState(false)
   const scoreC = P.score >= 90 ? '#22c55e' : P.score >= 70 ? '#f59e0b' : '#ef4444'
 
   return (
@@ -66,9 +140,9 @@ export default function DemoBuyerPerfil({ navigate }) {
         </div>
 
         {/* Ações */}
-        <div style={{ display:'flex', gap:10, marginTop:16 }}>
-          <Button variant="primary">📝 Solicitar Cotação (RFQ)</Button>
-          <Button variant="orange">⭐ Iniciar Homologação</Button>
+        <div style={{ display:'flex', gap:10, marginTop:16, flexWrap:'wrap' }}>
+          <Button variant="primary" onClick={() => navigate('rfq')}>📝 Solicitar Cotação (RFQ)</Button>
+          <Button variant="orange" onClick={() => setShowInvite(true)}>📨 Enviar Convite</Button>
           <Button variant="neutral">📄 Exportar Dossie</Button>
         </div>
       </Card>
@@ -128,6 +202,7 @@ export default function DemoBuyerPerfil({ navigate }) {
           </Card>
         </div>
       </div>
+      {showInvite && <InviteModal onClose={() => setShowInvite(false)}/>}
     </div>
   )
 }
