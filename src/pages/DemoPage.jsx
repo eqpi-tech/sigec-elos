@@ -9,6 +9,7 @@ import DemoClientDashboard      from './demo/DemoClientDashboard.jsx'
 import DemoClientFornecedores   from './demo/DemoClientFornecedores.jsx'
 import DemoRFQ                  from './demo/DemoRFQ.jsx'
 import DemoConvites             from './demo/DemoConvites.jsx'
+import DemoClientQuestionarios  from './demo/DemoClientQuestionarios.jsx'
 import { DEMO_PROCESSO }        from './demo/demoData.js'
 import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
 
@@ -199,6 +200,7 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'fornecedores')  return <DemoClientFornecedores navigate={navigate}/>
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
     if (screen === 'rfq')           return <DemoRFQ profile="CLIENT" navigate={navigate}/>
+    if (screen === 'questionarios')  return <DemoClientQuestionarios navigate={navigate}/>
     if (screen === 'configuracoes') return <ComingSoon title="Configurações" icon="⚙️" navigate={navigate} backTo="dashboard" backLabel="Dashboard"/>
     if (screen === 'processo')      return <DemoBuyerPerfil navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
