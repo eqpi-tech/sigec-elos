@@ -8,15 +8,15 @@ const sealLabel = s => s === 'ACTIVE' ? 'Homologado' : s === 'PENDING' ? 'Em an�
 const CATS_RFQ = ['Manutenção Industrial','Serviços Elétricos','Construção Civil','Automação & Controle','Limpeza e Conservação','Tecnologia']
 
 /* ── Modal base ── */
-function Modal({ onClose, children }) {
+function Modal({ onClose, title, children }) {
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'0 0 0 0' }}>
-      <div style={{ background:'#fff', borderRadius:'20px 20px 0 0', padding:'28px 24px 40px', width:'100%', maxWidth:480, boxShadow:'0 -8px 40px rgba(0,0,0,.15)', maxHeight:'90vh', overflowY:'auto' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          {children[0]}
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+      <div style={{ background:'#fff', borderRadius:'20px 20px 0 0', width:'100%', maxWidth:480, boxShadow:'0 -8px 40px rgba(0,0,0,.15)', maxHeight:'90vh', overflowY:'auto', position:'relative' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'24px 24px 0' }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{title}</div>
           <button onClick={onClose} style={{ background:'#f4f5f9', border:'none', borderRadius:8, padding:'6px 10px', cursor:'pointer', color:'#9B9B9B', fontSize:16 }}>✕</button>
         </div>
-        {children.slice(1)}
+        <div style={{ padding:'20px 24px 40px' }}>{children}</div>
       </div>
     </div>
   )
@@ -57,21 +57,18 @@ function InviteModal({ onClose }) {
   )
 
   return (
-    <>
-      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>📨 Convidar Fornecedor</div>
-      <div>
-        <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:20 }}>
-          O fornecedor receberá um link com o portal exclusivo da sua empresa para cadastro.
-        </div>
-        <label style={lbl}>CNPJ do fornecedor</label>
-        <div style={inp}>33.445.566/0001-88</div>
-        <label style={lbl}>Razão Social</label>
-        <div style={inp}>TechFix Industrial Ltda</div>
-        <label style={lbl}>E-mail do responsável</label>
-        <div style={inp}>carlos@techfix.com.br</div>
-        <Button variant="primary" full size="lg" onClick={() => setStep('sending')}>📨 Enviar Convite</Button>
+    <div>
+      <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:20 }}>
+        O fornecedor receberá um link com o portal exclusivo da sua empresa para cadastro.
       </div>
-    </>
+      <label style={lbl}>CNPJ do fornecedor</label>
+      <div style={inp}>33.445.566/0001-88</div>
+      <label style={lbl}>Razão Social</label>
+      <div style={inp}>TechFix Industrial Ltda</div>
+      <label style={lbl}>E-mail do responsável</label>
+      <div style={inp}>carlos@techfix.com.br</div>
+      <Button variant="primary" full size="lg" onClick={() => setStep('sending')}>📨 Enviar Convite</Button>
+    </div>
   )
 }
 
@@ -120,12 +117,10 @@ function RFQModal({ onClose }) {
   )
 
   return (
-    <>
-      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>💬 Solicitar Cotação (RFQ)</div>
-      <div>
-        <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:20 }}>
-          A solicitação será enviada automaticamente para todos os fornecedores homologados na categoria selecionada.
-        </div>
+    <div>
+      <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:20 }}>
+        A solicitação será enviada automaticamente para todos os fornecedores homologados na categoria selecionada.
+      </div>
         <label style={lbl}>Título da solicitação</label>
         <div style={inp}>Manutenção preventiva — Planta Carajás Q2/2026</div>
         <label style={lbl}>Categoria</label>
@@ -140,8 +135,7 @@ function RFQModal({ onClose }) {
           💡 Esta RFQ será enviada para <strong>12 fornecedores homologados</strong> em Manutenção Industrial
         </div>
         <Button variant="primary" full size="lg" onClick={() => setStep('sending')}>💬 Enviar para 12 fornecedores</Button>
-      </div>
-    </>
+    </div>
   )
 }
 
@@ -224,12 +218,12 @@ export default function ClienteView() {
 
       {/* Modais */}
       {modal === 'invite' && (
-        <Modal onClose={() => setModal(null)}>
+        <Modal onClose={() => setModal(null)} title="📨 Convidar Fornecedor">
           <InviteModal onClose={() => setModal(null)}/>
         </Modal>
       )}
       {modal === 'rfq' && (
-        <Modal onClose={() => setModal(null)}>
+        <Modal onClose={() => setModal(null)} title="💬 Solicitar Cotação (RFQ)">
           <RFQModal onClose={() => setModal(null)}/>
         </Modal>
       )}
