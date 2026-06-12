@@ -251,7 +251,7 @@ export default function LandingPage() {
         <FadeIn>
           <div style={{ maxWidth:1000, margin:'0 auto', display:'flex', justifyContent:'space-around', flexWrap:'wrap', gap:32 }}>
             <Stat value="+60K"  label="Fornecedores na base EQPI" />
-            <Stat value="+7.2B" label="Documentos analisados" />
+            <Stat value="+7.2M" label="Documentos analisados" />
             <Stat value="31%"   label="Redução de risco na contratação" />
             <Stat value="10+"   label="Anos de experiência em homologação" />
           </div>
