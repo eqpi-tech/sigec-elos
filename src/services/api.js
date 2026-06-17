@@ -766,6 +766,36 @@ export const adminApi = {
     return data || []
   },
 
+  getProcessLog: async (supplierId, { dateFrom, dateTo, description } = {}) => {
+    let q = supabase
+      .from('audit_log')
+      .select('id, action, metadata, created_at, user_id')
+      .eq('entity_id', supplierId)
+      .order('created_at', { ascending: false })
+      .limit(200)
+    if (dateFrom) q = q.gte('created_at', new Date(dateFrom).toISOString())
+    if (dateTo)   q = q.lte('created_at', new Date(dateTo + 'T23:59:59').toISOString())
+    const { data } = await q
+    let rows = data || []
+    if (description) {
+      const lower = description.toLowerCase()
+      rows = rows.filter(r =>
+        (r.action || '').toLowerCase().includes(lower) ||
+        JSON.stringify(r.metadata || '').toLowerCase().includes(lower)
+      )
+    }
+    return rows
+  },
+
+  getSupplierInvitations: async (supplierId) => {
+    const { data } = await supabase
+      .from('invitations')
+      .select('id, status, created_at, client_id, clients(razao_social)')
+      .eq('supplier_id', supplierId)
+      .order('created_at', { ascending: false })
+    return data || []
+  },
+
   getDocumentFarol: async () => {
     // Janela: vencidos + hoje + próximos 5 dias (reduz volume e foco operacional)
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)

@@ -42,7 +42,7 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body) } catch {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) }
   }
-  const { documentId, status, expiresAt, note } = body
+  const { documentId, status, expiresAt, note, inscriptionNumber } = body
   if (!documentId || !['VALID', 'REJECTED'].includes(status)) {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'documentId e status (VALID|REJECTED) são obrigatórios' }) }
   }
@@ -54,7 +54,8 @@ exports.handler = async (event) => {
     reviewed_by:  user.id,
     reviewed_at:  new Date().toISOString(),
   }
-  if (expiresAt) updatePayload.expires_at = expiresAt
+  if (expiresAt)          updatePayload.expires_at        = expiresAt
+  if (inscriptionNumber)  updatePayload.inscription_number = inscriptionNumber
 
   const { data: updatedDoc, error: docErr } = await supabaseAdmin
     .from('documents')

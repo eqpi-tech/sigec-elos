@@ -24,6 +24,7 @@ export default function BackofficeUsers() {
   const [filterRole,  setFilterRole]  = useState('Todos')
   const [filterStatus,setFilterStatus]= useState('Todos')   // Todos | Ativo | Bloqueado
   const [search,      setSearch]      = useState('')
+  const [cnpjSearch,  setCnpjSearch]  = useState('')
   const [acting,      setActing]      = useState({})         // { [userId]: string }
   const [editModal,      setEditModal]      = useState(null)   // { userId, currentName }
   const [editName,       setEditName]       = useState('')
@@ -79,6 +80,12 @@ export default function BackofficeUsers() {
       const q = search.toLowerCase()
       if (!u.email?.toLowerCase().includes(q) && !u.name?.toLowerCase().includes(q)) return false
     }
+    if (cnpjSearch) {
+      const digits = cnpjSearch.replace(/\D/g, '')
+      if (!digits) return true
+      const cnpj = (u.supplierCnpj || '').replace(/\D/g, '')
+      if (!cnpj.includes(digits)) return false
+    }
     return true
   })
 
@@ -109,7 +116,10 @@ export default function BackofficeUsers() {
       <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="🔍  Buscar por nome ou e-mail..."
-          style={{ flex:1, minWidth:220, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none' }}/>
+          style={{ flex:1, minWidth:200, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none' }}/>
+        <input value={cnpjSearch} onChange={e=>setCnpjSearch(e.target.value)}
+          placeholder="CNPJ do fornecedor..."
+          style={{ width:200, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none' }}/>
         <div style={{ display:'flex', gap:6 }}>
           {['Todos','ADMIN','BUYER','CLIENT','SUPPLIER'].map(r => (
             <button key={r} onClick={()=>setFilterRole(r)}
@@ -160,6 +170,7 @@ export default function BackofficeUsers() {
                       </div>
                       <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                         {u.email}
+                        {u.supplierCnpj ? ` · CNPJ: ${u.supplierCnpj}` : ''}
                         {u.lastSignIn ? ` · Último acesso: ${new Date(u.lastSignIn).toLocaleDateString('pt-BR')}` : ' · Nunca acessou'}
                         {u.createdAt ? ` · Cadastrado: ${new Date(u.createdAt).toLocaleDateString('pt-BR')}` : ''}
                       </div>

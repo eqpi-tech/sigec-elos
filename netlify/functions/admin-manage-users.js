@@ -37,37 +37,53 @@ exports.handler = async (event) => {
   try {
     // ── LIST ──────────────────────────────────────────────────────────────────
     if (action === 'list') {
-      const [{ data: authUsers }, rolesRes, profilesRes] = await Promise.all([
+      const [{ data: authUsers }, rolesRes, profilesRes, suppliersRes] = await Promise.all([
         supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
-        supabaseAdmin.from('user_roles').select('user_id, role, is_primary, client_id'),
+        supabaseAdmin.from('user_roles').select('user_id, role, is_primary, client_id, supplier_id'),
         supabaseAdmin.from('profiles').select('id, name'),
+        supabaseAdmin.from('suppliers').select('id, cnpj, razao_social'),
       ])
 
-      const roleMap    = {}
-      const primaryMap = {}
+      const roleMap     = {}
+      const primaryMap  = {}
       const clientIdMap = {}
+      const supplierMap = {}  // userId → supplier_id
       ;(rolesRes.data || []).forEach(r => {
         if (!roleMap[r.user_id]) roleMap[r.user_id] = []
         roleMap[r.user_id].push(r.role)
         if (r.is_primary) primaryMap[r.user_id] = r.role
         if (r.role === 'CLIENT' && r.client_id) clientIdMap[r.user_id] = r.client_id
+        if (r.role === 'SUPPLIER' && r.supplier_id) supplierMap[r.user_id] = r.supplier_id
       })
 
-      const nameMap = {}
+      const nameMap     = {}
       ;(profilesRes.data || []).forEach(p => { nameMap[p.id] = p.name })
 
-      const users = (authUsers?.users || []).map(u => ({
-        id:         u.id,
-        email:      u.email,
-        name:       nameMap[u.id] || u.user_metadata?.name || '—',
-        roles:      roleMap[u.id]    || [],
-        primaryRole:primaryMap[u.id] || (roleMap[u.id]?.[0]) || 'SUPPLIER',
-        clientId:   clientIdMap[u.id] || null,
-        banned:     u.banned_until ? new Date(u.banned_until) > new Date() : false,
-        bannedUntil:u.banned_until || null,
-        createdAt:  u.created_at,
-        lastSignIn: u.last_sign_in_at || null,
-      }))
+      const supplierCnpjMap    = {}
+      const supplierRazaoMap   = {}
+      ;(suppliersRes.data || []).forEach(s => {
+        supplierCnpjMap[s.id]  = s.cnpj
+        supplierRazaoMap[s.id] = s.razao_social
+      })
+
+      const users = (authUsers?.users || []).map(u => {
+        const suppId = supplierMap[u.id]
+        return {
+          id:             u.id,
+          email:          u.email,
+          name:           nameMap[u.id] || u.user_metadata?.name || '—',
+          roles:          roleMap[u.id]    || [],
+          primaryRole:    primaryMap[u.id] || (roleMap[u.id]?.[0]) || 'SUPPLIER',
+          clientId:       clientIdMap[u.id] || null,
+          supplierId:     suppId || null,
+          supplierCnpj:   suppId ? (supplierCnpjMap[suppId]  || '') : '',
+          supplierRazao:  suppId ? (supplierRazaoMap[suppId] || '') : '',
+          banned:         u.banned_until ? new Date(u.banned_until) > new Date() : false,
+          bannedUntil:    u.banned_until || null,
+          createdAt:      u.created_at,
+          lastSignIn:     u.last_sign_in_at || null,
+        }
+      })
 
       return { statusCode:200, headers, body: JSON.stringify({ users }) }
     }

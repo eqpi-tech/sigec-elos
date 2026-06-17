@@ -250,6 +250,18 @@ export function BackofficeAnalysis() {
   const [rejectReasons,  setRejectReasons]  = useState([])
   const [rejectCode,     setRejectCode]     = useState('')
   const [rejectCustom,   setRejectCustom]   = useState('')
+  // Número de inscrição (Municipal/Estadual)
+  const [approveInscription, setApproveInscription] = useState('')
+  // Log do Processo
+  const [logData,       setLogData]       = useState([])
+  const [logLoading,    setLogLoading]    = useState(false)
+  const [logDateFrom,   setLogDateFrom]   = useState('')
+  const [logDateTo,     setLogDateTo]     = useState('')
+  const [logDesc,       setLogDesc]       = useState('')
+  // Convites recebidos pelo fornecedor
+  const [inviteLog,     setInviteLog]     = useState([])
+  // Categorias: expandir/recolher "Ver mais"
+  const [catsExpanded,  setCatsExpanded]  = useState(false)
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
@@ -277,6 +289,8 @@ export function BackofficeAnalysis() {
       .then(({ data }) => setBankData(data || {}))
     supabase.from('supplier_financials').select('*').eq('supplier_id', id).order('year', { ascending: false })
       .then(({ data }) => setDreList(data || []))
+    // Carrega convites recebidos pelo fornecedor
+    adminApi.getSupplierInvitations(id).then(setInviteLog).catch(() => {})
   }, [id])
 
   useEffect(() => {
@@ -429,9 +443,19 @@ export function BackofficeAnalysis() {
     setProcessing(false)
   }
   const openApproveModal = (doc) => {
-    setApproveModal({ docId: doc.id, docLabel: doc.label })
+    setApproveModal({ docId: doc.id, docLabel: doc.label, docLabelLower: (doc.label || '').toLowerCase() })
     setApproveNote('')
+    setApproveInscription('')
     // mantém a sugestão de expiração já definida no load
+  }
+
+  const fetchLog = async () => {
+    setLogLoading(true)
+    try {
+      const rows = await adminApi.getProcessLog(id, { dateFrom: logDateFrom, dateTo: logDateTo, description: logDesc })
+      setLogData(rows)
+    } catch(e) { console.error(e) }
+    finally { setLogLoading(false) }
   }
 
   const handleDocApprove = async () => {
@@ -448,6 +472,7 @@ export function BackofficeAnalysis() {
           status: 'VALID',
           expiresAt: approveExpiry || undefined,
           note: approveNote || 'Aprovado pelo backoffice',
+          inscriptionNumber: approveInscription || undefined,
         }),
       })
       const result = await res.json()
@@ -751,18 +776,33 @@ export function BackofficeAnalysis() {
           )}
 
           {/* Categorias do Fornecedor */}
-          {data.categories?.length > 0 && (
-            <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16,border:'1px solid rgba(46,49,146,.15)' }}>
-              <SectionTitle style={{ marginBottom:12 }}>Categorias de Atuação</SectionTitle>
-              <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
-                {data.categories.map(cat => (
-                  <div key={cat.id} style={{ display:'flex',alignItems:'center',gap:6,background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:20,padding:'4px 12px' }}>
-                    <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+          {data.categories?.length > 0 && (() => {
+            const INITIAL = 5
+            const cats    = data.categories
+            const visible = catsExpanded ? cats : cats.slice(0, INITIAL)
+            const extra   = cats.length - INITIAL
+            return (
+              <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16,border:'1px solid rgba(46,49,146,.15)' }}>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+                  <SectionTitle style={{ marginBottom:0 }}>Categorias de Atuação</SectionTitle>
+                  <span style={{ fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>{cats.length} categoria{cats.length!==1?'s':''}</span>
+                </div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
+                  {visible.map(cat => (
+                    <div key={cat.id} style={{ display:'flex',alignItems:'center',gap:6,background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:20,padding:'4px 12px' }}>
+                      <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
+                    </div>
+                  ))}
+                </div>
+                {cats.length > INITIAL && (
+                  <button onClick={() => setCatsExpanded(x => !x)}
+                    style={{ marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#2E3192',fontFamily:'Montserrat,sans-serif',fontWeight:700,padding:0 }}>
+                    {catsExpanded ? '▲ Ver menos' : `+ ${extra} categoria${extra!==1?'s':''} | Ver mais`}
+                  </button>
+                )}
+              </Card>
+            )
+          })()}
 
           {/* Assertiva */}
           <Card style={{ borderRadius:16,padding:'20px 24px',border:'1px solid rgba(46,49,146,.15)' }}>
@@ -859,12 +899,15 @@ export function BackofficeAnalysis() {
                 ['questionario','Questionário'],
                 ['banco','Dados Bancários'],
                 ['dre','DRE / Financeiro'],
+                ['log','Log do Processo'],
+                ['convites','Convites'],
               ].map(([tab,label])=>(
-                <button key={tab} onClick={()=>setActiveTab(tab)}
-                  style={{ padding:'8px 18px',background:'none',border:'none',borderBottom:`2px solid ${activeTab===tab?'#2E3192':'transparent'}`,color:activeTab===tab?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:-1 }}>
+                <button key={tab} onClick={()=>{ setActiveTab(tab); if(tab==='log' && logData.length===0) fetchLog() }}
+                  style={{ padding:'8px 18px',background:'none',border:'none',borderBottom:`2px solid ${activeTab===tab?'#2E3192':'transparent'}`,color:activeTab===tab?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:-1,whiteSpace:'nowrap' }}>
                   {label}{tab==='questionario'&&qaAnswers.length>0?` (${qaAnswers.length})`:''}
                   {tab==='banco'&&bankData?.bank_name?` ✓`:''}
                   {tab==='dre'&&dreList.length>0?` (${dreList.length})`:''}
+                  {tab==='convites'&&inviteLog.length>0?` (${inviteLog.length})`:''}
                 </button>
               ))}
             </div>
@@ -1092,6 +1135,116 @@ export function BackofficeAnalysis() {
                 )}
               </div>
             )}
+
+            {/* ── Tab: Log do Processo ──────────────────────────────────────── */}
+            {activeTab === 'log' && (
+              <div>
+                {/* Filtros */}
+                <div style={{ display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end' }}>
+                  <div>
+                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Data início</label>
+                    <input type="date" value={logDateFrom} onChange={e=>setLogDateFrom(e.target.value)}
+                      style={{ padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12 }}/>
+                  </div>
+                  <div>
+                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Data fim</label>
+                    <input type="date" value={logDateTo} onChange={e=>setLogDateTo(e.target.value)}
+                      style={{ padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12 }}/>
+                  </div>
+                  <div style={{ flex:1,minWidth:160 }}>
+                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Descrição</label>
+                    <input value={logDesc} onChange={e=>setLogDesc(e.target.value)} placeholder="Filtrar por ação ou descrição..."
+                      style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12,boxSizing:'border-box' }}/>
+                  </div>
+                  <Button variant="primary" size="sm" disabled={logLoading} onClick={fetchLog}>
+                    {logLoading ? <Spinner size={14}/> : '🔍 Pesquisar'}
+                  </Button>
+                </div>
+
+                {logLoading ? (
+                  <div style={{ textAlign:'center',padding:32 }}><Spinner size={32}/></div>
+                ) : logData.length === 0 ? (
+                  <div style={{ textAlign:'center',padding:'32px',color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    {logData.length === 0 && !logLoading ? 'Clique em Pesquisar para carregar o histórico.' : 'Nenhum evento encontrado para os filtros aplicados.'}
+                  </div>
+                ) : (
+                  <div style={{ display:'flex',flexDirection:'column',gap:0 }}>
+                    {logData.map((entry,i) => {
+                      const ACTION_MAP = {
+                        ANALYSIS_STARTED:   { label:'Análise iniciada',         color:'#2E3192', icon:'🔍' },
+                        SEAL_APPROVED:      { label:'Homologação aprovada',      color:'#22c55e', icon:'✅' },
+                        SEAL_REJECTED:      { label:'Homologação rejeitada',     color:'#ef4444', icon:'❌' },
+                        SEAL_REVERTED:      { label:'Análise revertida',         color:'#f59e0b', icon:'↩️' },
+                        SEAL_AUTO_APPROVED: { label:'Aprovação automática',      color:'#22c55e', icon:'⚡' },
+                        SEAL_AUTO_REJECTED: { label:'Rejeição automática',       color:'#ef4444', icon:'⚡' },
+                      }
+                      const info    = ACTION_MAP[entry.action] || { label: entry.action, color:'#9B9B9B', icon:'📋' }
+                      const meta    = entry.metadata || {}
+                      const dt      = new Date(entry.created_at)
+                      const dateStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+                      let detail    = ''
+                      if (meta.reason)       detail = `Motivo: ${meta.reason}`
+                      if (meta.score)        detail = `Score: ${meta.score}%`
+                      if (meta.level)        detail = (detail ? detail + ' · ' : '') + `Nível: ${meta.level}`
+                      if (meta.razao_social) detail = (detail ? detail + ' · ' : '') + meta.razao_social
+                      return (
+                        <div key={i} style={{ display:'flex',gap:12,padding:'12px 0',borderBottom:i<logData.length-1?'1px solid #f0f2f8':'' }}>
+                          <div style={{ width:32,height:32,borderRadius:8,background:`${info.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,marginTop:2 }}>
+                            {info.icon}
+                          </div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:info.color }}>{info.label}</div>
+                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2 }}>{detail}</div>}
+                            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Tab: Convites recebidos ──────────────────────────────────── */}
+            {activeTab === 'convites' && (
+              <div>
+                {inviteLog.length === 0 ? (
+                  <div style={{ textAlign:'center',padding:'40px',color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
+                    Nenhum convite enviado para este fornecedor.
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:12,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginBottom:14 }}>
+                      {inviteLog.length} convite{inviteLog.length!==1?'s':''} enviados por clientes/compradores
+                    </div>
+                    {inviteLog.map((inv,i) => {
+                      const STATUS_INFO = {
+                        SENT:       { label:'Enviado',      color:'#f59e0b', bg:'#fef3c7' },
+                        VIEWED:     { label:'Visualizado',  color:'#2563eb', bg:'#dbeafe' },
+                        REGISTERED: { label:'Cadastrado',   color:'#22c55e', bg:'#dcfce7' },
+                      }
+                      const si   = STATUS_INFO[inv.status] || { label: inv.status, color:'#9B9B9B', bg:'#f0f0f0' }
+                      const dt   = new Date(inv.created_at)
+                      const dtStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+                      return (
+                        <div key={i} style={{ display:'flex',alignItems:'center',gap:14,padding:'12px 14px',borderRadius:10,background:'#f8faff',border:'1px solid #e2e4ef',marginBottom:8 }}>
+                          <div style={{ width:36,height:36,borderRadius:10,background:'#EEF0FF',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0 }}>🏢</div>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e' }}>
+                              {inv.clients?.razao_social || `Cliente ${inv.client_id?.slice(0,8)}`}
+                            </div>
+                            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:2 }}>{dtStr}</div>
+                          </div>
+                          <span style={{ fontSize:11,fontWeight:700,color:si.color,background:si.bg,borderRadius:20,padding:'3px 10px',fontFamily:'Montserrat,sans-serif' }}>
+                            {si.label}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -1227,6 +1380,21 @@ export function BackofficeAnalysis() {
               />
               <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Sugestão: data de vencimento da assinatura do fornecedor</div>
             </div>
+
+            {approveModal && (approveModal.docLabelLower?.includes('inscrição municipal') || approveModal.docLabelLower?.includes('inscricao municipal') || approveModal.docLabelLower?.includes('inscrição estadual') || approveModal.docLabelLower?.includes('inscricao estadual')) && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
+                  Número da Inscrição
+                </label>
+                <input
+                  type="text"
+                  value={approveInscription}
+                  onChange={e => setApproveInscription(e.target.value)}
+                  placeholder="Ex: 606005028116"
+                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}
+                />
+              </div>
+            )}
 
             <div style={{ marginBottom:20 }}>
               <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>Observação (opcional)</label>

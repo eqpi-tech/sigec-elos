@@ -351,10 +351,63 @@ export default function DocumentAnalysis() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
+  const handleExportCsv = async (scope = 'filtered') => {
+    let exportRows = rows
+    if (scope === 'all' && total > rows.length) {
+      // Busca todos os registros sem paginação
+      try {
+        const result = await adminApi.listDocumentsForAnalysis({
+          docType: docType || undefined,
+          supplierSearch: supplierSearch || undefined,
+          status: statusFilter !== 'todos' ? statusFilter : undefined,
+          expiresUntil: expiresUntil || undefined,
+          sortBy: 'expires_asc',
+          page: 0,
+          pageSize: 9999,
+        })
+        exportRows = result.rows
+      } catch(e) { alert('Erro ao exportar: ' + e.message); return }
+    }
+    const BOM     = '﻿'
+    const headers = ['Fornecedor', 'CNPJ', 'Documento', 'Status', 'Vencimento', 'Fonte']
+    const csvRows = exportRows.map(d => [
+      d.suppliers?.razao_social || '',
+      d.suppliers?.cnpj || '',
+      d.label || '',
+      STATUS_LABEL[d.status] || d.status || '',
+      d.expires_at ? d.expires_at.slice(0,10) : '',
+      d.source === 'AUTO' ? 'Automático' : 'Manual',
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';'))
+    const csv  = BOM + [headers.join(';'), ...csvRows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `analise_documentos_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div style={{ padding:'24px 32px', maxWidth:1200, margin:'0 auto' }}>
       <PageHeader title="Análise de Documentos" subtitle="Aprovação e rejeição em lote · independente de fornecedor"
-        action={<Button variant="neutral" onClick={() => navigate('/backoffice')}>← Painel</Button>}
+        action={
+          <div style={{ display:'flex', gap:8 }}>
+            {rows.length > 0 && (
+              <div style={{ display:'flex', gap:6 }}>
+                <Button variant="neutral" size="sm" onClick={() => handleExportCsv('filtered')}>
+                  ⬇ Exportar página ({rows.length})
+                </Button>
+                {total > rows.length && (
+                  <Button variant="neutral" size="sm" onClick={() => handleExportCsv('all')}>
+                    ⬇ Exportar tudo ({total})
+                  </Button>
+                )}
+              </div>
+            )}
+            <Button variant="neutral" onClick={() => navigate('/backoffice')}>← Painel</Button>
+          </div>
+        }
       />
 
       {/* Filtros */}
