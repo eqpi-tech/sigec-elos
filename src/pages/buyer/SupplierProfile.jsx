@@ -157,6 +157,7 @@ export default function SupplierProfile() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteObjective, setInviteObjective] = useState('') // 'contato' | 'homologacao'
   const [inviteMsg,       setInviteMsg]       = useState('')
+  const [catsExpanded,    setCatsExpanded]    = useState(false)
 
   const SESSION_KEY = 'marketplace_state'
   const hasMarketState = !!sessionStorage.getItem(SESSION_KEY)
@@ -536,7 +537,22 @@ export default function SupplierProfile() {
           <Section icon="🏷️" title="Categorias de Atuação">
             {categories.length === 0
               ? <div style={{color:'#9B9B9B',fontSize:13,textAlign:'center',padding:20}}>Sem categorias cadastradas.</div>
-              : <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{categories.map((c,i)=><Chip key={i} label={c}/>)}</div>
+              : (() => {
+                  const INIT = 5
+                  const visible = catsExpanded ? categories : categories.slice(0, INIT)
+                  const extra   = categories.length - INIT
+                  return (
+                    <>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{visible.map((c,i)=><Chip key={i} label={c}/>)}</div>
+                      {categories.length > INIT && (
+                        <button onClick={() => setCatsExpanded(x => !x)}
+                          style={{ marginTop:10,background:'none',border:'none',cursor:'pointer',fontSize:12,color:'#2E3192',fontFamily:'Montserrat,sans-serif',fontWeight:700,padding:0 }}>
+                          {catsExpanded ? '▲ Ver menos' : `+ ${extra} categoria${extra!==1?'s':''} | Ver mais`}
+                        </button>
+                      )}
+                    </>
+                  )
+                })()
             }
           </Section>
           <Section icon="💰" title="Capacidade Financeira">

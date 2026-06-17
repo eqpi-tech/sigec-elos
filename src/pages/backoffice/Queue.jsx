@@ -260,8 +260,24 @@ export function BackofficeAnalysis() {
   const [logDesc,       setLogDesc]       = useState('')
   // Convites recebidos pelo fornecedor
   const [inviteLog,     setInviteLog]     = useState([])
-  // Categorias: expandir/recolher "Ver mais"
+  // Categorias: expandir/recolher "Ver mais" + expandir docs por categoria
   const [catsExpanded,  setCatsExpanded]  = useState(false)
+  const [expandedCat,   setExpandedCat]   = useState(null)  // category id
+  // Sócios manuais (Item 7)
+  const [partners,      setPartners]      = useState([])
+  const [partnerModal,  setPartnerModal]  = useState(false)
+  const [partnerForm,   setPartnerForm]   = useState({ tipo:'pf', cpf_cnpj:'', nome:'', cargo:'', nacionalidade:'', participacao:'' })
+  const [partnerSaving, setPartnerSaving] = useState(false)
+  // Sanções manuais (Item 9)
+  const [manualSanc,    setManualSanc]    = useState([])
+  const [sancModal,     setSancModal]     = useState(false)
+  const [sancForm,      setSancForm]      = useState({ tipo:'', data_final:'', orgao:'', uf:'' })
+  const [sancSaving,    setSancSaving]    = useState(false)
+  // Arquivamento (Item 10)
+  const [archiveModal,  setArchiveModal]  = useState(false)
+  const [archiveReason, setArchiveReason] = useState('')
+  const [archiving,     setArchiving]     = useState(false)
+  const [isArchived,    setIsArchived]    = useState(false)
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
@@ -291,6 +307,15 @@ export function BackofficeAnalysis() {
       .then(({ data }) => setDreList(data || []))
     // Carrega convites recebidos pelo fornecedor
     adminApi.getSupplierInvitations(id).then(setInviteLog).catch(() => {})
+    // Carrega sócios manuais (Item 7)
+    supabase.from('supplier_partners').select('*').eq('supplier_id', id).order('created_at')
+      .then(({ data: rows }) => setPartners(rows || []))
+    // Carrega sanções manuais (Item 9)
+    supabase.from('supplier_sanctions_manual').select('*').eq('supplier_id', id).order('created_at', { ascending: false })
+      .then(({ data: rows }) => setManualSanc(rows || []))
+    // Verifica se arquivado (Item 10)
+    supabase.from('suppliers').select('archived_at').eq('id', id).maybeSingle()
+      .then(({ data: s }) => setIsArchived(!!s?.archived_at))
   }, [id])
 
   useEffect(() => {
@@ -305,6 +330,75 @@ export function BackofficeAnalysis() {
       })
       .catch(() => {})
   }, [data])
+
+  const savePartner = async () => {
+    if (!partnerForm.nome.trim()) return
+    setPartnerSaving(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    await supabase.from('supplier_partners').insert({
+      supplier_id:   id,
+      tipo:          partnerForm.tipo,
+      cpf_cnpj:      partnerForm.cpf_cnpj || null,
+      nome:          partnerForm.nome.trim(),
+      cargo:         partnerForm.cargo || null,
+      nacionalidade: partnerForm.nacionalidade || null,
+      participacao:  partnerForm.participacao ? Number(partnerForm.participacao) : null,
+      registered_by: session?.user?.id,
+    })
+    const { data: rows } = await supabase.from('supplier_partners').select('*').eq('supplier_id', id).order('created_at')
+    setPartners(rows || [])
+    setPartnerForm({ tipo:'pf', cpf_cnpj:'', nome:'', cargo:'', nacionalidade:'', participacao:'' })
+    setPartnerModal(false)
+    setPartnerSaving(false)
+  }
+
+  const deletePartner = async (pid) => {
+    await supabase.from('supplier_partners').delete().eq('id', pid)
+    setPartners(p => p.filter(x => x.id !== pid))
+  }
+
+  const saveSanction = async () => {
+    if (!sancForm.tipo.trim()) return
+    setSancSaving(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    await supabase.from('supplier_sanctions_manual').insert({
+      supplier_id:   id,
+      tipo:          sancForm.tipo.trim(),
+      data_final:    sancForm.data_final || null,
+      orgao:         sancForm.orgao || null,
+      uf:            sancForm.uf || null,
+      registered_by: session?.user?.id,
+    })
+    const { data: rows } = await supabase.from('supplier_sanctions_manual').select('*').eq('supplier_id', id).order('created_at', { ascending: false })
+    setManualSanc(rows || [])
+    setSancForm({ tipo:'', data_final:'', orgao:'', uf:'' })
+    setSancModal(false)
+    setSancSaving(false)
+  }
+
+  const deleteSanction = async (sid) => {
+    await supabase.from('supplier_sanctions_manual').delete().eq('id', sid)
+    setManualSanc(p => p.filter(x => x.id !== sid))
+  }
+
+  const handleArchive = async () => {
+    setArchiving(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (isArchived) {
+      await supabase.from('suppliers').update({ archived_at: null, archived_by: null, archive_reason: null }).eq('id', id)
+      setIsArchived(false)
+    } else {
+      await supabase.from('suppliers').update({
+        archived_at:     new Date().toISOString(),
+        archived_by:     session?.user?.id,
+        archive_reason:  archiveReason || null,
+      }).eq('id', id)
+      setIsArchived(true)
+    }
+    setArchiveModal(false)
+    setArchiveReason('')
+    setArchiving(false)
+  }
 
   const sendAnalysisStartEmail = async (supplierData) => {
     if (!supplierData?.user_id) return
@@ -687,7 +781,14 @@ export function BackofficeAnalysis() {
               <div style={{ textAlign:'right' }}>
                 <div style={{ fontSize:28,fontWeight:900,color:data.score>=70?'#22c55e':data.score>=50?'#f59e0b':'#ef4444',fontFamily:'Montserrat,sans-serif' }}>{liveScore}</div>
                 <div style={{ fontSize:10,color:'#9B9B9B' }}>Score ELOS</div>
+                {isArchived && <div style={{ fontSize:10,fontWeight:700,color:'#dc2626',marginTop:4 }}>ARQUIVADO</div>}
               </div>
+            </div>
+            <div style={{ marginTop:12,display:'flex',justifyContent:'flex-end' }}>
+              <button onClick={() => setArchiveModal(true)}
+                style={{ fontSize:11,fontFamily:'DM Sans,sans-serif',fontWeight:600,color:isArchived?'#059669':'#9B9B9B',background:'none',border:`1px solid ${isArchived?'#86efac':'#e2e4ef'}`,borderRadius:8,padding:'4px 12px',cursor:'pointer' }}>
+                {isArchived ? '↺ Desarquivar' : '📁 Arquivar cadastro'}
+              </button>
             </div>
           </Card>
 
@@ -763,10 +864,65 @@ export function BackofficeAnalysis() {
                 </div>
               )}
 
+              {/* Quadro Societário Manual (Item 7) */}
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5 }}>
+                    Quadro Societário {partners.length > 0 ? `(${partners.length} registrado${partners.length!==1?'s':''})` : '— Registro Manual'}
+                  </div>
+                  <button onClick={() => setPartnerModal(true)}
+                    style={{ fontSize:11,fontFamily:'DM Sans,sans-serif',fontWeight:700,color:'#2E3192',background:'rgba(46,49,146,.07)',border:'1px solid rgba(46,49,146,.2)',borderRadius:8,padding:'3px 10px',cursor:'pointer' }}>
+                    + Adicionar Sócio
+                  </button>
+                </div>
+                {partners.length === 0 && (
+                  <div style={{ fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontStyle:'italic' }}>
+                    Nenhum sócio registrado manualmente. Os dados do QSA acima vêm da consulta BrasilAPI.
+                  </div>
+                )}
+                {partners.map((p, i) => (
+                  <div key={p.id} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.1)',borderRadius:8,marginBottom:4 }}>
+                    <div>
+                      <div style={{ fontSize:12,fontWeight:700,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif' }}>{p.nome}</div>
+                      <div style={{ fontSize:11,color:'#9B9B9B' }}>
+                        {p.cargo || p.tipo?.toUpperCase()} {p.cpf_cnpj ? `· ${p.cpf_cnpj}` : ''} {p.participacao ? `· ${p.participacao}%` : ''} {p.nacionalidade ? `· ${p.nacionalidade}` : ''}
+                      </div>
+                    </div>
+                    <button onClick={() => deletePartner(p.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:14,padding:'2px 6px' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+
               {/* Sanções CEIS / CNEP */}
               <div>
-                <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:8 }}>Sanções CEIS / CNEP</div>
+                <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:8 }}>Sanções CEIS / CNEP (API Transparência)</div>
                 <SanctionCard sanctions={{ ceis: activeSancCeis, cnep: activeSancCnep, ceisHistory: sanctions?.ceisHistory, cnepHistory: sanctions?.cnepHistory }} cnpj={supplierCnpj}/>
+              </div>
+
+              {/* Sanções Manuais (Item 9) */}
+              <div style={{ marginTop:14 }}>
+                <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
+                  <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5 }}>
+                    Sanções Registradas Manualmente {manualSanc.length > 0 ? `(${manualSanc.length})` : ''}
+                  </div>
+                  <button onClick={() => setSancModal(true)}
+                    style={{ fontSize:11,fontFamily:'DM Sans,sans-serif',fontWeight:700,color:'#dc2626',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'3px 10px',cursor:'pointer' }}>
+                    + Nova Sanção
+                  </button>
+                </div>
+                {manualSanc.length === 0 ? (
+                  <div style={{ fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontStyle:'italic' }}>Nenhuma sanção registrada manualmente.</div>
+                ) : manualSanc.map(s => (
+                  <div key={s.id} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',background:'rgba(239,68,68,.05)',border:'1px solid rgba(239,68,68,.15)',borderRadius:8,marginBottom:4 }}>
+                    <div>
+                      <div style={{ fontSize:12,fontWeight:700,color:'#dc2626',fontFamily:'DM Sans,sans-serif' }}>{s.tipo}</div>
+                      <div style={{ fontSize:11,color:'#9B9B9B' }}>
+                        {s.orgao || ''}  {s.uf ? `· ${s.uf}` : ''} {s.data_final ? `· Até ${new Date(s.data_final).toLocaleDateString('pt-BR')}` : '· Sem data final'}
+                      </div>
+                    </div>
+                    <button onClick={() => deleteSanction(s.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:14,padding:'2px 6px' }}>✕</button>
+                  </div>
+                ))}
               </div>
 
               <div style={{ fontSize:10,color:'#9B9B9B',marginTop:12,fontFamily:'DM Sans,sans-serif' }}>
@@ -788,11 +944,44 @@ export function BackofficeAnalysis() {
                   <span style={{ fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif' }}>{cats.length} categoria{cats.length!==1?'s':''}</span>
                 </div>
                 <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
-                  {visible.map(cat => (
-                    <div key={cat.id} style={{ display:'flex',alignItems:'center',gap:6,background:'rgba(46,49,146,.06)',border:'1px solid rgba(46,49,146,.15)',borderRadius:20,padding:'4px 12px' }}>
-                      <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
-                    </div>
-                  ))}
+                  {visible.map(cat => {
+                    const isOpen = expandedCat === cat.id
+                    const catDocs = allDocs.filter(d => {
+                      const label = (d.label || d.type || '').toLowerCase()
+                      const catName = (cat.name || '').toLowerCase()
+                      return d.category_id === cat.id || label.includes(catName.split(' ')[0])
+                    })
+                    return (
+                      <div key={cat.id} style={{ width:'100%' }}>
+                        <button onClick={() => setExpandedCat(isOpen ? null : cat.id)}
+                          style={{ display:'flex',alignItems:'center',gap:6,background:isOpen?'rgba(46,49,146,.12)':'rgba(46,49,146,.06)',border:`1px solid ${isOpen?'#2E3192':'rgba(46,49,146,.15)'}`,borderRadius:isOpen?'10px 10px 0 0':20,padding:'4px 12px',cursor:'pointer',textAlign:'left' }}>
+                          <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:isOpen?'#2E3192':'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
+                          <span style={{ fontSize:10,color:'#9B9B9B' }}>{isOpen ? '▲' : '▾'}</span>
+                        </button>
+                        {isOpen && (
+                          <div style={{ border:'1px solid rgba(46,49,146,.15)',borderTop:'none',borderRadius:'0 0 10px 10px',background:'#f9faff',padding:'8px 12px' }}>
+                            {allDocs.length === 0 ? (
+                              <div style={{ fontSize:11,color:'#9B9B9B',fontStyle:'italic' }}>Nenhum documento carregado.</div>
+                            ) : (
+                              allDocs.map(d => {
+                                const ST_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#ef4444', REJECTED:'#ef4444', EXPIRED:'#9B9B9B', EXPIRING:'#f59e0b' }
+                                const ST_LABEL = { VALID:'Aprovado', PENDING:'Pendente', MISSING:'Ausente', REJECTED:'Reprovado', EXPIRED:'Vencido', EXPIRING:'Vencendo' }
+                                return (
+                                  <div key={d.id} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 4px',borderBottom:'1px solid rgba(46,49,146,.06)',fontSize:11 }}>
+                                    <span style={{ color:'#1a1c5e',fontFamily:'DM Sans,sans-serif' }}>{d.label || `Doc ${d.type}`}</span>
+                                    <span style={{ fontWeight:700,color:ST_COLOR[d.status]||'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontSize:10 }}>
+                                      {ST_LABEL[d.status] || d.status}
+                                      {d.expires_at ? ` · ${new Date(d.expires_at).toLocaleDateString('pt-BR')}` : ''}
+                                    </span>
+                                  </div>
+                                )
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
                 {cats.length > INITIAL && (
                   <button onClick={() => setCatsExpanded(x => !x)}
@@ -1524,6 +1713,104 @@ export function BackofficeAnalysis() {
                 disabled={!rejectCode || (rejectCode === 'OUTRO' && !rejectCustom.trim())}
                 onClick={confirmDocReject}>
                 ✕ Confirmar Rejeição
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Arquivar Fornecedor (Item 10) */}
+      {archiveModal && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:17,color:isArchived?'#059669':'#1a1c5e',marginBottom:8 }}>
+              {isArchived ? '↺ Desarquivar Cadastro' : '📁 Arquivar Cadastro'}
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
+              {isArchived
+                ? 'O cadastro voltará a aparecer normalmente nas buscas e relatórios.'
+                : 'O fornecedor será ocultado das buscas e relatórios, mas os dados são preservados.'}
+            </div>
+            {!isArchived && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:5 }}>Motivo (opcional)</label>
+                <input value={archiveReason} onChange={e => setArchiveReason(e.target.value)}
+                  placeholder="Ex: encerrou atividades, contrato encerrado..."
+                  style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+              </div>
+            )}
+            <div style={{ display:'flex',gap:8 }}>
+              <Button variant="neutral" full onClick={() => setArchiveModal(false)}>Cancelar</Button>
+              <Button variant={isArchived?'success':'danger'} full disabled={archiving} onClick={handleArchive}>
+                {archiving ? <Spinner size={14}/> : isArchived ? '↺ Desarquivar' : '📁 Arquivar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Adicionar Sócio (Item 7) */}
+      {partnerModal && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ background:'#fff',borderRadius:16,padding:28,maxWidth:460,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.25)',maxHeight:'90vh',overflowY:'auto' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:17,color:'#1a1c5e',marginBottom:16 }}>+ Adicionar Sócio</div>
+            {[
+              { label:'Tipo', field:'tipo', type:'select', opts:[['pf','Pessoa Física'],['pj','Pessoa Jurídica'],['estrangeiro','Estrangeiro']] },
+              { label:'CPF / CNPJ', field:'cpf_cnpj', placeholder:'000.000.000-00' },
+              { label:'Nome *', field:'nome', placeholder:'Nome completo' },
+              { label:'Cargo / Qualificação', field:'cargo', placeholder:'Sócio administrador' },
+              { label:'Nacionalidade', field:'nacionalidade', placeholder:'Brasileiro' },
+              { label:'% Participação', field:'participacao', type:'number', placeholder:'0.00' },
+            ].map(({ label, field, type, opts, placeholder }) => (
+              <div key={field} style={{ marginBottom:12 }}>
+                <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:4 }}>{label}</label>
+                {type === 'select' ? (
+                  <select value={partnerForm[field]} onChange={e => setPartnerForm(p => ({...p, [field]: e.target.value}))}
+                    style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}>
+                    {opts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                ) : (
+                  <input type={type||'text'} value={partnerForm[field]} placeholder={placeholder}
+                    onChange={e => setPartnerForm(p => ({...p, [field]: e.target.value}))}
+                    style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                )}
+              </div>
+            ))}
+            <div style={{ display:'flex',gap:8,marginTop:16 }}>
+              <Button variant="neutral" full onClick={() => setPartnerModal(false)}>Cancelar</Button>
+              <Button variant="primary" full disabled={partnerSaving || !partnerForm.nome.trim()} onClick={savePartner}>
+                {partnerSaving ? <Spinner size={14}/> : 'Salvar Sócio'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nova Sanção Manual (Item 9) */}
+      {sancModal && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:17,color:'#dc2626',marginBottom:16 }}>+ Nova Sanção Manual</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9B9B9B',marginBottom:16 }}>
+              Use para registrar sanções encontradas em pesquisa manual que não apareceram na consulta automática de CEIS/CNEP.
+            </div>
+            {[
+              { label:'Tipo de Sanção *', field:'tipo', placeholder:'Impedimento de licitar, Inabilitação...' },
+              { label:'Data Final', field:'data_final', type:'date' },
+              { label:'Órgão Sancionador', field:'orgao', placeholder:'TCU, CGU, Ministério...' },
+              { label:'UF', field:'uf', placeholder:'SP', maxLength:2 },
+            ].map(({ label, field, type, placeholder, maxLength }) => (
+              <div key={field} style={{ marginBottom:12 }}>
+                <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:4 }}>{label}</label>
+                <input type={type||'text'} value={sancForm[field]} placeholder={placeholder} maxLength={maxLength}
+                  onChange={e => setSancForm(p => ({...p, [field]: e.target.value}))}
+                  style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+              </div>
+            ))}
+            <div style={{ display:'flex',gap:8,marginTop:16 }}>
+              <Button variant="neutral" full onClick={() => setSancModal(false)}>Cancelar</Button>
+              <Button variant="danger" full disabled={sancSaving || !sancForm.tipo.trim()} onClick={saveSanction}>
+                {sancSaving ? <Spinner size={14}/> : 'Registrar Sanção'}
               </Button>
             </div>
           </div>

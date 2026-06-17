@@ -141,9 +141,9 @@ export default function BackofficeProcessSearch() {
       for (let i = 0; i < allIds.length; i += 150) {
         const batch = allIds.slice(i, i + 150)
         let bq = supabase.from('suppliers')
-          .select('id, razao_social, cnpj, city, state, status, created_at')
+          .select('id, razao_social, cnpj, city, state, status, created_at, archived_at')
           .in('id', batch)
-        if (!showInactive) bq = bq.neq('status', 'INACTIVE')
+        if (!showInactive) { bq = bq.neq('status', 'INACTIVE'); bq = bq.is('archived_at', null) }
         if (qTrim) {
           if (qNums.length >= 8) bq = bq.ilike('cnpj', `%${qNums}%`)
           else bq = bq.ilike('razao_social', `%${qTrim}%`)
@@ -175,7 +175,7 @@ export default function BackofficeProcessSearch() {
       .order(qTrim ? 'razao_social' : 'created_at', { ascending: !qTrim ? false : true })
       .limit(qTrim ? 200 : PAGE_LIMIT)
 
-    if (!showInactive) suppQuery = suppQuery.neq('status', 'INACTIVE')
+    if (!showInactive) { suppQuery = suppQuery.neq('status', 'INACTIVE'); suppQuery = suppQuery.is('archived_at', null) }
     if (qNums.length >= 8) suppQuery = suppQuery.ilike('cnpj', `%${qNums}%`)
     else suppQuery = suppQuery.ilike('razao_social', `%${qTrim}%`)
 
@@ -247,7 +247,7 @@ export default function BackofficeProcessSearch() {
           </div>
           <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'#64748b', fontFamily:'DM Sans,sans-serif', cursor:'pointer' }}>
             <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} style={{ cursor:'pointer' }}/>
-            Mostrar inativos/arquivados
+            Mostrar inativos e arquivados
           </label>
         </div>
       </Card>
