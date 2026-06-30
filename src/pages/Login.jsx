@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button } from '../components/ui.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
+import BannerStrip from '../components/BannerStrip.jsx'
 
 export default function Login() {
   const [email,    setEmail]    = useState('')
@@ -42,6 +43,8 @@ export default function Login() {
   const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
 
   return (
+    <>
+    <BannerStrip/>
     <div style={{ minHeight:'100vh', display:'flex', flexDirection: mobile ? 'column' : 'row', background:'linear-gradient(160deg,#1a1c5e 0%,#2E3192 50%,#1a1c5e 100%)' }}>
 
       {/* Painel esquerdo — esconde no mobile, vira header compacto */}
@@ -135,5 +138,6 @@ export default function Login() {
         </div>
       </div>
     </div>
+    </>
   )
 }

@@ -33,6 +33,7 @@ import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlow
 import BackofficeDocumentAnalysis    from './pages/backoffice/DocumentAnalysis.jsx'
 import BackofficeClientSettings     from './pages/backoffice/ClientSettings.jsx'
 import BackofficeLandingPages        from './pages/backoffice/LandingPages.jsx'
+import BackofficeComunicados         from './pages/backoffice/Comunicados.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import SupplierTeam             from './pages/supplier/Team.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
@@ -113,6 +114,7 @@ function AppRoutes() {
       <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
       <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']}><BackofficeClientSettings/></Protect>} />
       <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']}><BackofficeLandingPages/></Protect>} />
+      <Route path="/backoffice/comunicados"     element={<Protect roles={['ADMIN']}><BackofficeComunicados/></Protect>} />
 
       {/* Cliente (HOC) */}
       <Route path="/cliente"                                element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
