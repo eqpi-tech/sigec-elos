@@ -31,7 +31,11 @@ jobs:
             > /etc/apt/sources.list.d/pgdg.list'
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client-17
-          pg_dump --version
+          # Adicionar pg17 ao PATH do runner para os próximos steps
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Verificar versão do pg_dump
+        run: pg_dump --version
 
       - name: Gerar nome do arquivo de backup
         run: |
