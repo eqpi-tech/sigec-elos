@@ -14,7 +14,16 @@
       "Bash(curl -s \"https://integracao.assertivasolucoes.com.br/v3/swagger/oauth2/swagger.json\")",
       "Bash(python3 -c ' *)",
       "Bash(npx vite *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(git -C /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos remote get-url origin)",
+      "Bash(chmod +x /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos/scripts/restore-test.sh)",
+      "Bash(git -C /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos add .github/workflows/db-backup.yml scripts/restore-test.sh docs/DR_RUNBOOK.md)",
+      "Bash(git -C /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos commit -m ' *)",
+      "Bash(git -C /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos push origin main)",
+      "Bash(gh secret *)",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)",
+      "Bash(git -C /Users/luiz.panareli/Downloads/workspaces_eqpi_new/sigec-elos add .github/workflows/db-backup.yml)"
     ]
   }
 }
