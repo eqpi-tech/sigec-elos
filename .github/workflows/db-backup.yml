@@ -1,0 +1,71 @@
+# .github/workflows/db-backup.yml
+# Backup lógico diário do banco Supabase/PostgreSQL para S3 (VIX)
+# Atende: INF.01.008, INF.03.002-005 (Questionário VIX) / P1-5 IMPLEMENTACAO_VIX_ELOS.md
+# RPO: 24h  |  Retenção no bucket: 30 dias (lifecycle configurado no S3)
+# Segredos necessários: SUPABASE_DB_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+
+name: Backup Diário — Banco de Dados ELOS
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 04:00 UTC = 01:00 BRT
+  workflow_dispatch:        # Disparo manual para validação e testes
+
+jobs:
+  backup:
+    name: Exportar dump e enviar para S3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Instalar cliente PostgreSQL
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+
+      - name: Gerar nome do arquivo de backup
+        run: |
+          set -euo pipefail
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          FILENAME="elos_${TIMESTAMP}.dump"
+          echo "BACKUP_FILENAME=${FILENAME}" >> "$GITHUB_ENV"
+
+      - name: Executar pg_dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          pg_dump "$DB_URL" \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="${{ env.BACKUP_FILENAME }}"
+
+      - name: Validar integridade do arquivo (tamanho > 0)
+        run: |
+          set -euo pipefail
+          FILE_SIZE=$(stat -c%s "${{ env.BACKUP_FILENAME }}" 2>/dev/null || stat -f%z "${{ env.BACKUP_FILENAME }}")
+          echo "Tamanho do dump: ${FILE_SIZE} bytes"
+          if [ "${FILE_SIZE}" -le 0 ]; then
+            echo "ERRO: arquivo de backup está vazio — abortando envio."
+            exit 1
+          fi
+          echo "Validação OK: arquivo com ${FILE_SIZE} bytes."
+
+      - name: Enviar dump para S3 (VIX)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: sa-east-1
+        run: |
+          set -euo pipefail
+          aws s3 cp "${{ env.BACKUP_FILENAME }}" \
+            "s3://eqpi-vix-db-backups/elos/${{ env.BACKUP_FILENAME }}" \
+            --region sa-east-1
+          echo "Upload concluído: s3://eqpi-vix-db-backups/elos/${{ env.BACKUP_FILENAME }}"
+
+      - name: Remover arquivo local após upload
+        if: always()
+        run: |
+          rm -f "${{ env.BACKUP_FILENAME }}" || true
