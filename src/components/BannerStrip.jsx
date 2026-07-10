@@ -60,7 +60,7 @@ export default function BannerStrip() {
   const icon   = TIPO_ICON[banner.tipo]  || '📢'
 
   return (
-    <div style={{ width:'60%', margin:'0 auto', position:'relative', overflow:'hidden', borderRadius:10 }}>
+    <div style={{ width:'60%', margin:'0 auto', position:'relative', overflow:'hidden', borderRadius:12, background:'transparent' }}>
 
       {/* ── Modo imagem ──────────────────────────────────────── */}
       {banner.image_url ? (

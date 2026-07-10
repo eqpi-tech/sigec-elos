@@ -43,9 +43,15 @@ export default function Login() {
   const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
 
   return (
-    <>
-    <BannerStrip/>
-    <div style={{ minHeight:'100vh', display:'flex', flexDirection: mobile ? 'column' : 'row', background:'linear-gradient(160deg,#1a1c5e 0%,#2E3192 50%,#1a1c5e 100%)' }}>
+    <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', background:'linear-gradient(160deg,#1a1c5e 0%,#2E3192 50%,#1a1c5e 100%)' }}>
+
+      {/* Banner de comunicados — flutua sobre o gradiente, sem fundo próprio */}
+      <div style={{ paddingTop:20 }}>
+        <BannerStrip/>
+      </div>
+
+      {/* Painéis principal (linha) */}
+      <div style={{ flex:1, display:'flex', flexDirection: mobile ? 'column' : 'row' }}>
 
       {/* Painel esquerdo — esconde no mobile, vira header compacto */}
       {mobile ? (
@@ -137,7 +143,7 @@ export default function Login() {
           </div>
         </div>
       </div>
+      </div>
     </div>
-    </>
   )
 }
