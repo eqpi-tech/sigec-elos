@@ -60,7 +60,7 @@ export default function BannerStrip() {
   const icon   = TIPO_ICON[banner.tipo]  || '📢'
 
   return (
-    <div style={{ width:'100%', position:'relative', overflow:'hidden' }}>
+    <div style={{ width:'60%', margin:'0 auto', position:'relative', overflow:'hidden', borderRadius:10 }}>
 
       {/* ── Modo imagem ──────────────────────────────────────── */}
       {banner.image_url ? (
@@ -68,11 +68,11 @@ export default function BannerStrip() {
           {banner.cta_url ? (
             <a href={banner.cta_url} target="_blank" rel="noopener noreferrer" style={{ display:'block' }}>
               <img src={banner.image_url} alt={banner.image_alt || banner.title || 'Comunicado'}
-                style={{ width:'100%', maxHeight:200, objectFit:'cover', display:'block' }}/>
+                style={{ width:'100%', height:'auto', display:'block' }}/>
             </a>
           ) : (
             <img src={banner.image_url} alt={banner.image_alt || banner.title || 'Comunicado'}
-              style={{ width:'100%', maxHeight:200, objectFit:'cover', display:'block' }}/>
+              style={{ width:'100%', height:'auto', display:'block' }}/>
           )}
         </div>
       ) : (

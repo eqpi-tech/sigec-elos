@@ -54,8 +54,8 @@
       img.src = banner.image_url
       img.alt = banner.image_alt || banner.title || 'Comunicado EQPI Tech'
       css(img, {
-        width: '100%', maxHeight: '200px',
-        objectFit: 'cover', display: 'block',
+        width: '100%', height: 'auto',
+        display: 'block',
         cursor: banner.cta_url ? 'pointer' : 'default',
       })
       wrapper.appendChild(img)
@@ -126,7 +126,8 @@
     // ── Wrapper ──────────────────────────────────────────────────
     var wrap = document.createElement('div')
     wrap.id = 'eqpi-banner-root'
-    css(wrap, { width: '100%', position: 'relative', overflow: 'hidden', fontFamily: 'sans-serif', zIndex: '99999' })
+    css(wrap, { width: '60%', margin: '0 auto', position: 'relative', overflow: 'hidden',
+      fontFamily: 'sans-serif', zIndex: '99999', borderRadius: '10px' })
 
     // ── Slides ───────────────────────────────────────────────────
     banners.forEach(function (b, i) {
