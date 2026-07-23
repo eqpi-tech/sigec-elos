@@ -737,6 +737,7 @@ export default function LandingPage() {
             ))}
             <a href="https://eqpitech.com.br" target="_blank" rel="noopener noreferrer" style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', fontSize:12, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>EQPI Tech</a>
             <a href="mailto:comercial@eqpitech.com.br" style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', fontSize:12, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Contato</a>
+            <a href="/privacidade" style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', fontSize:12, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>Privacidade</a>
           </div>
         </div>
       </footer>
