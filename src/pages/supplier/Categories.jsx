@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { categoriesApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import CategorySelector from '../../components/CategorySelector.jsx'
 import { Button, Card, Spinner, PageHeader } from '../../components/ui.jsx'
 
 export default function SupplierCategories() {
   const { user } = useAuth()
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [clientIds, setClientIds]     = useState(undefined)  // clientes vinculados → categorias custom visíveis
   const [loading, setLoading]         = useState(true)
   const [saving, setSaving]           = useState(false)
   const [toast, setToast]             = useState(null)
@@ -14,8 +16,16 @@ export default function SupplierCategories() {
 
   useEffect(() => {
     if (!user?.supplierId) { setLoading(false); return }
-    categoriesApi.getSupplierCategories(user.supplierId)
-      .then(cats => setSelectedIds(new Set(cats.map(c => c.id))))
+    Promise.all([
+      categoriesApi.getSupplierCategories(user.supplierId),
+      // Clientes com selo para este fornecedor → árvore inclui as categorias deles
+      supabase.from('seals').select('client_id').eq('supplier_id', user.supplierId).not('client_id', 'is', null),
+    ])
+      .then(([cats, sealsRes]) => {
+        setSelectedIds(new Set(cats.map(c => c.id)))
+        const ids = [...new Set((sealsRes.data || []).map(s => s.client_id))]
+        setClientIds(ids.length ? ids : undefined)
+      })
       .finally(() => setLoading(false))
   }, [user?.supplierId])
 
@@ -71,6 +81,7 @@ export default function SupplierCategories() {
           selectedIds={selectedIds}
           onChange={handleChange}
           showDocuments={true}
+          clientIds={clientIds}
         />
       </Card>
 

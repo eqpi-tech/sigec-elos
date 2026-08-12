@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, categoriesApi, assertivaApi } from '../../services/api.js'
+import { supplierApi, documentApi, categoriesApi, assertivaApi, getRequiredTypesBySeal } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
@@ -43,7 +43,8 @@ export default function SupplierDocuments() {
   const mobile = useIsMobile()
   const { user }   = useAuth()
   const [supplier, setSupplier] = useState(null)
-  const [reqDocs, setReqDocs]   = useState([])   // docs exigidos pelas categorias
+  const [reqDocs, setReqDocs]   = useState([])   // união dos docs exigidos (todos os fluxos)
+  const [docGroups, setDocGroups] = useState([]) // [{ key, title, ids:Set }] — um por processo/cliente
   const [uploaded, setUploaded] = useState([])   // docs já no banco
   const [loading, setLoading]   = useState(true)
   const [uploading, setUploading] = useState(null)
@@ -81,14 +82,52 @@ export default function SupplierDocuments() {
       const s = await supplierApi.me(user.supplierId)
       setSupplier(s)
 
-      // 2. Categorias selecionadas → documentos exigidos
-      const cats = await categoriesApi.getSupplierCategories(user.supplierId)
+      // 2. Documentos exigidos POR PROCESSO: fluxo do cliente para selos de
+      //    cliente (categorias com client_id), fluxo padrão para o selo ELOS
       let docs = []
-      if (cats.length > 0) {
-        docs = await categoriesApi.getRequiredDocuments(cats.map(c => c.id))
-        docs.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+      let groups = []
+      try {
+        const { requiredBySeal, seals } = await getRequiredTypesBySeal(user.supplierId)
+        const unionIds = new Set()
+        requiredBySeal.forEach(list => list.forEach(id => unionIds.add(id)))
+
+        if (unionIds.size) {
+          const ids = [...unionIds]
+          for (let i = 0; i < ids.length; i += 200) {
+            const { data: catalogRows } = await supabase
+              .from('documents_catalog').select('id, name, auto_collect').in('id', ids.slice(i, i + 200))
+            docs = docs.concat(catalogRows || [])
+          }
+          docs.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+        }
+
+        // Um grupo por cliente (dedup) + um para o fluxo padrão
+        const seenOwner = new Set()
+        for (const seal of seals) {
+          const owner = seal.client_id || 'global'
+          if (seenOwner.has(owner)) continue
+          seenOwner.add(owner)
+          const idSet = new Set(requiredBySeal.get(seal.id) || [])
+          if (!idSet.size) continue
+          groups.push({
+            key: owner,
+            title: seal.client_id
+              ? `Processo — ${seal.clients?.razao_social || seal.seal_name || 'Cliente'}`
+              : 'Fluxo padrão ELOS',
+            ids: idSet,
+          })
+        }
+      } catch (err) {
+        // Fallback: comportamento anterior (união das categorias, sem grupos)
+        console.warn('Fluxos por selo indisponíveis, usando união de categorias:', err?.message)
+        const cats = await categoriesApi.getSupplierCategories(user.supplierId)
+        if (cats.length > 0) {
+          docs = await categoriesApi.getRequiredDocuments(cats.map(c => c.id))
+          docs.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+        }
       }
       setReqDocs(docs)
+      setDocGroups(groups)
 
       // 3. Documentos já enviados
       const d = await documentApi.list(user.supplierId)
@@ -478,10 +517,37 @@ export default function SupplierDocuments() {
             📦 Selecionar Categorias →
           </Button>
         </Card>
+      ) : docGroups.length > 1 ? (
+        /* Multi-processo: um card por fluxo (cliente ou padrão) */
+        <>
+          {docGroups.map(g => {
+            const groupDocs = reqDocs.filter(d => g.ids.has(d.id))
+            const groupOk   = groupDocs.filter(d => { const up = getDoc(d.id); return up?.status === 'VALID' }).length
+            return (
+              <Card key={g.key} style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between', flexWrap:'wrap' }}>
+                  <SectionTitle style={{ marginBottom:0 }}>
+                    {g.key === 'global' ? '🌐 ' : '🏢 '}{g.title}
+                  </SectionTitle>
+                  <span style={{ fontSize:12, color: groupOk === groupDocs.length ? '#22c55e' : '#9B9B9B', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                    {groupOk}/{groupDocs.length} válidos
+                  </span>
+                </div>
+                {groupDocs.map(renderDocRow)}
+              </Card>
+            )
+          })}
+          <div style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+            Documentos compartilhados entre processos são enviados uma única vez.
+            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · Máx 10MB
+          </div>
+        </>
       ) : (
         <Card style={{ borderRadius:16, padding:'20px 24px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between' }}>
-            <SectionTitle style={{ marginBottom:0 }}>Documentos Exigidos para Homologação</SectionTitle>
+            <SectionTitle style={{ marginBottom:0 }}>
+              {docGroups[0]?.title ? `Documentos — ${docGroups[0].title}` : 'Documentos Exigidos para Homologação'}
+            </SectionTitle>
             <a href="/fornecedor/categorias" style={{ fontSize:12, color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:600 }}>
               Editar categorias →
             </a>

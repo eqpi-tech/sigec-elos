@@ -319,31 +319,86 @@ export const documentApi = {
       .eq('id', docId)
     if (error) throw new Error(error.message)
 
-    // Recalcula score após mudança de status
+    // Recalcula os scores POR SELO (fluxo do cliente vs fluxo padrão)
     if (docData?.supplier_id) {
-      const [{ data: allDocs }, { data: catRows }] = await Promise.all([
-        supabase.from('documents').select('type, status').eq('supplier_id', docData.supplier_id),
-        supabase.from('supplier_categories').select('category_id').eq('supplier_id', docData.supplier_id),
-      ])
-      // Busca documentos exigidos pelas categorias
-      let reqDocs = []
-      if (catRows?.length) {
-        const catIds = catRows.map(r => r.category_id)
-        const { data: catDocRows } = await supabase
-          .from('category_documents').select('document_id').in('category_id', catIds)
-        const seen = new Set()
-        reqDocs = (catDocRows || [])
-          .map(r => ({ id: r.document_id }))
-          .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true })
-      }
-      const newScore = calculateScore(allDocs || [], reqDocs)
-      await supabase.from('seals')
-        .update({ score: newScore })
-        .eq('supplier_id', docData.supplier_id)
+      await recalcSealScores(docData.supplier_id)
     }
 
     return { success: true }
   },
+}
+
+// ── Fluxos documentais por selo ──────────────────────────────────────────────
+// Regra de produto: fornecedor espontâneo segue o fluxo padrão (categorias
+// globais); fornecedor vinculado a cliente segue o fluxo do cliente
+// (categorias com client_id, migradas do HOC). Cada selo tem seu denominador.
+
+// Retorna { requiredBySeal: Map<sealId, number[]>, seals, allDocs }
+export async function getRequiredTypesBySeal(supplierId) {
+  const [{ data: seals }, { data: allDocs }, { data: catRows }] = await Promise.all([
+    supabase.from('seals').select('id, client_id, status, seal_name, clients(razao_social)').eq('supplier_id', supplierId),
+    supabase.from('documents').select('type, status').eq('supplier_id', supplierId),
+    supabase.from('supplier_categories')
+      .select('category_id, categories(id, client_id)')
+      .eq('supplier_id', supplierId),
+  ])
+
+  // Agrupa as categorias do fornecedor por dono: cliente ou global
+  const catsByOwner = {} // 'global' | client_id → [category_id]
+  for (const r of (catRows || [])) {
+    const owner = r.categories?.client_id || 'global'
+    ;(catsByOwner[owner] = catsByOwner[owner] || []).push(r.category_id)
+  }
+
+  // Documentos exigidos por grupo de categorias (uma query para todas)
+  const allCatIds = (catRows || []).map(r => r.category_id)
+  const catToOwner = {}
+  for (const [owner, ids] of Object.entries(catsByOwner))
+    for (const id of ids) catToOwner[id] = owner
+
+  const reqByOwner = {} // owner → Set<document_id>
+  if (allCatIds.length) {
+    for (let i = 0; i < allCatIds.length; i += 200) {
+      const { data: catDocRows } = await supabase
+        .from('category_documents')
+        .select('category_id, document_id')
+        .in('category_id', allCatIds.slice(i, i + 200))
+      for (const r of (catDocRows || [])) {
+        const owner = catToOwner[r.category_id] || 'global'
+        ;(reqByOwner[owner] = reqByOwner[owner] || new Set()).add(r.document_id)
+      }
+    }
+  }
+
+  const requiredBySeal = new Map()
+  for (const seal of (seals || [])) {
+    const owner = seal.client_id || 'global'
+    let req = [...(reqByOwner[owner] || [])]
+    // Fallback 1: cliente sem categorias vinculadas → fluxo manual do cliente
+    if (!req.length && seal.client_id) {
+      const { data: flowRows } = await supabase
+        .from('client_document_flows')
+        .select('catalog_id')
+        .eq('client_id', seal.client_id)
+        .eq('required', true)
+      req = (flowRows || []).map(r => r.catalog_id)
+    }
+    // Fallback 2: nada específico → fluxo padrão
+    if (!req.length) req = [...(reqByOwner['global'] || [])]
+    requiredBySeal.set(seal.id, req)
+  }
+
+  return { requiredBySeal, seals: seals || [], allDocs: allDocs || [] }
+}
+
+// Recalcula seals.score individualmente, cada selo contra o seu fluxo
+export async function recalcSealScores(supplierId) {
+  const { requiredBySeal, seals, allDocs } = await getRequiredTypesBySeal(supplierId)
+  await Promise.all(seals.map(seal => {
+    const req = (requiredBySeal.get(seal.id) || []).map(id => ({ id }))
+    const score = calculateScore(allDocs, req)
+    return supabase.from('seals').update({ score }).eq('id', seal.id)
+  }))
 }
 
 // ── Marketplace ───────────────────────────────────────────────────────────────

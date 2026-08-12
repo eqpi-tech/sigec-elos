@@ -67,6 +67,10 @@ exports.handler = async (event) => {
 
   const supplierId = updatedDoc.supplier_id
 
+  // ── Recalcula scores POR SELO (fluxo do cliente vs padrão) ──────
+  await recalcSealScores(supabaseAdmin, supplierId).catch(e =>
+    console.warn('[admin-approve-document] recalc scores:', e.message))
+
   // ── Verificar se todos os documentos foram revisados ────────────
   const { data: allDocs } = await supabaseAdmin
     .from('documents')
@@ -230,6 +234,54 @@ exports.handler = async (event) => {
       headers: HEADERS,
       body: JSON.stringify({ updated: true, autoFinalized: true, outcome: 'rejected', rejectedCount: rejected.length }),
     }
+  }
+}
+
+// ── Score por selo ───────────────────────────────────────────────
+// Cada selo usa o denominador do SEU fluxo: categorias do cliente
+// (client_id, migradas do HOC) para selos HOC; categorias globais
+// para o selo ELOS próprio. Fallbacks: client_document_flows → global.
+async function recalcSealScores(sb, supplierId) {
+  const [{ data: seals }, { data: allDocs }, { data: catRows }] = await Promise.all([
+    sb.from('seals').select('id, client_id').eq('supplier_id', supplierId),
+    sb.from('documents').select('type, status').eq('supplier_id', supplierId),
+    sb.from('supplier_categories').select('category_id, categories(id, client_id)').eq('supplier_id', supplierId),
+  ])
+  if (!seals?.length) return
+
+  const catToOwner = {}
+  for (const r of (catRows || []))
+    catToOwner[r.category_id] = r.categories?.client_id || 'global'
+
+  const allCatIds = Object.keys(catToOwner).map(Number)
+  const reqByOwner = {}
+  for (let i = 0; i < allCatIds.length; i += 200) {
+    const { data: cdRows } = await sb
+      .from('category_documents')
+      .select('category_id, document_id')
+      .in('category_id', allCatIds.slice(i, i + 200))
+    for (const r of (cdRows || [])) {
+      const owner = catToOwner[r.category_id] || 'global'
+      ;(reqByOwner[owner] = reqByOwner[owner] || new Set()).add(r.document_id)
+    }
+  }
+
+  const validTypes = new Set((allDocs || []).filter(d => d.status === 'VALID').map(d => String(d.type)))
+
+  for (const seal of seals) {
+    const owner = seal.client_id || 'global'
+    let req = [...(reqByOwner[owner] || [])]
+    if (!req.length && seal.client_id) {
+      const { data: flowRows } = await sb
+        .from('client_document_flows').select('catalog_id')
+        .eq('client_id', seal.client_id).eq('required', true)
+      req = (flowRows || []).map(r => r.catalog_id)
+    }
+    if (!req.length) req = [...(reqByOwner['global'] || [])]
+    if (!req.length) continue
+    const valid = req.filter(id => validTypes.has(String(id))).length
+    const score = Math.round((valid / req.length) * 100)
+    await sb.from('seals').update({ score }).eq('id', seal.id)
   }
 }
 

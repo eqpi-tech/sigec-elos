@@ -13,7 +13,9 @@ const ICONS = {
 // Normaliza string para comparação sem acento e case-insensitive
 const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
 
-export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null }) {
+// clientIds: inclui as categorias custom desses clientes além da árvore global
+// (fornecedor convidado por cliente HOC vê o fluxo do cliente — patch_032)
+export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined }) {
   const [parents,      setParents]      = useState([])
   const [expanded,     setExpanded]     = useState(new Set())
   const [trees,        setTrees]        = useState({})
@@ -33,7 +35,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
 
   // Carrega categorias pai
   useEffect(() => {
-    categoriesApi.getParents()
+    categoriesApi.getParents(clientIds)
       .then(data => {
         setParents(data)
         if (!data.length) setLoadError('Nenhuma categoria encontrada.')
@@ -54,7 +56,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       autoExpandMatching()
       return
     }
-    Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id))).then(results => {
+    Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds))).then(results => {
       const patch = {}
       results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
       if (Object.keys(patch).length) {
@@ -95,7 +97,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     if (treesRef.current[parentId]) return
     setLoadingTree(prev => new Set([...prev, parentId]))
     try {
-      const tree = await categoriesApi.getTree(parentId)
+      const tree = await categoriesApi.getTree(parentId, clientIds)
       setTrees(prev => ({ ...prev, [parentId]: tree }))
     } finally {
       setLoadingTree(prev => { const n = new Set(prev); n.delete(parentId); return n })
@@ -158,7 +160,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       // Garante que todas as árvores estão carregadas
       const unloaded = parents.filter(p => !treesRef.current[p.id])
       if (unloaded.length) {
-        const results = await Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id)))
+        const results = await Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds)))
         const patch = {}
         results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
         if (Object.keys(patch).length) {
