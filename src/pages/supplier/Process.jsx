@@ -245,17 +245,72 @@ export default function SupplierProcess() {
       )}
 
       {/* ── Tab: Histórico ── */}
-      {tab === 'Histórico' && (
-        <Card style={{ borderRadius:14, padding:'32px', textAlign:'center' }}>
-          <div style={{ fontSize:32, marginBottom:8 }}>🕐</div>
-          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, color:'#1a1c5e', marginBottom:6 }}>
-            Histórico em breve
-          </div>
-          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
-            O histórico completo de ações deste processo estará disponível em breve.
-          </div>
-        </Card>
-      )}
+      {tab === 'Histórico' && <HistoryTab supplierId={user.supplierId}/>}
+    </div>
+  )
+}
+
+const HIST_EVENT_LABEL = {
+  CREATED:'Documento registrado', UPLOADED:'Novo arquivo enviado', APPROVED:'Aprovado',
+  REJECTED:'Rejeitado', REVOKED:'Aprovação revogada', EXPIRED:'Vencido', UPDATED:'Atualizado',
+}
+const HIST_EVENT_COLOR = {
+  CREATED:'#64748b', UPLOADED:'#2E3192', APPROVED:'#22c55e',
+  REJECTED:'#ef4444', REVOKED:'#f59e0b', EXPIRED:'#ef4444', UPDATED:'#64748b',
+}
+
+function HistoryTab({ supplierId }) {
+  const [entries, setEntries] = useState(null)
+  const [error,   setError]   = useState('')
+
+  useEffect(() => {
+    documentApi.getHistory(supplierId)
+      .then(setEntries)
+      .catch(e => setError(e.message))
+  }, [supplierId])
+
+  if (error) return <Card style={{ borderRadius:14, padding:24, color:'#dc2626', fontFamily:'DM Sans,sans-serif', fontSize:13 }}>{error}</Card>
+  if (!entries) return <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
+
+  if (entries.length === 0) return (
+    <Card style={{ borderRadius:14, padding:'32px', textAlign:'center' }}>
+      <div style={{ fontSize:32, marginBottom:8 }}>🕐</div>
+      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:15, color:'#1a1c5e', marginBottom:6 }}>
+        Sem eventos ainda
+      </div>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
+        Envios, aprovações e vencimentos de documentos aparecerão aqui.
+      </div>
+    </Card>
+  )
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+      {entries.map(h => {
+        const color = HIST_EVENT_COLOR[h.event] || '#64748b'
+        return (
+          <Card key={h.id} style={{ borderRadius:10, padding:'12px 16px', borderLeft:`3px solid ${color}` }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
+              <span style={{ fontSize:11, fontWeight:700, color, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap' }}>
+                {HIST_EVENT_LABEL[h.event] || h.event}
+              </span>
+              <span style={{ flex:1, fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', fontWeight:600 }}>
+                {h.label || `Documento ${h.type}`}
+              </span>
+              <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap' }}>
+                {new Date(h.created_at).toLocaleString('pt-BR')}
+              </span>
+            </div>
+            {(h.expires_at || h.review_note) && (
+              <div style={{ fontSize:11.5, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                {h.expires_at ? `Validade: ${new Date(h.expires_at).toLocaleDateString('pt-BR')}` : ''}
+                {h.expires_at && h.review_note ? ' · ' : ''}
+                {h.review_note || ''}
+              </div>
+            )}
+          </Card>
+        )
+      })}
     </div>
   )
 }

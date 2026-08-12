@@ -86,6 +86,14 @@ async function handleClientInvitation(body, callerUser, h) {
   const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT' } = body
   if (!razao_social || !email) return { statusCode:400, headers:h, body: JSON.stringify({ error:'razao_social e email são obrigatórios' }) }
 
+  // Perfil readonly (patch_030) não envia convites
+  if (invited_by_role === 'CLIENT') {
+    const { data: callerRole } = await supabaseAdmin
+      .from('user_roles').select('access_profile').eq('user_id', callerUser.id).eq('role', 'CLIENT').maybeSingle()
+    if (callerRole?.access_profile === 'readonly')
+      return { statusCode:403, headers:h, body: JSON.stringify({ error:'Seu perfil de acesso é somente leitura' }) }
+  }
+
   // Busca nome do convidante
   let senderName = callerUser.email
   if (client_id) {

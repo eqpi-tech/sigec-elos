@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
+import { can } from './lib/permissions.js'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Navbar from './components/Navbar.jsx'
 import { Spinner } from './components/ui.jsx'
@@ -34,6 +35,7 @@ import BackofficeDocumentAnalysis    from './pages/backoffice/DocumentAnalysis.j
 import BackofficeClientSettings     from './pages/backoffice/ClientSettings.jsx'
 import BackofficeLandingPages        from './pages/backoffice/LandingPages.jsx'
 import BackofficeComunicados         from './pages/backoffice/Comunicados.jsx'
+import BackofficeFeriados            from './pages/backoffice/Feriados.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import SupplierTeam             from './pages/supplier/Team.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
@@ -69,8 +71,15 @@ function AppLayout({ children }) {
   )
 }
 
-function Protect({ roles, children }) {
-  return <ProtectedRoute allowedRoles={roles}><AppLayout>{children}</AppLayout></ProtectedRoute>
+function Protect({ roles, perm, children }) {
+  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm}>{children}</PermGate></AppLayout></ProtectedRoute>
+}
+
+// Gate por permissão granular (access_profile, patch_030)
+function PermGate({ perm, children }) {
+  const { user } = useAuth()
+  if (perm && !can(user, perm)) return <Navigate to={ROLE_HOME[user?.role] || '/'} replace/>
+  return children
 }
 
 function AppRoutes() {
@@ -106,17 +115,18 @@ function AppRoutes() {
       <Route path="/backoffice/fila"            element={<Protect roles={['ADMIN']}><BackofficeQueue/></Protect>} />
       <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
       <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
-      <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']}><BackofficeCreateUser/></Protect>} />
-      <Route path="/backoffice/criar-cliente"  element={<Protect roles={['ADMIN']}><BackofficeCreateClient/></Protect>} />
+      <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeCreateUser/></Protect>} />
+      <Route path="/backoffice/criar-cliente"  element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeCreateClient/></Protect>} />
       <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
       <Route path="/backoffice/processos"        element={<Protect roles={['ADMIN']}><BackofficeProcessSearch/></Protect>} />
       <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
-      <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']}><BackofficeUsers/></Protect>} />
-      <Route path="/backoffice/fluxo-documentos"    element={<Protect roles={['ADMIN']}><BackofficeClientDocumentFlows/></Protect>} />
+      <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUsers/></Protect>} />
+      <Route path="/backoffice/fluxo-documentos"    element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientDocumentFlows/></Protect>} />
       <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
-      <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']}><BackofficeClientSettings/></Protect>} />
-      <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']}><BackofficeLandingPages/></Protect>} />
-      <Route path="/backoffice/comunicados"     element={<Protect roles={['ADMIN']}><BackofficeComunicados/></Protect>} />
+      <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientSettings/></Protect>} />
+      <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeLandingPages/></Protect>} />
+      <Route path="/backoffice/comunicados"     element={<Protect roles={['ADMIN']} perm="manage_comunicados"><BackofficeComunicados/></Protect>} />
+      <Route path="/backoffice/feriados"        element={<Protect roles={['ADMIN']}><BackofficeFeriados/></Protect>} />
 
       {/* Cliente (HOC) */}
       <Route path="/cliente"                                element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />

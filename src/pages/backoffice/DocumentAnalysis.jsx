@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
+import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
 const STATUS_OPTIONS = [
@@ -253,15 +254,25 @@ function ApproveModal({ doc, onConfirm, onClose }) {
   )
 }
 
+// Persistência dos filtros na sessão — sobrevive a navegação/remontagem da página
+const FILTERS_KEY = 'docanalysis_filters'
+function loadSavedFilters() {
+  try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY)) || {} } catch { return {} }
+}
+
+// Prazo (dias corridos) entre o envio do documento e a data limite de análise
+const ANALYSIS_SLA_DAYS = 5
+
 export default function DocumentAnalysis() {
   const navigate = useNavigate()
+  const saved = loadSavedFilters()
 
   // Filtros
-  const [docType,       setDocType]       = useState('')
-  const [supplierSearch,setSupplierSearch] = useState('')
-  const [statusFilter,  setStatusFilter]  = useState('analise')
-  const [expiresUntil,  setExpiresUntil]  = useState('')
-  const [sortBy,        setSortBy]        = useState('expires_asc')
+  const [docType,       setDocType]       = useState(saved.docType ?? '')
+  const [supplierSearch,setSupplierSearch] = useState(saved.supplierSearch ?? '')
+  const [statusFilter,  setStatusFilter]  = useState(saved.statusFilter ?? 'analise')
+  const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
+  const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'expires_asc')
 
   // Dados
   const [rows,        setRows]        = useState([])
@@ -282,7 +293,8 @@ export default function DocumentAnalysis() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('documents_catalog').select('id, name').order('name'),
+      // select('*') tolera a ausência das colunas do patch_031 (analysis_sla_days, responsibility)
+      supabase.from('documents_catalog').select('*').order('name'),
       adminApi.getRejectionReasons(),
     ]).then(([catRes, reasonsData]) => {
       setCatalog(catRes.data || [])
@@ -313,6 +325,11 @@ export default function DocumentAnalysis() {
   }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
 
   useEffect(() => { fetchDocs(0) }, [fetchDocs])
+
+  // Salva os filtros a cada mudança
+  useEffect(() => {
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy }))
+  }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
 
   async function handleApprove(docId, expiry) {
     setSaving(p => new Set([...p, docId]))
@@ -368,14 +385,32 @@ export default function DocumentAnalysis() {
         exportRows = result.rows
       } catch(e) { alert('Erro ao exportar: ' + e.message); return }
     }
+    // CNPJ com máscara — evita que o Excel converta para notação científica
+    const fmtCnpj = (c) => {
+      const d = String(c || '').replace(/\D/g, '')
+      return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '')
+    }
+    const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR') : ''
+    // Data limite de análise = envio + SLA do tipo (patch_031, fallback padrão),
+    // rolada para o próximo dia útil (feriados/fins de semana)
+    const holidaySet = await getHolidaySet()
+    const slaByType = Object.fromEntries(catalog.map(c => [String(c.id), c.analysis_sla_days]))
+    const analysisDeadline = (d) => {
+      if (!d.created_at || d.status === 'VALID' || d.status === 'REJECTED') return ''
+      const dt = new Date(d.created_at)
+      dt.setDate(dt.getDate() + (slaByType[String(d.type)] || ANALYSIS_SLA_DAYS))
+      return adjustToBusinessDay(dt, holidaySet).toLocaleDateString('pt-BR')
+    }
     const BOM     = '﻿'
-    const headers = ['Fornecedor', 'CNPJ', 'Documento', 'Status', 'Vencimento', 'Fonte']
+    const headers = ['Fornecedor', 'CNPJ', 'Documento', 'Status', 'Enviado em', 'Data limite de análise', 'Vencimento', 'Fonte']
     const csvRows = exportRows.map(d => [
       d.suppliers?.razao_social || '',
-      d.suppliers?.cnpj || '',
+      fmtCnpj(d.suppliers?.cnpj),
       d.label || '',
       STATUS_LABEL[d.status] || d.status || '',
-      d.expires_at ? d.expires_at.slice(0,10) : '',
+      fmtDate(d.created_at),
+      analysisDeadline(d),
+      d.expires_at ? fmtDate(d.expires_at) : '',
       d.source === 'AUTO' ? 'Automático' : 'Manual',
     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(';'))
     const csv  = BOM + [headers.join(';'), ...csvRows].join('\n')

@@ -224,6 +224,7 @@ export function BackofficeAnalysis() {
   const [revertReason, setRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
   const [docAiModal, setDocAiModal] = useState(null)  // { doc, extractType: 'bank'|'dre' }
+  const [docHistModal, setDocHistModal] = useState(null)  // { doc, entries|null }
   // Dados bancários
   const [bankData,     setBankData]     = useState(null)  // { bank_name, bank_code, bank_agency, bank_account, account_type, pix_key }
   const [bankLoading,  setBankLoading]  = useState(false)
@@ -1176,6 +1177,14 @@ export function BackofficeAnalysis() {
                       <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
                     ) : null
                   })()}
+                  <Button variant="neutral" size="sm" title="Histórico do documento"
+                    onClick={async () => {
+                      setDocHistModal({ doc, entries: null })
+                      try {
+                        const entries = await documentApi.getHistory(doc.supplier_id || id, doc.type)
+                        setDocHistModal(m => m && m.doc.id === doc.id ? { ...m, entries } : m)
+                      } catch { setDocHistModal(m => m && m.doc.id === doc.id ? { ...m, entries: [] } : m) }
+                    }}>🕓</Button>
                   {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
@@ -1550,6 +1559,55 @@ export function BackofficeAnalysis() {
         </div>
       )}
 
+      {/* Modal Histórico do Documento */}
+      {docHistModal && (() => {
+        const EV_LABEL = { CREATED:'Registrado', UPLOADED:'Novo arquivo', APPROVED:'Aprovado', REJECTED:'Rejeitado', REVOKED:'Revogado', EXPIRED:'Vencido', UPDATED:'Atualizado' }
+        const EV_COLOR = { CREATED:'#64748b', UPLOADED:'#2E3192', APPROVED:'#22c55e', REJECTED:'#ef4444', REVOKED:'#f59e0b', EXPIRED:'#ef4444', UPDATED:'#64748b' }
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+            <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:560, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,.2)', maxHeight:'85vh', overflowY:'auto' }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:2 }}>
+                🕓 Histórico do Documento
+              </div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:16 }}>
+                {docHistModal.doc.label}
+              </div>
+
+              {docHistModal.entries === null ? (
+                <div style={{ display:'flex', justifyContent:'center', padding:30 }}><Spinner size={28}/></div>
+              ) : docHistModal.entries.length === 0 ? (
+                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', padding:'16px 0' }}>
+                  Sem eventos registrados. O histórico passa a ser gravado a partir do patch_029.
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+                  {docHistModal.entries.map(h => (
+                    <div key={h.id} style={{ borderLeft:`3px solid ${EV_COLOR[h.event]||'#64748b'}`, background:'#f8f9fd', borderRadius:'0 8px 8px 0', padding:'8px 12px' }}>
+                      <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
+                        <span style={{ fontSize:11, fontWeight:700, color:EV_COLOR[h.event]||'#64748b', fontFamily:'Montserrat,sans-serif' }}>
+                          {EV_LABEL[h.event] || h.event}
+                        </span>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+                          {new Date(h.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <div style={{ fontSize:11.5, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>
+                        {h.expires_at ? `Validade: ${new Date(h.expires_at).toLocaleDateString('pt-BR')}` : 'Sem validade definida'}
+                        {h.inscription_number ? ` · Inscrição: ${h.inscription_number}` : ''}
+                        {h.review_note ? ` · ${h.review_note}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button variant="neutral" full onClick={() => setDocHistModal(null)}>Fechar</Button>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Modal Aprovar Documento com Data de Expiração */}
       {approveModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -1792,19 +1850,25 @@ export function BackofficeAnalysis() {
           <div style={{ background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:17,color:'#dc2626',marginBottom:16 }}>+ Nova Sanção Manual</div>
             <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9B9B9B',marginBottom:16 }}>
-              Use para registrar sanções encontradas em pesquisa manual que não apareceram na consulta automática de CEIS/CNEP.
+              Use para registrar sanções encontradas em pesquisa manual que não apareceram na consulta automática de CEIS/CNEP — incluindo restrições administrativas internas.
             </div>
             {[
-              { label:'Tipo de Sanção *', field:'tipo', placeholder:'Impedimento de licitar, Inabilitação...' },
+              { label:'Tipo de Sanção *', field:'tipo', placeholder:'Impedimento de licitar, Inabilitação...', suggestions:['Impedimento de licitar','Inabilitação','Suspensão temporária','Declaração de inidoneidade','Restrição Administrativa'] },
               { label:'Data Final', field:'data_final', type:'date' },
               { label:'Órgão Sancionador', field:'orgao', placeholder:'TCU, CGU, Ministério...' },
               { label:'UF', field:'uf', placeholder:'SP', maxLength:2 },
-            ].map(({ label, field, type, placeholder, maxLength }) => (
+            ].map(({ label, field, type, placeholder, maxLength, suggestions }) => (
               <div key={field} style={{ marginBottom:12 }}>
                 <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',letterSpacing:.5,textTransform:'uppercase',marginBottom:4 }}>{label}</label>
                 <input type={type||'text'} value={sancForm[field]} placeholder={placeholder} maxLength={maxLength}
+                  list={suggestions ? `sanc-${field}-opts` : undefined}
                   onChange={e => setSancForm(p => ({...p, [field]: e.target.value}))}
                   style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,boxSizing:'border-box' }}/>
+                {suggestions && (
+                  <datalist id={`sanc-${field}-opts`}>
+                    {suggestions.map(s => <option key={s} value={s}/>)}
+                  </datalist>
+                )}
               </div>
             ))}
             <div style={{ display:'flex',gap:8,marginTop:16 }}>

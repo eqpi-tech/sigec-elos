@@ -281,6 +281,20 @@ export const documentApi = {
     return data.signedUrl
   },
 
+  // Histórico de versões do documento (document_history, patch_029)
+  // Filtra por fornecedor; opcionalmente por tipo de documento
+  getHistory: async (supplierId, type) => {
+    let q = supabase
+      .from('document_history')
+      .select('*')
+      .eq('supplier_id', supplierId)
+      .order('created_at', { ascending: false })
+    if (type) q = q.eq('type', String(type))
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
   updateStatus: async (docId, status, note) => {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -711,7 +725,7 @@ export const adminApi = {
 
     let q = supabase
       .from('documents')
-      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, suppliers(id, razao_social, cnpj)', { count: 'exact' })
+      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, created_at, updated_at, suppliers(id, razao_social, cnpj)', { count: 'exact' })
       .not('label', 'is', null)
 
     // Filtro tipo de documento
@@ -915,49 +929,57 @@ export const adminApi = {
 
 // ── Categorias e Documentos EQPI ─────────────────────────────────────────────
 export const categoriesApi = {
+  // Categorias híbridas (patch_032): client_id NULL = global; preenchido = custom do cliente.
+  // clientIds (opcional): inclui as categorias custom desses clientes além das globais.
+  // Filtro em JS para tolerar bancos sem a coluna client_id.
+  _visibleTo: (rows, clientIds) => (rows || []).filter(c =>
+    !c.client_id || (clientIds || []).includes(c.client_id)
+  ),
+
   // Busca todas as categorias pai
-  getParents: async () => {
+  getParents: async (clientIds) => {
     const { data, error } = await supabase
       .from('categories')
-      .select('id, name')
+      .select('*')
       .is('parent_id', null)
       .eq('active', true)
       .order('name')
     if (error) throw new Error(error.message)
-    return data || []
+    return categoriesApi._visibleTo(data, clientIds)
   },
 
   // Busca filhas de uma categoria pai
-  getChildren: async (parentId) => {
+  getChildren: async (parentId, clientIds) => {
     const { data, error } = await supabase
       .from('categories')
-      .select('id, name, parent_id')
+      .select('*')
       .eq('parent_id', parentId)
       .eq('active', true)
       .order('name')
     if (error) throw new Error(error.message)
-    return data || []
+    return categoriesApi._visibleTo(data, clientIds)
   },
 
   // Busca todos os nós filhos e netos de um pai (para expandir a árvore)
-  getTree: async (parentId) => {
+  getTree: async (parentId, clientIds) => {
     // Busca nível 2 (filhos diretos)
-    const { data: children } = await supabase
+    const { data: rawChildren } = await supabase
       .from('categories')
-      .select('id, name, parent_id')
+      .select('*')
       .eq('parent_id', parentId)
       .eq('active', true)
       .order('name')
-    if (!children?.length) return []
+    const children = categoriesApi._visibleTo(rawChildren, clientIds)
+    if (!children.length) return []
     // Busca nível 3 (netos) para cada filho
     const childIds = children.map(c => c.id)
-    const { data: grandchildren } = await supabase
+    const { data: rawGrandchildren } = await supabase
       .from('categories')
-      .select('id, name, parent_id')
+      .select('*')
       .in('parent_id', childIds)
       .eq('active', true)
       .order('name')
-    return { children: children || [], grandchildren: grandchildren || [] }
+    return { children, grandchildren: categoriesApi._visibleTo(rawGrandchildren, clientIds) }
   },
 
   // Calcula documentos exigidos pela união das categorias selecionadas (sem duplicatas)

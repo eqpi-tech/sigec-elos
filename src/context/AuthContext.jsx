@@ -18,6 +18,8 @@ export function AuthProvider({ children }) {
       buyerId:             profile.buyer_id,
       clientId:            profile.client_id,
       isPrimary:           profile.is_primary !== false,
+      // Perfil de acesso granular (patch_030): full | analyst | readonly
+      accessProfile:       profile.access_profile || 'full',
       // Plano do comprador (free → padrão, pro → assinante)
       buyerPlan:           profile.buyer_plan || 'free',
       buyerPlanExpiresAt:  profile.buyer_plan_expires_at || null,
@@ -37,6 +39,7 @@ export function AuthProvider({ children }) {
       supplier_id: opt.supplier_id, supplierId: opt.supplier_id,
       buyer_id:    opt.buyer_id,    buyerId:    opt.buyer_id,
       client_id:   opt.client_id,   clientId:   opt.client_id,
+      accessProfile: opt.access_profile || 'full',
     }))
     localStorage.setItem('elos_active_role', role)
   }
@@ -50,7 +53,7 @@ export function AuthProvider({ children }) {
       try {
         const { data: rolesData, error: rolesErr } = await supabase
           .from('user_roles')
-          .select('role, supplier_id, buyer_id, client_id, is_primary, buyer_plan, buyer_plan_expires_at')
+          .select('*')  // tolerante a colunas novas (ex.: access_profile do patch_030)
           .eq('user_id', authUser.id)
         if (!rolesErr) roles = rolesData
       } catch {}
@@ -71,6 +74,7 @@ export function AuthProvider({ children }) {
           buyer_id:              preferred.buyer_id,
           client_id:             preferred.client_id,
           is_primary:            preferred.is_primary,
+          access_profile:        preferred.access_profile,
           buyer_plan:            preferred.buyer_plan,
           buyer_plan_expires_at: preferred.buyer_plan_expires_at,
         }))

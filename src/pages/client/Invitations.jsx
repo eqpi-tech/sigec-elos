@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { invitationsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
+import { can } from '../../lib/permissions.js'
 
 const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado' }
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e' }
@@ -94,7 +95,7 @@ export default function ClientInvitations() {
       <PageHeader
         title="Convites"
         subtitle={`${invites.length} convite${invites.length !== 1 ? 's' : ''} enviado${invites.length !== 1 ? 's' : ''}`}
-        action={{ label:'+ Novo Convite', onClick: () => setShowModal(true) }}
+        action={can(user, 'client_invite') ? { label:'+ Novo Convite', onClick: () => setShowModal(true) } : undefined}
       />
 
       {success && (

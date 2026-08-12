@@ -20,6 +20,7 @@ export default function BackofficeCreateUser() {
   const [org, setOrg]         = useState('')
   const [cnpj, setCnpj]       = useState('')
   const [role, setRole]       = useState('CLIENT')
+  const [accessProfile, setAccessProfile] = useState('full')
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState('')
@@ -33,7 +34,7 @@ export default function BackofficeCreateUser() {
       const res = await fetch('/.netlify/functions/admin-create-user', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,'') }),
+        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -109,6 +110,17 @@ export default function BackofficeCreateUser() {
             <div style={{ marginBottom:16 }}>
               <label style={lbl}>CNPJ da Empresa *</label>
               <input value={cnpj} onChange={e=>setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" required style={inp} />
+            </div>
+          )}
+
+          {(role === 'ADMIN' || role === 'CLIENT') && (
+            <div style={{ marginBottom:16 }}>
+              <label style={lbl}>Perfil de acesso</label>
+              <select value={accessProfile} onChange={e=>setAccessProfile(e.target.value)} style={inp}>
+                <option value="full">Completo — todas as funções do papel</option>
+                {role === 'ADMIN'  && <option value="analyst">Analista — análises apenas, sem gestão de usuários/clientes</option>}
+                {role === 'CLIENT' && <option value="readonly">Somente leitura — visualiza sem convidar ou editar</option>}
+              </select>
             </div>
           )}
 

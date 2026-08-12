@@ -34,6 +34,7 @@ const NAVS = {
         { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', desc:'Buscar e abrir fichas de fornecedores' },
         { path:'/backoffice/homologados',        label:'Homologados',     icon:'✅', desc:'Fornecedores com selo ativo' },
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
+        { path:'/backoffice/feriados',           label:'Feriados',        icon:'📅', desc:'Datas que ajustam os prazos do farol' },
       ],
     },
     { path:'/backoffice/metricas',    label:'Métricas',    icon:'📊' },
@@ -70,7 +71,14 @@ export default function Navbar() {
 
   if (!user) return null
 
-  const items        = NAVS[user.role] || []
+  // Perfil analyst (ADMIN): esconde grupos de gestão — usuários, clientes e comunicados
+  const items = (NAVS[user.role] || []).filter(item => {
+    if (user.role === 'ADMIN' && user.accessProfile === 'analyst') {
+      if (item.key === 'usuarios' || item.key === 'clientes') return false
+      if (item.path === '/backoffice/comunicados') return false
+    }
+    return true
+  })
   const handleLogout = async () => { await logout(); navigate('/login') }
   const go           = (path) => { navigate(path); setOpen(false); setOpenGroup(null) }
 

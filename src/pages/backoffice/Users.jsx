@@ -1,7 +1,7 @@
 // Gestão de Usuários — lista, bloqueia, desbloqueia, redefine senha, edita nome, preço CLIENT
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { Button, Card, Spinner, PageHeader } from '../../components/ui.jsx'
+import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 const ROLE_LABEL = { ADMIN:'Backoffice', BUYER:'Comprador', CLIENT:'Cliente', SUPPLIER:'Fornecedor' }
 const ROLE_COLOR = { ADMIN:'#7c3aed',    BUYER:'#ea580c',   CLIENT:'#059669', SUPPLIER:'#2563eb' }
@@ -82,9 +82,12 @@ export default function BackofficeUsers() {
     }
     if (cnpjSearch) {
       const digits = cnpjSearch.replace(/\D/g, '')
-      if (!digits) return true
-      const cnpj = (u.supplierCnpj || '').replace(/\D/g, '')
-      if (!cnpj.includes(digits)) return false
+      if (digits) {
+        // Busca em todos os CNPJs vinculados ao usuário (fornecedor, cliente ou comprador)
+        const allCnpjs = (u.orgs || []).map(o => (o.cnpj || '').replace(/\D/g, ''))
+        if (u.supplierCnpj) allCnpjs.push(u.supplierCnpj.replace(/\D/g, ''))
+        if (!allCnpjs.some(c => c.includes(digits))) return false
+      }
     }
     return true
   })
@@ -118,7 +121,7 @@ export default function BackofficeUsers() {
           placeholder="🔍  Buscar por nome ou e-mail..."
           style={{ flex:1, minWidth:200, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none' }}/>
         <input value={cnpjSearch} onChange={e=>setCnpjSearch(e.target.value)}
-          placeholder="CNPJ do fornecedor..."
+          placeholder="CNPJ vinculado (qualquer papel)..."
           style={{ width:200, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none' }}/>
         <div style={{ display:'flex', gap:6 }}>
           {['Todos','ADMIN','BUYER','CLIENT','SUPPLIER'].map(r => (
@@ -167,13 +170,27 @@ export default function BackofficeUsers() {
                         {u.banned && (
                           <span style={{ fontSize:10, fontWeight:700, color:'#dc2626', background:'rgba(239,68,68,.1)', padding:'2px 8px', borderRadius:20 }}>BLOQUEADO</span>
                         )}
+                        {u.accessProfile === 'analyst' && (
+                          <span style={{ fontSize:10, fontWeight:700, color:'#d97706', background:'rgba(245,158,11,.12)', padding:'2px 8px', borderRadius:20 }}>ANALISTA</span>
+                        )}
+                        {u.accessProfile === 'readonly' && (
+                          <span style={{ fontSize:10, fontWeight:700, color:'#64748b', background:'rgba(100,116,139,.12)', padding:'2px 8px', borderRadius:20 }}>SOMENTE LEITURA</span>
+                        )}
                       </div>
                       <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                         {u.email}
-                        {u.supplierCnpj ? ` · CNPJ: ${u.supplierCnpj}` : ''}
                         {u.lastSignIn ? ` · Último acesso: ${new Date(u.lastSignIn).toLocaleDateString('pt-BR')}` : ' · Nunca acessou'}
                         {u.createdAt ? ` · Cadastrado: ${new Date(u.createdAt).toLocaleDateString('pt-BR')}` : ''}
                       </div>
+                      {(u.orgs?.length > 0) && (
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:4 }}>
+                          {u.orgs.map((o, i) => (
+                            <span key={i} style={{ fontSize:10.5, fontFamily:'DM Sans,sans-serif', color:ROLE_COLOR[o.role]||'#64748b', background:`${ROLE_COLOR[o.role]||'#64748b'}10`, border:`1px solid ${ROLE_COLOR[o.role]||'#64748b'}25`, padding:'2px 8px', borderRadius:6 }}>
+                              {ROLE_LABEL[o.role]}: {o.razao || '—'}{o.cnpj ? ` · ${o.cnpj}` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Ações */}
@@ -183,6 +200,22 @@ export default function BackofficeUsers() {
                         onClick={() => { setEditModal({ userId: u.id, currentName: u.name }); setEditName(u.name || '') }}>
                         ✏ Editar
                       </Button>
+                      {(u.roles?.includes('ADMIN') || u.roles?.includes('CLIENT')) && (
+                        <Button variant="neutral" size="sm" disabled={isActing}
+                          onClick={() => {
+                            const isAdmin = u.roles.includes('ADMIN')
+                            const options = isAdmin
+                              ? 'full (acesso completo) ou analyst (só análises)'
+                              : 'full (acesso completo) ou readonly (somente leitura)'
+                            const p = prompt(`Perfil de acesso para ${u.name || u.email}:\n${options}`, u.accessProfile || 'full')
+                            if (!p) return
+                            const valid = isAdmin ? ['full','analyst'] : ['full','readonly']
+                            if (!valid.includes(p.trim())) { alert(`Perfil inválido. Use: ${valid.join(' ou ')}`); return }
+                            act(u.id, 'set-profile', { profile: p.trim() })
+                          }}>
+                          🔐 Perfil
+                        </Button>
+                      )}
                       {u.primaryRole === 'CLIENT' && u.clientId && (
                         <Button variant="neutral" size="sm" disabled={isActing}
                           onClick={async () => {

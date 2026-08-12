@@ -27,8 +27,11 @@ exports.handler = async (event) => {
   if (authErr || !user) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Token inválido' }) }
 
   const { data: roleRow } = await supabase
-    .from('user_roles').select('client_id, role').eq('user_id', user.id).eq('role', 'CLIENT').maybeSingle()
+    .from('user_roles').select('client_id, role, access_profile').eq('user_id', user.id).eq('role', 'CLIENT').maybeSingle()
   if (!roleRow?.client_id) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso negado' }) }
+  // Perfil readonly (patch_030) não inativa/reativa fornecedores
+  if (roleRow.access_profile === 'readonly')
+    return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Seu perfil de acesso é somente leitura' }) }
 
   let body
   try { body = JSON.parse(event.body) } catch {

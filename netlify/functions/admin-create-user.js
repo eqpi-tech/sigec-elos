@@ -33,7 +33,10 @@ exports.handler = async (event) => {
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode:400, headers, body: JSON.stringify({ error:'JSON inválido' }) } }
 
-  const { name, email, role, organization, cnpj } = body
+  const { name, email, role, organization, cnpj, accessProfile } = body
+  // Perfil de acesso granular (patch_030): analyst só p/ ADMIN, readonly só p/ CLIENT
+  const validProfiles = role === 'ADMIN' ? ['full','analyst'] : role === 'CLIENT' ? ['full','readonly'] : ['full']
+  const finalProfile = validProfiles.includes(accessProfile) ? accessProfile : 'full'
   if (!name || !email || !role) return { statusCode:400, headers, body: JSON.stringify({ error:'name, email e role são obrigatórios' }) }
   if (!['ADMIN','BUYER','CLIENT'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN, BUYER ou CLIENT' }) }
   if (role === 'CLIENT' && !organization) return { statusCode:400, headers, body: JSON.stringify({ error:'organization (razão social) é obrigatório para CLIENT' }) }
@@ -56,7 +59,7 @@ exports.handler = async (event) => {
 
     // 3. Insere em user_roles
     await supabaseAdmin.from('user_roles').insert({
-      user_id: newUser.user.id, role, is_primary: true
+      user_id: newUser.user.id, role, is_primary: true, access_profile: finalProfile
     })
 
     // 4. Se BUYER, cria registro na tabela buyers

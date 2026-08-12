@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { invitationsApi } from '../../services/api.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
+
+const EMPTY_INVITE = { razao_social:'', cnpj:'', email:'', telefone:'', contato:'', tipo_fornecedor:'servico', subsidiado:false, escopo:'' }
 
 export default function BackofficeClientSettings() {
   const [clients,  setClients]  = useState([])
@@ -8,6 +11,10 @@ export default function BackofficeClientSettings() {
   const [editing,  setEditing]  = useState(null)  // { id, homologation_price, homologation_payer }
   const [saving,   setSaving]   = useState(false)
   const [search,   setSearch]   = useState('')
+  const [inviteModal, setInviteModal] = useState(null)  // client object
+  const [inviteForm,  setInviteForm]  = useState(EMPTY_INVITE)
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteMsg,   setInviteMsg]   = useState({ ok:'', err:'' })
 
   useEffect(() => {
     supabase
@@ -39,6 +46,31 @@ export default function BackofficeClientSettings() {
     finally { setSaving(false) }
   }
 
+  async function sendInvite(e) {
+    e.preventDefault()
+    setInviteSending(true); setInviteMsg({ ok:'', err:'' })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      await invitationsApi.send({
+        razao_social:    inviteForm.razao_social,
+        cnpj:            inviteForm.cnpj.replace(/\D/g,''),
+        email:           inviteForm.email,
+        telefone:        inviteForm.telefone,
+        contato:         inviteForm.contato,
+        tipo_fornecedor: inviteForm.tipo_fornecedor,
+        subsidiado:      inviteForm.subsidiado,
+        escopo:          inviteForm.escopo,
+        client_id:       inviteModal.id,
+        invited_by_role: 'ADMIN',
+      }, session?.access_token)
+      setInviteMsg({ ok:`Convite enviado para ${inviteForm.email} em nome de ${inviteModal.razao_social}!`, err:'' })
+      setInviteModal(null)
+      setInviteForm(EMPTY_INVITE)
+    } catch (err) {
+      setInviteMsg({ ok:'', err: err.message })
+    } finally { setInviteSending(false) }
+  }
+
   const inp = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box', outline:'none' }
   const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:5 }
 
@@ -53,6 +85,12 @@ export default function BackofficeClientSettings() {
         Se <em>Fornecedor paga</em>: o valor é cobrado via Stripe no cadastro.
         Se <em>Cliente subsidia</em>: o fornecedor não paga nada — o acerto é feito fora da plataforma conforme contrato.
       </div>
+
+      {inviteMsg.ok && (
+        <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:10, padding:'10px 16px', marginBottom:16, color:'#15803d', fontFamily:'DM Sans,sans-serif', fontSize:13 }}>
+          ✅ {inviteMsg.ok}
+        </div>
+      )}
 
       {/* Busca */}
       <div style={{ marginBottom:16, position:'relative' }}>
@@ -102,6 +140,10 @@ export default function BackofficeClientSettings() {
                   <Button variant="neutral" size="sm"
                     onClick={() => setEditing({ id: c.id, homologation_price: c.homologation_price ?? 390, homologation_payer: c.homologation_payer ?? 'supplier' })}>
                     ✏ Editar
+                  </Button>
+                  <Button variant="primary" size="sm"
+                    onClick={() => { setInviteForm(EMPTY_INVITE); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
+                    📨 Convidar fornecedor
                   </Button>
                 </div>
               </div>
@@ -154,6 +196,79 @@ export default function BackofficeClientSettings() {
                 {saving ? <Spinner size={14}/> : '💾 Salvar'}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal convite de fornecedor em nome do cliente */}
+      {inviteModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:520, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,.2)', maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:17, color:'#1a1c5e', marginBottom:4 }}>
+              📨 Convidar Fornecedor
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:18 }}>
+              Em nome de <strong style={{ color:'#2E3192' }}>{inviteModal.razao_social}</strong> — o fornecedor recebe o convite e os termos deste cliente.
+            </div>
+
+            {inviteMsg.err && (
+              <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'8px 12px', marginBottom:14, color:'#dc2626', fontFamily:'DM Sans,sans-serif', fontSize:12 }}>
+                {inviteMsg.err}
+              </div>
+            )}
+
+            <form onSubmit={sendInvite}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <span style={lbl}>Razão Social *</span>
+                  <input required value={inviteForm.razao_social} onChange={e=>setInviteForm(f=>({...f, razao_social:e.target.value}))} style={inp}/>
+                </div>
+                <div>
+                  <span style={lbl}>E-mail *</span>
+                  <input required type="email" value={inviteForm.email} onChange={e=>setInviteForm(f=>({...f, email:e.target.value}))} style={inp}/>
+                </div>
+                <div>
+                  <span style={lbl}>CNPJ</span>
+                  <input value={inviteForm.cnpj} onChange={e=>setInviteForm(f=>({...f, cnpj:e.target.value}))} placeholder="00.000.000/0000-00" style={inp}/>
+                </div>
+                <div>
+                  <span style={lbl}>Telefone</span>
+                  <input value={inviteForm.telefone} onChange={e=>setInviteForm(f=>({...f, telefone:e.target.value}))} style={inp}/>
+                </div>
+                <div>
+                  <span style={lbl}>Contato (nome)</span>
+                  <input value={inviteForm.contato} onChange={e=>setInviteForm(f=>({...f, contato:e.target.value}))} style={inp}/>
+                </div>
+                <div>
+                  <span style={lbl}>Tipo de fornecedor</span>
+                  <select value={inviteForm.tipo_fornecedor} onChange={e=>setInviteForm(f=>({...f, tipo_fornecedor:e.target.value}))} style={inp}>
+                    <option value="servico">Serviço</option>
+                    <option value="produto">Produto</option>
+                    <option value="ambos">Ambos</option>
+                  </select>
+                </div>
+                <div>
+                  <span style={lbl}>Subsidiado</span>
+                  <select value={inviteForm.subsidiado ? 'sim' : 'nao'} onChange={e=>setInviteForm(f=>({...f, subsidiado: e.target.value === 'sim'}))} style={inp}>
+                    <option value="nao">Não — fornecedor paga</option>
+                    <option value="sim">Sim — cliente subsidia</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <span style={lbl}>Escopo da homologação</span>
+                  <textarea rows={2} value={inviteForm.escopo} onChange={e=>setInviteForm(f=>({...f, escopo:e.target.value}))}
+                    placeholder="Objetivo da contratação / escopo do fornecimento..."
+                    style={{ ...inp, resize:'vertical' }}/>
+                </div>
+              </div>
+
+              <div style={{ display:'flex', gap:8 }}>
+                <Button type="button" variant="neutral" full onClick={() => setInviteModal(null)}>Cancelar</Button>
+                <Button type="submit" variant="primary" full disabled={inviteSending}>
+                  {inviteSending ? <Spinner size={14}/> : '📨 Enviar convite'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -43,9 +43,12 @@ exports.handler = async (event) => {
 
   // Busca o client_id do usuário
   const { data: roleRow } = await supabase
-    .from('user_roles').select('client_id, role').eq('user_id', user.id)
+    .from('user_roles').select('client_id, role, access_profile').eq('user_id', user.id)
     .in('role', ['CLIENT', 'ADMIN']).maybeSingle()
   if (!roleRow) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso negado' }) }
+  // Perfil readonly (patch_030) não altera termos
+  if (event.httpMethod === 'POST' && roleRow.role === 'CLIENT' && roleRow.access_profile === 'readonly')
+    return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Seu perfil de acesso é somente leitura' }) }
 
   if (event.httpMethod === 'GET') {
     if (!roleRow.client_id) {
