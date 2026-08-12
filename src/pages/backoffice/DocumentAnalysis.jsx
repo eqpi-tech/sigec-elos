@@ -585,6 +585,12 @@ export default function DocumentAnalysis() {
                         }}>👁</Button>
                       )
                     })()}
+                    {!doc.storage_path && doc.hoc_arquivo_id && (
+                      <Button variant="neutral" size="sm" onClick={async () => {
+                        try { const url = await documentApi.getHocFileUrl(doc.id); window.open(url, '_blank') }
+                        catch (e) { alert(e.message) }
+                      }}>👁</Button>
+                    )}
                     {isSaving ? <Spinner size={16}/> : (
                       <>
                         {(status === 'PENDING' || status === 'MISSING' || status === 'EXPIRED' || status === 'EXPIRING') && (

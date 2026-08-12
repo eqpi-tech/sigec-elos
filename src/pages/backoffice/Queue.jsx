@@ -1172,10 +1172,17 @@ export function BackofficeAnalysis() {
                         </Button>
                       )
                     }
-                    // Docs normais: botão Ver
-                    return doc.storage_path ? (
+                    // Docs normais: botão Ver (Storage próprio ou S3 do HOC via URL pré-assinada)
+                    if (doc.storage_path) return (
                       <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
-                    ) : null
+                    )
+                    if (doc.hoc_arquivo_id) return (
+                      <Button variant="neutral" size="sm" onClick={async()=>{
+                        try { const url = await documentApi.getHocFileUrl(doc.id); window.open(url,'_blank') }
+                        catch (e) { alert(e.message) }
+                      }}>👁 Ver</Button>
+                    )
+                    return null
                   })()}
                   <Button variant="neutral" size="sm" title="Histórico do documento"
                     onClick={async () => {

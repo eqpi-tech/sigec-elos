@@ -281,6 +281,17 @@ export const documentApi = {
     return data.signedUrl
   },
 
+  // Arquivos migrados do HOC (S3 privado) — URL pré-assinada via function
+  getHocFileUrl: async (documentId) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`/.netlify/functions/get-hoc-file?documentId=${documentId}`, {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao abrir arquivo')
+    return data.url
+  },
+
   // Histórico de versões do documento (document_history, patch_029)
   // Filtra por fornecedor; opcionalmente por tipo de documento
   getHistory: async (supplierId, type) => {
@@ -725,7 +736,7 @@ export const adminApi = {
 
     let q = supabase
       .from('documents')
-      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, created_at, updated_at, suppliers(id, razao_social, cnpj)', { count: 'exact' })
+      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, hoc_arquivo_id, created_at, updated_at, suppliers(id, razao_social, cnpj)', { count: 'exact' })
       .not('label', 'is', null)
 
     // Filtro tipo de documento
