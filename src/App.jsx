@@ -15,6 +15,7 @@ import SupplierPlans      from './pages/supplier/Plans.jsx'
 import PlanSuccess        from './pages/supplier/PlanSuccess.jsx'
 import SupplierCategories from './pages/supplier/Categories.jsx'
 import SupplierProcess    from './pages/supplier/Process.jsx'
+import SupplierCertificate from './pages/supplier/Certificate.jsx'
 
 import BuyerMarketplace     from './pages/buyer/Marketplace.jsx'
 import BuyerSupplierProfile from './pages/buyer/SupplierProfile.jsx'
@@ -102,6 +103,8 @@ function AppRoutes() {
       <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
       <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']}><SupplierQuestionnaire/></Protect>} />
       <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />
+      {/* Certificado: rota standalone (sem navbar) para impressão limpa */}
+      <Route path="/fornecedor/certificado/:sealId" element={<ProtectedRoute allowedRoles={['SUPPLIER']}><SupplierCertificate/></ProtectedRoute>} />
       <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']}><SupplierTeam/></Protect>} />
 
       {/* Buyer */}

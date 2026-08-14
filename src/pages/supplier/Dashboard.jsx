@@ -182,8 +182,20 @@ export default function SupplierDashboard() {
         ) : (
           <div style={{ display:'flex', gap:24, flexWrap:'wrap', justifyContent: seals.length <= 3 ? 'flex-start' : 'space-around' }}>
             {processes.map((seal, i) => (
-              <div key={seal.id || i} style={{ cursor:'pointer' }} onClick={() => navigate(`/fornecedor/processo/${seal.id}`)}>
-                <SealBadge seal={seal} size={mobile ? 'sm' : 'md'} showClient showScore />
+              <div key={seal.id || i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8 }}>
+                <div style={{ cursor:'pointer' }} onClick={() => navigate(`/fornecedor/processo/${seal.id}`)}>
+                  <SealBadge seal={seal} size={mobile ? 'sm' : 'md'} showClient showScore />
+                </div>
+                {seal.effStatus === 'ACTIVE' && (
+                  <button onClick={() => navigate(`/fornecedor/certificado/${seal.id}`)}
+                    title="Abrir certificado de homologação para impressão"
+                    style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(184,134,11,.1)',
+                      border:'1px solid rgba(184,134,11,.35)', borderRadius:20, padding:'4px 12px',
+                      cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10.5,
+                      color:'#92600a', whiteSpace:'nowrap' }}>
+                    🎓 Certificado disponível
+                  </button>
+                )}
               </div>
             ))}
           </div>

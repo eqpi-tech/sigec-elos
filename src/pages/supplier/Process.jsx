@@ -70,6 +70,15 @@ export default function SupplierProcess() {
               {isSigec ? 'Processo de homologação SIGEC-ELOS' : clientName}
             </div>
 
+            {effStatus === 'ACTIVE' && (
+              <button onClick={() => navigate(`/fornecedor/certificado/${seal.id}`)}
+                style={{ display:'inline-flex', alignItems:'center', gap:6, background:'rgba(184,134,11,.1)',
+                  border:'1px solid rgba(184,134,11,.35)', borderRadius:10, padding:'8px 16px', marginBottom:16,
+                  cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#92600a' }}>
+                🎓 Abrir Certificado de Homologação
+              </button>
+            )}
+
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))', gap:12 }}>
               <div>
                 <span style={lbl}>Nível</span>
