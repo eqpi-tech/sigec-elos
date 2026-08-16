@@ -435,9 +435,15 @@ export default function SupplierProfile() {
           )}
 
           <Section icon="📞" title="Contato">
-            <Row label="Telefone"               value={data.phone || (cd.ddd_telefone_1 ? fmtPhone(cd.ddd_telefone_1) : '—')} />
-            {cd.ddd_telefone_2 && <Row label="Telefone 2" value={fmtPhone(cd.ddd_telefone_2)} />}
+            {/* valores mascarados já vêm formatados do servidor — não reformatar */}
+            <Row label="Telefone"               value={data.phone || (cd.ddd_telefone_1 ? (data.contacts_masked ? cd.ddd_telefone_1 : fmtPhone(cd.ddd_telefone_1)) : '—')} />
+            {cd.ddd_telefone_2 && <Row label="Telefone 2" value={data.contacts_masked ? cd.ddd_telefone_2 : fmtPhone(cd.ddd_telefone_2)} />}
             <Row label="E-mail"                 value={ss(data.email || cd.email)} />
+            {data.contacts_masked && (
+              <div style={{marginTop:10,padding:'10px 14px',borderRadius:10,background:'#fff7ed',border:'1px solid rgba(244,126,47,.35)',fontSize:12,color:'#F47E2F',fontFamily:'DM Sans,sans-serif',fontWeight:600}}>
+                🔒 Assine um plano para ver os contatos completos do fornecedor e dos sócios
+              </div>
+            )}
           </Section>
 
           {(cd.regime_tributario||[]).length > 0 && (

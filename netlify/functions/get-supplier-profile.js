@@ -83,6 +83,30 @@ exports.handler = async (event) => {
       if (d.length < 10) return null
       return `(${d.slice(0,2)}) ${'*'.repeat(d.length-6)}-**${d.slice(-2)}`
     }
+    // E-mail mascarado: 2 primeiros caracteres + domínio parcial
+    const maskEmail = (v) => {
+      const s = String(v || '').trim()
+      const at = s.indexOf('@')
+      if (at < 1) return null
+      const dom = s.slice(at + 1)
+      const tld = dom.includes('.') ? dom.slice(dom.indexOf('.')) : ''
+      return `${s.slice(0, 2)}${'*'.repeat(Math.max(3, at - 2))}@***${tld}`
+    }
+
+    // Comprador sem assinatura: contatos da EMPRESA também mascarados
+    // (mesma regra dos sócios) — inclusive o fallback cnpjData (BrasilAPI)
+    const cnpjData = cnpjRec?.cnpj_data ? { ...cnpjRec.cnpj_data } : null
+    if (!openContacts) {
+      if (supplier.email)            supplier.email            = maskEmail(supplier.email)
+      if (supplier.email_financeiro) supplier.email_financeiro = maskEmail(supplier.email_financeiro)
+      if (supplier.phone)            supplier.phone            = maskFone(supplier.phone)
+      if (cnpjData) {
+        if (cnpjData.email)           cnpjData.email           = maskEmail(cnpjData.email)
+        if (cnpjData.ddd_telefone_1)  cnpjData.ddd_telefone_1  = maskFone(cnpjData.ddd_telefone_1)
+        if (cnpjData.ddd_telefone_2)  cnpjData.ddd_telefone_2  = maskFone(cnpjData.ddd_telefone_2)
+      }
+    }
+
     const partners = (partnersRes.value?.data || []).map(p => ({
       nome: p.nome, tipo: p.tipo, cargo: p.cargo,
       nacionalidade: p.nacionalidade, participacao: p.participacao,
@@ -102,7 +126,8 @@ exports.handler = async (event) => {
         partners,
         hocEnderecos,
         planType:          null,
-        cnpjData:          cnpjRec?.cnpj_data         || null,
+        cnpjData,
+        contacts_masked:   !openContacts,
         sanctionsData:     cnpjRec?.sanctions_data    || null,
         hasSanctions:      cnpjRec?.has_sanctions     || false,
         cnpjConsultedAt:   cnpjRec?.consulted_at      || null,
