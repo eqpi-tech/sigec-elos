@@ -262,10 +262,20 @@ export default function ClientPortal() {
               <a href="#sobre" className="nav-link">A Empresa</a>
               <a href="#processo" className="nav-link">Como Funciona</a>
               <a href="#planos" className="nav-link">Planos</a>
+              <a href={`/portal/${slug}/login`} className="nav-link"
+                style={{ border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, padding: '9px 20px' }}>
+                Entrar
+              </a>
               <a href="#cadastro" className="btn-primary" style={{ padding: '10px 22px', fontSize: 13 }}>
                 Quero ser Fornecedor
               </a>
             </div>
+          )}
+          {mobile && (
+            <a href={`/portal/${slug}/login`} className="nav-link"
+              style={{ border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, padding: '8px 16px', fontSize: 13 }}>
+              Entrar
+            </a>
           )}
         </div>
       </nav>
