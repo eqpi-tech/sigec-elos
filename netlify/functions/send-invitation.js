@@ -13,7 +13,8 @@ const supabaseAdmin = createClient(
 
 // ── MODO A: Buyer convida supplier já cadastrado ────────────────────────────
 async function handleBuyerInvitation(body, h) {
-  const { supplierId, supplierRazaoSocial, supplierCnpj, buyerName, buyerEmail, buyerId } = body
+  const { supplierId, supplierRazaoSocial, supplierCnpj, buyerName, buyerEmail, buyerId,
+          objective = 'homologacao', customMessage } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
 
   // Busca todos os user_ids vinculados ao supplier
@@ -45,35 +46,52 @@ async function handleBuyerInvitation(body, h) {
     supplier_email:        emails.join(', '),
     status:                'SENT',
     invited_by_role:       'BUYER',
+    objetivo:              objective === 'contato' ? 'contato' : 'homologacao',
   }).select('id, token').single()
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
 
   if (emails.length > 0 && process.env.RESEND_API_KEY) {
     const HOC_LINK = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
     const cadastroLink = `${HOC_LINK}/cadastro?token=${invite.token}`
+    const isContato = objective === 'contato'
+
+    // Mensagem editada na tela tem prioridade; nl2br para o HTML
+    const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const messageHtml = customMessage?.trim()
+      ? `<div style="white-space:pre-line;color:#374151;line-height:1.7">${esc(customMessage.trim())}</div>`
+      : `<p>A empresa <strong>${buyerName}</strong> ${isContato
+          ? 'gostaria de entrar em contato com'
+          : 'quer iniciar uma homologação com'} <strong>${supplierRazaoSocial}</strong>.</p>`
+
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
         <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
           <h1 style="color:#fff;margin:0 0 4px;font-size:24px">SIGEC-ELOS</h1>
-          <p style="color:#C7D2FE;margin:0;font-size:13px">Plataforma de Homologação de Fornecedores</p>
+          <p style="color:#C7D2FE;margin:0;font-size:13px">${isContato ? 'Contato Comercial' : 'Plataforma de Homologação de Fornecedores'}</p>
         </div>
         <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
-          <h2 style="color:#1a1c5e;margin:0 0 16px">Você recebeu um convite!</h2>
-          <p>A empresa <strong>${buyerName}</strong> quer iniciar uma homologação com <strong>${supplierRazaoSocial}</strong>.</p>
-          <a href="${cadastroLink}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">
-            Acessar Plataforma →
-          </a>
+          <h2 style="color:#1a1c5e;margin:0 0 16px">${isContato ? 'Uma empresa quer falar com você!' : 'Você recebeu um convite!'}</h2>
+          ${messageHtml}
+          <div style="margin-top:20px">
+            <a href="${cadastroLink}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">
+              ${isContato ? 'Conhecer a Plataforma →' : 'Acessar Plataforma →'}
+            </a>
+          </div>
         </div>
         <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">
           EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br
         </div>
       </div>`
 
+    const subject = isContato
+      ? `${buyerName} quer entrar em contato — SIGEC-ELOS`
+      : `Convite de ${buyerName} — SIGEC-ELOS`
+
     await Promise.allSettled(emails.map(to =>
       fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
-        body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[to], reply_to: buyerEmail||undefined, subject:`Convite de ${buyerName} — SIGEC-ELOS`, html })
+        body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[to], reply_to: buyerEmail||undefined, subject, html })
       }).catch(e => ({ error: e.message }))
     ))
   }
@@ -83,7 +101,7 @@ async function handleBuyerInvitation(body, h) {
 
 // ── MODO B: Client/Admin convida empresa ainda não cadastrada ──────────────
 async function handleClientInvitation(body, callerUser, h) {
-  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT', objetivo = 'homologacao' } = body
+  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT', objetivo = 'homologacao', message } = body
   if (!razao_social || !email) return { statusCode:400, headers:h, body: JSON.stringify({ error:'razao_social e email são obrigatórios' }) }
 
   // Perfil readonly (patch_030) não envia convites
@@ -131,12 +149,12 @@ async function handleClientInvitation(body, callerUser, h) {
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 
-  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo })
+  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo, message })
 
   return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, message:`Convite enviado para ${email}` }) }
 }
 
-async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo = 'homologacao' }) {
+async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo = 'homologacao', message }) {
   if (!process.env.RESEND_API_KEY) return
   const frontendUrl = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
 
@@ -165,7 +183,11 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
   const isContato = objetivo === 'contato'
 
   const headerSubtitle = isContato ? 'Contato Comercial' : 'Convite de Homologação'
-  const bodyIntro = isContato
+  // Mensagem editada na tela tem prioridade sobre o template padrão
+  const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  const bodyIntro = message?.trim()
+    ? `<div style="white-space:pre-line;color:#374151;line-height:1.7">${esc(message.trim())}</div>`
+    : isContato
     ? `<p>A empresa <strong>${senderName}</strong> conheceu o perfil da sua empresa e gostaria de <strong>entrar em contato</strong> para explorar oportunidades de parceria.</p>
        <p>Respondendo a este e-mail você fala diretamente com o responsável. Se preferir, conheça também a plataforma SIGEC-ELOS, onde ${senderName} gerencia seus fornecedores.</p>`
     : `<p>A empresa <strong>${senderName}</strong> convidou você para participar do processo de homologação de fornecedores através do <strong>SIGEC-ELOS</strong> da EQPI Tech.</p>`

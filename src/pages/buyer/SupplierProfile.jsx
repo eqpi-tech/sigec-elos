@@ -646,17 +646,21 @@ export default function SupplierProfile() {
 
       {/* ── Modal de convite ──────────────────────────────────────────── */}
       {showInviteModal && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div style={{background:'#fff',borderRadius:20,padding:28,width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
-            <div style={{fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:18,color:'#1a1c5e',marginBottom:6}}>🤝 Enviar Convite</div>
-            <div style={{fontSize:13,color:'#9B9B9B',marginBottom:20}}>Para: <strong style={{color:'#1a1c5e'}}>{razaoSocial}</strong></div>
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,padding:'28px 32px',width:'100%',maxWidth:560,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+              <div style={{fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:18,color:'#1a1c5e'}}>Convidar Fornecedor</div>
+              <button onClick={()=>setShowInviteModal(false)}
+                style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9B9B9B'}}>✕</button>
+            </div>
+            <div style={{fontSize:13,color:'#9B9B9B',marginBottom:20,fontFamily:'DM Sans,sans-serif'}}>Para: <strong style={{color:'#1a1c5e'}}>{razaoSocial}</strong></div>
 
-            {/* Objetivo */}
+            {/* Objetivo — mesmo padrão do modal do cliente */}
             <div style={{fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:10}}>Objetivo do convite *</div>
             <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:20}}>
               {[
-                {val:'contato', label:'Fazer contato com o Fornecedor', desc:'Apresentação e exploração de oportunidades de parceria.'},
-                {val:'homologacao', label:'Solicitar homologação para prestação de serviços', desc:'O fornecedor será convidado a completar o cadastro e documentação na plataforma ELOS.'},
+                {val:'contato',     label:'📞 Fazer contato com o Fornecedor',           desc:'Apresentação e exploração de oportunidades — sem iniciar processo de homologação.'},
+                {val:'homologacao', label:'🏅 Enviar convite para solicitar homologação', desc:'O fornecedor será convidado a completar cadastro e documentação na plataforma.'},
               ].map(opt => (
                 <label key={opt.val} style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 14px',borderRadius:10,border:`1.5px solid ${inviteObjective===opt.val?'#2E3192':'#e2e4ef'}`,background:inviteObjective===opt.val?'rgba(46,49,146,.04)':'#fff',cursor:'pointer',transition:'all .15s'}}
                   onClick={()=>handleObjectiveChange(opt.val)}>
@@ -686,22 +690,21 @@ export default function SupplierProfile() {
 
             {/* Prévia do e-mail */}
             {inviteObjective && (
-              <>
+              <div style={{marginBottom:20}}>
                 <div style={{fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>Prévia da mensagem (editável)</div>
                 <textarea value={inviteMsg} onChange={e=>setInviteMsg(e.target.value)} rows={6}
-                  style={{width:'100%',padding:'10px 12px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',resize:'vertical',outline:'none',boxSizing:'border-box',marginBottom:16}}/>
-              </>
+                  style={{width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',resize:'vertical',outline:'none',boxSizing:'border-box',minHeight:120,lineHeight:1.6}}/>
+                <div style={{fontSize:11,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:4}}>
+                  Este texto é o corpo do e-mail que o fornecedor receberá{inviteObjective === 'homologacao' ? ', junto com o link da plataforma' : ''}.
+                </div>
+              </div>
             )}
 
             <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setShowInviteModal(false)}
-                style={{flex:1,padding:'11px',borderRadius:10,border:'1px solid #e2e4ef',background:'#fff',color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer'}}>
-                Cancelar
-              </button>
-              <button onClick={sendInvite} disabled={inviting||!inviteObjective}
-                style={{flex:2,padding:'11px',borderRadius:10,border:'none',background:inviting||!inviteObjective?'#e2e4ef':'#F47E2F',color:'#fff',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:inviting||!inviteObjective?'not-allowed':'pointer',transition:'background .15s'}}>
-                {inviting ? '⏳ Enviando...' : '📨 Enviar Convite'}
-              </button>
+              <Button type="button" variant="ghost" full onClick={()=>setShowInviteModal(false)}>Cancelar</Button>
+              <Button type="button" variant="primary" full disabled={inviting||!inviteObjective} onClick={sendInvite}>
+                {inviting ? '⏳ Enviando...' : inviteObjective === 'contato' ? '📞 Enviar Contato' : '📨 Enviar Convite'}
+              </Button>
             </div>
           </div>
         </div>

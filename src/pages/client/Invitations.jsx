@@ -17,7 +17,16 @@ function formatCnpj(v) {
 
 const EMPTY_FORM = {
   objetivo:'', razao_social:'', cnpj:'', email:'', telefone:'', contato:'',
-  tipo_fornecedor:'servico', subsidiado: false, escopo:'',
+  tipo_fornecedor:'servico', subsidiado: false, escopo:'', message:'',
+}
+
+// Templates de mensagem por objetivo (editáveis na tela antes do envio)
+const buildTemplate = (objetivo, razao, clientName, userName) => {
+  const dest = razao?.trim() || 'fornecedor'
+  const emp  = clientName || 'Nossa empresa'
+  if (objetivo === 'contato')
+    return `Olá, ${dest}!\n\nSomos a ${emp}. Conhecemos o perfil da sua empresa e gostaríamos de entrar em contato para explorar oportunidades de parceria.\n\nFicamos à disposição para uma conversa.\n\nAtenciosamente,\n${userName || emp}`
+  return `Olá, ${dest}!\n\nA ${emp} convida sua empresa para o processo de homologação de fornecedores através da plataforma SIGEC-ELOS.\n\nPelo link abaixo você completa o cadastro e a documentação de forma digital e ágil.\n\nAtenciosamente,\n${userName || emp}`
 }
 
 export default function ClientInvitations() {
@@ -30,7 +39,20 @@ export default function ClientInvitations() {
   const [search, setSearch]       = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]           = useState(EMPTY_FORM)
+  const [clientName, setClientName] = useState('')
   const location = useLocation()
+
+  // Razão social do cliente para os templates de mensagem
+  useEffect(() => {
+    if (!user?.clientId) return
+    supabase.from('clients').select('razao_social').eq('id', user.clientId).maybeSingle()
+      .then(({ data }) => setClientName(data?.razao_social || ''))
+  }, [user?.clientId])
+
+  // Ao escolher o objetivo, gera o template (a mensagem continua editável)
+  const pickObjetivo = (val) => {
+    setForm(f => ({ ...f, objetivo: val, message: buildTemplate(val, f.razao_social, clientName, user?.name) }))
+  }
 
   // Pré-preenchimento vindo de outras telas (ex.: relatório de interessados)
   useEffect(() => {
@@ -86,6 +108,7 @@ export default function ClientInvitations() {
         tipo_fornecedor: form.tipo_fornecedor,
         subsidiado:      form.objetivo === 'contato' ? false : form.subsidiado,
         escopo:          form.objetivo === 'contato' ? '' : form.escopo,
+        message:         form.message,
         client_id:       user.clientId,
         invited_by_role: 'CLIENT',
       }, session?.access_token)
@@ -212,8 +235,8 @@ export default function ClientInvitations() {
                     style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'12px 14px', borderRadius:10,
                       border:`1.5px solid ${form.objetivo===opt.val?'#2E3192':'#e2e4ef'}`,
                       background:form.objetivo===opt.val?'rgba(46,49,146,.04)':'#fff', cursor:'pointer', transition:'all .15s' }}
-                    onClick={() => setForm(f=>({ ...f, objetivo: opt.val }))}>
-                    <input type="radio" checked={form.objetivo===opt.val} onChange={() => setForm(f=>({ ...f, objetivo: opt.val }))}
+                    onClick={() => pickObjetivo(opt.val)}>
+                    <input type="radio" checked={form.objetivo===opt.val} onChange={() => pickObjetivo(opt.val)}
                       style={{ marginTop:2, accentColor:'#2E3192' }}/>
                     <div>
                       <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{opt.label}</div>
@@ -288,6 +311,18 @@ export default function ClientInvitations() {
                     style={{ ...inp, resize:'vertical', minHeight:80 }} />
                 </div>
               </>)}
+
+              {/* Prévia da mensagem — editável, como no perfil comprador */}
+              {form.objetivo && (
+                <div style={{ marginBottom:20 }}>
+                  <label style={lbl}>Prévia da mensagem (editável)</label>
+                  <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={6}
+                    style={{ ...inp, resize:'vertical', minHeight:120, lineHeight:1.6 }}/>
+                  <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                    Este texto é o corpo do e-mail que o fornecedor receberá{form.objetivo === 'homologacao' ? ', junto com o link de cadastro' : ''}.
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#dc2626' }}>
