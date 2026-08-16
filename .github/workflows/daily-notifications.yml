@@ -28,3 +28,21 @@ jobs:
             exit 1
           fi
           echo "✅ Notificações processadas com sucesso"
+
+  invitation-reminders:
+    name: Lembretes de convite (fornecedores sem cadastro)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/invitation-reminders")
+          echo "HTTP status: $response"
+          if [ "$response" != "200" ]; then
+            echo "❌ Falha nos lembretes (HTTP $response)"
+            exit 1
+          fi
+          echo "✅ Lembretes processados com sucesso"

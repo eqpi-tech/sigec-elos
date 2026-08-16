@@ -273,8 +273,10 @@ async function recalcSealScores(sb, supplierId) {
     let req = [...(reqByOwner[owner] || [])]
     if (!req.length && seal.client_id) {
       const { data: flowRows } = await sb
-        .from('client_document_flows').select('catalog_id')
+        .from('client_document_flows')
+        .select('catalog_id, client_flows!inner(active)')
         .eq('client_id', seal.client_id).eq('required', true)
+        .eq('client_flows.active', true)
       req = (flowRows || []).map(r => r.catalog_id)
     }
     if (!req.length) req = [...(reqByOwner['global'] || [])]

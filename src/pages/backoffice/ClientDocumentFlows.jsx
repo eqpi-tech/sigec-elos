@@ -2,6 +2,13 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, PageHeader } from '../../components/ui.jsx'
 
+const font   = { fontFamily: 'DM Sans,sans-serif' }
+const titleF = { fontFamily: 'Montserrat,sans-serif' }
+const lbl = {
+  display:'block', ...titleF, fontWeight:700, fontSize:10,
+  color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:6,
+}
+
 function ClientSearchCombo({ clients, value, onChange }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -38,7 +45,7 @@ function ClientSearchCombo({ clients, value, onChange }) {
           onChange={e => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); setQ('') }}
           placeholder="Buscar cliente por nome..."
-          style={{ width:'100%', padding:'10px 40px 10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff' }}
+          style={{ width:'100%', padding:'10px 40px 10px 12px', borderRadius:10, border:'1px solid #e2e4ef', ...font, fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'#fff' }}
         />
         {value
           ? <button onClick={clear} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:16, lineHeight:1 }}>✕</button>
@@ -48,10 +55,10 @@ function ClientSearchCombo({ clients, value, onChange }) {
       {open && (
         <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:200, maxHeight:260, overflowY:'auto' }}>
           {filtered.length === 0
-            ? <div style={{ padding:'12px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>Nenhum cliente encontrado</div>
+            ? <div style={{ padding:'12px 14px', ...font, fontSize:13, color:'#9B9B9B' }}>Nenhum cliente encontrado</div>
             : filtered.map(c => (
               <button key={c.id} onMouseDown={() => select(c)}
-                style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', display:'block' }}>
+                style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', ...font, fontSize:13, color:'#1a1c5e', display:'block' }}>
                 {c.nome_fantasia || c.razao_social}
                 {c.nome_fantasia && c.razao_social !== c.nome_fantasia && (
                   <span style={{ display:'block', fontSize:11, color:'#9B9B9B' }}>{c.razao_social}</span>
@@ -60,7 +67,7 @@ function ClientSearchCombo({ clients, value, onChange }) {
             ))
           }
           {!q.trim() && clients.length > 20 && (
-            <div style={{ padding:'8px 14px', fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', borderTop:'1px solid #f0f0f5', textAlign:'center' }}>
+            <div style={{ padding:'8px 14px', ...font, fontSize:11, color:'#9B9B9B', borderTop:'1px solid #f0f0f5', textAlign:'center' }}>
               {clients.length - 20} clientes adicionais — refine a busca para filtrar
             </div>
           )}
@@ -70,58 +77,108 @@ function ClientSearchCombo({ clients, value, onChange }) {
   )
 }
 
-export default function BackofficeClientDocumentFlows() {
-  const [clients,     setClients]     = useState([])
-  const [clientId,    setClientId]    = useState('')
-  const [categories,  setCategories]  = useState([])
-  const [catalog,     setCatalog]     = useState([])
-  const [standardSet, setStandardSet] = useState(new Set())
-  const [flowMap,     setFlowMap]     = useState({})   // `${catId}:${docId}` → { id, required }
-  const [expanded,    setExpanded]    = useState(new Set())
-  const [search,      setSearch]      = useState('')
-  const [baseLoading, setBaseLoading] = useState(true)
-  const [flowLoading, setFlowLoading] = useState(false)
-  const [saving,      setSaving]      = useState(new Set())
+// Modal simples de criação/renomeação de fluxo
+function FlowFormModal({ flow, onSave, onClose, busy }) {
+  const [name, setName] = useState(flow?.name || '')
+  const [description, setDescription] = useState(flow?.description || '')
 
-  // Load static data once
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(15,17,60,.45)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:'24px 28px', width:'100%', maxWidth:440, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+          <h3 style={{ ...titleF, fontWeight:800, fontSize:16, color:'#1a1c5e', margin:0 }}>
+            {flow ? 'Editar Fluxo' : 'Novo Fluxo de Homologação'}
+          </h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:18, lineHeight:1 }}>✕</button>
+        </div>
+        <span style={lbl}>Nome do fluxo *</span>
+        <input value={name} onChange={e => setName(e.target.value)} autoFocus
+          placeholder='Ex.: "Fluxo Serviços", "Fluxo Materiais"...'
+          style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', ...font, fontSize:14, color:'#1a1c5e', outline:'none', boxSizing:'border-box', marginBottom:14 }} />
+        <span style={lbl}>Descrição</span>
+        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
+          placeholder="Opcional — quando este fluxo se aplica"
+          style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', ...font, fontSize:13, color:'#1a1c5e', outline:'none', boxSizing:'border-box', resize:'vertical', marginBottom:20 }} />
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <button onClick={onClose} disabled={busy}
+            style={{ padding:'10px 20px', borderRadius:10, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', ...font, fontSize:13, fontWeight:600, color:'#64748b' }}>
+            Cancelar
+          </button>
+          <button onClick={() => onSave({ name: name.trim(), description: description.trim() || null })}
+            disabled={busy || !name.trim()}
+            style={{ padding:'10px 20px', borderRadius:10, border:'none', background: name.trim() ? '#2E3192' : '#c7c9e2', cursor: name.trim() ? 'pointer' : 'not-allowed', ...font, fontSize:13, fontWeight:700, color:'#fff', display:'flex', alignItems:'center', gap:8 }}>
+            {busy && <Spinner size={14}/>}
+            {flow ? 'Salvar' : 'Criar Fluxo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function BackofficeClientDocumentFlows() {
+  const [clients,  setClients]  = useState([])
+  const [catalog,  setCatalog]  = useState([])
+  const [clientId, setClientId] = useState('')
+
+  const [flows,       setFlows]       = useState([])         // client_flows do cliente
+  const [flowCounts,  setFlowCounts]  = useState({})         // flow_id → nº docs
+  const [flowId,      setFlowId]      = useState('')
+  const [docs,        setDocs]        = useState([])         // linhas do fluxo selecionado
+  const [baseLoading, setBaseLoading] = useState(true)
+  const [flowsLoading, setFlowsLoading] = useState(false)
+  const [docsLoading, setDocsLoading] = useState(false)
+  const [saving,      setSaving]      = useState(new Set())  // catalog_ids em gravação
+  const [modal,       setModal]       = useState(null)       // { flow } | { flow: null } | null
+  const [modalBusy,   setModalBusy]   = useState(false)
+  const [addSearch,   setAddSearch]   = useState('')
+  const [error,       setError]       = useState('')
+
   useEffect(() => {
     Promise.all([
-      supabase.from('clients').select('id, razao_social').order('razao_social'),
-      supabase.from('categories').select('id, name, parent_id').order('id'),
+      supabase.from('clients').select('id, razao_social, nome_fantasia').order('razao_social'),
       supabase.from('documents_catalog').select('id, name').order('name'),
-      supabase.from('category_documents').select('category_id, document_id'),
-    ]).then(([c, cats, docs, std]) => {
+    ]).then(([c, d]) => {
       setClients(c.data || [])
-      setCategories(cats.data || [])
-      setCatalog(docs.data || [])
-      const s = new Set((std.data || []).map(r => `${r.category_id}:${r.document_id}`))
-      setStandardSet(s)
+      setCatalog(d.data || [])
       setBaseLoading(false)
     })
   }, [])
 
-  // Load client flows when client changes
+  async function loadFlows(cid, keepFlowId) {
+    setFlowsLoading(true)
+    setError('')
+    const [{ data: fl, error: e1 }, { data: rows }] = await Promise.all([
+      supabase.from('client_flows').select('*').eq('client_id', cid).order('created_at'),
+      supabase.from('client_document_flows').select('flow_id').eq('client_id', cid),
+    ])
+    if (e1) setError(e1.message)
+    const counts = {}
+    ;(rows || []).forEach(r => { if (r.flow_id) counts[r.flow_id] = (counts[r.flow_id] || 0) + 1 })
+    setFlows(fl || [])
+    setFlowCounts(counts)
+    setFlowsLoading(false)
+    const still = (fl || []).some(f => f.id === keepFlowId)
+    setFlowId(still ? keepFlowId : ((fl || [])[0]?.id || ''))
+  }
+
   useEffect(() => {
-    if (!clientId) { setFlowMap({}); return }
-    setFlowLoading(true)
-    supabase.from('client_document_flows')
-      .select('id, category_id, catalog_id, required')
-      .eq('client_id', clientId)
-      .then(({ data }) => {
-        const m = {}
-        ;(data || []).forEach(r => { m[`${r.category_id}:${r.catalog_id}`] = { id: r.id, required: r.required } })
-        setFlowMap(m)
-        setFlowLoading(false)
-      })
+    if (!clientId) { setFlows([]); setFlowId(''); setDocs([]); return }
+    loadFlows(clientId)
   }, [clientId])
 
-  // ── Derived maps ───────────────────────────────────────────────────────────
-
-  const catMap = useMemo(() => {
-    const m = {}
-    categories.forEach(c => { m[c.id] = c })
-    return m
-  }, [categories])
+  useEffect(() => {
+    if (!flowId) { setDocs([]); return }
+    setDocsLoading(true)
+    supabase.from('client_document_flows')
+      .select('id, catalog_id, required, blocking')
+      .eq('flow_id', flowId)
+      .then(({ data }) => {
+        setDocs(data || [])
+        setDocsLoading(false)
+      })
+  }, [flowId])
 
   const catalogMap = useMemo(() => {
     const m = {}
@@ -129,312 +186,265 @@ export default function BackofficeClientDocumentFlows() {
     return m
   }, [catalog])
 
-  // standard docs per category: catId → Set<docId>
-  const catStdDocs = useMemo(() => {
-    const m = {}
-    standardSet.forEach(k => {
-      const [catId, docId] = k.split(':').map(Number)
-      if (!m[catId]) m[catId] = []
-      m[catId].push(docId)
-    })
-    return m
-  }, [standardSet])
+  const currentFlow = flows.find(f => f.id === flowId)
+  const inFlowIds = useMemo(() => new Set(docs.map(d => d.catalog_id)), [docs])
 
-  // category IDs that differ from the standard
-  const modifiedCatIds = useMemo(() => {
-    const s = new Set()
-    Object.entries(flowMap).forEach(([k, v]) => {
-      if (!v.required || !standardSet.has(k)) {
-        s.add(Number(k.split(':')[0]))
-      }
-    })
-    return s
-  }, [flowMap, standardSet])
+  const sortedDocs = useMemo(() =>
+    [...docs].sort((a, b) => (catalogMap[a.catalog_id]?.name || '').localeCompare(catalogMap[b.catalog_id]?.name || '')),
+  [docs, catalogMap])
 
-  const stats = useMemo(() => {
-    let removed = 0, added = 0
-    Object.entries(flowMap).forEach(([k, v]) => {
-      if (standardSet.has(k) && !v.required) removed++
-      if (!standardSet.has(k) && v.required)  added++
-    })
-    return { removed, added, modified: modifiedCatIds.size }
-  }, [flowMap, standardSet, modifiedCatIds])
+  const addable = useMemo(() => {
+    const q = addSearch.trim().toLowerCase()
+    if (!q) return []
+    return catalog.filter(d => !inFlowIds.has(d.id) && d.name.toLowerCase().includes(q)).slice(0, 12)
+  }, [catalog, inFlowIds, addSearch])
 
-  // categories to display
-  const filteredCats = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return clientId ? categories.filter(c => modifiedCatIds.has(c.id)) : []
-    return categories.filter(c => c.name.toLowerCase().includes(q))
-  }, [categories, search, modifiedCatIds, clientId])
+  // ── Ações: fluxos ──────────────────────────────────────────────────────────
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  function parentLabel(cat) {
-    const p = cat.parent_id ? catMap[cat.parent_id] : null
-    return p ? `${p.name} › ${cat.name}` : cat.name
-  }
-
-  function isActive(catId, docId) {
-    const key = `${catId}:${docId}`
-    const row = flowMap[key]
-    return standardSet.has(key) ? (row ? row.required : true) : (row?.required ?? false)
-  }
-
-  async function toggle(catId, docId) {
-    if (!clientId) return
-    const key       = `${catId}:${docId}`
-    const isStd     = standardSet.has(key)
-    const row       = flowMap[key]
-    const nowActive = isActive(catId, docId)
-    setSaving(p => new Set([...p, key]))
+  async function saveFlow(values) {
+    setModalBusy(true)
+    setError('')
     try {
-      if (isStd) {
-        const next = !nowActive
-        if (row) {
-          await supabase.from('client_document_flows').update({ required: next }).eq('id', row.id)
-          setFlowMap(p => ({ ...p, [key]: { ...row, required: next } }))
-        } else {
-          // Row missing — insert (graceful recovery after backfill gap)
-          const { data } = await supabase.from('client_document_flows')
-            .insert({ client_id: clientId, category_id: catId, catalog_id: docId, required: next })
-            .select().single()
-          setFlowMap(p => ({ ...p, [key]: { id: data.id, required: next } }))
-        }
+      if (modal.flow) {
+        const { error: e } = await supabase.from('client_flows')
+          .update(values).eq('id', modal.flow.id)
+        if (e) throw e
       } else {
-        if (nowActive && row) {
-          await supabase.from('client_document_flows').delete().eq('id', row.id)
-          setFlowMap(p => { const n = { ...p }; delete n[key]; return n })
-        } else {
-          const { data } = await supabase.from('client_document_flows')
-            .insert({ client_id: clientId, category_id: catId, catalog_id: docId, required: true })
-            .select().single()
-          setFlowMap(p => ({ ...p, [key]: { id: data.id, required: true } }))
-        }
+        const { data, error: e } = await supabase.from('client_flows')
+          .insert({ client_id: clientId, ...values }).select().single()
+        if (e) throw e
+        await loadFlows(clientId, data.id)
+        setModal(null); setModalBusy(false)
+        return
       }
+      await loadFlows(clientId, flowId)
+      setModal(null)
     } catch (e) {
-      console.error('toggle failed', e)
+      setError(e.code === '23505' ? 'Já existe um fluxo com esse nome para este cliente.' : e.message)
     } finally {
-      setSaving(p => { const n = new Set(p); n.delete(key); return n })
+      setModalBusy(false)
     }
   }
 
-  function toggleExpand(catId) {
-    setExpanded(p => {
-      const n = new Set(p)
-      n.has(catId) ? n.delete(catId) : n.add(catId)
-      return n
-    })
+  async function toggleActive(flow) {
+    const { error: e } = await supabase.from('client_flows')
+      .update({ active: !flow.active }).eq('id', flow.id)
+    if (e) { setError(e.message); return }
+    setFlows(p => p.map(f => f.id === flow.id ? { ...f, active: !f.active } : f))
+  }
+
+  async function deleteFlow(flow) {
+    const n = flowCounts[flow.id] || 0
+    if (!window.confirm(`Excluir o fluxo "${flow.name}"${n ? ` e seus ${n} documentos` : ''}? Esta ação não pode ser desfeita.`)) return
+    const { error: e } = await supabase.from('client_flows').delete().eq('id', flow.id)
+    if (e) { setError(e.message); return }
+    await loadFlows(clientId, flowId === flow.id ? null : flowId)
+  }
+
+  // ── Ações: documentos do fluxo ─────────────────────────────────────────────
+  // Índice único parcial (flow_id, catalog_id) → sempre insert/delete, nunca upsert
+
+  async function addDoc(doc) {
+    setSaving(p => new Set([...p, doc.id]))
+    setError('')
+    const { data, error: e } = await supabase.from('client_document_flows')
+      .insert({ client_id: clientId, flow_id: flowId, catalog_id: doc.id, required: true, blocking: false })
+      .select('id, catalog_id, required, blocking').single()
+    if (e) setError(e.message)
+    else {
+      setDocs(p => [...p, data])
+      setFlowCounts(p => ({ ...p, [flowId]: (p[flowId] || 0) + 1 }))
+    }
+    setSaving(p => { const n = new Set(p); n.delete(doc.id); return n })
+  }
+
+  async function removeDoc(row) {
+    setSaving(p => new Set([...p, row.catalog_id]))
+    const { error: e } = await supabase.from('client_document_flows').delete().eq('id', row.id)
+    if (e) setError(e.message)
+    else {
+      setDocs(p => p.filter(d => d.id !== row.id))
+      setFlowCounts(p => ({ ...p, [flowId]: Math.max(0, (p[flowId] || 1) - 1) }))
+    }
+    setSaving(p => { const n = new Set(p); n.delete(row.catalog_id); return n })
+  }
+
+  async function toggleField(row, field) {
+    setSaving(p => new Set([...p, row.catalog_id]))
+    const { error: e } = await supabase.from('client_document_flows')
+      .update({ [field]: !row[field] }).eq('id', row.id)
+    if (e) setError(e.message)
+    else setDocs(p => p.map(d => d.id === row.id ? { ...d, [field]: !row[field] } : d))
+    setSaving(p => { const n = new Set(p); n.delete(row.catalog_id); return n })
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const lbl = {
-    display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10,
-    color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:6,
-  }
-
   if (baseLoading) return <div style={{ display:'flex', justifyContent:'center', padding:80 }}><Spinner size={40}/></div>
 
   return (
-    <div style={{ padding:'24px 32px', maxWidth:960, margin:'0 auto' }}>
-      <PageHeader title="Fluxo de Homologação" subtitle="Configuração de documentos por cliente"/>
+    <div style={{ padding:'24px 32px', maxWidth:1080, margin:'0 auto' }}>
+      <PageHeader title="Fluxos de Homologação" subtitle="Cada cliente pode ter múltiplos fluxos de documentos — ex.: um por categoria de fornecedor"/>
 
-      {/* Client selector */}
       <Card style={{ borderRadius:14, padding:'20px 24px', marginBottom:20 }}>
         <span style={lbl}>Cliente</span>
-        <ClientSearchCombo
-          clients={clients}
-          value={clientId}
-          onChange={id => { setClientId(id); setSearch(''); setExpanded(new Set()) }}
-        />
+        <ClientSearchCombo clients={clients} value={clientId} onChange={setClientId}/>
       </Card>
 
-      {clientId && (
-        <>
-          {/* Stats */}
-          {!flowLoading && (
-            <div style={{ display:'flex', gap:12, marginBottom:16 }}>
-              {[
-                ['Removidos vs. padrão',  stats.removed,  '#ef4444'],
-                ['Adicionados vs. padrão', stats.added,   '#22c55e'],
-                ['Categorias modificadas', stats.modified, '#2E3192'],
-              ].map(([label, n, color]) => (
-                <div key={label} style={{ flex:1, textAlign:'center', padding:'12px', background:`${color}0d`, borderRadius:12, border:`1px solid ${color}22` }}>
-                  <div style={{ fontSize:22, fontWeight:900, color, fontFamily:'Montserrat,sans-serif' }}>{n}</div>
-                  <div style={{ fontSize:11, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>{label}</div>
-                </div>
-              ))}
+      {error && (
+        <div style={{ marginBottom:16, padding:'12px 16px', borderRadius:10, background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.3)', ...font, fontSize:13, color:'#b91c1c' }}>
+          {error}
+        </div>
+      )}
+
+      {clientId && (flowsLoading ? (
+        <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:20, alignItems:'start' }}>
+
+          {/* Coluna esquerda: lista de fluxos */}
+          <Card style={{ borderRadius:14, padding:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <span style={{ ...lbl, marginBottom:0 }}>Fluxos ({flows.length})</span>
+              <button onClick={() => setModal({ flow: null })}
+                style={{ padding:'6px 12px', borderRadius:8, border:'none', background:'#2E3192', color:'#fff', cursor:'pointer', ...font, fontSize:12, fontWeight:700 }}>
+                + Novo
+              </button>
             </div>
-          )}
 
-          {/* Search */}
-          <div style={{ marginBottom:16, position:'relative' }}>
-            <input
-              value={search}
-              onChange={e => { setSearch(e.target.value); setExpanded(new Set()) }}
-              placeholder="Buscar categoria..."
-              style={{ width:'100%', padding:'10px 12px 10px 38px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box', outline:'none' }}
-            />
-            <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#9B9B9B', pointerEvents:'none' }}>🔍</span>
-            {search && (
-              <button onClick={() => setSearch('')}
-                style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:16, lineHeight:1 }}>✕</button>
-            )}
-          </div>
-
-          {flowLoading ? (
-            <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
-          ) : (
-            <>
-              {filteredCats.length === 0 && (
-                <Card style={{ borderRadius:14, padding:'32px', textAlign:'center' }}>
-                  {search ? (
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B' }}>
-                      Nenhuma categoria encontrada para "{search}"
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
-                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e', marginBottom:4 }}>
-                        Nenhuma modificação
-                      </div>
-                      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
-                        Este cliente segue o fluxo padrão em todas as categorias. Busque uma categoria acima para editar.
-                      </div>
-                    </>
-                  )}
-                </Card>
-              )}
-
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {filteredCats.map(cat => {
-                  const isOpen   = expanded.has(cat.id)
-                  const stdDocs  = catStdDocs[cat.id] || []
-                  const modified = modifiedCatIds.has(cat.id)
-
-                  // extra docs already added for this client+category
-                  const extraActive = catalog.filter(d =>
-                    !stdDocs.includes(d.id) && isActive(cat.id, d.id)
-                  )
-
-                  const activeStd = stdDocs.filter(dId => isActive(cat.id, dId)).length
-
-                  // non-standard docs available to add
-                  const nonStd = catalog.filter(d => !stdDocs.includes(d.id))
-
-                  return (
-                    <Card key={cat.id} style={{
-                      borderRadius:12, padding:0, overflow:'hidden',
-                      border: modified ? '1px solid rgba(239,68,68,.3)' : '1px solid #e2e4ef',
-                    }}>
-                      {/* Row header */}
-                      <button onClick={() => toggleExpand(cat.id)}
-                        style={{ width:'100%', background: modified ? 'rgba(254,242,242,.5)' : '#fff', border:'none', cursor:'pointer', padding:'13px 16px', display:'flex', alignItems:'center', gap:10, textAlign:'left' }}>
-                        <span style={{ color:'#9B9B9B', fontSize:11, transition:'transform .15s', display:'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none' }}>▶</span>
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, color:'#1a1c5e' }}>
-                            {parentLabel(cat)}
-                          </div>
-                        </div>
-                        <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                          {modified && (
-                            <span style={{ fontSize:10, fontWeight:700, color:'#ef4444', background:'rgba(239,68,68,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
-                              modificado
-                            </span>
-                          )}
-                          {extraActive.length > 0 && (
-                            <span style={{ fontSize:10, fontWeight:700, color:'#22c55e', background:'rgba(34,197,94,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
-                              +{extraActive.length} extra
-                            </span>
-                          )}
-                          <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                            {activeStd}/{stdDocs.length}
-                          </span>
-                        </div>
-                      </button>
-
-                      {/* Expanded docs */}
-                      {isOpen && (
-                        <div style={{ padding:'4px 16px 16px', borderTop:'1px solid #f0f0f5' }}>
-
-                          {/* Standard docs */}
-                          {stdDocs.length > 0 && (
-                            <>
-                              <div style={{ ...lbl, marginTop:12 }}>Documentos Padrão</div>
-                              {stdDocs.map(docId => {
-                                const key    = `${cat.id}:${docId}`
-                                const active = isActive(cat.id, docId)
-                                const busy   = saving.has(key)
-                                const doc    = catalogMap[docId]
-                                return (
-                                  <label key={docId} style={{
-                                    display:'flex', alignItems:'center', gap:10, padding:'8px 10px',
-                                    borderRadius:8, marginBottom:5, cursor: busy ? 'wait' : 'pointer',
-                                    background: active ? '#f0fdf4' : '#fff5f5',
-                                    border: `1px solid ${active ? '#bbf7d0' : '#fecaca'}`,
-                                  }}>
-                                    <input type="checkbox" checked={active} disabled={busy}
-                                      onChange={() => toggle(cat.id, docId)}
-                                      style={{ width:15, height:15, accentColor:'#22c55e', cursor:'pointer', flexShrink:0 }} />
-                                    <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>
-                                      {doc?.name || `Documento #${docId}`}
-                                    </span>
-                                    {busy && <Spinner size={14}/>}
-                                    {!active && !busy && (
-                                      <span style={{ fontSize:10, color:'#ef4444', fontFamily:'DM Sans,sans-serif', flexShrink:0 }}>removido</span>
-                                    )}
-                                  </label>
-                                )
-                              })}
-                            </>
-                          )}
-
-                          {/* Non-standard docs (extras) */}
-                          {nonStd.length > 0 && (
-                            <>
-                              <div style={{ ...lbl, marginTop:16 }}>Documentos Adicionais (fora do padrão)</div>
-                              {nonStd.map(doc => {
-                                const key    = `${cat.id}:${doc.id}`
-                                const active = isActive(cat.id, doc.id)
-                                const busy   = saving.has(key)
-                                return (
-                                  <label key={doc.id} style={{
-                                    display:'flex', alignItems:'center', gap:10, padding:'8px 10px',
-                                    borderRadius:8, marginBottom:5, cursor: busy ? 'wait' : 'pointer',
-                                    background: active ? '#f0fdf4' : '#fafafa',
-                                    border: `1px solid ${active ? '#bbf7d0' : '#e2e4ef'}`,
-                                    opacity: active ? 1 : 0.6,
-                                  }}>
-                                    <input type="checkbox" checked={active} disabled={busy}
-                                      onChange={() => toggle(cat.id, doc.id)}
-                                      style={{ width:15, height:15, accentColor:'#22c55e', cursor:'pointer', flexShrink:0 }} />
-                                    <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>
-                                      {doc.name}
-                                    </span>
-                                    {busy && <Spinner size={14}/>}
-                                    {active && !busy && (
-                                      <span style={{ fontSize:10, color:'#22c55e', fontFamily:'DM Sans,sans-serif', flexShrink:0 }}>adicionado</span>
-                                    )}
-                                  </label>
-                                )
-                              })}
-                            </>
-                          )}
-
-                          {stdDocs.length === 0 && nonStd.length === 0 && (
-                            <div style={{ padding:'12px 0', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', textAlign:'center' }}>
-                              Nenhum documento associado a esta categoria
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </Card>
-                  )
-                })}
+            {flows.length === 0 ? (
+              <div style={{ padding:'24px 8px', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
+                Nenhum fluxo cadastrado.<br/>Crie o primeiro com "+ Novo".
               </div>
-            </>
-          )}
-        </>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {flows.map(f => (
+                  <div key={f.id} onClick={() => setFlowId(f.id)}
+                    style={{
+                      padding:'12px 14px', borderRadius:10, cursor:'pointer',
+                      border: f.id === flowId ? '1.5px solid #2E3192' : '1px solid #e2e4ef',
+                      background: f.id === flowId ? 'rgba(46,49,146,.05)' : '#fff',
+                      opacity: f.active ? 1 : .55,
+                    }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ ...font, fontSize:13, fontWeight:700, color:'#1a1c5e', flex:1 }}>{f.name}</span>
+                      {!f.active && (
+                        <span style={{ fontSize:9, fontWeight:700, color:'#9B9B9B', background:'#f1f2f8', padding:'2px 7px', borderRadius:20, ...titleF }}>inativo</span>
+                      )}
+                    </div>
+                    {f.description && (
+                      <div style={{ ...font, fontSize:11, color:'#9B9B9B', marginTop:3 }}>{f.description}</div>
+                    )}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
+                      <span style={{ ...font, fontSize:11, color:'#64748b', flex:1 }}>
+                        📄 {flowCounts[f.id] || 0} docs
+                      </span>
+                      <button onClick={e => { e.stopPropagation(); setModal({ flow: f }) }} title="Renomear / editar"
+                        style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:2 }}>✏️</button>
+                      <button onClick={e => { e.stopPropagation(); toggleActive(f) }} title={f.active ? 'Desativar' : 'Ativar'}
+                        style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:2 }}>{f.active ? '⏸' : '▶️'}</button>
+                      <button onClick={e => { e.stopPropagation(); deleteFlow(f) }} title="Excluir fluxo"
+                        style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:2 }}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Coluna direita: documentos do fluxo selecionado */}
+          <Card style={{ borderRadius:14, padding:20 }}>
+            {!currentFlow ? (
+              <div style={{ padding:'40px 0', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
+                Selecione ou crie um fluxo à esquerda
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ ...titleF, fontWeight:800, fontSize:15, color:'#1a1c5e' }}>{currentFlow.name}</div>
+                  <div style={{ ...font, fontSize:12, color:'#9B9B9B', marginTop:2 }}>
+                    {docs.length} documento{docs.length === 1 ? '' : 's'} no fluxo
+                    {' · '}<strong style={{ color:'#ef4444' }}>desclassificatório</strong> suspende o selo se ausente
+                  </div>
+                </div>
+
+                {/* Adicionar documento */}
+                <div style={{ position:'relative', marginBottom:16 }}>
+                  <input
+                    value={addSearch}
+                    onChange={e => setAddSearch(e.target.value)}
+                    placeholder="➕ Buscar documento do catálogo para adicionar..."
+                    style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px dashed #2E319266', ...font, fontSize:13, color:'#1a1c5e', outline:'none', boxSizing:'border-box', background:'rgba(46,49,146,.02)' }}
+                  />
+                  {addSearch.trim() && (
+                    <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:100, maxHeight:280, overflowY:'auto' }}>
+                      {addable.length === 0
+                        ? <div style={{ padding:'12px 14px', ...font, fontSize:13, color:'#9B9B9B' }}>Nenhum documento disponível para "{addSearch}"</div>
+                        : addable.map(d => (
+                          <button key={d.id} onClick={() => { addDoc(d); setAddSearch('') }} disabled={saving.has(d.id)}
+                            style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background:'#fff', cursor:'pointer', textAlign:'left', ...font, fontSize:13, color:'#1a1c5e', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            {d.name}
+                            <span style={{ fontSize:11, color:'#22c55e', fontWeight:700 }}>+ adicionar</span>
+                          </button>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+
+                {docsLoading ? (
+                  <div style={{ display:'flex', justifyContent:'center', padding:32 }}><Spinner size={28}/></div>
+                ) : sortedDocs.length === 0 ? (
+                  <div style={{ padding:'28px 0', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
+                    Fluxo vazio — busque documentos acima para montar a lista
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 130px 36px', gap:8, padding:'0 10px', alignItems:'center' }}>
+                      <span style={{ ...lbl, marginBottom:0 }}>Documento</span>
+                      <span style={{ ...lbl, marginBottom:0, textAlign:'center' }}>Obrigatório</span>
+                      <span style={{ ...lbl, marginBottom:0, textAlign:'center' }}>Desclassificatório</span>
+                      <span/>
+                    </div>
+                    {sortedDocs.map(row => {
+                      const busy = saving.has(row.catalog_id)
+                      return (
+                        <div key={row.id} style={{
+                          display:'grid', gridTemplateColumns:'1fr 90px 130px 36px', gap:8, alignItems:'center',
+                          padding:'9px 10px', borderRadius:8, border:'1px solid #eef0f6',
+                          background: row.blocking ? 'rgba(239,68,68,.03)' : '#fff', opacity: busy ? .6 : 1,
+                        }}>
+                          <span style={{ ...font, fontSize:13, color:'#1a1c5e' }}>
+                            {catalogMap[row.catalog_id]?.name || `Documento #${row.catalog_id}`}
+                          </span>
+                          <div style={{ textAlign:'center' }}>
+                            <input type="checkbox" checked={!!row.required} disabled={busy}
+                              onChange={() => toggleField(row, 'required')}
+                              style={{ width:15, height:15, accentColor:'#2E3192', cursor:'pointer' }}/>
+                          </div>
+                          <div style={{ textAlign:'center' }}>
+                            <input type="checkbox" checked={!!row.blocking} disabled={busy}
+                              onChange={() => toggleField(row, 'blocking')}
+                              style={{ width:15, height:15, accentColor:'#ef4444', cursor:'pointer' }}/>
+                          </div>
+                          <button onClick={() => removeDoc(row)} disabled={busy} title="Remover do fluxo"
+                            style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'#9B9B9B' }}>
+                            {busy ? <Spinner size={13}/> : '🗑'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+          </Card>
+        </div>
+      ))}
+
+      {modal && (
+        <FlowFormModal flow={modal.flow} busy={modalBusy}
+          onSave={saveFlow} onClose={() => { setModal(null); setError('') }}/>
       )}
     </div>
   )

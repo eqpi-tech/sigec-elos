@@ -165,9 +165,10 @@ export const supplierApi = {
       if (!reqRows.length) {
         const { data: flowRows } = await supabase
           .from('client_document_flows')
-          .select('catalog_id, documents_catalog(id, name)')
+          .select('catalog_id, documents_catalog(id, name), client_flows!inner(active)')
           .eq('client_id', seal.client_id)
           .eq('required', true)
+          .eq('client_flows.active', true)
         reqRows = (flowRows || [])
           .filter(r => r.documents_catalog)
           .map(r => ({ document_id: r.catalog_id, name: r.documents_catalog.name }))
@@ -403,9 +404,10 @@ export async function getRequiredTypesBySeal(supplierId) {
     if (!req.length && seal.client_id) {
       const { data: flowRows } = await supabase
         .from('client_document_flows')
-        .select('catalog_id')
+        .select('catalog_id, client_flows!inner(active)')
         .eq('client_id', seal.client_id)
         .eq('required', true)
+        .eq('client_flows.active', true)
       req = (flowRows || []).map(r => r.catalog_id)
     }
     // Fallback 2: nada específico → fluxo padrão
