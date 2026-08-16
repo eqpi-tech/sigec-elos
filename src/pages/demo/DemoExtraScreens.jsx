@@ -257,7 +257,7 @@ export function DemoPlano({ role }) {
 }
 
 // ── Cliente: Configurações (inclui portal white-label) ────────────────────
-export function DemoClientConfig() {
+export function DemoClientConfig({ navigate }) {
   const [copied, setCopied] = useState(false)
   const portalUrl = 'elos.eqpitech.com.br/portal/horizonte-mineracao/login'
   return (
@@ -286,6 +286,10 @@ export function DemoClientConfig() {
           {[['Logo','sua logomarca no topo'],['Cores','identidade visual própria'],['Mensagem','texto de boas-vindas']].map(([l,v]) => (
             <div key={l} style={{ fontFamily:D, fontSize:12, color:'#64748b' }}>🎨 <strong>{l}:</strong> {v}</div>
           ))}
+        </div>
+        <div style={{ display:'flex', gap:10, marginTop:16, flexWrap:'wrap' }}>
+          <Button variant="orange" size="sm" onClick={() => navigate('portal_landing')}>🌐 Ver Landing Page</Button>
+          <Button variant="neutral" size="sm" onClick={() => navigate('portal_login')}>🔐 Ver Login Personalizado</Button>
         </div>
       </Card>
 
@@ -424,6 +428,177 @@ export function DemoSupplierCertificado({ navigate }) {
               A validade está condicionada à manutenção da regularidade documental do fornecedor na plataforma SIGEC-ELOS.
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Portal white-label FAKE (Horizonte Mineração) ─────────────────────────
+// Landing page e login personalizados 100% fictícios, para a apresentação
+// comercial não depender de nenhum portal real. Renderizam em tela cheia
+// (sem a navbar do demo) com um botão discreto de retorno.
+const HZ = { sec:'#14532d', acc:'#f59e0b', name:'Horizonte Mineração S/A' }
+
+function BackPill({ navigate, to = 'configuracoes' }) {
+  return (
+    <button onClick={() => navigate(to)}
+      style={{ position:'fixed', top:14, left:14, zIndex:1000, background:'rgba(0,0,0,.55)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:20, padding:'7px 16px', cursor:'pointer', fontFamily:D, fontSize:12, backdropFilter:'blur(4px)' }}>
+      ← Voltar ao demo
+    </button>
+  )
+}
+
+function HzLogo({ size = 26, light = true }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+      <div style={{ width:size+12, height:size+12, borderRadius:10, background:HZ.acc, display:'flex', alignItems:'center', justifyContent:'center', fontSize:size-6 }}>⛰️</div>
+      <div>
+        <div style={{ fontFamily:M, fontWeight:900, fontSize:size-8, color: light ? '#fff' : HZ.sec, letterSpacing:1, lineHeight:1 }}>HORIZONTE</div>
+        <div style={{ fontFamily:M, fontWeight:700, fontSize:Math.max(8, size-18), color: light ? 'rgba(255,255,255,.65)' : '#9B9B9B', letterSpacing:3 }}>MINERAÇÃO</div>
+      </div>
+    </div>
+  )
+}
+
+export function DemoPortalLanding({ navigate }) {
+  return (
+    <div style={{ minHeight:'100vh', background:'#fff', fontFamily:D }}>
+      <BackPill navigate={navigate}/>
+
+      {/* Topbar */}
+      <div style={{ background:HZ.sec, padding:'14px 5vw', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:12 }}>
+        <HzLogo/>
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+          <button onClick={() => navigate('portal_login')}
+            style={{ background:'none', border:'1px solid rgba(255,255,255,.4)', color:'#fff', borderRadius:10, padding:'9px 20px', cursor:'pointer', fontFamily:M, fontWeight:700, fontSize:12 }}>
+            Já sou fornecedor — Entrar
+          </button>
+          <a href="#cadastro-demo" style={{ background:HZ.acc, color:'#1a1c1a', borderRadius:10, padding:'10px 22px', textDecoration:'none', fontFamily:M, fontWeight:800, fontSize:12 }}>
+            Quero ser Fornecedor
+          </a>
+        </div>
+      </div>
+
+      {/* Hero */}
+      <div style={{ background:`linear-gradient(150deg, ${HZ.sec} 0%, #1e6b3a 60%, ${HZ.acc}44 130%)`, padding:'72px 5vw 84px', textAlign:'center', position:'relative', overflow:'hidden' }}>
+        <div style={{ position:'absolute', inset:0, opacity:.08, fontSize:220, display:'flex', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>⛰️</div>
+        <div style={{ position:'relative' }}>
+          <div style={{ fontFamily:M, fontWeight:700, fontSize:12, letterSpacing:3, color:HZ.acc, textTransform:'uppercase', marginBottom:16 }}>Programa de Homologação de Fornecedores</div>
+          <h1 style={{ fontFamily:M, fontWeight:900, fontSize:'clamp(30px,4.5vw,52px)', color:'#fff', lineHeight:1.15, maxWidth:820, margin:'0 auto' }}>
+            Faça parte da cadeia de fornecedores da Horizonte Mineração
+          </h1>
+          <p style={{ fontSize:16, color:'rgba(255,255,255,.75)', maxWidth:600, margin:'18px auto 32px', lineHeight:1.7 }}>
+            Homologue sua empresa de forma 100% digital e torne-se apto a fornecer para uma das maiores mineradoras do país.
+          </p>
+          <a href="#cadastro-demo" style={{ background:HZ.acc, color:'#1a1c1a', borderRadius:12, padding:'16px 40px', textDecoration:'none', fontFamily:M, fontWeight:800, fontSize:16, boxShadow:`0 10px 30px ${HZ.acc}66`, display:'inline-block' }}>
+            Iniciar Cadastro →
+          </a>
+          <div style={{ display:'flex', gap:'6vw', justifyContent:'center', marginTop:52, flexWrap:'wrap' }}>
+            {[['128','fornecedores ativos'],['94','homologados'],['12 anos','de operação'],['5 dias','prazo médio de análise']].map(([v,l]) => (
+              <div key={l}>
+                <div style={{ fontFamily:M, fontWeight:900, fontSize:30, color:'#fff' }}>{v}</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,.6)' }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Benefícios */}
+      <div style={{ padding:'64px 5vw', maxWidth:1100, margin:'0 auto' }}>
+        <h2 style={{ fontFamily:M, fontWeight:800, fontSize:26, color:'#1a1c5e', textAlign:'center', marginBottom:40 }}>Por que se homologar?</h2>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:20 }}>
+          {[
+            ['📋','Processo 100% digital','Envie documentos pela plataforma e acompanhe a análise em tempo real.'],
+            ['🏅','Selo de Homologado','Certificado oficial que comprova sua conformidade para fornecer.'],
+            ['🔔','Renovação assistida','Alertas automáticos antes de qualquer documento vencer.'],
+            ['🤝','Acesso ao ecossistema ELOS','Sua empresa visível para outros compradores da plataforma.'],
+          ].map(([ic, t, d]) => (
+            <div key={t} style={{ border:'1px solid #e2e4ef', borderRadius:16, padding:'26px 24px' }}>
+              <div style={{ fontSize:30, marginBottom:12 }}>{ic}</div>
+              <div style={{ fontFamily:M, fontWeight:800, fontSize:15, color:'#1a1c5e', marginBottom:8 }}>{t}</div>
+              <div style={{ fontSize:13, color:'#64748b', lineHeight:1.6 }}>{d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cadastro CNPJ */}
+      <div id="cadastro-demo" style={{ background:'#f4f5f9', padding:'56px 5vw' }}>
+        <div style={{ maxWidth:520, margin:'0 auto', background:'#fff', borderRadius:20, padding:'36px 40px', boxShadow:'0 12px 40px rgba(0,0,0,.08)', textAlign:'center' }}>
+          <div style={{ fontFamily:M, fontWeight:800, fontSize:20, color:'#1a1c5e', marginBottom:6 }}>Quero ser Fornecedor</div>
+          <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:22 }}>Informe o CNPJ da sua empresa para começar</div>
+          <input placeholder="00.000.000/0000-00" style={{ ...INP, textAlign:'center', fontSize:16, padding:'13px', marginBottom:12 }}/>
+          <button onClick={() => alert('Demo: aqui o fornecedor inicia o cadastro já vinculado à Horizonte Mineração.')}
+            style={{ width:'100%', padding:'14px', borderRadius:12, border:'none', background:HZ.sec, color:'#fff', fontFamily:M, fontWeight:800, fontSize:15, cursor:'pointer' }}>
+            Iniciar Cadastro →
+          </button>
+          <div style={{ fontSize:11, color:'#9B9B9B', marginTop:12 }}>
+            Ao solicitar o cadastro, você será vinculado como fornecedor da Horizonte Mineração.
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ background:HZ.sec, padding:'26px 5vw', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:12 }}>
+        <HzLogo size={20}/>
+        <div style={{ fontSize:12, color:'rgba(255,255,255,.55)' }}>
+          Portal de Fornecedores · powered by <span style={{ color:HZ.acc, fontWeight:700 }}>SIGEC-ELOS</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function DemoPortalLogin({ navigate }) {
+  const inp = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:D, fontSize:14, color:'#1a1c5e', boxSizing:'border-box', outline:'none' }
+  const lbl = { display:'block', fontFamily:M, fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:'32px 16px', position:'relative', fontFamily:D,
+      background:`linear-gradient(150deg, ${HZ.sec} 0%, ${HZ.sec}ee 55%, ${HZ.acc}33 130%)` }}>
+      <BackPill navigate={navigate}/>
+
+      <div style={{ width:'100%', maxWidth:420, position:'relative' }}>
+        <div style={{ textAlign:'center', marginBottom:24, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+          <HzLogo size={30}/>
+          <div style={{ color:'rgba(255,255,255,.55)', fontSize:12, letterSpacing:.8 }}>
+            Portal de Fornecedores · powered by <span style={{ color:HZ.acc, fontWeight:700 }}>SIGEC-ELOS</span>
+          </div>
+        </div>
+
+        <div style={{ background:'#fff', borderRadius:20, padding:32, boxShadow:'0 24px 80px rgba(0,0,0,.35)' }}>
+          <h2 style={{ fontFamily:M, fontWeight:800, fontSize:20, color:'#1a1c5e', marginBottom:4 }}>Entrar na plataforma</h2>
+          <p style={{ fontSize:13, color:'#9B9B9B', marginBottom:22 }}>Acesso ao processo de homologação {HZ.name}</p>
+
+          <div style={{ marginBottom:14 }}>
+            <label style={lbl}>E-mail</label>
+            <input type="email" placeholder="seu@email.com" defaultValue="lucas@primatus.com.br" style={inp}/>
+          </div>
+          <div style={{ marginBottom:18 }}>
+            <label style={lbl}>Senha</label>
+            <input type="password" placeholder="••••••••" defaultValue="demo1234" style={inp}/>
+          </div>
+          <button onClick={() => alert('Demo: o fornecedor entra direto no ELOS, já no contexto da Horizonte Mineração.')}
+            style={{ width:'100%', padding:'13px', borderRadius:12, border:'none', cursor:'pointer', background:HZ.acc, color:'#1a1c1a', fontFamily:M, fontWeight:800, fontSize:15, boxShadow:`0 8px 24px ${HZ.acc}55` }}>
+            Entrar →
+          </button>
+          <div style={{ textAlign:'center', marginTop:12 }}>
+            <button onClick={() => alert('Demo: link de redefinição enviado por e-mail.')}
+              style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:13, fontFamily:D, textDecoration:'underline' }}>
+              Esqueci minha senha
+            </button>
+          </div>
+        </div>
+
+        <div style={{ textAlign:'center', marginTop:18, display:'flex', flexDirection:'column', gap:8 }}>
+          <span style={{ fontSize:13, color:'rgba(255,255,255,.65)' }}>
+            Ainda não é fornecedor?{' '}
+            <button onClick={() => navigate('portal_landing')}
+              style={{ background:'none', border:'none', cursor:'pointer', color:HZ.acc, fontWeight:700, fontSize:13, fontFamily:D, textDecoration:'underline' }}>
+              Solicite seu cadastro
+            </button>
+          </span>
         </div>
       </div>
     </div>

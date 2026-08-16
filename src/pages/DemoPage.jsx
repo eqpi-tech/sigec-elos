@@ -13,7 +13,7 @@ import DemoClientQuestionarios  from './demo/DemoClientQuestionarios.jsx'
 import {
   DemoSupplierQuestionario, DemoSupplierCategorias, DemoSupplierMeusDados,
   DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig,
-  DemoSupplierCertificado,
+  DemoSupplierCertificado, DemoPortalLanding, DemoPortalLogin,
 } from './demo/DemoExtraScreens.jsx'
 import { DEMO_PROCESSO }        from './demo/demoData.js'
 import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
@@ -197,7 +197,7 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
     if (screen === 'rfq')           return <DemoRFQ profile="CLIENT" navigate={navigate}/>
     if (screen === 'questionarios')  return <DemoClientQuestionarios navigate={navigate}/>
-    if (screen === 'configuracoes') return <DemoClientConfig/>
+    if (screen === 'configuracoes') return <DemoClientConfig navigate={navigate}/>
     if (screen === 'equipe')        return <DemoTeam role="CLIENT"/>
     if (screen === 'processo')      return <DemoBuyerPerfil navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
@@ -230,6 +230,10 @@ export default function DemoPage() {
   }
 
   if (!profile) return <ProfileSelector onSelect={handleSelect}/>
+
+  // Portal white-label fake: tela cheia, sem a navbar do demo (parece real)
+  if (profile === 'CLIENT' && screen === 'portal_landing') return <DemoPortalLanding navigate={setScreen}/>
+  if (profile === 'CLIENT' && screen === 'portal_login')   return <DemoPortalLogin   navigate={setScreen}/>
 
   return (
     <div style={{ minHeight:'100vh', background:'#f4f5f9' }}>
