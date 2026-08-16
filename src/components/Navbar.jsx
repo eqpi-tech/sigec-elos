@@ -2,17 +2,18 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
+import { hasModule } from '../lib/modules.js'
 
 const NAVS = {
   SUPPLIER: [
-    { path:'/fornecedor',               label:'Dashboard',   icon:'⊞' },
-    { path:'/fornecedor/documentos',    label:'Documentos',  icon:'📋' },
-    { path:'/fornecedor/questionario',  label:'Questionário',icon:'❓' },
-    { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐' },
-    { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦' },
-    { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢' },
-    { path:'/fornecedor/clientes',      label:'Clientes ELOS', icon:'🤝' },
-    { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥' },
+    { path:'/fornecedor',               label:'Dashboard',   icon:'⊞',  module:'dashboard' },
+    { path:'/fornecedor/documentos',    label:'Documentos',  icon:'📋', module:'documentos' },
+    { path:'/fornecedor/questionario',  label:'Questionário',icon:'❓', module:'questionario' },
+    { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐', module:'plano' },
+    { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦', module:'categorias' },
+    { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢', module:'meus_dados' },
+    { path:'/fornecedor/clientes',      label:'Clientes ELOS', icon:'🤝', module:'clientes_elos' },
+    { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥', module:'equipe' },
   ],
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
@@ -20,12 +21,13 @@ const NAVS = {
     { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐' },
   ],
   CLIENT: [
-    { path:'/cliente',                label:'Dashboard',       icon:'⊞' },
-    { path:'/cliente/fornecedores',   label:'Fornecedores',    icon:'🏭' },
-    { path:'/cliente/convites',       label:'Convites',        icon:'🤝' },
-    { path:'/cliente/rfq',            label:'Cotações (RFQ)',  icon:'💬' },
-    { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋' },
-    { path:'/cliente/configuracoes',  label:'Configurações',   icon:'⚙️' },
+    { path:'/cliente',                label:'Dashboard',       icon:'⊞',  module:'dashboard' },
+    { path:'/cliente/fornecedores',   label:'Fornecedores',    icon:'🏭', module:'fornecedores' },
+    { path:'/cliente/convites',       label:'Convites',        icon:'🤝', module:'convites' },
+    { path:'/cliente/rfq',            label:'Cotações (RFQ)',  icon:'💬', module:'rfq' },
+    { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋', module:'questionarios' },
+    { path:'/cliente/configuracoes',  label:'Configurações',   icon:'⚙️', module:'configuracoes' },
+    { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
   ],
   ADMIN: [
     { path:'/backoffice', label:'Início', icon:'⊞' },
@@ -55,6 +57,7 @@ const NAVS = {
       children: [
         { path:'/backoffice/usuarios',      label:'Lista de Usuários', icon:'👤', desc:'Bloquear, redefinir senha, editar' },
         { path:'/backoffice/criar-usuario', label:'Novo Usuário',      icon:'➕', desc:'Criar comprador, cliente ou analista' },
+        { path:'/backoffice/perfis',        label:'Perfis de Usuário', icon:'🎛️', desc:'Módulos por perfil para clientes e fornecedores' },
       ],
     },
   ],
@@ -74,11 +77,13 @@ export default function Navbar() {
   if (!user) return null
 
   // Perfil analyst (ADMIN): esconde grupos de gestão — usuários, clientes e comunicados
+  // Perfis de módulos (patch_038): SUPPLIER/CLIENT veem só os módulos do perfil
   const items = (NAVS[user.role] || []).filter(item => {
     if (user.role === 'ADMIN' && user.accessProfile === 'analyst') {
       if (item.key === 'usuarios' || item.key === 'clientes') return false
       if (item.path === '/backoffice/comunicados') return false
     }
+    if (item.module && !hasModule(user, item.module)) return false
     return true
   })
   const handleLogout = async () => { await logout(); navigate('/login') }

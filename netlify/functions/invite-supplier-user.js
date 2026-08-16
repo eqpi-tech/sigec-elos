@@ -49,7 +49,7 @@ exports.handler = async (event) => {
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Body inválido' }) } }
 
-  const { email, name, supplierId } = body
+  const { email, name, supplierId, accessProfileId } = body
   if (!email || !name || !supplierId) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'email, name e supplierId são obrigatórios' }) }
 
   // Verificar que quem chama é SUPPLIER master do mesmo fornecedor
@@ -105,6 +105,21 @@ exports.handler = async (event) => {
     newUserId = newUser.user.id
   }
 
+  // Perfil de módulos (patch_038): informado ou "Acesso Total" de SUPPLIER
+  let profileId = accessProfileId || null
+  try {
+    if (profileId) {
+      const { data: ap } = await supabaseAdmin.from('access_profiles')
+        .select('id').eq('id', profileId).eq('role_type', 'SUPPLIER').maybeSingle()
+      if (!ap) profileId = null
+    }
+    if (!profileId) {
+      const { data: total } = await supabaseAdmin.from('access_profiles')
+        .select('id').eq('role_type', 'SUPPLIER').eq('is_system', true).maybeSingle()
+      profileId = total?.id || null
+    }
+  } catch { profileId = null }
+
   // Inserir em user_roles como usuário adicional
   const { error: roleErr } = await supabaseAdmin.from('user_roles').insert({
     user_id:     newUserId,
@@ -113,6 +128,7 @@ exports.handler = async (event) => {
     is_primary:  false,
     is_active:   true,
     invited_by:  caller.id,
+    access_profile_id: profileId,
   })
   if (roleErr) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: roleErr.message }) }
 

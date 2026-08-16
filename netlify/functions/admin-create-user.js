@@ -57,9 +57,18 @@ exports.handler = async (event) => {
       id: newUser.user.id, role, name
     }, { onConflict: 'id' })
 
-    // 3. Insere em user_roles
+    // 3. Insere em user_roles (perfil de módulos "Acesso Total" p/ CLIENT — patch_038)
+    let moduleProfileId = null
+    if (role === 'CLIENT') {
+      try {
+        const { data: total } = await supabaseAdmin.from('access_profiles')
+          .select('id').eq('role_type', 'CLIENT').eq('is_system', true).maybeSingle()
+        moduleProfileId = total?.id || null
+      } catch { /* pré-patch_038 */ }
+    }
     await supabaseAdmin.from('user_roles').insert({
-      user_id: newUser.user.id, role, is_primary: true, access_profile: finalProfile
+      user_id: newUser.user.id, role, is_primary: true, access_profile: finalProfile,
+      access_profile_id: moduleProfileId,
     })
 
     // 4. Se BUYER, cria registro na tabela buyers

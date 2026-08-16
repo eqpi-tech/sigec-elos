@@ -236,9 +236,16 @@ exports.handler = async (event) => {
       .eq('id', user.id)
     if (profileError) console.error('Profile update error:', profileError)
 
-    // 3b. Registra SUPPLIER em user_roles
+    // 3b. Registra SUPPLIER em user_roles (perfil de módulos "Acesso Total" — patch_038)
+    let supplierProfileId = null
+    try {
+      const { data: total } = await supabaseAdmin.from('access_profiles')
+        .select('id').eq('role_type', 'SUPPLIER').eq('is_system', true).maybeSingle()
+      supplierProfileId = total?.id || null
+    } catch { /* pré-patch_038 */ }
     await supabaseAdmin.from('user_roles').upsert({
-      user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: true
+      user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: true,
+      access_profile_id: supplierProfileId,
     }, { onConflict: 'user_id,role' })
 
     // 3c. Todo fornecedor ganha também perfil BUYER para acessar o marketplace

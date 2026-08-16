@@ -22,6 +22,8 @@ export default function SupplierTeam() {
   const [loading,    setLoading]    = useState(true)
   const [inviteEmail,setInviteEmail]= useState('')
   const [inviteName, setInviteName] = useState('')
+  const [profiles,      setProfiles]      = useState([])   // perfis de módulos SUPPLIER (patch_038)
+  const [inviteProfile, setInviteProfile] = useState('')
   const [inviting,   setInviting]   = useState(false)
   const [error,      setError]      = useState('')
   const [success,    setSuccess]    = useState('')
@@ -33,6 +35,13 @@ export default function SupplierTeam() {
   useEffect(() => {
     if (!supplierId) return
     loadMembers()
+    supabase.from('access_profiles').select('id, name, is_system').eq('role_type', 'SUPPLIER')
+      .order('is_system', { ascending: false }).order('name')
+      .then(({ data }) => {
+        setProfiles(data || [])
+        const total = (data || []).find(p => p.is_system)
+        if (total) setInviteProfile(total.id)
+      })
   }, [supplierId])
 
   async function loadMembers() {
@@ -60,7 +69,7 @@ export default function SupplierTeam() {
       const res = await fetch('/.netlify/functions/invite-supplier-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), supplierId }),
+        body: JSON.stringify({ email: inviteEmail.trim(), name: inviteName.trim(), supplierId, accessProfileId: inviteProfile || undefined }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
@@ -160,6 +169,17 @@ export default function SupplierTeam() {
               E-mails pessoais (Gmail, Hotmail, etc.) não são aceitos.
             </div>
           </div>
+          {profiles.length > 0 && (
+            <div style={{ marginBottom:12 }}>
+              <span style={lbl}>Perfil de acesso</span>
+              <select value={inviteProfile} onChange={e => setInviteProfile(e.target.value)} style={inp}>
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                O usuário verá apenas os módulos do perfil escolhido.
+              </div>
+            </div>
+          )}
           {error   && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>}
           {success && <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#15803d', fontFamily:'DM Sans,sans-serif' }}>{success}</div>}
           <Button variant="primary" full disabled={inviting || !inviteEmail || !inviteName} onClick={handleInvite}>

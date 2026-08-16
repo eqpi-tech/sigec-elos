@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { can } from './lib/permissions.js'
+import { hasModule } from './lib/modules.js'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Navbar from './components/Navbar.jsx'
 import { Spinner } from './components/ui.jsx'
@@ -55,6 +56,8 @@ import ClientSupplierDiscover  from './pages/client/SupplierDiscover.jsx'
 import ClientQuestionnaires    from './pages/client/Questionnaires.jsx'
 import ClientSettings          from './pages/client/Settings.jsx'
 import ClientRFQ               from './pages/client/RFQ.jsx'
+import ClientTeam              from './pages/client/Team.jsx'
+import BackofficeUserProfiles  from './pages/backoffice/UserProfiles.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -75,14 +78,15 @@ function AppLayout({ children }) {
   )
 }
 
-function Protect({ roles, perm, children }) {
-  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm}>{children}</PermGate></AppLayout></ProtectedRoute>
+function Protect({ roles, perm, module, children }) {
+  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm} module={module}>{children}</PermGate></AppLayout></ProtectedRoute>
 }
 
-// Gate por permissão granular (access_profile, patch_030)
-function PermGate({ perm, children }) {
+// Gates: permissão granular (patch_030) + módulos do perfil (patch_038)
+function PermGate({ perm, module, children }) {
   const { user } = useAuth()
   if (perm && !can(user, perm)) return <Navigate to={ROLE_HOME[user?.role] || '/'} replace/>
+  if (module && !hasModule(user, module)) return <Navigate to={ROLE_HOME[user?.role] || '/'} replace/>
   return children
 }
 
@@ -101,17 +105,17 @@ function AppRoutes() {
 
       {/* Supplier */}
       <Route path="/fornecedor"             element={<Protect roles={['SUPPLIER']}><SupplierDashboard/></Protect>} />
-      <Route path="/fornecedor/documentos"  element={<Protect roles={['SUPPLIER']}><SupplierDocuments/></Protect>} />
-      <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']}><SupplierPlans/></Protect>} />
+      <Route path="/fornecedor/documentos"  element={<Protect roles={['SUPPLIER']} module="documentos"><SupplierDocuments/></Protect>} />
+      <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']} module="plano"><SupplierPlans/></Protect>} />
       <Route path="/fornecedor/plano-ativo"    element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
-      <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']}><SupplierCategories/></Protect>} />
-      <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']}><SupplierQuestionnaire/></Protect>} />
+      <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']} module="categorias"><SupplierCategories/></Protect>} />
+      <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']} module="questionario"><SupplierQuestionnaire/></Protect>} />
       <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />
       {/* Certificado: rota standalone (sem navbar) para impressão limpa */}
       <Route path="/fornecedor/certificado/:sealId" element={<ProtectedRoute allowedRoles={['SUPPLIER']}><SupplierCertificate/></ProtectedRoute>} />
-      <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']}><SupplierTeam/></Protect>} />
-      <Route path="/fornecedor/dados"            element={<Protect roles={['SUPPLIER']}><SupplierMyData/></Protect>} />
-      <Route path="/fornecedor/clientes"         element={<Protect roles={['SUPPLIER']}><SupplierClientsDirectory/></Protect>} />
+      <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']} module="equipe"><SupplierTeam/></Protect>} />
+      <Route path="/fornecedor/dados"            element={<Protect roles={['SUPPLIER']} module="meus_dados"><SupplierMyData/></Protect>} />
+      <Route path="/fornecedor/clientes"         element={<Protect roles={['SUPPLIER']} module="clientes_elos"><SupplierClientsDirectory/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
@@ -130,6 +134,7 @@ function AppRoutes() {
       <Route path="/backoffice/processos"        element={<Protect roles={['ADMIN']}><BackofficeProcessSearch/></Protect>} />
       <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
       <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUsers/></Protect>} />
+      <Route path="/backoffice/perfis"          element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUserProfiles/></Protect>} />
       <Route path="/backoffice/fluxo-documentos"    element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientDocumentFlows/></Protect>} />
       <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
       <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientSettings/></Protect>} />
@@ -139,13 +144,14 @@ function AppRoutes() {
 
       {/* Cliente (HOC) */}
       <Route path="/cliente"                                element={<Protect roles={['CLIENT']}><ClientDashboard/></Protect>} />
-      <Route path="/cliente/fornecedores"               element={<Protect roles={['CLIENT']}><ClientSuppliers/></Protect>} />
-      <Route path="/cliente/fornecedor/:supplierId"     element={<Protect roles={['CLIENT']}><ClientSupplierProcess/></Protect>} />
-      <Route path="/cliente/perfil-fornecedor/:id"      element={<Protect roles={['CLIENT']}><ClientSupplierDiscover/></Protect>} />
-      <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']}><ClientInvitations/></Protect>} />
-      <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']}><ClientQuestionnaires/></Protect>} />
-      <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']}><ClientSettings/></Protect>} />
-      <Route path="/cliente/rfq"                      element={<Protect roles={['CLIENT']}><ClientRFQ/></Protect>} />
+      <Route path="/cliente/fornecedores"               element={<Protect roles={['CLIENT']} module="fornecedores"><ClientSuppliers/></Protect>} />
+      <Route path="/cliente/fornecedor/:supplierId"     element={<Protect roles={['CLIENT']} module="fornecedores"><ClientSupplierProcess/></Protect>} />
+      <Route path="/cliente/perfil-fornecedor/:id"      element={<Protect roles={['CLIENT']} module="fornecedores"><ClientSupplierDiscover/></Protect>} />
+      <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']} module="convites"><ClientInvitations/></Protect>} />
+      <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']} module="questionarios"><ClientQuestionnaires/></Protect>} />
+      <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']} module="configuracoes"><ClientSettings/></Protect>} />
+      <Route path="/cliente/rfq"                      element={<Protect roles={['CLIENT']} module="rfq"><ClientRFQ/></Protect>} />
+      <Route path="/cliente/equipe"                   element={<Protect roles={['CLIENT']} module="equipe"><ClientTeam/></Protect>} />
 
       <Route path="*" element={<Navigate to="/" replace/>} />
     </Routes>

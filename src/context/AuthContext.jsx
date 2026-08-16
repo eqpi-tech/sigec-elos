@@ -20,6 +20,9 @@ export function AuthProvider({ children }) {
       isPrimary:           profile.is_primary !== false,
       // Perfil de acesso granular (patch_030): full | analyst | readonly
       accessProfile:       profile.access_profile || 'full',
+      // Perfil de módulos (patch_038): null = acesso total (fallback)
+      modules:             profile.modules ?? null,
+      moduleProfileName:   profile.module_profile_name ?? null,
       // Plano do comprador (free → padrão, pro → assinante)
       buyerPlan:           profile.buyer_plan || 'free',
       buyerPlanExpiresAt:  profile.buyer_plan_expires_at || null,
@@ -40,6 +43,8 @@ export function AuthProvider({ children }) {
       buyer_id:    opt.buyer_id,    buyerId:    opt.buyer_id,
       client_id:   opt.client_id,   clientId:   opt.client_id,
       accessProfile: opt.access_profile || 'full',
+      modules:           opt._modules ?? null,
+      moduleProfileName: opt._profile_name ?? null,
     }))
     localStorage.setItem('elos_active_role', role)
   }
@@ -59,10 +64,26 @@ export function AuthProvider({ children }) {
       } catch {}
 
       if (roles && roles.length > 0) {
-        setRoleOptions(roles)
+        // Perfis de módulos (patch_038) de todas as roles — para o switchRole
+        // trocar de módulos sem novo fetch
+        const profileIds = [...new Set(roles.map(r => r.access_profile_id).filter(Boolean))]
+        let profileMap = {}
+        if (profileIds.length) {
+          try {
+            const { data: aps } = await supabase
+              .from('access_profiles').select('id, name, modules').in('id', profileIds)
+            ;(aps || []).forEach(p => { profileMap[p.id] = p })
+          } catch { /* tabela ausente pré-patch_038 — segue com acesso total */ }
+        }
+        const withModules = roles.map(r => ({
+          ...r,
+          _modules:      r.access_profile_id ? (profileMap[r.access_profile_id]?.modules ?? null) : null,
+          _profile_name: r.access_profile_id ? (profileMap[r.access_profile_id]?.name ?? null) : null,
+        }))
+        setRoleOptions(withModules)
         // Decide qual role ativar: salva preferência no localStorage
         const saved = localStorage.getItem('elos_active_role')
-        const preferred = roles.find(r => r.role === saved) || roles.find(r => r.is_primary) || roles[0]
+        const preferred = withModules.find(r => r.role === saved) || withModules.find(r => r.is_primary) || withModules[0]
         setActiveRole(preferred.role)
         // Busca profile base
         const { data: profile } = await supabase
@@ -75,6 +96,8 @@ export function AuthProvider({ children }) {
           client_id:             preferred.client_id,
           is_primary:            preferred.is_primary,
           access_profile:        preferred.access_profile,
+          modules:               preferred._modules,
+          module_profile_name:   preferred._profile_name,
           buyer_plan:            preferred.buyer_plan,
           buyer_plan_expires_at: preferred.buyer_plan_expires_at,
         }))
