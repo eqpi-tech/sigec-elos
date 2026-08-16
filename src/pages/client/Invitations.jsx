@@ -16,7 +16,7 @@ function formatCnpj(v) {
 }
 
 const EMPTY_FORM = {
-  razao_social:'', cnpj:'', email:'', telefone:'', contato:'',
+  objetivo:'', razao_social:'', cnpj:'', email:'', telefone:'', contato:'',
   tipo_fornecedor:'servico', subsidiado: false, escopo:'',
 }
 
@@ -77,14 +77,15 @@ export default function ClientInvitations() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       await invitationsApi.send({
+        objetivo:        form.objetivo || 'homologacao',
         razao_social:    form.razao_social,
         cnpj:            form.cnpj.replace(/\D/g,''),
         email:           form.email,
         telefone:        form.telefone,
         contato:         form.contato,
         tipo_fornecedor: form.tipo_fornecedor,
-        subsidiado:      form.subsidiado,
-        escopo:          form.escopo,
+        subsidiado:      form.objetivo === 'contato' ? false : form.subsidiado,
+        escopo:          form.objetivo === 'contato' ? '' : form.escopo,
         client_id:       user.clientId,
         invited_by_role: 'CLIENT',
       }, session?.access_token)
@@ -198,6 +199,30 @@ export default function ClientInvitations() {
             </div>
 
             <form onSubmit={handleSend}>
+              {/* Objetivo do convite — mesmo padrão do perfil comprador */}
+              <div style={{ fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:10 }}>
+                Objetivo do convite *
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+                {[
+                  { val:'contato',     label:'📞 Fazer contato com o Fornecedor',                    desc:'Apresentação e exploração de oportunidades — sem iniciar processo de homologação.' },
+                  { val:'homologacao', label:'🏅 Enviar convite para solicitar homologação',          desc:'O fornecedor será convidado a completar cadastro e documentação na plataforma.' },
+                ].map(opt => (
+                  <label key={opt.val}
+                    style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'12px 14px', borderRadius:10,
+                      border:`1.5px solid ${form.objetivo===opt.val?'#2E3192':'#e2e4ef'}`,
+                      background:form.objetivo===opt.val?'rgba(46,49,146,.04)':'#fff', cursor:'pointer', transition:'all .15s' }}
+                    onClick={() => setForm(f=>({ ...f, objetivo: opt.val }))}>
+                    <input type="radio" checked={form.objetivo===opt.val} onChange={() => setForm(f=>({ ...f, objetivo: opt.val }))}
+                      style={{ marginTop:2, accentColor:'#2E3192' }}/>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{opt.label}</div>
+                      <div style={{ fontSize:12, color:'#9B9B9B', marginTop:2 }}>{opt.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
               <div style={row2}>
                 <div>
                   <label style={lbl}>Razão Social *</label>
@@ -225,41 +250,44 @@ export default function ClientInvitations() {
                 <input value={form.contato} onChange={e=>setForm(f=>({...f, contato:e.target.value}))} placeholder="João da Silva — Gerente de Compras" style={inp} />
               </div>
 
-              <div style={row2}>
-                <div>
-                  <label style={lbl}>Tipo de fornecimento *</label>
-                  <select value={form.tipo_fornecedor} onChange={e=>setForm(f=>({...f, tipo_fornecedor:e.target.value}))} style={inp}>
-                    <option value="servico">Serviço</option>
-                    <option value="produto">Produto</option>
-                    <option value="ambos">Produto e Serviço</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={lbl}>Subsidiado?</label>
-                  <div style={{ display:'flex', gap:16, paddingTop:12 }}>
-                    {[true, false].map(v => (
-                      <label key={String(v)} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e' }}>
-                        <input type="radio" name="subsidiado" checked={form.subsidiado === v} onChange={() => setForm(f=>({...f, subsidiado:v}))} style={{ accentColor:'#2E3192' }} />
-                        {v ? 'Sim' : 'Não'}
-                      </label>
-                    ))}
+              {/* Campos exclusivos de homologação */}
+              {form.objetivo === 'homologacao' && (<>
+                <div style={row2}>
+                  <div>
+                    <label style={lbl}>Tipo de fornecimento *</label>
+                    <select value={form.tipo_fornecedor} onChange={e=>setForm(f=>({...f, tipo_fornecedor:e.target.value}))} style={inp}>
+                      <option value="servico">Serviço</option>
+                      <option value="produto">Produto</option>
+                      <option value="ambos">Produto e Serviço</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Subsidiado?</label>
+                    <div style={{ display:'flex', gap:16, paddingTop:12 }}>
+                      {[true, false].map(v => (
+                        <label key={String(v)} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e' }}>
+                          <input type="radio" name="subsidiado" checked={form.subsidiado === v} onChange={() => setForm(f=>({...f, subsidiado:v}))} style={{ accentColor:'#2E3192' }} />
+                          {v ? 'Sim' : 'Não'}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {form.subsidiado && (
-                <div style={{ marginBottom:14, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:10, padding:'10px 14px' }}>
-                  <div style={{ fontSize:12, color:'#15803d', fontFamily:'DM Sans,sans-serif' }}>
-                    O custo da homologação será assumido pela sua empresa. A EQPI receberá o pagamento mensalmente.
+                {form.subsidiado && (
+                  <div style={{ marginBottom:14, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:10, padding:'10px 14px' }}>
+                    <div style={{ fontSize:12, color:'#15803d', fontFamily:'DM Sans,sans-serif' }}>
+                      O custo da homologação será assumido pela sua empresa. A EQPI receberá o pagamento mensalmente.
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div style={{ marginBottom:20 }}>
-                <label style={lbl}>Escopo do fornecimento</label>
-                <textarea value={form.escopo} onChange={e=>setForm(f=>({...f, escopo:e.target.value}))} placeholder="Descreva os produtos ou serviços que este fornecedor irá entregar..." rows={3}
-                  style={{ ...inp, resize:'vertical', minHeight:80 }} />
-              </div>
+                <div style={{ marginBottom:20 }}>
+                  <label style={lbl}>Escopo do fornecimento</label>
+                  <textarea value={form.escopo} onChange={e=>setForm(f=>({...f, escopo:e.target.value}))} placeholder="Descreva os produtos ou serviços que este fornecedor irá entregar..." rows={3}
+                    style={{ ...inp, resize:'vertical', minHeight:80 }} />
+                </div>
+              </>)}
 
               {error && (
                 <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#dc2626' }}>
@@ -269,8 +297,8 @@ export default function ClientInvitations() {
 
               <div style={{ display:'flex', gap:10 }}>
                 <Button type="button" variant="ghost" full onClick={() => { setShowModal(false); setError('') }}>Cancelar</Button>
-                <Button type="submit" variant="primary" full disabled={sending}>
-                  {sending ? '⏳ Enviando...' : '📨 Enviar Convite'}
+                <Button type="submit" variant="primary" full disabled={sending || !form.objetivo}>
+                  {sending ? '⏳ Enviando...' : form.objetivo === 'contato' ? '📞 Enviar Contato' : '📨 Enviar Convite'}
                 </Button>
               </div>
             </form>

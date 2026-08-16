@@ -417,8 +417,7 @@ function InterestsReport({ clientId, navigate }) {
                 </div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
                   <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/perfil-fornecedor/${row.supplier_id}`)}>👁 Ficha</Button>
-                  <Button variant="primary" size="sm" onClick={() => invite(row)}>📨 Convidar</Button>
-                  <Button variant="orange"  size="sm" onClick={() => navigate('/cliente/rfq')}>📝 RFQ</Button>
+                  <Button variant="primary" size="sm" onClick={() => invite(row)}>📨 Enviar Convite</Button>
                   <Button variant="danger"  size="sm" disabled={acting === row.id} onClick={() => dismiss(row)}>
                     {acting === row.id ? '⏳' : '🗑'}
                   </Button>

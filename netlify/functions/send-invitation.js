@@ -83,7 +83,7 @@ async function handleBuyerInvitation(body, h) {
 
 // ── MODO B: Client/Admin convida empresa ainda não cadastrada ──────────────
 async function handleClientInvitation(body, callerUser, h) {
-  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT' } = body
+  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT', objetivo = 'homologacao' } = body
   if (!razao_social || !email) return { statusCode:400, headers:h, body: JSON.stringify({ error:'razao_social e email são obrigatórios' }) }
 
   // Perfil readonly (patch_030) não envia convites
@@ -118,6 +118,7 @@ async function handleClientInvitation(body, callerUser, h) {
     supplier_email:        email,
     status:                'SENT',
     invited_by_role,
+    objetivo,
   }
   if (client_id)        invitePayload.client_id       = client_id
   if (buyer_id)         invitePayload.buyer_id         = buyer_id
@@ -130,12 +131,12 @@ async function handleClientInvitation(body, callerUser, h) {
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 
-  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id })
+  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo })
 
   return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, message:`Convite enviado para ${email}` }) }
 }
 
-async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id }) {
+async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo = 'homologacao' }) {
   if (!process.env.RESEND_API_KEY) return
   const frontendUrl = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
 
@@ -161,23 +162,35 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
     } catch (e) { console.warn('[send-invitation] landing page lookup failed:', e.message) }
   }
   const tipoLabel = tipo_fornecedor === 'produto' ? 'Produto' : tipo_fornecedor === 'ambos' ? 'Produto & Serviço' : 'Serviço'
+  const isContato = objetivo === 'contato'
+
+  const headerSubtitle = isContato ? 'Contato Comercial' : 'Convite de Homologação'
+  const bodyIntro = isContato
+    ? `<p>A empresa <strong>${senderName}</strong> conheceu o perfil da sua empresa e gostaria de <strong>entrar em contato</strong> para explorar oportunidades de parceria.</p>
+       <p>Respondendo a este e-mail você fala diretamente com o responsável. Se preferir, conheça também a plataforma SIGEC-ELOS, onde ${senderName} gerencia seus fornecedores.</p>`
+    : `<p>A empresa <strong>${senderName}</strong> convidou você para participar do processo de homologação de fornecedores através do <strong>SIGEC-ELOS</strong> da EQPI Tech.</p>`
+  const ctaLabel = isContato ? 'Conhecer a Plataforma →' : 'Iniciar Cadastro →'
+  const subject = isContato
+    ? `${senderName} quer entrar em contato com sua empresa — SIGEC-ELOS`
+    : `${senderName} convidou você para homologação no SIGEC-ELOS`
+
   const emailHtml = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
       <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
         <h1 style="color:#fff;margin:0;font-size:24px">SIGEC-ELOS</h1>
-        <p style="color:#C7D2FE;margin:8px 0 0">Convite de Homologação</p>
+        <p style="color:#C7D2FE;margin:8px 0 0">${headerSubtitle}</p>
       </div>
       <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
         <p>Olá, <strong>${razao_social}</strong>!</p>
-        <p>A empresa <strong>${senderName}</strong> convidou você para participar do processo de homologação de fornecedores através do <strong>SIGEC-ELOS</strong> da EQPI Tech.</p>
-        ${escopo ? `<div style="background:#f8fafc;border-left:4px solid #2E3192;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0"><strong>Escopo:</strong> ${escopo}</div>` : ''}
+        ${bodyIntro}
+        ${!isContato && escopo ? `<div style="background:#f8fafc;border-left:4px solid #2E3192;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0"><strong>Escopo:</strong> ${escopo}</div>` : ''}
         <table style="width:100%;border-collapse:collapse;margin:20px 0">
-          ${tipo_fornecedor ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%">Tipo</td><td style="padding:8px;border:1px solid #e2e8f0">${tipoLabel}</td></tr>` : ''}
-          ${subsidiado ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold">Custeio</td><td style="padding:8px;border:1px solid #e2e8f0">🟢 Subsidiado por ${senderName}</td></tr>` : ''}
-          ${contato ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold">Contato</td><td style="padding:8px;border:1px solid #e2e8f0">${contato}</td></tr>` : ''}
+          ${!isContato && tipo_fornecedor ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%">Tipo</td><td style="padding:8px;border:1px solid #e2e8f0">${tipoLabel}</td></tr>` : ''}
+          ${!isContato && subsidiado ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold">Custeio</td><td style="padding:8px;border:1px solid #e2e8f0">🟢 Subsidiado por ${senderName}</td></tr>` : ''}
+          ${contato ? `<tr><td style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%">Contato</td><td style="padding:8px;border:1px solid #e2e8f0">${contato}</td></tr>` : ''}
         </table>
         <a href="${cadastroLink}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px">
-          Iniciar Cadastro →
+          ${ctaLabel}
         </a>
         <p style="color:#9B9B9B;font-size:12px;margin-top:24px">Em caso de dúvidas: <a href="mailto:comercial@eqpitech.com.br" style="color:#2E3192">comercial@eqpitech.com.br</a></p>
       </div>
@@ -190,7 +203,7 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
-      body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[email], subject:`${senderName} convidou você para homologação no SIGEC-ELOS`, html: emailHtml })
+      body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[email], reply_to: undefined, subject, html: emailHtml })
     })
   } catch (e) { console.warn('[send-invitation] e-mail falhou (convite salvo):', e.message) }
 }
