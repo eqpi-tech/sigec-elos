@@ -267,6 +267,9 @@ export default function SupplierProfile() {
         qualificacao_socio: p.cargo || (p.tipo === 'pj' ? 'Pessoa Jurídica' : 'Sócio'),
         participacao: p.participacao,
         nacionalidade: p.nacionalidade,
+        cpf: p.cpf,
+        telefone: p.telefone,
+        telefone_mascarado: p.telefone_mascarado,
       }))
     : (cd.qsa || [])
 
@@ -533,8 +536,14 @@ export default function SupplierProfile() {
                     </div>
                     <div style={{fontSize:11,color:'#9B9B9B',lineHeight:1.7}}>
                       {socio.data_entrada_sociedade && `Sócio desde ${fmtDate(socio.data_entrada_sociedade)}`}
-                      {socio.cnpj_cpf_do_socio && ` · CPF: ${socio.cnpj_cpf_do_socio}`}
+                      {(socio.cpf || socio.cnpj_cpf_do_socio) && ` · CPF: ${socio.cpf || socio.cnpj_cpf_do_socio}`}
+                      {socio.telefone && ` · 📞 ${socio.telefone}`}
                     </div>
+                    {socio.telefone_mascarado && (
+                      <div style={{fontSize:11,color:'#F47E2F',fontFamily:'DM Sans,sans-serif',marginTop:4,fontWeight:600}}>
+                        🔒 Assine um plano para ver os contatos completos dos sócios
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

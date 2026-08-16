@@ -135,6 +135,8 @@ export default function ClientSupplierDiscover() {
         qualificacao_socio: p.cargo || (p.tipo === 'pj' ? 'Pessoa Jurídica' : 'Sócio'),
         participacao: p.participacao,
         nacionalidade: p.nacionalidade,
+        cpf: p.cpf,
+        telefone: p.telefone,
       }))
     : (cd.qsa || [])
 
@@ -352,7 +354,8 @@ export default function ClientSupplierDiscover() {
                     </div>
                     <div style={{ fontSize:11, color:'#9B9B9B', marginTop:6 }}>
                       {socio.data_entrada_sociedade && `Sócio desde ${fmtDate(socio.data_entrada_sociedade)}`}
-                      {socio.cnpj_cpf_do_socio && ` · CPF: ${socio.cnpj_cpf_do_socio}`}
+                      {(socio.cpf || socio.cnpj_cpf_do_socio) && ` · CPF: ${socio.cpf || socio.cnpj_cpf_do_socio}`}
+                      {socio.telefone && ` · 📞 ${socio.telefone}`}
                     </div>
                   </div>
                 </div>

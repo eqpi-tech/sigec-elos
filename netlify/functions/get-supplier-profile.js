@@ -20,6 +20,19 @@ exports.handler = async (event) => {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
+  // Papel do chamador decide a abertura dos contatos dos sócios:
+  // CLIENT/ADMIN veem telefone aberto; BUYER vê mascarado até existir
+  // assinatura de comprador; CPF é SEMPRE mascarado (LGPD).
+  let openContacts = false
+  try {
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (user) {
+      const { data: roles } = await supabase
+        .from('user_roles').select('role').eq('user_id', user.id)
+      openContacts = (roles || []).some(r => r.role === 'CLIENT' || r.role === 'ADMIN')
+    }
+  } catch { /* segue mascarado */ }
+
   try {
     const [supplierRes, sealsRes, docsRes, cnpjRes, catRes, partnersRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*').eq('id', id).single(),
@@ -34,9 +47,9 @@ exports.handler = async (event) => {
       supabase.from('supplier_categories')
         .select('category_id, categories(id, name, parent_id)')
         .eq('supplier_id', id),
-      // Quadro societário (migrado do HOC ou registrado pelo backoffice)
+      // Quadro societário (migrado do HOC / backoffice / legado EQPI)
       supabase.from('supplier_partners')
-        .select('nome, tipo, cargo, nacionalidade, participacao')
+        .select('nome, tipo, cargo, nacionalidade, participacao, cpf_cnpj, telefone')
         .eq('supplier_id', id)
         .order('nome'),
     ])
@@ -57,6 +70,27 @@ exports.handler = async (event) => {
     const docs    = docsRes.value?.data || []
     const cats    = catRes.value?.data  || []
 
+    // CPF sempre mascarado (LGPD); CNPJ de sócio PJ parcialmente
+    const maskDoc = (v) => {
+      const d = String(v || '').replace(/\D/g, '')
+      if (d.length === 11) return `***.${d.slice(3,6)}.${d.slice(6,9)}-**`
+      if (d.length === 14) return `**.***.${d.slice(5,8)}/****-**`
+      return null
+    }
+    // Telefone mascarado: mantém DDD e 2 últimos dígitos
+    const maskFone = (v) => {
+      const d = String(v || '').replace(/\D/g, '')
+      if (d.length < 10) return null
+      return `(${d.slice(0,2)}) ${'*'.repeat(d.length-6)}-**${d.slice(-2)}`
+    }
+    const partners = (partnersRes.value?.data || []).map(p => ({
+      nome: p.nome, tipo: p.tipo, cargo: p.cargo,
+      nacionalidade: p.nacionalidade, participacao: p.participacao,
+      cpf: maskDoc(p.cpf_cnpj),
+      telefone: p.telefone ? (openContacts ? p.telefone : maskFone(p.telefone)) : null,
+      telefone_mascarado: !!p.telefone && !openContacts,
+    }))
+
     return {
       statusCode: 200,
       headers: h,
@@ -65,7 +99,7 @@ exports.handler = async (event) => {
         seals:             sealsRes.value?.data || [],
         documents:         docs,
         supplier_categories: cats,
-        partners:          partnersRes.value?.data || [],
+        partners,
         hocEnderecos,
         planType:          null,
         cnpjData:          cnpjRec?.cnpj_data         || null,
