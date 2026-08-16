@@ -195,18 +195,31 @@ export default function BackofficeLandingPages() {
         <SectionTitle style={{ marginBottom:10 }}>Selecionar Cliente</SectionTitle>
         <ClientSearchCombo clients={clients} value={selClient} onChange={setSelClient}/>
         {selClient && lp && (
-          <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color:'#9B9B9B' }}>URL:</span>
-            <a href={`/portal/${lp.slug}`} target="_blank" rel="noreferrer"
-              style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
-              /portal/{lp.slug} ↗
-            </a>
-            <span style={{ fontSize:11, fontWeight:700,
-              color: lp.is_active ? '#22c55e' : '#9B9B9B',
-              background: lp.is_active ? 'rgba(34,197,94,.1)' : '#f0f0f0',
-              padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
-              {lp.is_active ? 'Ativo' : 'Inativo'}
-            </span>
+          <div style={{ marginTop:10, display:'flex', flexDirection:'column', gap:6 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color:'#9B9B9B', minWidth:110 }}>Portal:</span>
+              <a href={`/portal/${lp.slug}`} target="_blank" rel="noreferrer"
+                style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
+                /portal/{lp.slug} ↗
+              </a>
+              <span style={{ fontSize:11, fontWeight:700,
+                color: lp.is_active ? '#22c55e' : '#9B9B9B',
+                background: lp.is_active ? 'rgba(34,197,94,.1)' : '#f0f0f0',
+                padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
+                {lp.is_active ? 'Ativo' : 'Inativo'}
+              </span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color:'#9B9B9B', minWidth:110 }}>Login do cliente:</span>
+              <a href={`/portal/${lp.slug}/login`} target="_blank" rel="noreferrer"
+                style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
+                /portal/{lp.slug}/login ↗
+              </a>
+              <button onClick={() => { navigator.clipboard.writeText(`https://elos.eqpitech.com.br/portal/${lp.slug}/login`); alert('Link copiado!') }}
+                style={{ fontSize:11, padding:'2px 10px', borderRadius:20, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', color:'#64748b', fontFamily:'DM Sans,sans-serif' }}>
+                📋 Copiar
+              </button>
+            </div>
           </div>
         )}
       </Card>

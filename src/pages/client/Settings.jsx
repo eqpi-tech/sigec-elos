@@ -186,6 +186,34 @@ export default function ClientSettings() {
           )}
         </div>
 
+        {/* Link do login personalizado — para o cliente distribuir aos fornecedores */}
+        {lp && (
+          <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.12)', borderRadius:12,
+            padding:'14px 18px', marginBottom:20, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+            <div style={{ flex:1, minWidth:240 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e', marginBottom:2 }}>
+                🔑 Login personalizado da sua empresa
+              </div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b' }}>
+                Compartilhe este endereço com seus fornecedores — a tela de login usa a sua marca e cores.
+              </div>
+              <code style={{ display:'inline-block', marginTop:6, fontSize:12, background:'#fff', border:'1px solid #e2e4ef',
+                borderRadius:8, padding:'5px 10px', color:'#2E3192', fontFamily:'ui-monospace,monospace' }}>
+                elos.eqpitech.com.br/portal/{lp.slug}/login
+              </code>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" size="sm"
+                onClick={() => { navigator.clipboard.writeText(`https://elos.eqpitech.com.br/portal/${lp.slug}/login`) }}>
+                📋 Copiar link
+              </Button>
+              <a href={`/portal/${lp.slug}/login`} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>
+                <Button variant="primary" size="sm">Abrir ↗</Button>
+              </a>
+            </div>
+          </div>
+        )}
+
         {lpLoading ? (
           <div style={{ display:'flex', justifyContent:'center', padding:'30px' }}><Spinner size={36}/></div>
         ) : lpForm && (
