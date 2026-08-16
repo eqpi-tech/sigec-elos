@@ -187,6 +187,35 @@ exports.handler = async (event) => {
           .from('seals').select('status').eq('supplier_id', supplierRes.value.data.id)
           .eq('status', 'ACTIVE').maybeSingle()
         dbInfo.hasActiveSeal = !!sealData
+
+        // REGRA: a consulta ATUALIZA o banco com os dados frescos da Receita —
+        // o sistema sempre LÊ do banco. Só grava campos que a BrasilAPI trouxe.
+        if (cnpjData?.razao_social) {
+          const fresh = {
+            razao_social:   cnpjData.razao_social,
+            nome_fantasia:  cnpjData.nome_fantasia || undefined,
+            cnae_main:      cnpjData.cnae_fiscal ? String(cnpjData.cnae_fiscal) : undefined,
+            state:          cnpjData.uf || undefined,
+            city:           cnpjData.municipio || undefined,
+            capital_social: cnpjData.capital_social ?? undefined,
+            simples_nacional: cnpjData.opcao_pelo_simples ?? undefined,
+            data_abertura:  cnpjData.data_inicio_atividade || undefined,
+            phone:          cnpjData.ddd_telefone_1 || undefined,
+            address: {
+              logradouro: [cnpjData.descricao_tipo_de_logradouro, cnpjData.logradouro].filter(Boolean).join(' ') || undefined,
+              numero:     cnpjData.numero || undefined,
+              bairro:     cnpjData.bairro || undefined,
+              municipio:  cnpjData.municipio || undefined,
+              uf:         cnpjData.uf || undefined,
+              cep:        cnpjData.cep || undefined,
+            },
+          }
+          Object.keys(fresh).forEach(k => fresh[k] === undefined && delete fresh[k])
+          await supabaseAdmin.from('suppliers').update(fresh)
+            .eq('id', supplierRes.value.data.id)
+            .then(() => console.log(`[cnpj-lookup] suppliers atualizado com dados frescos da Receita`))
+            .catch(e => console.warn('[cnpj-lookup] update supplier:', e.message))
+        }
       }
     } catch (dbErr) {
       console.warn('[cnpj-lookup] DB check não crítico:', dbErr.message)

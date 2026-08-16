@@ -239,23 +239,41 @@ export default function SupplierProfile() {
   const categories = (data.supplier_categories||[]).map(sc=>sc.categories?.name).filter(Boolean)
   const allSancoes = [...(sd.ceis||[]), ...(sd.cnep||[])]
 
-  // Dados com fallback suppliers → cnpj_data
-  const razaoSocial  = ss(cd.razao_social  || data.razao_social)
-  const nomeFantasia = ss(cd.nome_fantasia)
-  const cnpjStr      = cd.cnpj || data.cnpj || ''
-  const municipio    = ss(cd.municipio || data.city)
-  const uf           = ss(cd.uf        || data.state)
-  const situacao     = ss(cd.descricao_situacao_cadastral)   // "ATIVA"
+  // REGRA: o BANCO é a fonte de leitura (suppliers + tabelas estruturadas).
+  // cnpj_data (BrasilAPI) é apenas complemento para campos sem coluna própria —
+  // a consulta grava no banco, o sistema lê do banco.
+  const hocEnd       = (data.hocEnderecos || [])[0] || {}
+  const dbAddr       = data.address || {}
+  const razaoSocial  = ss(data.razao_social  || cd.razao_social)
+  const nomeFantasia = ss(data.nome_fantasia || cd.nome_fantasia)
+  const cnpjStr      = data.cnpj || cd.cnpj || ''
+  const municipio    = ss(data.city  || dbAddr.municipio || hocEnd.municipio || cd.municipio)
+  const uf           = ss(data.state || dbAddr.uf        || hocEnd.uf        || cd.uf)
+  const situacao     = ss(cd.descricao_situacao_cadastral)   // "ATIVA" (só via consulta)
   const isAtiva      = situacao === 'ATIVA'
   const tipoLogr     = ss(cd.descricao_tipo_de_logradouro,'')
-  const endereco     = [tipoLogr, cd.logradouro, cd.numero, cd.complemento].filter(Boolean).join(' ') || '—'
+  const endereco     = [dbAddr.logradouro, dbAddr.numero].filter(Boolean).join(', ')
+                       || [hocEnd.logradouro, hocEnd.numero, hocEnd.complemento].filter(Boolean).join(' ')
+                       || [tipoLogr, cd.logradouro, cd.numero, cd.complemento].filter(Boolean).join(' ')
+                       || '—'
 
   const hasCnpjData = Object.keys(cd).length > 0
+
+  // Sócios: supplier_partners (migrados do HOC / backoffice) tem prioridade;
+  // fallback QSA da BrasilAPI
+  const socios = (data.partners || []).length > 0
+    ? data.partners.map(p => ({
+        nome_socio: p.nome,
+        qualificacao_socio: p.cargo || (p.tipo === 'pj' ? 'Pessoa Jurídica' : 'Sócio'),
+        participacao: p.participacao,
+        nacionalidade: p.nacionalidade,
+      }))
+    : (cd.qsa || [])
 
   const TABS = [
     {id:'dados',      label:'📋 Cadastral'},
     {id:'atividade',  label:'🏭 Atividade'},
-    {id:'socios',     label:`👥 Sócios (${(cd.qsa||[]).length})`},
+    {id:'socios',     label:`👥 Sócios (${socios.length})`},
     {id:'documentos', label:`📄 Docs (${validDocs.length}/${allDocs.length})`},
     {id:'categorias', label:'🏷️ Categorias'},
     ...(allSancoes.length > 0 ? [{id:'sancoes', label:`⚠️ Sanções (${allSancoes.length})`}] : []),
@@ -377,12 +395,14 @@ export default function SupplierProfile() {
             <Row label="Razão Social"           value={razaoSocial} />
             <Row label="Nome Fantasia"          value={nomeFantasia} />
             <Row label="CNPJ"                   value={cnpjStr ? fmtCNPJ(cnpjStr) : '—'} mono />
-            <Row label="Situação Cadastral"     value={`${situacao} (desde ${fmtDate(cd.data_situacao_cadastral)})`} />
-            <Row label="Tipo"                   value={ss(cd.descricao_identificador_matriz_filial)} />
-            <Row label="Data de Abertura"       value={fmtDate(cd.data_inicio_atividade)} />
+            {hasCnpjData && <Row label="Situação Cadastral" value={`${situacao} (desde ${fmtDate(cd.data_situacao_cadastral)})`} />}
+            <Row label="Tipo"                   value={ss(data.tipo_empresa || cd.descricao_identificador_matriz_filial)} />
+            <Row label="Data de Abertura"       value={fmtDate(data.data_abertura || cd.data_inicio_atividade)} />
+            {ss(data.inscricao_estadual)  !== '—' && <Row label="Inscrição Estadual"  value={ss(data.inscricao_estadual)}  mono />}
+            {ss(data.inscricao_municipal) !== '—' && <Row label="Inscrição Municipal" value={ss(data.inscricao_municipal)} mono />}
             <Row label="Natureza Jurídica"      value={ss(cd.natureza_juridica)} />
             <Row label="Porte"                  value={ss(cd.porte)} />
-            <Row label="Capital Social"         value={fmtMoeda(cd.capital_social)} highlight />
+            <Row label="Capital Social"         value={fmtMoeda(data.capital_social ?? cd.capital_social)} highlight />
             <Row label="Opção pelo Simples"
               value={cd.opcao_pelo_simples
                 ? `Sim (desde ${fmtDate(cd.data_opcao_pelo_simples)})${cd.data_exclusao_do_simples ? ` · Excluído em ${fmtDate(cd.data_exclusao_do_simples)}` : ''}`
@@ -393,15 +413,28 @@ export default function SupplierProfile() {
 
           <Section icon="📍" title="Endereço">
             <Row label="Logradouro"             value={endereco} />
-            <Row label="Bairro"                 value={ss(cd.bairro)} />
+            <Row label="Bairro"                 value={ss(hocEnd.bairro || cd.bairro)} />
             <Row label="Município / UF"         value={`${municipio} / ${uf}`} />
-            <Row label="CEP"                    value={fmtCEP(cd.cep)} mono />
+            <Row label="CEP"                    value={fmtCEP(dbAddr.cep || hocEnd.cep || cd.cep)} mono />
           </Section>
 
+          {(data.hocEnderecos || []).length > 1 && (
+            <Section icon="🗺️" title={`Outros Endereços (${data.hocEnderecos.length - 1})`}>
+              {data.hocEnderecos.slice(1).map((e, i) => (
+                <div key={i} style={{padding:'10px 14px',background:'#f8f9ff',borderRadius:10,marginBottom:6,fontSize:13,color:'#1a1c5e'}}>
+                  {[e.logradouro, e.numero, e.complemento].filter(Boolean).join(', ')}
+                  <div style={{fontSize:11,color:'#9B9B9B',marginTop:2}}>
+                    {[e.bairro, e.municipio && `${e.municipio}/${e.uf}`, e.cep && fmtCEP(e.cep)].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </Section>
+          )}
+
           <Section icon="📞" title="Contato">
-            <Row label="Telefone"               value={cd.ddd_telefone_1 ? fmtPhone(cd.ddd_telefone_1) : '—'} />
+            <Row label="Telefone"               value={data.phone || (cd.ddd_telefone_1 ? fmtPhone(cd.ddd_telefone_1) : '—')} />
             {cd.ddd_telefone_2 && <Row label="Telefone 2" value={fmtPhone(cd.ddd_telefone_2)} />}
-            <Row label="E-mail"                 value={ss(cd.email)} />
+            <Row label="E-mail"                 value={ss(data.email || cd.email)} />
           </Section>
 
           {(cd.regime_tributario||[]).length > 0 && (
@@ -419,57 +452,70 @@ export default function SupplierProfile() {
         </Card>
       )}
 
-      {/* ── TAB: ATIVIDADE ───────────────────────────────────────────────── */}
+      {/* ── TAB: ATIVIDADE ── banco primeiro, cnpj_data como complemento ── */}
       {tab==='atividade' && (
         <Card style={{borderRadius:14,padding:mobile?'16px':'24px 28px'}}>
-          {!hasCnpjData ? (
-            <div style={{color:'#9B9B9B',textAlign:'center',padding:32,fontSize:14}}>
-              Dados de atividade econômica não disponíveis para este fornecedor.
-            </div>
-          ) : (
-            <>
-              <Section icon="🏭" title="CNAE Principal">
-                <div style={{padding:'14px 16px',background:'rgba(46,49,146,.04)',borderRadius:10,border:'1px solid rgba(46,49,146,.1)'}}>
-                  <div style={{fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:14,color:'#2E3192'}}>
-                    {cd.cnae_fiscal}
-                  </div>
-                  <div style={{fontSize:13,color:'#1a1c5e',marginTop:4}}>{ss(cd.cnae_fiscal_descricao)}</div>
-                </div>
-              </Section>
+          {(() => {
+            const cnaePrincipal = data.cnae_main || cd.cnae_fiscal
+            // Secundários: cnpj_data traz código+descrição; cnae_list do banco traz códigos
+            const secundarios = (cd.cnaes_secundarios || []).length > 0
+              ? cd.cnaes_secundarios
+              : (data.cnae_list || []).filter(c => c !== String(cnaePrincipal)).map(c => ({ codigo: c, descricao: null }))
 
-              {(cd.cnaes_secundarios||[]).length > 0 && (
-                <Section icon="📋" title={`CNAEs Secundários (${cd.cnaes_secundarios.length})`}>
-                  {cd.cnaes_secundarios.map((c,i) => (
-                    <div key={i} style={{display:'flex',gap:14,padding:'8px 10px',borderRadius:8,background:'#f8f9ff',marginBottom:6,alignItems:'flex-start'}}>
-                      <span style={{fontWeight:700,color:'#2E3192',flexShrink:0,fontFamily:'Montserrat,sans-serif',fontSize:12,minWidth:64}}>{c.codigo}</span>
-                      <span style={{fontSize:13,color:'#555'}}>{ss(c.descricao)}</span>
+            if (!cnaePrincipal && !secundarios.length && !(data.services||[]).length) return (
+              <div style={{color:'#9B9B9B',textAlign:'center',padding:32,fontSize:14}}>
+                Dados de atividade econômica não disponíveis para este fornecedor.
+              </div>
+            )
+            return (
+              <>
+                {cnaePrincipal && (
+                  <Section icon="🏭" title="CNAE Principal">
+                    <div style={{padding:'14px 16px',background:'rgba(46,49,146,.04)',borderRadius:10,border:'1px solid rgba(46,49,146,.1)'}}>
+                      <div style={{fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:14,color:'#2E3192'}}>
+                        {cnaePrincipal}
+                      </div>
+                      {ss(cd.cnae_fiscal_descricao) !== '—' && (
+                        <div style={{fontSize:13,color:'#1a1c5e',marginTop:4}}>{ss(cd.cnae_fiscal_descricao)}</div>
+                      )}
                     </div>
-                  ))}
-                </Section>
-              )}
+                  </Section>
+                )}
 
-              {(data.services||[]).length > 0 && (
-                <Section icon="🔧" title="Serviços Declarados">
-                  <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                    {data.services.map((sv,i)=><Chip key={i} label={sv} color="#15803d"/>)}
-                  </div>
-                </Section>
-              )}
-            </>
-          )}
+                {secundarios.length > 0 && (
+                  <Section icon="📋" title={`CNAEs Secundários (${secundarios.length})`}>
+                    {secundarios.map((c,i) => (
+                      <div key={i} style={{display:'flex',gap:14,padding:'8px 10px',borderRadius:8,background:'#f8f9ff',marginBottom:6,alignItems:'flex-start'}}>
+                        <span style={{fontWeight:700,color:'#2E3192',flexShrink:0,fontFamily:'Montserrat,sans-serif',fontSize:12,minWidth:64}}>{c.codigo}</span>
+                        {c.descricao && <span style={{fontSize:13,color:'#555'}}>{ss(c.descricao)}</span>}
+                      </div>
+                    ))}
+                  </Section>
+                )}
+
+                {(data.services||[]).length > 0 && (
+                  <Section icon="🔧" title="Serviços Declarados">
+                    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                      {data.services.map((sv,i)=><Chip key={i} label={sv} color="#15803d"/>)}
+                    </div>
+                  </Section>
+                )}
+              </>
+            )
+          })()}
         </Card>
       )}
 
       {/* ── TAB: SÓCIOS ─────────────────────────────────────────────────── */}
       {tab==='socios' && (
         <Card style={{borderRadius:14,padding:mobile?'16px':'24px 28px'}}>
-          {(cd.qsa||[]).length === 0 ? (
+          {socios.length === 0 ? (
             <div style={{color:'#9B9B9B',textAlign:'center',padding:32,fontSize:14}}>
               {hasCnpjData ? 'Quadro societário não informado.' : 'Dados não disponíveis.'}
             </div>
           ) : (
-            <Section icon="👥" title={`Quadro Societário — ${cd.qsa.length} ${cd.qsa.length===1?'membro':'membros'}`}>
-              {cd.qsa.map((socio,i) => (
+            <Section icon="👥" title={`Quadro Societário — ${socios.length} ${socios.length===1?'membro':'membros'}`}>
+              {socios.map((socio,i) => (
                 <div key={i} style={{padding:'14px 16px',background:'#f8f9ff',borderRadius:12,marginBottom:10,display:'flex',gap:14,alignItems:'flex-start'}}>
                   <div style={{width:42,height:42,borderRadius:10,background:'rgba(46,49,146,.1)',display:'flex',alignItems:'center',
                     justifyContent:'center',fontWeight:800,fontSize:16,color:'#2E3192',flexShrink:0}}>
@@ -481,6 +527,8 @@ export default function SupplierProfile() {
                     </div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:6}}>
                       <Chip label={ss(socio.qualificacao_socio)} small />
+                      {socio.participacao != null && <Chip label={`${socio.participacao}%`} color="#F47E2F" small />}
+                      {socio.nacionalidade && <Chip label={socio.nacionalidade} color="#9B9B9B" small />}
                       {socio.faixa_etaria && <Chip label={socio.faixa_etaria} color="#9B9B9B" small />}
                     </div>
                     <div style={{fontSize:11,color:'#9B9B9B',lineHeight:1.7}}>

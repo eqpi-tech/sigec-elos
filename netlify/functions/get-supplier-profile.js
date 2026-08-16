@@ -21,7 +21,7 @@ exports.handler = async (event) => {
   )
 
   try {
-    const [supplierRes, sealsRes, docsRes, cnpjRes, catRes] = await Promise.allSettled([
+    const [supplierRes, sealsRes, docsRes, cnpjRes, catRes, partnersRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*').eq('id', id).single(),
       supabase.from('seals').select('*').eq('supplier_id', id).order('issued_at', { ascending: false }),
       supabase.from('documents').select('id,status,label,type,expires_at,source').eq('supplier_id', id),
@@ -34,10 +34,23 @@ exports.handler = async (event) => {
       supabase.from('supplier_categories')
         .select('category_id, categories(id, name, parent_id)')
         .eq('supplier_id', id),
+      // Quadro societário (migrado do HOC ou registrado pelo backoffice)
+      supabase.from('supplier_partners')
+        .select('nome, tipo, cargo, nacionalidade, participacao')
+        .eq('supplier_id', id)
+        .order('nome'),
     ])
 
-    const supplier = supplierRes.value?.data
-    if (!supplier) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Fornecedor não encontrado' }) }
+    const supplierRaw = supplierRes.value?.data
+    if (!supplierRaw) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Fornecedor não encontrado' }) }
+
+    // hoc_extra contém dados sensíveis (histórico bancário) — NÃO vaza para o
+    // perfil público; expõe apenas os endereços
+    const { hoc_extra, ...supplier } = supplierRaw
+    const hocEnderecos = (hoc_extra?.enderecos || []).map(e => ({
+      logradouro: e.nome_logradouro, numero: e.numero_endereco, complemento: e.complemento,
+      bairro: e.bairro, municipio: e.municipio, uf: e.uf, cep: e.cep, tipo: e.tipo,
+    }))
 
     const cnpjRec = cnpjRes.value?.data
     const seal    = sealsRes.value?.data?.[0]
@@ -52,6 +65,8 @@ exports.handler = async (event) => {
         seals:             sealsRes.value?.data || [],
         documents:         docs,
         supplier_categories: cats,
+        partners:          partnersRes.value?.data || [],
+        hocEnderecos,
         planType:          null,
         cnpjData:          cnpjRec?.cnpj_data         || null,
         sanctionsData:     cnpjRec?.sanctions_data    || null,
