@@ -1,0 +1,98 @@
+2026-08-12 18:00:58,308 INFO *** MODO DRY-RUN — nenhuma gravação no Supabase ***
+2026-08-12 18:00:59,495 INFO package: mysql.connector.plugins
+2026-08-12 18:00:59,496 INFO plugin_name: mysql_native_password
+2026-08-12 18:00:59,496 INFO AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-08-12 18:01:00,845 INFO MySQL conectado (sessão READ ONLY).
+2026-08-12 18:01:00,885 INFO Supabase conectado.
+2026-08-12 18:01:00,885 INFO === FASE clients ===
+2026-08-12 18:01:01,341 INFO HOC clientes: 25
+2026-08-12 18:01:01,342 INFO === FASE client_categories ===
+2026-08-12 18:01:03,047 INFO HOC categorias: 10185
+2026-08-12 18:01:03,434 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/clients?select=id%2Choc_id "HTTP/2 200 OK"
+2026-08-12 18:01:03,454 INFO [DRY] 10185 categorias seriam gravadas
+2026-08-12 18:01:03,457 INFO === FASE catalog_and_links ===
+2026-08-12 18:01:04,010 INFO HOC documentos (tipos): 535
+2026-08-12 18:01:04,981 INFO HOC vínculos categoria×documento: 106479
+2026-08-12 18:01:05,018 INFO [DRY] 106479 vínculos seriam gravados
+2026-08-12 18:01:05,033 INFO === FASE suppliers ===
+2026-08-12 18:01:07,912 INFO HOC fornecedores: 55805
+2026-08-12 18:01:07,912 INFO   Progresso: 0/55805
+2026-08-12 18:01:07,917 INFO   Progresso: 2000/55805
+2026-08-12 18:01:07,922 INFO   Progresso: 4000/55805
+2026-08-12 18:01:07,926 INFO   Progresso: 6000/55805
+2026-08-12 18:01:07,931 INFO   Progresso: 8000/55805
+2026-08-12 18:01:07,936 INFO   Progresso: 10000/55805
+2026-08-12 18:01:07,940 INFO   Progresso: 12000/55805
+2026-08-12 18:01:07,945 INFO   Progresso: 14000/55805
+2026-08-12 18:01:07,950 INFO   Progresso: 16000/55805
+2026-08-12 18:01:07,955 INFO   Progresso: 18000/55805
+2026-08-12 18:01:07,959 INFO   Progresso: 20000/55805
+2026-08-12 18:01:07,964 INFO   Progresso: 22000/55805
+2026-08-12 18:01:07,969 INFO   Progresso: 24000/55805
+2026-08-12 18:01:07,973 INFO   Progresso: 26000/55805
+2026-08-12 18:01:07,978 INFO   Progresso: 28000/55805
+2026-08-12 18:01:07,982 INFO   Progresso: 30000/55805
+2026-08-12 18:01:07,987 INFO   Progresso: 32000/55805
+2026-08-12 18:01:07,991 INFO   Progresso: 34000/55805
+2026-08-12 18:01:07,995 INFO   Progresso: 36000/55805
+2026-08-12 18:01:08,003 INFO   Progresso: 38000/55805
+2026-08-12 18:01:08,007 INFO   Progresso: 40000/55805
+2026-08-12 18:01:08,012 INFO   Progresso: 42000/55805
+2026-08-12 18:01:08,017 INFO   Progresso: 44000/55805
+2026-08-12 18:01:08,021 INFO   Progresso: 46000/55805
+2026-08-12 18:01:08,026 INFO   Progresso: 48000/55805
+2026-08-12 18:01:08,030 INFO   Progresso: 50000/55805
+2026-08-12 18:01:08,035 INFO   Progresso: 52000/55805
+2026-08-12 18:01:08,040 INFO   Progresso: 54000/55805
+2026-08-12 18:01:08,051 INFO === FASE supplier_categories (meta: 0 descartes) ===
+2026-08-12 18:01:09,451 INFO HOC vínculos fornecedor×categoria: 87639
+2026-08-12 18:01:10,836 INFO   [DRY] 10185 categorias simuladas a partir do HOC
+2026-08-12 18:01:10,933 INFO   87639 vínculos válidos para gravar
+2026-08-12 18:01:10,947 INFO === FASE seals_plans ===
+2026-08-12 18:01:11,463 INFO Pares únicos fornecedor×cliente: 3277
+2026-08-12 18:01:12,727 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/clients?select=id%2Choc_id "HTTP/2 200 OK"
+2026-08-12 18:01:12,728 INFO Carregando resultados de processo_categorias em lote...
+2026-08-12 18:01:15,287 INFO   Resultados carregados para 3258 processos
+2026-08-12 18:01:15,287 INFO   Progresso seals: 0/3277
+2026-08-12 18:01:15,290 INFO   Progresso seals: 500/3277
+2026-08-12 18:01:15,293 INFO   Progresso seals: 1000/3277
+2026-08-12 18:01:15,296 INFO   Progresso seals: 1500/3277
+2026-08-12 18:01:15,299 INFO   Progresso seals: 2000/3277
+2026-08-12 18:01:15,302 INFO   Progresso seals: 2500/3277
+2026-08-12 18:01:15,304 INFO   Progresso seals: 3000/3277
+2026-08-12 18:01:15,306 INFO Planos para 762 fornecedores ACTIVE...
+2026-08-12 18:01:15,313 INFO === FASE documents (arquivos permanecem no S3 do HOC) ===
+2026-08-12 18:01:17,286 INFO Documentos únicos a migrar: 19917 (de 25562 envios)
+2026-08-12 18:01:18,211 INFO === FASE reconcile ===
+
+FASE                              HOC   GRAVADOS  DESCARTES
+------------------------------------------------------------
+clients                            25         25          0
+client_categories              10,185     10,185          0
+catalog                           535        535          0
+category_links                106,479    106,479          0
+suppliers                      55,805     55,804          1
+supplier_categories            87,639     87,639          0
+seals                           3,277      3,277          0
+plans                             762        762          0
+documents                      19,917     19,917          0
+------------------------------------------------------------
+2026-08-12 18:01:18,425 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/clients?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS clients                                  26
+2026-08-12 18:01:18,601 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/categories?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS categories (total)                    1,711
+2026-08-12 18:01:18,788 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS suppliers                            55,611
+2026-08-12 18:01:18,963 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/supplier_categories?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS supplier_categories                  31,498
+2026-08-12 18:01:19,143 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/category_documents?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS category_documents                   17,307
+2026-08-12 18:01:19,325 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/seals?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS seals                                 3,774
+2026-08-12 18:01:19,483 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/plans?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS plans                                   790
+2026-08-12 18:01:19,646 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS documents                            19,206
+2026-08-12 18:01:19,648 INFO Relatório completo (com todos os descartes): migration_v2_report_20260812_180119.json
+2026-08-12 18:01:19,649 WARNING ⚠ 1 descartes no total — revisar o relatório antes de aceitar a migração
+2026-08-12 18:01:19,649 INFO === MIGRAÇÃO V2 CONCLUÍDA ===

@@ -1,0 +1,136 @@
+2026-08-12 21:27:28,383 INFO package: mysql.connector.plugins
+2026-08-12 21:27:28,384 INFO plugin_name: mysql_native_password
+2026-08-12 21:27:28,385 INFO AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-08-12 21:27:29,771 INFO MySQL conectado (sessão READ ONLY).
+2026-08-12 21:27:29,790 INFO Supabase conectado.
+2026-08-12 21:27:29,790 INFO === FASE documents (arquivos permanecem no S3 do HOC) ===
+2026-08-12 21:27:32,975 INFO Documentos únicos a migrar: 19925 (de 25570 envios)
+2026-08-12 21:27:34,700 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=0&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:34,957 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=1000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:35,204 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=2000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:35,436 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=3000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:35,667 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=4000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:35,886 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=5000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:36,130 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=6000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:36,406 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=7000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:36,705 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=8000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:37,010 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=9000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:37,368 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=10000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:37,661 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=11000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:37,978 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=12000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:38,284 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=13000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:38,584 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=14000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:38,815 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=15000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:39,039 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=16000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:39,275 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=17000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:39,505 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=18000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:39,731 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=19000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:39,956 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=20000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:40,192 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=21000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:40,426 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=22000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:40,653 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=23000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:40,885 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=24000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:41,125 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=25000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:41,353 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=26000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:41,581 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=27000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:41,825 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=28000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:42,058 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=29000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:42,275 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=30000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:42,502 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=31000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:42,732 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=32000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:42,962 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=33000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:43,222 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=34000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:43,451 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=35000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:43,749 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=36000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:43,984 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=37000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:44,212 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=38000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:44,444 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=39000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:44,658 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=40000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:44,877 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=41000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:45,101 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=42000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:45,319 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=43000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:45,538 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=44000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:45,766 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=45000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:45,997 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=46000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:46,216 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=47000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:46,451 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=48000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:46,685 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=49000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:46,922 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=50000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:47,171 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=51000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:47,380 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=52000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:47,596 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=53000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:47,837 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=54000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:48,090 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id%2Ccnpj&offset=55000&limit=1000 "HTTP/2 200 OK"
+2026-08-12 21:27:49,010 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:49,704 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:50,162 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:50,726 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:51,235 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:51,793 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:52,653 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:53,183 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:53,846 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:54,461 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:54,598 INFO   Progresso docs: 5000/19925
+2026-08-12 21:27:54,952 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:55,453 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:55,948 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:56,455 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:56,973 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:57,350 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:57,873 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:58,393 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:58,914 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:59,339 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:27:59,484 INFO   Progresso docs: 10000/19925
+2026-08-12 21:27:59,853 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:00,326 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:00,794 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:01,268 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:01,732 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:02,087 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:02,459 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:02,819 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:03,204 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:03,569 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:03,615 INFO   Progresso docs: 15000/19925
+2026-08-12 21:28:03,930 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:04,330 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:04,668 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:05,016 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:05,543 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:06,142 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:06,649 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:07,025 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:07,423 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:07,799 INFO HTTP Request: POST https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?on_conflict=supplier_id%2Ctype&columns=%22status%22%2C%22source%22%2C%22expires_at%22%2C%22public_url%22%2C%22supplier_id%22%2C%22hoc_s3_url%22%2C%22type%22%2C%22label%22%2C%22hoc_arquivo_id%22 "HTTP/2 201 Created"
+2026-08-12 21:28:07,848 INFO === MIGRAÇÃO V2 CONCLUÍDA ===
+2026-08-12 21:28:09,698 INFO package: mysql.connector.plugins
+2026-08-12 21:28:09,698 INFO plugin_name: mysql_native_password
+2026-08-12 21:28:09,699 INFO AUTHENTICATION_PLUGIN_CLASS: MySQLNativePasswordAuthPlugin
+2026-08-12 21:28:11,094 INFO MySQL conectado (sessão READ ONLY).
+2026-08-12 21:28:11,189 INFO Supabase conectado.
+2026-08-12 21:28:11,190 INFO === FASE reconcile ===
+
+FASE                              HOC   GRAVADOS  DESCARTES
+------------------------------------------------------------
+------------------------------------------------------------
+2026-08-12 21:28:11,524 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/clients?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS clients                                  26
+2026-08-12 21:28:11,716 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/categories?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS categories (total)                   11,896
+2026-08-12 21:28:12,042 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/suppliers?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS suppliers                            55,784
+2026-08-12 21:28:12,671 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/supplier_categories?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS supplier_categories                  87,639
+2026-08-12 21:28:13,004 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/category_documents?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS category_documents                  123,786
+2026-08-12 21:28:13,178 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/seals?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS seals                                 3,278
+2026-08-12 21:28:13,341 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/plans?select=id&limit=1 "HTTP/2 200 OK"
+  ELOS plans                                     0
+2026-08-12 21:28:13,510 INFO HTTP Request: GET https://omodfayxxucuxnozsxak.supabase.co/rest/v1/documents?select=id&limit=1 "HTTP/2 206 Partial Content"
+  ELOS documents                            19,925
+2026-08-12 21:28:13,511 INFO Relatório completo (com todos os descartes): migration_v2_report_20260812_212813.json
+2026-08-12 21:28:13,511 INFO ✅ 0 descartes — meta atingida
+2026-08-12 21:28:13,511 INFO === MIGRAÇÃO V2 CONCLUÍDA ===

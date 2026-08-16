@@ -1,0 +1,62 @@
+{
+  "clients": {
+    "hoc_count": 25,
+    "written": 25,
+    "skipped": 0,
+    "discards": []
+  },
+  "client_categories": {
+    "hoc_count": 10185,
+    "written": 10185,
+    "skipped": 0,
+    "discards": []
+  },
+  "catalog": {
+    "hoc_count": 535,
+    "written": 535,
+    "skipped": 0,
+    "discards": []
+  },
+  "category_links": {
+    "hoc_count": 106479,
+    "written": 106479,
+    "skipped": 0,
+    "discards": []
+  },
+  "suppliers": {
+    "hoc_count": 55804,
+    "written": 55803,
+    "skipped": 1,
+    "discards": [
+      {
+        "phase": "suppliers",
+        "hoc_id": 6217,
+        "motivo": "sem CNPJ"
+      }
+    ]
+  },
+  "supplier_categories": {
+    "hoc_count": 87639,
+    "written": 6800,
+    "skipped": 0,
+    "discards": []
+  },
+  "seals": {
+    "hoc_count": 3277,
+    "written": 3277,
+    "skipped": 0,
+    "discards": []
+  },
+  "plans": {
+    "hoc_count": 1,
+    "written": 1,
+    "skipped": 0,
+    "discards": []
+  },
+  "documents": {
+    "hoc_count": 19917,
+    "written": 19917,
+    "skipped": 0,
+    "discards": []
+  }
+}
