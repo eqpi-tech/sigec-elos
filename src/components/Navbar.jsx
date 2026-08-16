@@ -11,6 +11,7 @@ const NAVS = {
     { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐' },
     { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦' },
     { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢' },
+    { path:'/fornecedor/clientes',      label:'Clientes ELOS', icon:'🤝' },
     { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥' },
   ],
   BUYER: [

@@ -200,7 +200,8 @@ export default function BuyerMarketplace() {
   const goToProfile = (id) => {
     // salva estado atual antes de navegar
     saveState(results, total)
-    navigate(`/comprador/fornecedor/${id}`)
+    // A mesma tela serve BUYER e CLIENT — a ficha de destino muda por papel
+    navigate(user?.role === 'CLIENT' ? `/cliente/perfil-fornecedor/${id}` : `/comprador/fornecedor/${id}`)
   }
 
   const resetFilters = () => {
@@ -370,7 +371,9 @@ export default function BuyerMarketplace() {
                     {' — '}
                     <button onClick={() => setSelectedMap({})} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
                   </span>
-                  {user?.buyerPlan === 'pro'
+                  {user?.role === 'CLIENT'
+                    ? <Button variant="orange" onClick={() => navigate('/cliente/rfq')}>📝 Criar Cotação (RFQ)</Button>
+                    : user?.buyerPlan === 'pro'
                     ? <Button variant="orange" onClick={() => setShowRfq(true)}>📝 Cotação ({selectedList.length})</Button>
                     : <button onClick={() => navigate('/comprador/plano')}
                         style={{ padding:'8px 14px', borderRadius:10, border:'2px dashed #F47E2F', background:'rgba(244,126,47,.06)', color:'#F47E2F', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, cursor:'pointer' }}>

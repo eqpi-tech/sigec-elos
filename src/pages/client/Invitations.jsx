@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { invitationsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -29,6 +30,17 @@ export default function ClientInvitations() {
   const [search, setSearch]       = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]           = useState(EMPTY_FORM)
+  const location = useLocation()
+
+  // Pré-preenchimento vindo de outras telas (ex.: relatório de interessados)
+  useEffect(() => {
+    const prefill = location.state?.prefill
+    if (prefill) {
+      setForm(f => ({ ...f, ...prefill }))
+      setShowModal(true)
+      window.history.replaceState({}, '')  // evita reabrir ao navegar de volta
+    }
+  }, [location.state])
 
   const load = useCallback(async () => {
     if (!user?.clientId) return

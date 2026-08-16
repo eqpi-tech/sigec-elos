@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
+import BuyerMarketplace from '../buyer/Marketplace.jsx'
 
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
 const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B' }
@@ -207,6 +209,7 @@ export default function ClientSuppliers() {
         {[
           ['meus', `Meus Fornecedores (${mySuppliers.length})`],
           ['todos', 'Todos os Fornecedores'],
+          ['interessados', '💡 Interessados'],
         ].map(([tab, label]) => (
           <button key={tab} onClick={() => handleTabChange(tab)}
             style={{ padding:'10px 22px', background:'none', border:'none', borderBottom:`3px solid ${activeTab===tab?'#2E3192':'transparent'}`, color:activeTab===tab?'#2E3192':'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, cursor:'pointer', marginBottom:-2 }}>
@@ -303,107 +306,16 @@ export default function ClientSuppliers() {
         </>
       )}
 
-      {/* ── Tab: Todos os Fornecedores (mini-wizard) ── */}
+      {/* ── Tab: Todos os Fornecedores — busca completa (mesma tela do comprador) ── */}
       {activeTab === 'todos' && (
-        <>
-          {/* Wizard card — visível nos passos 1-3 */}
-          {vStage < 4 && (
-            <Card style={{ borderRadius:16, marginBottom:20 }}>
-              {/* Progress */}
-              <div style={{ display:'flex', alignItems:'center', marginBottom:24, overflowX:'auto' }}>
-                {VSTAGES.map((s, i) => (
-                  <div key={s.n} style={{ display:'flex', alignItems:'center', flex: i < VSTAGES.length - 1 ? 1 : 'initial' }}>
-                    <div onClick={() => s.n < vStage && setVStage(s.n)}
-                      style={{ display:'flex', flexDirection:'column', alignItems:'center', cursor: s.n < vStage ? 'pointer' : 'default', minWidth:64 }}>
-                      <div style={{ width:32, height:32, borderRadius:'50%', background: s.n < vStage ? '#22c55e' : s.n === vStage ? '#2E3192' : '#e2e4ef', display:'flex', alignItems:'center', justifyContent:'center', fontSize: s.n <= vStage ? 14 : 12, border: s.n === vStage ? '3px solid #3d40b5' : 'none', color: s.n <= vStage ? '#fff' : '#9B9B9B', transition:'all .3s' }}>
-                        {s.n < vStage ? '✓' : s.icon}
-                      </div>
-                      <div style={{ fontSize:9, fontFamily:'Montserrat,sans-serif', fontWeight:600, color: s.n === vStage ? '#2E3192' : '#9B9B9B', marginTop:4, textAlign:'center' }}>{s.label}</div>
-                    </div>
-                    {i < VSTAGES.length - 1 && (
-                      <div style={{ flex:1, height:2, background: s.n < vStage ? '#22c55e' : '#e2e4ef', margin:'0 4px 20px', transition:'background .3s' }} />
-                    )}
-                  </div>
-                ))}
-              </div>
+        <div style={{ margin:'0 -32px' }}>
+          <BuyerMarketplace/>
+        </div>
+      )}
 
-              <div style={{ minHeight:140 }}>{renderVStage()}</div>
-
-              <div style={{ display:'flex', justifyContent:'space-between', marginTop:20, paddingTop:14, borderTop:'1px solid #e2e4ef' }}>
-                <Button variant="neutral" onClick={() => setVStage(s => Math.max(1, s - 1))} disabled={vStage === 1}>← Anterior</Button>
-                {vStage < 3
-                  ? <Button variant="primary" onClick={() => setVStage(s => s + 1)}>Próximo →</Button>
-                  : <Button variant="orange" size="lg" onClick={runVendorSearch}>{vLoading ? '⏳ Buscando...' : '🔍 Buscar Fornecedores'}</Button>
-                }
-              </div>
-            </Card>
-          )}
-
-          {/* Toolbar de resultados */}
-          {vSearched && (
-            <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
-              <div style={{ flex:1, position:'relative' }}>
-                <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#9B9B9B' }}>🔍</span>
-                <input value={vFilters.q}
-                  onChange={e => updV('q', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && runVendorSearch()}
-                  placeholder="Refinar busca por nome, CNPJ... (Enter para buscar)"
-                  style={{ ...inp, width:'100%', paddingLeft:34, boxSizing:'border-box' }} />
-              </div>
-              <Button variant="neutral" onClick={() => { setVStage(1); setVResults([]); setVSearched(false) }}>Nova Busca</Button>
-            </div>
-          )}
-
-          {/* Resultados */}
-          {vLoading && <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={32}/></div>}
-
-          {vSearched && !vLoading && vResults.length === 0 && (
-            <EmptyState icon="🔍" title="Nenhum fornecedor encontrado" subtitle="Tente ajustar os filtros ou clique em Nova Busca." />
-          )}
-
-          {!vLoading && vResults.length > 0 && (
-            <>
-              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:12 }}>
-                <strong style={{ color:'#1a1c5e' }}>{vResults.length}</strong> fornecedor{vResults.length !== 1 ? 'es' : ''} encontrado{vResults.length !== 1 ? 's' : ''}
-              </div>
-              <div style={{ display:'grid', gap:8 }}>
-                {vResults.map(s => {
-                  const isLinked = myIds.has(s.id) || s.isMySupplier
-                  const seal     = s.mySeal || s.seal
-                  const sealSt   = seal?.status
-                  return (
-                    <Card key={s.id} style={{ borderRadius:12, padding:'14px 18px', border:isLinked?'1px solid #bfdbfe':undefined, background:isLinked?'#eff6ff':undefined }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-                        <div style={{ width:40, height:40, borderRadius:10, background:'#EEF0FF', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:14, color:'#2E3192', flexShrink:0 }}>
-                          {s.razao_social?.slice(0,2).toUpperCase() || '??'}
-                        </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2, flexWrap:'wrap' }}>
-                            <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{s.razao_social}</span>
-                            {isLinked && <span style={{ fontSize:10, background:'#dbeafe', color:'#1d4ed8', borderRadius:20, padding:'1px 7px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>VINCULADO</span>}
-                            {sealSt === 'ACTIVE'  && <span style={{ fontSize:10, background:'rgba(34,197,94,.12)', color:'#15803d', borderRadius:20, padding:'1px 7px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>HOMOLOGADO</span>}
-                            {sealSt === 'PENDING' && <span style={{ fontSize:10, background:'rgba(245,158,11,.12)', color:'#92400e', borderRadius:20, padding:'1px 7px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>EM ANÁLISE</span>}
-                          </div>
-                          <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                            {s.cnpj && `CNPJ ${s.cnpj}`}
-                            {s.city && s.state && ` · ${s.city}/${s.state}`}
-                            {seal?.seal_name && ` · ${seal.seal_name}`}
-                          </div>
-                        </div>
-                        <div style={{ flexShrink:0 }}>
-                          {isLinked
-                            ? <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/fornecedor/${s.id}`)}>Ver Processo</Button>
-                            : <Button variant="orange" size="sm" onClick={() => navigate(`/cliente/perfil-fornecedor/${s.id}`)}>Ver Perfil →</Button>
-                          }
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-            </>
-          )}
-        </>
+      {/* ── Tab: Fornecedores com Intenção de Prestar Serviços ── */}
+      {activeTab === 'interessados' && (
+        <InterestsReport clientId={user?.clientId} navigate={navigate}/>
       )}
 
       {/* Modal Inativar */}
@@ -428,5 +340,94 @@ export default function ClientSuppliers() {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Relatório "Fornecedores com Intenção de Prestar Serviços" ────────────────
+// Convite reverso: fornecedores homologados que se auto-inseriram na lista.
+// O cliente pode ver a ficha, convidar (pré-preenchido), abrir RFQ ou remover.
+function InterestsReport({ clientId, navigate }) {
+  const [rows,    setRows]    = useState(null)
+  const [acting,  setActing]  = useState(null)
+
+  useEffect(() => {
+    if (!clientId) return
+    supabase
+      .from('supplier_interests')
+      .select('id, supplier_id, message, created_at, suppliers(id, razao_social, cnpj, city, state, email, phone, contact_name)')
+      .eq('client_id', clientId)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setRows(data || []))
+  }, [clientId])
+
+  const dismiss = async (row) => {
+    if (!confirm(`Remover ${row.suppliers?.razao_social || 'este fornecedor'} da lista de interessados?`)) return
+    setActing(row.id)
+    const { error } = await supabase.from('supplier_interests')
+      .update({ status: 'DISMISSED' }).eq('id', row.id)
+    if (error) alert('Erro: ' + error.message)
+    else setRows(prev => prev.filter(r => r.id !== row.id))
+    setActing(null)
+  }
+
+  const invite = (row) => {
+    const s = row.suppliers || {}
+    navigate('/cliente/convites', { state: { prefill: {
+      razao_social: s.razao_social || '', cnpj: s.cnpj || '',
+      email: s.email || '', contato: s.contact_name || '', telefone: s.phone || '',
+    } } })
+  }
+
+  if (rows === null) return <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={36}/></div>
+
+  if (!rows.length) return (
+    <EmptyState icon="💡" title="Nenhuma intenção registrada"
+      subtitle="Fornecedores homologados na plataforma podem declarar interesse em prestar serviços para sua empresa — eles aparecerão aqui."/>
+  )
+
+  return (
+    <>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:14 }}>
+        {rows.length} fornecedor{rows.length !== 1 ? 'es' : ''} declarou{rows.length !== 1 ? 'ram' : ''} intenção
+        de prestar serviços para sua empresa. Convide, solicite cotação ou remova da lista.
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+        {rows.map(row => {
+          const s = row.suppliers || {}
+          return (
+            <Card key={row.id} style={{ borderRadius:14, padding:'16px 20px' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap' }}>
+                <div style={{ width:44, height:44, borderRadius:10, background:'rgba(244,126,47,.12)', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:17, color:'#F47E2F', flexShrink:0 }}>
+                  {s.razao_social?.[0] || '?'}
+                </div>
+                <div style={{ flex:1, minWidth:220 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>
+                    {s.razao_social || 'Fornecedor'}
+                  </div>
+                  <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>
+                    {[s.cnpj, s.city && s.state ? `${s.city}/${s.state}` : null,
+                      `Interesse em ${new Date(row.created_at).toLocaleDateString('pt-BR')}`].filter(Boolean).join(' · ')}
+                  </div>
+                  {row.message && (
+                    <div style={{ marginTop:8, padding:'8px 12px', background:'#f8f9ff', borderLeft:'3px solid #2E3192', borderRadius:'0 8px 8px 0', fontSize:12.5, color:'#374151', fontFamily:'DM Sans,sans-serif', fontStyle:'italic' }}>
+                      "{row.message}"
+                    </div>
+                  )}
+                </div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                  <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/perfil-fornecedor/${row.supplier_id}`)}>👁 Ficha</Button>
+                  <Button variant="primary" size="sm" onClick={() => invite(row)}>📨 Convidar</Button>
+                  <Button variant="orange"  size="sm" onClick={() => navigate('/cliente/rfq')}>📝 RFQ</Button>
+                  <Button variant="danger"  size="sm" disabled={acting === row.id} onClick={() => dismiss(row)}>
+                    {acting === row.id ? '⏳' : '🗑'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+    </>
   )
 }
