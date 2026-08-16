@@ -16,6 +16,8 @@ exports.handler = async (event) => {
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
+  const empty = () => ({ statusCode: 200, headers, body: JSON.stringify({ data: [], total: 0 }) })
+
   try {
     const body = JSON.parse(event.body || '{}')
     const {
@@ -24,39 +26,102 @@ exports.handler = async (event) => {
       simples, clientSealMin = 0,
     } = body
 
+    const wantsSealFilter = clientSealMin > 0 || (sealType && sealType !== 'Todos')
+
     // ── Passo 1: filtrar por categoria ─────────────────────────────────
     let allowedSupplierIds = null
     if (categoryIds.length > 0) {
       const { data: catRows } = await supabase
         .from('supplier_categories').select('supplier_id').in('category_id', categoryIds)
       allowedSupplierIds = [...new Set((catRows || []).map(r => r.supplier_id))]
-      if (allowedSupplierIds.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ data: [], total: 0 }) }
+      if (allowedSupplierIds.length === 0) return empty()
+    }
+
+    // ── Passo 1.5: funil por selos ─────────────────────────────────────
+    // Pós-migração há 55k+ fornecedores; amostrar 200 ANTES de olhar selos
+    // zera qualquer busca por selo/cliente. Quando o filtro pede selos,
+    // partimos DA TABELA DE SELOS: só fornecedores que atendem entram na
+    // query principal. Selos de cliente contam como "homologado".
+    if (wantsSealFilter) {
+      const agg = {}
+      let off = 0
+      while (true) {
+        const { data: batch } = await supabase
+          .from('seals')
+          .select('supplier_id, seal_type, client_id')
+          .eq('status', 'ACTIVE')
+          .range(off, off + 999)
+        if (!batch?.length) break
+        for (const sl of batch) {
+          const a = agg[sl.supplier_id] || (agg[sl.supplier_id] = { clientCount: 0, types: new Set() })
+          if (sl.client_id) {
+            a.clientCount++
+            a.types.add(sl.seal_type || 'homologado')  // selo de cliente = homologação
+          } else if (sl.seal_type) {
+            a.types.add(sl.seal_type)
+          }
+        }
+        if (batch.length < 1000) break
+        off += 1000
+      }
+
+      let preIds = Object.entries(agg)
+        .filter(([, a]) => a.clientCount >= clientSealMin)
+        .filter(([, a]) => !sealType || sealType === 'Todos' || a.types.has(sealType))
+        .map(([id]) => id)
+
+      if (allowedSupplierIds) {
+        const set = new Set(allowedSupplierIds)
+        preIds = preIds.filter(id => set.has(id))
+      }
+      if (!preIds.length) return empty()
+      allowedSupplierIds = preIds
     }
 
     // ── Passo 2: query principal (service_role, sem RLS) ───────────────
-    let query = supabase
-      .from('suppliers')
-      .select('id, razao_social, cnpj, cnae_main, state, city, services, certifications, employee_range, capital_social, simples_nacional, latitude, longitude, status')
-      .in('status', ['ACTIVE', 'PENDING'])
-      .limit(200)
-
-    if (allowedSupplierIds) query = query.in('id', allowedSupplierIds)
-    if (states.length > 0)  query = query.in('state', states)
-    if (city)               query = query.ilike('city', `%${city}%`)
-    if (cnae)               query = query.ilike('cnae_main', `%${cnae}%`)
-    if (simples === true)   query = query.eq('simples_nacional', true)
-    if (simples === false)  query = query.eq('simples_nacional', false)
-    if (capitalMin != null) query = query.gte('capital_social', capitalMin)
-    if (capitalMax != null) query = query.lte('capital_social', capitalMax)
-    if (q) {
-      const qNums = q.replace(/\D/g, '')
-      if (qNums.length >= 8) query = query.ilike('cnpj', `%${qNums}%`)
-      else                   query = query.ilike('razao_social', `%${q}%`)
+    const applyFilters = (query) => {
+      if (states.length > 0)  query = query.in('state', states)
+      if (city)               query = query.ilike('city', `%${city}%`)
+      if (cnae)               query = query.ilike('cnae_main', `%${cnae}%`)
+      if (simples === true)   query = query.eq('simples_nacional', true)
+      if (simples === false)  query = query.eq('simples_nacional', false)
+      if (capitalMin != null) query = query.gte('capital_social', capitalMin)
+      if (capitalMax != null) query = query.lte('capital_social', capitalMax)
+      if (q) {
+        const qNums = q.replace(/\D/g, '')
+        if (qNums.length >= 8) query = query.ilike('cnpj', `%${qNums}%`)
+        else                   query = query.ilike('razao_social', `%${q}%`)
+      }
+      return query
     }
 
-    const { data: suppliers, error } = await query
-    if (error) throw new Error(error.message)
-    if (!suppliers?.length) return { statusCode: 200, headers, body: JSON.stringify({ data: [], total: 0 }) }
+    const SELECT = 'id, razao_social, cnpj, cnae_main, state, city, services, certifications, employee_range, capital_social, simples_nacional, latitude, longitude, status'
+    const MAX_POOL = 600  // pool de candidatos antes dos filtros JS
+
+    let suppliers = []
+    if (allowedSupplierIds) {
+      // IN em lotes de 150 (URL segura) até encher o pool
+      for (let i = 0; i < allowedSupplierIds.length && suppliers.length < MAX_POOL; i += 150) {
+        const { data: batch, error } = await applyFilters(
+          supabase.from('suppliers')
+            .select(SELECT)
+            .in('status', ['ACTIVE', 'PENDING'])
+            .in('id', allowedSupplierIds.slice(i, i + 150))
+        )
+        if (error) throw new Error(error.message)
+        if (batch) suppliers = suppliers.concat(batch)
+      }
+    } else {
+      const { data, error } = await applyFilters(
+        supabase.from('suppliers')
+          .select(SELECT)
+          .in('status', ['ACTIVE', 'PENDING'])
+          .limit(200)
+      )
+      if (error) throw new Error(error.message)
+      suppliers = data || []
+    }
+    if (!suppliers.length) return empty()
 
     // ── Passo 3: filtro de porte em JS ─────────────────────────────────
     let filtered = suppliers
@@ -72,10 +137,10 @@ exports.handler = async (event) => {
           return false
         })
       })
-      if (!filtered.length) return { statusCode: 200, headers, body: JSON.stringify({ data: [], total: 0 }) }
+      if (!filtered.length) return empty()
     }
 
-    // ── Passo 4: selos (ELOS own + client homologations) ───────────────
+    // ── Passo 4: selos do conjunto final ───────────────────────────────
     const supplierIds = filtered.map(s => s.id)
     let sealsRaw = []
     for (let i = 0; i < supplierIds.length; i += 150) {
@@ -87,33 +152,38 @@ exports.handler = async (event) => {
       if (batch) sealsRaw = sealsRaw.concat(batch)
     }
 
-    // Melhor selo ELOS por supplier + contagem de selos de clientes
+    // Agregação: melhor selo ELOS, contagem e melhor score de selos de cliente
     const sealAgg = {}
     sealsRaw.forEach(sl => {
-      if (!sealAgg[sl.supplier_id]) sealAgg[sl.supplier_id] = { elos: null, clientCount: 0 }
+      const a = sealAgg[sl.supplier_id] || (sealAgg[sl.supplier_id] = { elos: null, clientCount: 0, clientBest: 0, types: new Set() })
       if (sl.client_id) {
-        sealAgg[sl.supplier_id].clientCount++
+        a.clientCount++
+        a.clientBest = Math.max(a.clientBest, sl.score || 0)
+        a.types.add(sl.seal_type || 'homologado')
       } else {
-        const cur = sealAgg[sl.supplier_id].elos
-        if (!cur || (sl.score || 0) > (cur.score || 0)) sealAgg[sl.supplier_id].elos = sl
+        a.types.add(sl.seal_type || null)
+        if (!a.elos || (sl.score || 0) > (a.elos.score || 0)) a.elos = sl
       }
     })
 
     // ── Passo 5: montar resultados ──────────────────────────────────────
     let results = filtered.map(s => {
-      const agg = sealAgg[s.id] || { elos: null, clientCount: 0 }
+      const agg = sealAgg[s.id] || { elos: null, clientCount: 0, clientBest: 0, types: new Set() }
+      // Tipo exibido: selo ELOS próprio; senão, selo de cliente = homologado
+      const displayType = agg.elos?.seal_type || (agg.clientCount > 0 ? 'homologado' : null)
       return {
         ...s,
-        sealType:        agg.elos?.seal_type || null,
-        sealStatus:      agg.elos ? 'ACTIVE' : null,
-        score:           agg.elos?.score || 0,
+        sealType:        displayType,
+        sealStatus:      (agg.elos || agg.clientCount > 0) ? 'ACTIVE' : null,
+        score:           agg.elos?.score || agg.clientBest || 0,
         clientSealCount: agg.clientCount,
+        _types:          [...agg.types].filter(Boolean),
       }
     })
 
-    // Filtro de tipo de selo (só quando explicitamente selecionado)
+    // Filtro de tipo de selo — considera QUALQUER selo ativo (ELOS ou cliente)
     if (sealType && sealType !== 'Todos') {
-      results = results.filter(s => s.sealType === sealType)
+      results = results.filter(s => s._types.includes(sealType))
     }
     if (certs.length > 0) {
       results = results.filter(s => certs.every(c => (s.certifications || []).includes(c)))
@@ -121,6 +191,7 @@ exports.handler = async (event) => {
     if (clientSealMin > 0) {
       results = results.filter(s => s.clientSealCount >= clientSealMin)
     }
+    results.forEach(s => delete s._types)
 
     // Prioriza ACTIVE, depois por score
     results.sort((a, b) => {
