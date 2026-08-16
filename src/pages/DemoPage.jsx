@@ -10,6 +10,10 @@ import DemoClientFornecedores   from './demo/DemoClientFornecedores.jsx'
 import DemoRFQ                  from './demo/DemoRFQ.jsx'
 import DemoConvites             from './demo/DemoConvites.jsx'
 import DemoClientQuestionarios  from './demo/DemoClientQuestionarios.jsx'
+import {
+  DemoSupplierQuestionario, DemoSupplierCategorias, DemoSupplierMeusDados,
+  DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig,
+} from './demo/DemoExtraScreens.jsx'
 import { DEMO_PROCESSO }        from './demo/demoData.js'
 import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
 
@@ -108,22 +112,6 @@ function ProfileSelector({ onSelect }) {
   )
 }
 
-// ── Generic placeholder ───────────────────────────────────────────────────────
-function ComingSoon({ title, icon, navigate, backTo, backLabel }) {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'calc(100vh - 58px)', padding:40, textAlign:'center' }}>
-      <div style={{ fontSize:56, marginBottom:16 }}>{icon}</div>
-      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:20, color:'#1a1c5e', marginBottom:8 }}>{title}</div>
-      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:24 }}>Esta tela está disponível na versão completa da plataforma.</div>
-      {backTo && (
-        <button onClick={() => navigate(backTo)} style={{ padding:'10px 24px', borderRadius:10, background:'#EEF0FF', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, border:'none', cursor:'pointer' }}>
-          ← {backLabel || 'Voltar'}
-        </button>
-      )}
-    </div>
-  )
-}
-
 // ── Supplier process detail ───────────────────────────────────────────────────
 function DemoSupplierProcesso({ navigate }) {
   const p = DEMO_PROCESSO
@@ -185,15 +173,21 @@ function DemoSupplierProcesso({ navigate }) {
 // ── Screen routing ────────────────────────────────────────────────────────────
 function renderScreen(profile, screen, navigate) {
   if (profile === 'SUPPLIER') {
-    if (screen === 'documentos') return <DemoSupplierDocumentos navigate={navigate}/>
-    if (screen === 'processo')   return <DemoSupplierProcesso   navigate={navigate}/>
-    if (screen === 'planos')     return <ComingSoon title="Meu Plano" icon="⭐" navigate={navigate} backTo="dashboard" backLabel="Dashboard"/>
+    if (screen === 'documentos')   return <DemoSupplierDocumentos navigate={navigate}/>
+    if (screen === 'processo')     return <DemoSupplierProcesso   navigate={navigate}/>
+    if (screen === 'questionario') return <DemoSupplierQuestionario/>
+    if (screen === 'planos')       return <DemoPlano role="SUPPLIER"/>
+    if (screen === 'categorias')   return <DemoSupplierCategorias/>
+    if (screen === 'dados')        return <DemoSupplierMeusDados/>
+    if (screen === 'clientes')     return <DemoSupplierClientesElos/>
+    if (screen === 'equipe')       return <DemoTeam role="SUPPLIER"/>
     return <DemoSupplierDashboard navigate={navigate}/>
   }
   if (profile === 'BUYER') {
     if (screen === 'convites') return <DemoConvites profile="BUYER" navigate={navigate}/>
     if (screen === 'perfil')   return <DemoBuyerPerfil navigate={navigate}/>
     if (screen === 'rfq')      return <DemoRFQ profile="BUYER" navigate={navigate}/>
+    if (screen === 'plano')    return <DemoPlano role="BUYER"/>
     return <DemoBuyerMarketplace navigate={navigate}/>
   }
   if (profile === 'CLIENT') {
@@ -201,7 +195,8 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
     if (screen === 'rfq')           return <DemoRFQ profile="CLIENT" navigate={navigate}/>
     if (screen === 'questionarios')  return <DemoClientQuestionarios navigate={navigate}/>
-    if (screen === 'configuracoes') return <ComingSoon title="Configurações" icon="⚙️" navigate={navigate} backTo="dashboard" backLabel="Dashboard"/>
+    if (screen === 'configuracoes') return <DemoClientConfig/>
+    if (screen === 'equipe')        return <DemoTeam role="CLIENT"/>
     if (screen === 'processo')      return <DemoBuyerPerfil navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
   }

@@ -113,3 +113,75 @@ export const DEMO_CLIENT_SUPPLIERS = [
   { id:7, razao_social:'Metalmax Ind. Ltda',               initials:'MI', city:'Contagem',        state:'MG', subsidiado:false, sealStatus:'SUSPENDED', score:55, seal_name:'Suspenso'   },
   { id:8, razao_social:'LogFlex Transportes',              initials:'LF', city:'Santos',          state:'SP', subsidiado:true,  sealStatus:'ACTIVE',  score:90, seal_name:'HOC Homologado' },
 ]
+
+// ── Questionário do cliente (fornecedor responde) ──────────────────────────
+export const DEMO_QUESTIONARIO = {
+  clientName: 'Horizonte Mineração S/A',
+  progress: 7,
+  total: 10,
+  questions: [
+    { q:'A empresa possui certificação ISO 9001 vigente?',                          a:'Sim — válida até 03/2027',            done:true },
+    { q:'Possui programa formal de segurança do trabalho (SESMT/CIPA)?',            a:'Sim — CIPA constituída, 12 membros',  done:true },
+    { q:'Qual o efetivo médio alocado em contratos industriais?',                   a:'45 colaboradores',                     done:true },
+    { q:'A empresa já prestou serviços em unidades de mineração?',                  a:'Sim — 3 contratos nos últimos 5 anos', done:true },
+    { q:'Possui política de meio ambiente documentada?',                            a:'Sim',                                  done:true },
+    { q:'Descreva a estrutura de atendimento de emergência 24h.',                   a:'Plantão técnico com SLA de 4h',        done:true },
+    { q:'Possui seguro de responsabilidade civil vigente? Qual cobertura?',         a:'Sim — R$ 2.000.000',                   done:true },
+    { q:'Relacione os principais equipamentos próprios disponíveis.',               a:null, done:false },
+    { q:'A empresa possui plano de contingência para paradas não programadas?',     a:null, done:false },
+    { q:'Informe três referências comerciais com contato.',                         a:null, done:false },
+  ],
+}
+
+// ── Categorias do fornecedor ───────────────────────────────────────────────
+export const DEMO_SUPPLIER_CATEGORIES = [
+  { name:'Manutenção Industrial',   parent:'Serviços',    docs:9,  status:'ACTIVE' },
+  { name:'Serviços Elétricos',      parent:'Serviços',    docs:11, status:'ACTIVE' },
+  { name:'Automação & Controle',    parent:'Engenharia',  docs:8,  status:'ACTIVE' },
+  { name:'Montagem Mecânica',       parent:'Engenharia',  docs:10, status:'PENDING' },
+]
+
+// ── Meus Dados (fornecedor edita cadastro + sócios) ────────────────────────
+export const DEMO_MEUS_DADOS = {
+  razao_social:'Primatus Serviços Técnicos Ltda', nome_fantasia:'Primatus',
+  cnpj:'34.218.904/0001-72', ie:'110.042.490.114', im:'8.421.907-0',
+  data_abertura:'10/03/2012', tipo_empresa:'LTDA', porte:'Médio',
+  telefone:'(11) 3421-8900', email:'contato@primatus.com.br',
+  email_financeiro:'financeiro@primatus.com.br',
+  endereco:'Av. das Nações Unidas, 12.901 — Torre Norte, cj. 1204',
+  bairro:'Brooklin', cidade:'São Paulo', uf:'SP', cep:'04578-910',
+  socios: [
+    { nome:'Lucas Andrade',  cargo:'Sócio Administrador', cpf:'***.842.318-**', desde:'2012' },
+    { nome:'Maria Ferreira', cargo:'Sócia',               cpf:'***.104.226-**', desde:'2015' },
+  ],
+}
+
+// ── Clientes ELOS (diretório p/ fornecedor declarar interesse) ─────────────
+export const DEMO_ELOS_CLIENTS = [
+  { id:1, name:'Horizonte Mineração S/A', segmento:'Mineração',      uf:'MG', fornecedores:128, homologado:true,  interesse:false },
+  { id:2, name:'Vale Verde Agroflorestal', segmento:'Agronegócio',   uf:'BA', fornecedores:64,  homologado:false, interesse:true  },
+  { id:3, name:'Construtora Meridiano',    segmento:'Construção',    uf:'SP', fornecedores:97,  homologado:false, interesse:false },
+  { id:4, name:'EnergiaSul Distribuição',  segmento:'Energia',       uf:'RS', fornecedores:211, homologado:false, interesse:false },
+]
+
+// ── Equipes ────────────────────────────────────────────────────────────────
+export const DEMO_TEAM_SUPPLIER = [
+  { nome:'Lucas Andrade',   email:'lucas@primatus.com.br',    perfil:'Acesso Total', ativo:true,  titular:true  },
+  { nome:'Paula Rocha',     email:'paula@primatus.com.br',    perfil:'Documentos',   ativo:true,  titular:false },
+  { nome:'João Siqueira',   email:'joao@primatus.com.br',     perfil:'Acesso Total', ativo:false, titular:false },
+]
+
+export const DEMO_TEAM_CLIENT = [
+  { nome:'Rafael Costa',    email:'rafael@horizonte.com.br',   perfil:'Acesso Total',        ativo:true,  titular:true  },
+  { nome:'Fernanda Lima',   email:'fernanda@horizonte.com.br', perfil:'Homologação',         ativo:true,  titular:false },
+  { nome:'Carlos Nunes',    email:'carlos@horizonte.com.br',   perfil:'Consulta (leitura)',  ativo:true,  titular:false },
+  { nome:'Beatriz Souza',   email:'beatriz@horizonte.com.br',  perfil:'Homologação',         ativo:true,  titular:false },
+  { nome:'Diego Martins',   email:'diego@horizonte.com.br',    perfil:'Consulta (leitura)',  ativo:false, titular:false },
+]
+
+// ── Fornecedores com intenção (convite reverso, visão do cliente) ──────────
+export const DEMO_INTERESTED_SUPPLIERS = [
+  { id:1, razao_social:'Delta Caldeiraria Ltda',     cidade:'Betim/MG',     categoria:'Caldeiraria e Solda',  selo:'ELOS Verificado', score:84, desde:'05/08/2026' },
+  { id:2, razao_social:'ProServ Facilities S.A.',    cidade:'São Paulo/SP', categoria:'Facilities',           selo:'ELOS Homologado', score:91, desde:'28/07/2026' },
+  { id:3, razao_social:'Andaimes Rocha ME',          cidade:'Contagem/MG',  categoria:'Acesso e Andaimes',    selo:'ELOS Verificado', score:77, desde:'19/07/2026' },
+]

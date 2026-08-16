@@ -1,23 +1,32 @@
 import { useState } from 'react'
 import { DEMO_USER } from './demoData.js'
 
+// Mesmos itens/ordem da Navbar real (src/components/Navbar.jsx) — o demo
+// deve espelhar a versão atual do ELOS apresentada pelo comercial
 const NAVS = {
   SUPPLIER: [
-    { key:'dashboard',   label:'Dashboard',   icon:'⊞' },
-    { key:'documentos',  label:'Documentos',  icon:'📋' },
-    { key:'processo',    label:'Processo',    icon:'🔄' },
-    { key:'planos',      label:'Meu Plano',   icon:'⭐' },
+    { key:'dashboard',    label:'Dashboard',    icon:'⊞' },
+    { key:'documentos',   label:'Documentos',   icon:'📋' },
+    { key:'questionario', label:'Questionário', icon:'❓' },
+    { key:'planos',       label:'Meu Plano',    icon:'⭐' },
+    { key:'categorias',   label:'Categorias',   icon:'📦' },
+    { key:'dados',        label:'Meus Dados',   icon:'🏢' },
+    { key:'clientes',     label:'Clientes ELOS', icon:'🤝' },
+    { key:'equipe',       label:'Equipe',       icon:'👥' },
   ],
   BUYER: [
     { key:'marketplace', label:'Marketplace', icon:'🔍' },
     { key:'convites',    label:'Convites',    icon:'🤝' },
+    { key:'plano',       label:'Meu Plano',   icon:'⭐' },
   ],
   CLIENT: [
-    { key:'dashboard',      label:'Dashboard',     icon:'⊞' },
-    { key:'fornecedores',   label:'Fornecedores',  icon:'🏭' },
-    { key:'convites',       label:'Convites',      icon:'🤝' },
+    { key:'dashboard',      label:'Dashboard',      icon:'⊞' },
+    { key:'fornecedores',   label:'Fornecedores',   icon:'🏭' },
+    { key:'convites',       label:'Convites',       icon:'🤝' },
     { key:'rfq',            label:'Cotações (RFQ)', icon:'💬' },
-    { key:'configuracoes',  label:'Configurações', icon:'⚙️' },
+    { key:'questionarios',  label:'Questionários',  icon:'📋' },
+    { key:'configuracoes',  label:'Configurações',  icon:'⚙️' },
+    { key:'equipe',         label:'Equipe',         icon:'👥' },
   ],
 }
 

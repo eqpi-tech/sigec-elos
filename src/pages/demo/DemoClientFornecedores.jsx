@@ -1,15 +1,88 @@
 import { useState } from 'react'
 import { Card, Button, ScoreBar } from '../../components/ui.jsx'
-import { DEMO_CLIENT_SUPPLIERS } from './demoData.js'
+import { DEMO_CLIENT_SUPPLIERS, DEMO_INTERESTED_SUPPLIERS } from './demoData.js'
+import DemoBuyerMarketplace from './DemoBuyerMarketplace.jsx'
+
+function TabBar({ tab, setTab }) {
+  return (
+    <div style={{ display:'flex', gap:8, marginBottom:20, borderBottom:'1px solid #e2e4ef', paddingBottom:0 }}>
+      {TABS.map(t => (
+        <button key={t.key} onClick={() => setTab(t.key)}
+          style={{ padding:'10px 18px', border:'none', borderBottom: tab===t.key ? '2.5px solid #2E3192' : '2.5px solid transparent', background:'none', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color: tab===t.key ? '#2E3192' : '#9B9B9B' }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B' }
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
 
 const FILTER_OPTS = ['Todos','Homologados','Em análise','Suspensos','Subsidiados']
 
+// Aba "Fornecedores com intenção" — convite reverso (fornecedores ELOS que
+// declararam interesse em fornecer para este cliente)
+function InterestedTab({ navigate }) {
+  const [list, setList] = useState(DEMO_INTERESTED_SUPPLIERS)
+  return (
+    <div>
+      <div style={{ background:'#fff7ed', border:'1px solid rgba(244,126,47,.35)', borderRadius:12, padding:'12px 18px', marginBottom:18, fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9a5b1f' }}>
+        🤝 Fornecedores já verificados no ELOS que <strong>declararam interesse em fornecer para sua empresa</strong>. Convide-os direto para a homologação.
+      </div>
+      {list.length === 0 ? (
+        <Card style={{ borderRadius:14, padding:40, textAlign:'center', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
+          Nenhum interessado no momento.
+        </Card>
+      ) : list.map(s => (
+        <Card key={s.id} style={{ borderRadius:14, padding:'16px 22px', marginBottom:10, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+          <div style={{ width:42, height:42, borderRadius:11, background:'#fff7ed', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#F47E2F', flexShrink:0 }}>
+            {s.razao_social.split(' ').map(w=>w[0]).slice(0,2).join('')}
+          </div>
+          <div style={{ flex:1, minWidth:200 }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{s.razao_social}</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>{s.cidade} · {s.categoria} · interesse em {s.desde}</div>
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>{s.selo}</span>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color: s.score>=90?'#22c55e':'#f59e0b', marginTop:4 }}>{s.score}/100</div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <Button variant="neutral" size="sm" onClick={() => navigate('processo')}>👁 Ficha</Button>
+            <Button variant="primary" size="sm" onClick={() => navigate('convites')}>✉️ Enviar Convite</Button>
+            <button onClick={() => setList(p => p.filter(x => x.id !== s.id))} title="Remover da lista"
+              style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, color:'#9B9B9B' }}>🗑</button>
+          </div>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+const TABS = [
+  { key:'meus',         label:'🏭 Meus Fornecedores' },
+  { key:'todos',        label:'🔍 Todos os Fornecedores' },
+  { key:'interessados', label:'🤝 Com intenção' },
+]
+
 export default function DemoClientFornecedores({ navigate }) {
+  const [tab, setTab] = useState('meus')
   const [filter, setFilter] = useState('Todos')
   const [q, setQ] = useState('')
+
+  if (tab !== 'meus') {
+    return (
+      <div>
+        <div style={{ padding:'20px 32px 0', maxWidth:1100, margin:'0 auto' }}>
+          <TabBar tab={tab} setTab={setTab}/>
+        </div>
+        {tab === 'todos'
+          ? <DemoBuyerMarketplace navigate={navigate}/>
+          : <div style={{ padding:'8px 32px 28px', maxWidth:1100, margin:'0 auto' }}><InterestedTab navigate={navigate}/></div>
+        }
+      </div>
+    )
+  }
 
   const list = DEMO_CLIENT_SUPPLIERS.filter(s => {
     if (q && !s.razao_social.toLowerCase().includes(q.toLowerCase())) return false
@@ -21,7 +94,8 @@ export default function DemoClientFornecedores({ navigate }) {
   })
 
   return (
-    <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
+    <div style={{ padding:'20px 32px 28px', maxWidth:1100, margin:'0 auto' }}>
+      <TabBar tab={tab} setTab={setTab}/>
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <div>
