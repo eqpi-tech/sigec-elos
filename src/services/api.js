@@ -1074,7 +1074,8 @@ export const categoriesApi = {
     q1 = categoriesApi._ownerFilter(q1, clientIds)
     const { data: rawChildren } = await q1
     const children = categoriesApi._visibleTo(rawChildren, clientIds)
-    if (!children.length) return []
+    // Sempre retorna a mesma forma — retornar [] aqui quebrava tree.children nos callers
+    if (!children.length) return { children: [], grandchildren: [] }
     // Busca nível 3 (netos) para cada filho — em lotes p/ URL segura
     let grandchildren = []
     const childIds = children.map(c => c.id)

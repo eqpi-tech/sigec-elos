@@ -119,7 +119,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
 
   const getLeafIds = (parentId) => {
     const tree = trees[parentId]
-    if (!tree) return []
+    if (!tree?.children?.length) return []
     const leaves = []
     for (const child of tree.children) {
       const gc = tree.grandchildren?.filter(g => g.parent_id === child.id) || []
@@ -298,7 +298,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
                       </button>
                     </div>
                   )}
-                  {tree.children
+                  {(tree.children || [])
                     .filter(child => {
                       if (!search) return true
                       const q = norm(search)
