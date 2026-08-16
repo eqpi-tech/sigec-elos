@@ -254,6 +254,113 @@ function ApproveModal({ doc, onConfirm, onClose }) {
   )
 }
 
+// Modal de substituição de arquivo (paridade HOC: analista troca o documento
+// e ajusta o vencimento; o documento fica VALID)
+function ReplaceModal({ doc, onConfirm, onClose }) {
+  const [file,   setFile]   = useState(null)
+  const [expiry, setExpiry] = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
+  const [note,   setNote]   = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function confirm() {
+    if (!file) return
+    if (file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5MB — reduza o tamanho'); return }
+    setSaving(true)
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      await onConfirm(doc.id, {
+        action: 'replace_file',
+        file: { name: file.name, mime: file.type, base64 },
+        expiresAt: expiry || undefined,
+        note: note.trim() || undefined,
+      })
+      onClose()
+    } catch (e) { alert('Erro ao substituir: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
+      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:440,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e',marginBottom:4 }}>🔄 Substituir Documento</div>
+        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
+          {doc.label} · {doc.suppliers?.razao_social}
+        </div>
+
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Novo arquivo *</div>
+        <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files?.[0] || null)}
+          style={{ width:'100%',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14 }}/>
+
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Nova data de vencimento</div>
+        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
+          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14,boxSizing:'border-box' }}/>
+
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Observação</div>
+        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+          placeholder="Opcional — motivo da substituição"
+          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',boxSizing:'border-box',marginBottom:8 }}/>
+
+        <div style={{ background:'#FFF3E8',border:'1px solid #F47E2F55',borderRadius:8,padding:'10px 12px',fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9a5b1f',marginBottom:16 }}>
+          O documento substituído fica <strong>Aprovado</strong> com a data informada. A versão anterior permanece no histórico.
+        </div>
+
+        <div style={{ display:'flex',gap:8 }}>
+          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" full disabled={!file || saving} onClick={confirm}>
+            {saving ? <Spinner size={14}/> : 'Substituir'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Modal de alteração de vencimento (renova documento vencido/a vencer)
+function EditExpiryModal({ doc, onConfirm, onClose }) {
+  const [expiry, setExpiry] = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
+  const [note,   setNote]   = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function confirm() {
+    if (!expiry) return
+    setSaving(true)
+    try {
+      await onConfirm(doc.id, { action: 'set_expiry', expiresAt: expiry, note: note.trim() || undefined })
+      onClose()
+    } catch (e) { alert('Erro ao alterar vencimento: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
+      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:400,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e',marginBottom:4 }}>📅 Alterar Vencimento</div>
+        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
+          {doc.label} · {doc.suppliers?.razao_social}
+        </div>
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Nova data de vencimento *</div>
+        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
+          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14,boxSizing:'border-box' }}/>
+        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Observação</div>
+        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+          placeholder="Opcional — ex.: certidão renovada pelo órgão emissor"
+          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',boxSizing:'border-box',marginBottom:16 }}/>
+        <div style={{ display:'flex',gap:8 }}>
+          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
+          <Button variant="success" full disabled={!expiry || saving} onClick={confirm}>
+            {saving ? <Spinner size={14}/> : 'Salvar Data'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Persistência dos filtros na sessão — sobrevive a navegação/remontagem da página
 const FILTERS_KEY = 'docanalysis_filters'
 function loadSavedFilters() {
@@ -288,6 +395,8 @@ export default function DocumentAnalysis() {
   const [rejectModal, setRejectModal] = useState(null) // doc object
   const [approveModal,setApproveModal] = useState(null)
   const [aiModal,     setAiModal]     = useState(null) // { doc, extractType }
+  const [replaceModal,setReplaceModal] = useState(null)
+  const [expiryModal, setExpiryModal] = useState(null)
 
   const PAGE_SIZE = 50
 
@@ -345,6 +454,26 @@ export default function DocumentAnalysis() {
       setRows(p => p.map(d => d.id === docId ? { ...d, status: 'VALID', expires_at: expiry || d.expires_at } : d))
     } catch (e) { alert('Erro ao aprovar: ' + e.message) }
     finally { setSaving(p => { const n = new Set(p); n.delete(docId); return n }) }
+  }
+
+  // Substituir arquivo / alterar vencimento (admin-update-document)
+  async function handleUpdateDoc(docId, payload) {
+    setSaving(p => new Set([...p, docId]))
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/admin-update-document', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
+        body: JSON.stringify({ documentId: docId, ...payload }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+      const upd = result.document || {}
+      setDocStatus(p => ({ ...p, [docId]: upd.status }))
+      setRows(p => p.map(d => d.id === docId ? { ...d, ...upd } : d))
+    } finally {
+      setSaving(p => { const n = new Set(p); n.delete(docId); return n })
+    }
   }
 
   async function handleReject(docId, note) {
@@ -599,6 +728,12 @@ export default function DocumentAnalysis() {
                         {(status === 'PENDING' || status === 'VALID' || status === 'EXPIRING') && (
                           <Button variant="danger" size="sm" onClick={() => setRejectModal(doc)}>✕</Button>
                         )}
+                        <Button variant="neutral" size="sm" title="Substituir documento"
+                          onClick={() => setReplaceModal(doc)}>🔄</Button>
+                        {(status === 'VALID' || status === 'EXPIRED' || status === 'EXPIRING') && (
+                          <Button variant="neutral" size="sm" title="Alterar vencimento"
+                            onClick={() => setExpiryModal(doc)}>📅</Button>
+                        )}
                       </>
                     )}
                   </div>
@@ -625,6 +760,8 @@ export default function DocumentAnalysis() {
       {/* Modais */}
       {rejectModal  && <RejectModal  doc={rejectModal}  reasons={reasons} onConfirm={handleReject}  onClose={() => setRejectModal(null)}/>}
       {approveModal && <ApproveModal doc={approveModal} onConfirm={handleApprove} onClose={() => setApproveModal(null)}/>}
+      {replaceModal && <ReplaceModal doc={replaceModal} onConfirm={handleUpdateDoc} onClose={() => setReplaceModal(null)}/>}
+      {expiryModal  && <EditExpiryModal doc={expiryModal} onConfirm={handleUpdateDoc} onClose={() => setExpiryModal(null)}/>}
       {aiModal && (
         <DocAiModal
           doc={aiModal.doc}
