@@ -754,6 +754,331 @@ def phase_documents(mysql_conn, sb: Client, dry_run: bool, s3_cfg: dict):
     cur.close()
 
 
+# ── Fase details: dados completos do fornecedor/cliente (sem perda) ──────────
+# Estruturado → supplier_partners, supplier_bank_accounts, supplier_financials,
+#               cnae_list e colunas novas (patch_035)
+# Integral    → suppliers.hoc_extra / clients.hoc_extra (JSONB com TODAS as
+#               linhas relacionadas: endereços, contatos, anexos, escopos,
+#               mensagens, termos, bancários históricos, balanços brutos)
+# Questionário → seals.hoc_questionario (respostas dos processos válidos)
+
+def _fetch_grouped(cur, sql, key="id_fornecedor"):
+    cur.execute(sql)
+    cols = [d[0] for d in cur.description]
+    grouped = {}
+    for row in cur.fetchall():
+        rec = dict(zip(cols, row))
+        for k, v in rec.items():
+            if isinstance(v, (datetime, date)):
+                rec[k] = v.isoformat()
+        grouped.setdefault(rec.get(key), []).append(rec)
+    return grouped
+
+
+def phase_details(mysql_conn, sb: Client, dry_run: bool):
+    log.info("=== FASE details (dados completos, sem perda) ===")
+    cur = mysql_conn.cursor()
+
+    # hoc_id → supplier UUID (mapeamento direto, mais preciso que CNPJ)
+    hoc_to_uuid = {}
+    offset = 0
+    while True:
+        res = sb.table("suppliers").select("id,hoc_id").not_.is_("hoc_id", "null").range(offset, offset + 999).execute()
+        if not res.data:
+            break
+        for s in res.data:
+            hoc_to_uuid[s["hoc_id"]] = s["id"]
+        if len(res.data) < 1000:
+            break
+        offset += 1000
+    log.info(f"  {len(hoc_to_uuid)} fornecedores mapeados por hoc_id")
+
+    # ── Carrega TODAS as tabelas relacionadas (agrupadas por fornecedor) ──
+    log.info("  Carregando tabelas relacionadas do HOC...")
+    enderecos  = _fetch_grouped(cur, "SELECT * FROM endereco_fornecedor")
+    contatos   = _fetch_grouped(cur, "SELECT * FROM contato")
+    cnaes      = _fetch_grouped(cur, "SELECT * FROM cnae_fornecedor")
+    socios     = _fetch_grouped(cur, "SELECT * FROM socio_fornecedor")
+    bancarios  = _fetch_grouped(cur, "SELECT * FROM dados_bancarios_fornecedor")
+    anexos     = _fetch_grouped(cur, "SELECT * FROM fornecedor_anexos")
+    mensagens  = _fetch_grouped(cur, "SELECT * FROM mensagem_fornecedor")
+    contratantes = _fetch_grouped(cur, "SELECT * FROM fornecedor_contratante")
+    clientes_forn = _fetch_grouped(cur, "SELECT * FROM fornecedor_clientes")
+    termos     = _fetch_grouped(cur, "SELECT id_fornecedor, id_termo_uso, data_aceite, aceito_por FROM termo_uso_fornecedor")
+
+    # Balanços via processo_documento → processo → fornecedor
+    balancos = _fetch_grouped(cur, """
+        SELECT p.id_fornecedor, b.*, YEAR(pd.data_vencimento) AS ano_ref, pd.id_processo
+        FROM balanco b
+        JOIN processo_documento pd ON pd.id = b.id_processo_documento
+        JOIN processo p ON p.id = pd.id_processo
+        WHERE b.registro_cancelado IS NULL OR b.registro_cancelado = 0
+    """)
+
+    # Dados cadastrais completos do fornecedor
+    cur.execute("SELECT * FROM fornecedor")
+    fcols = [d[0] for d in cur.description]
+    fornecedores = {}
+    for row in cur.fetchall():
+        rec = dict(zip(fcols, row))
+        for k, v in rec.items():
+            if isinstance(v, (datetime, date)):
+                rec[k] = v.isoformat()
+        fornecedores[rec["id"]] = rec
+    log.info(f"  Tabelas carregadas: {len(fornecedores)} fornecedores, {sum(len(v) for v in socios.values())} sócios, "
+             f"{sum(len(v) for v in bancarios.values())} bancários, {sum(len(v) for v in balancos.values())} balanços")
+
+    stat("details_suppliers", hoc_count=len(hoc_to_uuid))
+
+    # ── 1. Enriquecimento de suppliers (colunas + hoc_extra integral) ──
+    sup_batch = []
+    partner_batch = []
+    bank_batch = []
+    fin_rows = {}   # (uuid, year) → record
+
+    for hoc_id, uuid in hoc_to_uuid.items():
+        f = fornecedores.get(hoc_id)
+        if not f:
+            stat("details_suppliers", discard={"phase": "details", "hoc_id": hoc_id, "motivo": "fornecedor sumiu do HOC"})
+            continue
+
+        cn = [safe_str(c.get("codigo")) for c in cnaes.get(hoc_id, []) if safe_str(c.get("codigo"))]
+        sup_batch.append({
+            "id": uuid,
+            # Colunas NOT NULL repetidas: o caminho de INSERT do ON CONFLICT
+            # valida o tuple inteiro antes de resolver o conflito — o upsert
+            # precisa carregar TODAS as colunas NOT NULL (cnpj, razao_social)
+            "cnpj": clean_cnpj(f.get("cnpj")),
+            "razao_social": safe_str(f.get("razao_social")) or f"Fornecedor HOC {hoc_id}",
+            "inscricao_estadual":  safe_str(f.get("inscricao_estadual")),
+            "inscricao_municipal": safe_str(f.get("inscricao_municipal")),
+            "data_abertura":       f.get("data_abertura"),
+            "tipo_empresa":        safe_str(f.get("tipo_empresa")),
+            "email_financeiro":    safe_str(f.get("email_financeiro")),
+            "cnae_list":           cn or None,
+            "hoc_extra": {
+                "fornecedor":    f,
+                "enderecos":     enderecos.get(hoc_id, []),
+                "contatos":      contatos.get(hoc_id, []),
+                "anexos":        anexos.get(hoc_id, []),
+                "mensagens":     mensagens.get(hoc_id, []),
+                "contratantes":  contratantes.get(hoc_id, []),
+                "clientes_do_fornecedor": clientes_forn.get(hoc_id, []),
+                "termos_aceite": termos.get(hoc_id, []),
+                "dados_bancarios_historico": bancarios.get(hoc_id, []),
+                "balancos_brutos": balancos.get(hoc_id, []),
+            },
+        })
+
+        # Sócios → supplier_partners
+        for s in socios.get(hoc_id, []):
+            tipo_raw = (s.get("tipo") or "").upper()
+            tipo = "pj" if "PJ" in tipo_raw or "JUR" in tipo_raw else ("estrangeiro" if "ESTRANG" in tipo_raw or "INT" in tipo_raw else "pf")
+            part = None
+            try:
+                part = float(s.get("participacao_societaria")) if s.get("participacao_societaria") not in (None, "") else None
+                if part is not None and part > 999: part = None
+            except Exception:
+                part = None
+            partner_batch.append({
+                "hoc_id": s["id"],
+                "supplier_id": uuid,
+                "tipo": tipo,
+                "cpf_cnpj": safe_str(s.get("cpf")),
+                "nome": safe_str(s.get("nome")) or "—",
+                "cargo": safe_str(s.get("cargo")),
+                "nacionalidade": safe_str(s.get("nacionalidade")),
+                "participacao": part,
+            })
+
+        # Dados bancários → o registro mais recente não cancelado
+        vals = [b for b in bancarios.get(hoc_id, []) if not b.get("registro_cancelado")]
+        if vals:
+            best = max(vals, key=lambda b: (b.get("versao") or 0, b.get("create_date") or ""))
+            conta = safe_str(best.get("conta")) or ""
+            digito = safe_str(best.get("digito_conta"))
+            bank_batch.append({
+                "supplier_id": uuid,
+                "hoc_id": best["id"],
+                "bank_name": safe_str(best.get("banco")),
+                "bank_code": safe_str(best.get("codigo_banco")) or safe_str(best.get("bank_code")),
+                "bank_agency": safe_str(best.get("agencia")),
+                "bank_account": f"{conta}-{digito}" if digito else conta or None,
+                "pix_key": None,
+            })
+
+        # Balanços → supplier_financials (1 por ano; mais recente vence)
+        for b in balancos.get(hoc_id, []):
+            year = b.get("ano_ref")
+            if not year:
+                continue
+            ac  = float(b.get("ativo_circulante") or 0)
+            anc = float(b.get("ativo_nao_circulante") or 0)
+            pc  = float(b.get("passivo_circulante") or 0)
+            pnc = float(b.get("passivo_nao_circulante") or 0)
+            rec = {
+                "supplier_id": uuid,
+                "year": int(year),
+                "ativo": float(b.get("valor_ativo_total") or 0) or (ac + anc) or None,
+                "passivo": (pc + pnc) or None,
+                "estoque": float(b.get("estoque") or 0) or None,
+            }
+            fin_rows[(uuid, int(year))] = rec  # última linha (versão maior) sobrescreve
+
+    log.info(f"  Preparado: {len(sup_batch)} suppliers, {len(partner_batch)} sócios, {len(bank_batch)} bancários, {len(fin_rows)} balanços")
+
+    if dry_run:
+        stat("details_suppliers", written=len(sup_batch))
+        stat("details_partners", hoc_count=len(partner_batch), written=len(partner_batch))
+        stat("details_bank", hoc_count=len(bank_batch), written=len(bank_batch))
+        stat("details_financials", hoc_count=len(fin_rows), written=len(fin_rows))
+    else:
+        for chunk in chunks(sup_batch, 100):
+            try:
+                sb.table("suppliers").upsert(chunk, on_conflict="id").execute()
+                stat("details_suppliers", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch suppliers extra: {e}")
+                for r in chunk:
+                    try:
+                        sb.table("suppliers").upsert(r, on_conflict="id").execute()
+                        stat("details_suppliers", written=1)
+                    except Exception as e2:
+                        stat("details_suppliers", discard={"phase": "details", "supplier": r["id"], "motivo": str(e2)})
+
+        stat("details_partners", hoc_count=len(partner_batch))
+        for chunk in chunks(partner_batch, 500):
+            try:
+                sb.table("supplier_partners").upsert(chunk, on_conflict="hoc_id").execute()
+                stat("details_partners", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch sócios: {e}")
+                for r in chunk:
+                    try:
+                        sb.table("supplier_partners").upsert(r, on_conflict="hoc_id").execute()
+                        stat("details_partners", written=1)
+                    except Exception as e2:
+                        stat("details_partners", discard={"phase": "details_partners", "hoc_id": r["hoc_id"], "motivo": str(e2)})
+
+        stat("details_bank", hoc_count=len(bank_batch))
+        for chunk in chunks(bank_batch, 500):
+            try:
+                sb.table("supplier_bank_accounts").upsert(chunk, on_conflict="supplier_id").execute()
+                stat("details_bank", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch bancários: {e}")
+                for r in chunk:
+                    try:
+                        sb.table("supplier_bank_accounts").upsert(r, on_conflict="supplier_id").execute()
+                        stat("details_bank", written=1)
+                    except Exception as e2:
+                        stat("details_bank", discard={"phase": "details_bank", "supplier": r["supplier_id"], "motivo": str(e2)})
+
+        stat("details_financials", hoc_count=len(fin_rows))
+        for chunk in chunks(list(fin_rows.values()), 500):
+            try:
+                sb.table("supplier_financials").upsert(chunk, on_conflict="supplier_id,year").execute()
+                stat("details_financials", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch balanços: {e}")
+                for r in chunk:
+                    try:
+                        sb.table("supplier_financials").upsert(r, on_conflict="supplier_id,year").execute()
+                        stat("details_financials", written=1)
+                    except Exception as e2:
+                        stat("details_financials", discard={"phase": "details_financials", "supplier": r["supplier_id"], "motivo": str(e2)})
+
+    # ── 2. Clientes: linha completa → clients.hoc_extra ──
+    cur.execute("SELECT * FROM cliente")
+    ccols = [d[0] for d in cur.description]
+    cli_batch = []
+    client_map = load_client_map(sb)
+    for row in cur.fetchall():
+        rec = dict(zip(ccols, row))
+        for k, v in rec.items():
+            if isinstance(v, (datetime, date)):
+                rec[k] = v.isoformat()
+        uuid = client_map.get(rec["id"])
+        if uuid:
+            cli_batch.append({
+                "id": uuid,
+                # razao_social NOT NULL: tuple de INSERT do ON CONFLICT é validado
+                "razao_social": safe_str(rec.get("razao_social")) or f"Cliente HOC {rec['id']}",
+                "hoc_extra": {"cliente": rec},
+            })
+    stat("details_clients", hoc_count=len(cli_batch))
+    if dry_run:
+        stat("details_clients", written=len(cli_batch))
+    else:
+        for chunk in chunks(cli_batch, 100):
+            try:
+                sb.table("clients").upsert(chunk, on_conflict="id").execute()
+                stat("details_clients", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch clientes extra: {e}")
+
+    # ── 3. Questionários dos processos válidos → seals.hoc_questionario ──
+    # Em LOTES por id_processo: a query única (332k respostas em JOIN)
+    # derruba a conexão MySQL
+    log.info("  Carregando respostas de questionário dos processos válidos...")
+
+    # seals com hoc_process_id (primeiro, para saber QUAIS processos buscar)
+    seal_by_proc = {}
+    offset = 0
+    while True:
+        res = sb.table("seals").select("id,hoc_process_id").not_.is_("hoc_process_id", "null").range(offset, offset + 999).execute()
+        if not res.data:
+            break
+        for s in res.data:
+            seal_by_proc[s["hoc_process_id"]] = s["id"]
+        if len(res.data) < 1000:
+            break
+        offset += 1000
+    log.info(f"  {len(seal_by_proc)} selos com processo HOC")
+
+    by_proc = {}
+    proc_ids = list(seal_by_proc.keys())
+    cur2 = mysql_conn.cursor(dictionary=True)
+    for idx, chunk in enumerate(chunks(proc_ids, 200)):
+        placeholders = ",".join(["%s"] * len(chunk))
+        cur2.execute(f"""
+            SELECT qr.id_processo, q.pergunta AS questao,
+                   COALESCE(r.descricao, qr.resposta_tipo_texto,
+                            CAST(qr.resposta_tipo_numero AS CHAR),
+                            CAST(qr.resposta_tipo_data AS CHAR)) AS resposta,
+                   qr.ordem
+            FROM questionario_resposta qr
+            LEFT JOIN questao q ON q.id = qr.id_questao
+            LEFT JOIN resposta r ON r.id = qr.id_resposta_tipo_unica
+            WHERE qr.id_processo IN ({placeholders})
+              AND (qr.ultima_resposta = 1 OR qr.ultima_resposta IS NULL)
+            ORDER BY qr.id_processo, qr.ordem
+        """, tuple(chunk))
+        for r in cur2.fetchall():
+            if r["questao"] or r["resposta"]:
+                by_proc.setdefault(r["id_processo"], []).append(
+                    {"questao": safe_str(r["questao"]), "resposta": safe_str(r["resposta"])})
+        if idx % 5 == 0:
+            log.info(f"  questionários: lote {idx + 1}/{(len(proc_ids) + 199) // 200}")
+    cur2.close()
+    log.info(f"  {len(by_proc)} processos com respostas")
+
+    q_batch = [{"id": seal_by_proc[pid], "hoc_questionario": answers}
+               for pid, answers in by_proc.items() if pid in seal_by_proc]
+    stat("details_questionario", hoc_count=len(by_proc), written=0)
+    if dry_run:
+        stat("details_questionario", written=len(q_batch))
+    else:
+        for chunk in chunks(q_batch, 50):
+            try:
+                sb.table("seals").upsert(chunk, on_conflict="id").execute()
+                stat("details_questionario", written=len(chunk))
+            except Exception as e:
+                log.error(f"  ERRO batch questionário: {e}")
+
+    cur.close()
+
+
 # ── Fase 8: reconcile ─────────────────────────────────────────────────────────
 
 def phase_reconcile(sb: Client):
@@ -790,7 +1115,7 @@ def phase_reconcile(sb: Client):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 ALL_PHASES = ["clients", "client_categories", "catalog_and_links", "suppliers",
-              "supplier_categories", "seals_plans", "documents", "reconcile"]
+              "supplier_categories", "seals_plans", "documents", "details", "reconcile"]
 
 
 def main():
@@ -819,6 +1144,7 @@ def main():
         "supplier_categories": lambda: phase_supplier_categories(mysql_conn, sb, dry_run),
         "seals_plans":         lambda: phase_seals_plans(mysql_conn, sb, dry_run),
         "documents":           lambda: phase_documents(mysql_conn, sb, dry_run, s3_cfg),
+        "details":             lambda: phase_details(mysql_conn, sb, dry_run),
         "reconcile":           lambda: phase_reconcile(sb),
     }
 
