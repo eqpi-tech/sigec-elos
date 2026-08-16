@@ -223,7 +223,9 @@ def phase_client_categories(mysql_conn, sb: Client, dry_run: bool):
         return
 
     # Duas passadas: primeiro sem parent (evita FK para pai ainda não inserido),
-    # depois atualiza os parents.
+    # depois REGRAVA os registros completos com parent_id.
+    # (upsert parcial {id, parent_id} falha: o caminho de insert do ON CONFLICT
+    #  viola o NOT NULL de name — bug que deixou 10k categorias sem hierarquia)
     for chunk in chunks([{**b, "parent_id": None} for b in batch], 500):
         try:
             sb.table("categories").upsert(chunk, on_conflict="id").execute()
@@ -233,13 +235,15 @@ def phase_client_categories(mysql_conn, sb: Client, dry_run: bool):
             for b in chunk:
                 stat("client_categories", discard={"phase": "client_categories", "hoc_id": b["hoc_id"], "motivo": str(e)})
 
-    with_parent = [{"id": b["id"], "parent_id": b["parent_id"]} for b in batch if b["parent_id"]]
-    log.info(f"Atualizando parent_id de {len(with_parent)} categorias...")
+    with_parent = [b for b in batch if b["parent_id"]]
+    log.info(f"Atualizando parent_id de {len(with_parent)} categorias (registros completos)...")
     for chunk in chunks(with_parent, 500):
         try:
             sb.table("categories").upsert(chunk, on_conflict="id").execute()
         except Exception as e:
             log.error(f"  ERRO batch parents: {e}")
+            for b in chunk:
+                stat("client_categories", discard={"phase": "client_categories", "hoc_id": b["hoc_id"], "motivo": f"parent: {e}"})
     cur.close()
 
 

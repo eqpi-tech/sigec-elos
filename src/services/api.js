@@ -1022,31 +1022,42 @@ export const adminApi = {
 export const categoriesApi = {
   // Categorias híbridas (patch_032): client_id NULL = global; preenchido = custom do cliente.
   // clientIds (opcional): inclui as categorias custom desses clientes além das globais.
-  // Filtro em JS para tolerar bancos sem a coluna client_id.
+  // Filtro SERVER-SIDE obrigatório: com 10k+ categorias de cliente na base, o
+  // limite de 1.000 linhas do PostgREST devolveria só categorias de outros
+  // clientes e o filtro em JS zeraria o resultado.
+  _ownerFilter: (q, clientIds) =>
+    clientIds?.length
+      ? q.or(`client_id.is.null,client_id.in.(${clientIds.join(',')})`)
+      : q.is('client_id', null),
+
   _visibleTo: (rows, clientIds) => (rows || []).filter(c =>
     !c.client_id || (clientIds || []).includes(c.client_id)
   ),
 
   // Busca todas as categorias pai
   getParents: async (clientIds) => {
-    const { data, error } = await supabase
+    let q = supabase
       .from('categories')
       .select('*')
       .is('parent_id', null)
       .eq('active', true)
       .order('name')
+    q = categoriesApi._ownerFilter(q, clientIds)
+    const { data, error } = await q
     if (error) throw new Error(error.message)
     return categoriesApi._visibleTo(data, clientIds)
   },
 
   // Busca filhas de uma categoria pai
   getChildren: async (parentId, clientIds) => {
-    const { data, error } = await supabase
+    let q = supabase
       .from('categories')
       .select('*')
       .eq('parent_id', parentId)
       .eq('active', true)
       .order('name')
+    q = categoriesApi._ownerFilter(q, clientIds)
+    const { data, error } = await q
     if (error) throw new Error(error.message)
     return categoriesApi._visibleTo(data, clientIds)
   },
@@ -1054,23 +1065,31 @@ export const categoriesApi = {
   // Busca todos os nós filhos e netos de um pai (para expandir a árvore)
   getTree: async (parentId, clientIds) => {
     // Busca nível 2 (filhos diretos)
-    const { data: rawChildren } = await supabase
+    let q1 = supabase
       .from('categories')
       .select('*')
       .eq('parent_id', parentId)
       .eq('active', true)
       .order('name')
+    q1 = categoriesApi._ownerFilter(q1, clientIds)
+    const { data: rawChildren } = await q1
     const children = categoriesApi._visibleTo(rawChildren, clientIds)
     if (!children.length) return []
-    // Busca nível 3 (netos) para cada filho
+    // Busca nível 3 (netos) para cada filho — em lotes p/ URL segura
+    let grandchildren = []
     const childIds = children.map(c => c.id)
-    const { data: rawGrandchildren } = await supabase
-      .from('categories')
-      .select('*')
-      .in('parent_id', childIds)
-      .eq('active', true)
-      .order('name')
-    return { children, grandchildren: categoriesApi._visibleTo(rawGrandchildren, clientIds) }
+    for (let i = 0; i < childIds.length; i += 150) {
+      let q2 = supabase
+        .from('categories')
+        .select('*')
+        .in('parent_id', childIds.slice(i, i + 150))
+        .eq('active', true)
+        .order('name')
+      q2 = categoriesApi._ownerFilter(q2, clientIds)
+      const { data: gc } = await q2
+      grandchildren = grandchildren.concat(categoriesApi._visibleTo(gc, clientIds))
+    }
+    return { children, grandchildren }
   },
 
   // Calcula documentos exigidos pela união das categorias selecionadas (sem duplicatas)
