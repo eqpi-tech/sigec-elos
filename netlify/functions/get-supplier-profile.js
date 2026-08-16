@@ -20,16 +20,35 @@ exports.handler = async (event) => {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // Papel do chamador decide a abertura dos contatos dos sócios:
-  // CLIENT/ADMIN veem telefone aberto; BUYER vê mascarado até existir
-  // assinatura de comprador; CPF é SEMPRE mascarado (LGPD).
+  // Papel do chamador decide a abertura dos contatos (CPF é SEMPRE
+  // mascarado — LGPD). Contatos abertos para:
+  //   · CLIENT e ADMIN
+  //   · SUPPLIER com selo VIGENTE (regra comercial: fornecedor homologado
+  //     conta como comprador assinante durante a vigência do selo; depois,
+  //     renova a homologação ou assina como comprador)
+  // BUYER puro: mascarado até existir assinatura de comprador.
   let openContacts = false
   try {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (user) {
       const { data: roles } = await supabase
-        .from('user_roles').select('role').eq('user_id', user.id)
+        .from('user_roles').select('role, supplier_id').eq('user_id', user.id)
       openContacts = (roles || []).some(r => r.role === 'CLIENT' || r.role === 'ADMIN')
+
+      if (!openContacts) {
+        const supplierIds = (roles || []).filter(r => r.role === 'SUPPLIER' && r.supplier_id).map(r => r.supplier_id)
+        if (supplierIds.length) {
+          const { data: activeSeal } = await supabase
+            .from('seals').select('id')
+            .in('supplier_id', supplierIds)
+            .eq('status', 'ACTIVE')
+            .is('client_suspended_at', null)
+            .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+            .limit(1)
+            .maybeSingle()
+          openContacts = !!activeSeal
+        }
+      }
     }
   } catch { /* segue mascarado */ }
 
