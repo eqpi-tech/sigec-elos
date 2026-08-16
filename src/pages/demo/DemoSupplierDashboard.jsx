@@ -6,7 +6,7 @@ const STATUS_L = { ACTIVE:'Ativo', PENDING:'Em análise', SUSPENDED:'Suspenso', 
 const DOC_BG   = { VALID:'#f8fffe', EXPIRING:'#fffbeb', MISSING:'#fff5f5', PENDING:'#fff7ed', REJECTED:'#fff5f5' }
 const DOC_BD   = { VALID:'#dcfce7', EXPIRING:'#fef3c7', MISSING:'#fee2e2', PENDING:'#fed7aa', REJECTED:'#fee2e2' }
 
-function SealCard({ seal, onClick }) {
+function SealCard({ seal, onClick, onCertificate }) {
   const sc = STATUS_C[seal.status] || '#9B9B9B'
   const sl = STATUS_L[seal.status] || seal.status
   return (
@@ -18,7 +18,13 @@ function SealCard({ seal, onClick }) {
       </div>
       <span style={{ fontSize:10, fontWeight:700, color:sc, background:`${sc}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{sl}</span>
       {seal.status === 'ACTIVE' && (
-        <div style={{ width:'100%' }}><ScoreBar score={seal.score}/></div>
+        <>
+          <div style={{ width:'100%' }}><ScoreBar score={seal.score}/></div>
+          <button onClick={e => { e.stopPropagation(); onCertificate() }}
+            style={{ width:'100%', padding:'7px 0', borderRadius:8, border:'none', background:'#1a1c5e', color:'#fff', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, cursor:'pointer' }}>
+            🎓 Emitir Certificado
+          </button>
+        </>
       )}
     </div>
   )
@@ -86,7 +92,8 @@ export default function DemoSupplierDashboard({ navigate }) {
         </div>
         <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
           {DEMO_SEALS.map(seal => (
-            <SealCard key={seal.id} seal={seal} onClick={() => navigate('processo')}/>
+            <SealCard key={seal.id} seal={seal} onClick={() => navigate('processo')}
+              onCertificate={() => navigate('certificado')}/>
           ))}
         </div>
       </Card>

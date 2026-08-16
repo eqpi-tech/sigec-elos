@@ -310,3 +310,122 @@ export function DemoClientConfig() {
     </Page>
   )
 }
+
+// ── Fornecedor: Certificado de Homologação (diploma imprimível) ───────────
+// Réplica do certificado real (src/pages/supplier/Certificate.jsx) com
+// dados fictícios — o comercial pode até imprimir/salvar PDF na demo.
+export function DemoSupplierCertificado({ navigate }) {
+  const cats = ['Automação & Controle', 'Manutenção Industrial', 'Serviços Elétricos']
+  const fmtDate = (d) => d.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' })
+  const hoje = new Date()
+  const validade = new Date(hoje); validade.setFullYear(validade.getFullYear() + 1)
+
+  return (
+    <div style={{ minHeight:'calc(100vh - 58px)', background:'#3a3d52', padding:'32px 16px', fontFamily:D }}>
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 0; }
+          body { background: #fff !important; }
+          nav, .cert-toolbar { display: none !important; }
+          .cert-sheet { box-shadow: none !important; margin: 0 auto !important; width: 100% !important; min-height: 100vh !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
+      {/* Barra de ações (some na impressão) */}
+      <div className="cert-toolbar" style={{ maxWidth:1050, margin:'0 auto 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <button onClick={() => navigate('dashboard')} style={{ background:'rgba(255,255,255,.12)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:10, padding:'9px 18px', cursor:'pointer', fontFamily:D, fontSize:13 }}>← Voltar ao Dashboard</button>
+        <button onClick={() => window.print()} style={{ background:'#F47E2F', color:'#fff', border:'none', borderRadius:10, padding:'11px 28px', cursor:'pointer', fontFamily:M, fontWeight:800, fontSize:14, boxShadow:'0 6px 20px rgba(244,126,47,.4)' }}>
+          🖨️ Imprimir / Salvar PDF
+        </button>
+      </div>
+
+      {/* Folha do certificado — A4 paisagem */}
+      <div className="cert-sheet" style={{ maxWidth:1050, margin:'0 auto', background:'#fffdf8', boxShadow:'0 24px 80px rgba(0,0,0,.5)', position:'relative' }}>
+        <div style={{ border:'4px solid #1a1c5e', padding:7 }}>
+          <div style={{ border:'1.5px solid #b8860b', padding:'38px 56px 30px', position:'relative', minHeight:620, display:'flex', flexDirection:'column' }}>
+
+            {/* Ornamentos de canto */}
+            {[{ top:8, left:8, bt:'2px solid', bl:'2px solid' }, { top:8, right:8, bt:'2px solid', br:'2px solid' },
+              { bottom:8, left:8, bb:'2px solid', bl:'2px solid' }, { bottom:8, right:8, bb:'2px solid', br:'2px solid' }].map((p, i) => (
+              <div key={i} style={{ position:'absolute', width:34, height:34, borderColor:'#b8860b',
+                top:p.top, left:p.left, right:p.right, bottom:p.bottom,
+                borderTop:p.bt||'none', borderBottom:p.bb||'none', borderLeft:p.bl||'none', borderRight:p.br||'none' }}/>
+            ))}
+
+            {/* Cabeçalho */}
+            <div style={{ textAlign:'center', marginBottom:22 }}>
+              <div style={{ fontFamily:M, fontWeight:900, fontSize:13, letterSpacing:6, color:'#F47E2F', textTransform:'uppercase', marginBottom:14 }}>
+                SIGEC · ELOS
+              </div>
+              <div style={{ fontFamily:"Georgia,'Times New Roman',serif", fontSize:52, fontWeight:700, color:'#1a1c5e', letterSpacing:10, textTransform:'uppercase', lineHeight:1 }}>
+                Certificado
+              </div>
+              <div style={{ fontFamily:M, fontWeight:700, fontSize:12, letterSpacing:4, color:'#8a8fa8', textTransform:'uppercase', marginTop:10 }}>
+                de Homologação de Fornecedor
+              </div>
+              <div style={{ width:180, height:2, background:'linear-gradient(90deg, transparent, #b8860b, transparent)', margin:'16px auto 0' }}/>
+            </div>
+
+            {/* Corpo */}
+            <div style={{ textAlign:'center', flex:1 }}>
+              <div style={{ fontFamily:'Georgia,serif', fontSize:16, color:'#4a4f66', marginBottom:10 }}>
+                Certificamos que o fornecedor
+              </div>
+              <div style={{ fontFamily:'Georgia,serif', fontStyle:'italic', fontWeight:700, fontSize:34, color:'#1a1c5e', lineHeight:1.2, margin:'0 auto 8px', maxWidth:820 }}>
+                Primatus Serviços Técnicos Ltda
+              </div>
+              <div style={{ fontFamily:D, fontSize:14, color:'#4a4f66', marginBottom:18 }}>
+                inscrito sob o CNPJ <strong style={{ color:'#1a1c5e' }}>34.218.904/0001-72</strong>
+              </div>
+              <div style={{ fontFamily:'Georgia,serif', fontSize:16.5, color:'#374151', lineHeight:1.7, maxWidth:840, margin:'0 auto' }}>
+                está <strong>conforme</strong> no processo de homologação de fornecedores
+                da plataforma <strong style={{ color:'#1a1c5e' }}>SIGEC-ELOS</strong>,
+                para as categorias de prestação de serviço e/ou fornecimento:
+              </div>
+              <div style={{ margin:'16px auto 0', maxWidth:860, fontFamily:D, fontSize:12.5, color:'#4a4f66', lineHeight:1.9 }}>
+                {cats.join('  ·  ')}
+              </div>
+            </div>
+
+            {/* Rodapé: emissão · medalha · validade */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop:28, gap:20 }}>
+              <div style={{ flex:1, textAlign:'left' }}>
+                <div style={{ fontFamily:M, fontWeight:700, fontSize:10, letterSpacing:1.5, color:'#8a8fa8', textTransform:'uppercase', marginBottom:4 }}>Certificado Nº</div>
+                <div style={{ fontFamily:D, fontSize:13, color:'#1a1c5e', fontWeight:700 }}>ELOS-DEMO4F2A81C09B</div>
+                <div style={{ fontFamily:D, fontSize:11.5, color:'#8a8fa8', marginTop:6 }}>
+                  Emitido em {fmtDate(hoje)}
+                </div>
+              </div>
+
+              <div style={{ textAlign:'center', flexShrink:0 }}>
+                <div style={{ width:92, height:92, borderRadius:'50%', margin:'0 auto',
+                  background:'radial-gradient(circle at 35% 35%, #3d40b5, #1a1c5e)',
+                  border:'4px solid #2E3192', boxShadow:'0 4px 16px rgba(0,0,0,.25)',
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff' }}>
+                  <div style={{ fontSize:26, lineHeight:1 }}>⭐</div>
+                  <div style={{ fontFamily:M, fontWeight:900, fontSize:10, letterSpacing:1, marginTop:4 }}>VERIFICADO</div>
+                </div>
+              </div>
+
+              <div style={{ flex:1, textAlign:'right' }}>
+                <div style={{ fontFamily:M, fontWeight:700, fontSize:10, letterSpacing:1.5, color:'#8a8fa8', textTransform:'uppercase', marginBottom:4 }}>Válido até</div>
+                <div style={{ fontFamily:D, fontSize:13, color:'#1a1c5e', fontWeight:700 }}>{fmtDate(validade)}</div>
+                <div style={{ borderTop:'1px solid #c9cddb', marginTop:14, paddingTop:6, display:'inline-block', minWidth:190 }}>
+                  <div style={{ fontFamily:M, fontWeight:700, fontSize:11, color:'#1a1c5e' }}>EQPI Tech · SIGEC-ELOS</div>
+                  <div style={{ fontFamily:D, fontSize:10, color:'#8a8fa8' }}>elos.eqpitech.com.br</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Nota de verificação */}
+            <div style={{ textAlign:'center', marginTop:16, fontFamily:D, fontSize:9.5, color:'#a8adc2' }}>
+              A autenticidade deste certificado pode ser verificada junto à EQPI Tech informando o número do certificado ·
+              A validade está condicionada à manutenção da regularidade documental do fornecedor na plataforma SIGEC-ELOS.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

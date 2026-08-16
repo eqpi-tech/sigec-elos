@@ -13,6 +13,7 @@ import DemoClientQuestionarios  from './demo/DemoClientQuestionarios.jsx'
 import {
   DemoSupplierQuestionario, DemoSupplierCategorias, DemoSupplierMeusDados,
   DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig,
+  DemoSupplierCertificado,
 } from './demo/DemoExtraScreens.jsx'
 import { DEMO_PROCESSO }        from './demo/demoData.js'
 import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
@@ -175,6 +176,7 @@ function renderScreen(profile, screen, navigate) {
   if (profile === 'SUPPLIER') {
     if (screen === 'documentos')   return <DemoSupplierDocumentos navigate={navigate}/>
     if (screen === 'processo')     return <DemoSupplierProcesso   navigate={navigate}/>
+    if (screen === 'certificado')  return <DemoSupplierCertificado navigate={navigate}/>
     if (screen === 'questionario') return <DemoSupplierQuestionario/>
     if (screen === 'planos')       return <DemoPlano role="SUPPLIER"/>
     if (screen === 'categorias')   return <DemoSupplierCategorias/>
