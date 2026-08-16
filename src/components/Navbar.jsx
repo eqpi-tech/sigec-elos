@@ -10,6 +10,7 @@ const NAVS = {
     { path:'/fornecedor/questionario',  label:'Questionário',icon:'❓' },
     { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐' },
     { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦' },
+    { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢' },
     { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥' },
   ],
   BUYER: [
