@@ -25,7 +25,9 @@ export default function SealBadge({ seal, size = 'md', showScore = false }) {
 
   // Tipo de selo: ELOS (autônomo) ou cliente específico
   const isElosSeal  = !seal.client_id
-  const clientFull  = seal.clients?.razao_social || seal.client_name || seal.seal_name
+  // Fallback via seal_name remove o prefixo "Homologado – " para exibir só o cliente
+  const clientFull  = seal.clients?.razao_social || seal.client_name
+                      || seal.seal_name?.replace(/^(Homologado|HOC)\s*[–-]\s*/i, '')
                       || (isElosSeal ? 'SIGEC ELOS' : 'Cliente')
 
   // Cor do anel: azul para ELOS, laranja para selos de cliente
@@ -102,17 +104,18 @@ export default function SealBadge({ seal, size = 'md', showScore = false }) {
         )}
       </div>
 
-      {/* Nome do cliente + status */}
-      <div style={{ textAlign:'center', maxWidth: px * 1.1 }}>
+      {/* Nome do cliente + status — nome completo, quebrando em até 2 linhas */}
+      <div style={{ textAlign:'center', maxWidth: Math.max(px * 1.6, 150) }}>
         <div style={{
           fontSize:     Math.max(9, px * 0.105),
           fontFamily:   'Montserrat,sans-serif',
           fontWeight:   700,
           color:        '#1a1c5e',
-          lineHeight:   1.2,
+          lineHeight:   1.25,
           overflow:     'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace:   'nowrap',
+          display:      '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
         }}>
           {isElosSeal ? 'SIGEC ELOS' : clientFull}
         </div>

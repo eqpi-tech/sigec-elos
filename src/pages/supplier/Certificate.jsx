@@ -70,8 +70,13 @@ export default function SupplierCertificate() {
   if (!data) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={48}/></div>
 
   const { seal, supplier, categories } = data
-  const clientName = seal.clients?.razao_social || 'SIGEC-ELOS'
   const isElos     = !seal.client_id
+  // Selo de cliente SEMPRE exibe o nome do cliente — fallback extrai do seal_name
+  const clientName = isElos
+    ? 'SIGEC-ELOS'
+    : (seal.clients?.razao_social
+        || seal.seal_name?.replace(/^(Homologado|HOC)\s*[–-]\s*/i, '')
+        || 'Cliente')
   const certNumber = `ELOS-${String(seal.id).replace(/-/g, '').slice(0, 12).toUpperCase()}`
   const shown      = categories.slice(0, MAX_CATEGORIES)
   const extra      = categories.length - shown.length

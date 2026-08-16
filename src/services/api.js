@@ -140,30 +140,55 @@ export const supplierApi = {
     let documents
 
     if (seal.client_id) {
-      // Processo de cliente: requisitos vindos do fluxo personalizado do cliente
-      const { data: flowRows } = await supabase
-        .from('client_document_flows')
-        .select('catalog_id, documents_catalog(id, name)')
-        .eq('client_id', seal.client_id)
-        .eq('required', true)
+      // Processo de cliente — fonte primária pós-migração v2: documentos
+      // exigidos pelas CATEGORIAS DO CLIENTE selecionadas pelo fornecedor.
+      // Fallback: client_document_flows (fluxo configurado manualmente).
+      const { data: catRows } = await supabase
+        .from('supplier_categories')
+        .select('category_id, categories(client_id)')
+        .eq('supplier_id', supplierId)
+      const clientCatIds = (catRows || [])
+        .filter(r => r.categories?.client_id === seal.client_id)
+        .map(r => r.category_id)
 
-      const requiredIds  = new Set((flowRows || []).map(r => String(r.catalog_id)))
-      const uploadedByType = {}
-      uploadedDocs.forEach(d => { uploadedByType[String(d.type)] = d })
+      let reqRows = [] // [{ document_id, name }]
+      if (clientCatIds.length) {
+        for (let i = 0; i < clientCatIds.length; i += 200) {
+          const { data: cdRows } = await supabase
+            .from('category_documents')
+            .select('document_id, documents_catalog(id, name)')
+            .in('category_id', clientCatIds.slice(i, i + 200))
+          for (const r of (cdRows || []))
+            if (r.documents_catalog) reqRows.push({ document_id: r.document_id, name: r.documents_catalog.name })
+        }
+      }
+      if (!reqRows.length) {
+        const { data: flowRows } = await supabase
+          .from('client_document_flows')
+          .select('catalog_id, documents_catalog(id, name)')
+          .eq('client_id', seal.client_id)
+          .eq('required', true)
+        reqRows = (flowRows || [])
+          .filter(r => r.documents_catalog)
+          .map(r => ({ document_id: r.catalog_id, name: r.documents_catalog.name }))
+      }
 
-      // Uploaded que o cliente exige
+      const requiredIds = new Set(reqRows.map(r => String(r.document_id)))
+
+      // Uploaded que este processo exige
       documents = uploadedDocs.filter(d => requiredIds.has(String(d.type)))
 
-      // MISSING para requisitos ainda não enviados (deduplicado por catalog_id)
+      // MISSING para requisitos ainda não enviados (deduplicado)
       const uploadedTypes = new Set(documents.map(d => String(d.type)))
       const seen = new Set()
-      ;(flowRows || []).forEach(row => {
-        const docId = String(row.catalog_id)
-        if (!uploadedTypes.has(docId) && !seen.has(docId) && row.documents_catalog) {
+      reqRows.forEach(row => {
+        const docId = String(row.document_id)
+        if (!uploadedTypes.has(docId) && !seen.has(docId)) {
           seen.add(docId)
-          documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.documents_catalog.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
+          documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
         }
       })
+      documents.sort((a, b) => (a.label || '').localeCompare(b.label || '', 'pt-BR'))
     } else {
       // Processo SIGEC: requisitos vindos das categorias do fornecedor
       documents = [...uploadedDocs]
