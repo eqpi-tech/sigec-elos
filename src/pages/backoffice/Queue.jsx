@@ -1431,12 +1431,15 @@ export function BackofficeAnalysis() {
                   <div style={{ display:'flex',flexDirection:'column',gap:0 }}>
                     {logData.map((entry,i) => {
                       const ACTION_MAP = {
-                        ANALYSIS_STARTED:   { label:'Análise iniciada',         color:'#2E3192', icon:'🔍' },
-                        SEAL_APPROVED:      { label:'Homologação aprovada',      color:'#22c55e', icon:'✅' },
-                        SEAL_REJECTED:      { label:'Homologação rejeitada',     color:'#ef4444', icon:'❌' },
-                        SEAL_REVERTED:      { label:'Análise revertida',         color:'#f59e0b', icon:'↩️' },
-                        SEAL_AUTO_APPROVED: { label:'Aprovação automática',      color:'#22c55e', icon:'⚡' },
-                        SEAL_AUTO_REJECTED: { label:'Rejeição automática',       color:'#ef4444', icon:'⚡' },
+                        ANALYSIS_STARTED:       { label:'Análise iniciada',       color:'#2E3192', icon:'🔍' },
+                        SEAL_APPROVED:          { label:'Homologação aprovada',    color:'#22c55e', icon:'✅' },
+                        SEAL_REJECTED:          { label:'Homologação rejeitada',   color:'#ef4444', icon:'❌' },
+                        SEAL_REVERTED:          { label:'Análise revertida',       color:'#f59e0b', icon:'↩️' },
+                        SEAL_AUTO_APPROVED:     { label:'Aprovação automática',    color:'#22c55e', icon:'⚡' },
+                        SEAL_AUTO_REJECTED:     { label:'Rejeição automática',     color:'#ef4444', icon:'⚡' },
+                        DOCUMENT_REPLACED:      { label:'Documento substituído',   color:'#2E3192', icon:'🔄' },
+                        DOCUMENT_EXPIRY_CHANGED:{ label:'Vencimento alterado',     color:'#2E3192', icon:'📅' },
+                        HOC_LOG:                { label:'Registro HOC',            color:'#64748b', icon:'📜' },
                       }
                       const info    = ACTION_MAP[entry.action] || { label: entry.action, color:'#9B9B9B', icon:'📋' }
                       const meta    = entry.metadata || {}
@@ -1447,6 +1450,10 @@ export function BackofficeAnalysis() {
                       if (meta.score)        detail = `Score: ${meta.score}%`
                       if (meta.level)        detail = (detail ? detail + ' · ' : '') + `Nível: ${meta.level}`
                       if (meta.razao_social) detail = (detail ? detail + ' · ' : '') + meta.razao_social
+                      if (meta.label)        detail = (detail ? detail + ' · ' : '') + meta.label
+                      // Registros migrados do HOC: descrição original + autor
+                      if (meta.descricao)    detail = meta.descricao
+                      const autor = meta.autor || null
                       return (
                         <div key={i} style={{ display:'flex',gap:12,padding:'12px 0',borderBottom:i<logData.length-1?'1px solid #f0f2f8':'' }}>
                           <div style={{ width:32,height:32,borderRadius:8,background:`${info.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,marginTop:2 }}>
@@ -1455,7 +1462,7 @@ export function BackofficeAnalysis() {
                           <div style={{ flex:1 }}>
                             <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:info.color }}>{info.label}</div>
                             {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2 }}>{detail}</div>}
-                            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}</div>
+                            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}{autor ? ` · por ${autor}` : ''}</div>
                           </div>
                         </div>
                       )

@@ -112,12 +112,13 @@ exports.handler = async (event) => {
     await recalcSealScores(supabaseAdmin, doc.supplier_id).catch(e =>
       console.warn('[admin-update-document] recalc scores:', e.message))
 
+    // Grava no log do PROCESSO (entity = fornecedor, mesmo padrão da aba Log)
     await supabaseAdmin.from('audit_log').insert({
-      actor_id: user.id,
-      action:   action === 'replace_file' ? 'DOCUMENT_REPLACED' : 'DOCUMENT_EXPIRY_CHANGED',
-      target_type: 'document',
-      target_id: documentId,
-      details: { supplier_id: doc.supplier_id, label: doc.label, expiresAt: expiresAt || null, note: note || null },
+      user_id: user.id,
+      action:  action === 'replace_file' ? 'DOCUMENT_REPLACED' : 'DOCUMENT_EXPIRY_CHANGED',
+      entity_type: 'supplier',
+      entity_id: doc.supplier_id,
+      metadata: { document_id: documentId, label: doc.label, expiresAt: expiresAt || null, note: note || null },
     }).catch(() => {})
 
     return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ updated: true, document: updated }) }
