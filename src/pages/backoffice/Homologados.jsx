@@ -16,45 +16,63 @@ export function BackofficeHomologados() {
   const [motivo, setMotivo]       = useState('')
   const [processing, setProcessing] = useState(false)
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
-    supabase
-      .from('seals')
-      .select('id, supplier_id, level, status, score, issued_at, suspended_reason, suppliers!inner(*)')
-      .in('status', ['ACTIVE', 'SUSPENDED'])
-      .range(0, 9999)  // bypass limite padrão de 1000 linhas
-      .order('issued_at', { ascending: false, nullsFirst: false })
-      .then(({ data, error }) => {
-        if (error) { console.error('Homologados query:', error.message); setLoading(false); return }
+    try {
+      // PostgREST corta em 1000 linhas por request (mesmo com range maior) —
+      // pagina em lotes até esgotar. Base atual: ~2,6k selos ACTIVE/SUSPENDED.
+      const PAGE = 1000
+      let all = [], from = 0
+      for (;;) {
+        const { data, error } = await supabase
+          .from('seals')
+          .select('id, supplier_id, level, status, score, issued_at, seal_name, client_id, suspended_reason, clients(razao_social), suppliers!inner(*)')
+          .in('status', ['ACTIVE', 'SUSPENDED'])
+          .order('id')
+          .range(from, from + PAGE - 1)
+        if (error) throw error
+        all = all.concat(data || [])
+        if (!data || data.length < PAGE) break
+        from += PAGE
+      }
 
-        // Deduplica por supplier_id: um fornecedor pode ter múltiplos selos (um por cliente HOC).
-        // Mantém o "melhor" selo: ACTIVE prevalece sobre SUSPENDED.
-        const bestSeal = {}
-        ;(data || []).forEach(seal => {
-          const sid = seal.supplier_id
-          if (!bestSeal[sid] || (seal.status === 'ACTIVE' && bestSeal[sid].status !== 'ACTIVE')) {
-            bestSeal[sid] = seal
-          }
-        })
-
-        const list = Object.values(bestSeal).map(seal => ({
-          ...seal.suppliers,
-          seal_id:          seal.id,
-          seal_level:       seal.level,
-          seal_status:      seal.status,
-          seal_score:       seal.score,
-          seal_issued_at:   seal.issued_at,
-          suspended_reason: seal.suspended_reason,
-        }))
-        setSuppliers(list)
-        setStats({
-          total:     list.filter(s => s.seal_status === 'ACTIVE').length,
-          premium:   list.filter(s => s.seal_level === 'Premium'  && s.seal_status === 'ACTIVE').length,
-          simples:   list.filter(s => s.seal_level === 'Simples'  && s.seal_status === 'ACTIVE').length,
-          suspended: list.filter(s => s.seal_status === 'SUSPENDED').length,
-        })
-        setLoading(false)
+      // Agrupa por fornecedor: um fornecedor pode ter vários selos (um por
+      // cliente). A linha mostra o "melhor" selo e chips com todos.
+      const bySupplier = {}
+      all.forEach(seal => {
+        const sid = seal.supplier_id
+        if (!bySupplier[sid]) bySupplier[sid] = { supplier: seal.suppliers, seals: [] }
+        bySupplier[sid].seals.push(seal)
       })
+
+      const list = Object.values(bySupplier).map(({ supplier, seals }) => {
+        const best = seals.find(s => s.status === 'ACTIVE') || seals[0]
+        return {
+          ...supplier,
+          seal_id:          best.id,
+          seal_level:       best.level,
+          seal_status:      best.status,
+          seal_score:       best.score,
+          seal_issued_at:   best.issued_at,
+          suspended_reason: best.suspended_reason,
+          all_seals: seals.map(s => ({
+            id: s.id, status: s.status,
+            name: s.clients?.razao_social || s.seal_name || (s.client_id ? 'Cliente' : 'ELOS'),
+          })),
+        }
+      })
+      setSuppliers(list)
+      setStats({
+        total:       list.filter(s => s.seal_status === 'ACTIVE').length,
+        sealsActive: all.filter(s => s.status === 'ACTIVE').length,
+        sealsSusp:   all.filter(s => s.status === 'SUSPENDED').length,
+        suspended:   list.filter(s => s.seal_status === 'SUSPENDED').length,
+      })
+    } catch (e) {
+      console.error('Homologados query:', e.message)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
@@ -104,10 +122,10 @@ export function BackofficeHomologados() {
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:24 }}>
         {[
-          { label:'Total Homologados', value:stats.total,    color:'#2E3192', bg:'rgba(46,49,146,.06)' },
-          { label:'Selo Premium',      value:stats.premium,  color:'#F47E2F', bg:'rgba(244,126,47,.06)' },
-          { label:'Selo Simples',      value:stats.simples,  color:'#22c55e', bg:'rgba(34,197,94,.06)'  },
-          { label:'Suspensos',         value:stats.suspended,color:'#dc2626', bg:'rgba(239,68,68,.06)'  },
+          { label:'Fornecedores homologados', value:stats.total,       color:'#2E3192', bg:'rgba(46,49,146,.06)' },
+          { label:'Selos ativos',             value:stats.sealsActive, color:'#22c55e', bg:'rgba(34,197,94,.06)'  },
+          { label:'Selos suspensos',          value:stats.sealsSusp,   color:'#F47E2F', bg:'rgba(244,126,47,.06)' },
+          { label:'Fornecedores só suspensos', value:stats.suspended,  color:'#dc2626', bg:'rgba(239,68,68,.06)'  },
         ].map((kpi,i) => (
           <div key={i} style={{ background:kpi.bg, border:`1px solid ${kpi.color}22`, borderRadius:12, padding:'16px 20px' }}>
             <div style={{ fontSize:28, fontWeight:800, color:kpi.color, fontFamily:'Montserrat,sans-serif' }}>{kpi.value}</div>
@@ -157,6 +175,17 @@ export function BackofficeHomologados() {
                     </div>
                     {isSuspended && s.suspended_reason && (
                       <div style={{ fontSize:11, color:'#dc2626', marginTop:2 }}>Motivo: {s.suspended_reason}</div>
+                    )}
+                    {(s.all_seals || []).length > 1 && (
+                      <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>
+                        {s.all_seals.map(sl => (
+                          <span key={sl.id} style={{ fontSize:9, fontWeight:700, fontFamily:'Montserrat,sans-serif', padding:'1px 7px', borderRadius:20,
+                            color: sl.status==='ACTIVE' ? '#15803d' : '#b45309',
+                            background: sl.status==='ACTIVE' ? 'rgba(34,197,94,.1)' : 'rgba(245,158,11,.12)' }}>
+                            {sl.name}
+                          </span>
+                        ))}
+                      </div>
                     )}
                     <div style={{ marginTop:6, width:160 }}>
                       <ScoreBar score={s.seal_score||0}/>

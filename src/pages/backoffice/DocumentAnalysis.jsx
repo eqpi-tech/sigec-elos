@@ -14,6 +14,7 @@ const STATUS_OPTIONS = [
   { value: '5dias',    label: 'Próximos 5 dias' },
   { value: 'VALID',    label: 'Aprovado' },
   { value: 'REJECTED', label: 'Rejeitado' },
+  { value: 'NOT_APPLICABLE', label: 'Não se aplica' },
 ]
 
 const SORT_OPTIONS = [
@@ -23,8 +24,8 @@ const SORT_OPTIONS = [
   { value: 'recent',       label: 'Mais recente' },
 ]
 
-const STATUS_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#9B9B9B', REJECTED:'#ef4444', EXPIRED:'#ef4444', EXPIRING:'#f59e0b' }
-const STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Rejeitado', EXPIRED:'Vencido', EXPIRING:'Vence em breve' }
+const STATUS_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#9B9B9B', REJECTED:'#ef4444', EXPIRED:'#ef4444', EXPIRING:'#f59e0b', NOT_APPLICABLE:'#64748b' }
+const STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Rejeitado', EXPIRED:'Vencido', EXPIRING:'Vence em breve', NOT_APPLICABLE:'Não se aplica' }
 
 function getDocAiType(doc) {
   const label = (doc.label || '').toLowerCase()
@@ -168,192 +169,106 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
   )
 }
 
-// Modal de rejeição com motivos parametrizados
-function RejectModal({ doc, reasons, onConfirm, onClose }) {
+// Modal ÚNICO de edição (paridade HOC): ver, substituir arquivo, vencimento,
+// status (Aprovado/Reprovado/Não se aplica) e motivo — tudo em um lugar.
+function EditDocModal({ doc, reasons, onView, onSubmit, onClose }) {
+  const [file, setFile]           = useState(null)
+  const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
+  const [status, setStatus]       = useState('')       // '' = manter atual
   const [reasonCode, setReasonCode] = useState('')
-  const [customNote, setCustomNote]  = useState('')
-  const [saving, setSaving]          = useState(false)
+  const [customNote, setCustomNote] = useState('')
+  const [saving, setSaving]       = useState(false)
 
   const selectedReason = reasons.find(r => r.code === reasonCode)
-  const finalNote = reasonCode === 'OUTRO' ? customNote : (selectedReason?.label || '')
+  const note = status === 'REJECTED'
+    ? (reasonCode === 'OUTRO' ? customNote.trim() : (selectedReason?.label || ''))
+    : customNote.trim()
+
+  const rejectSemMotivo = status === 'REJECTED' && (!reasonCode || (reasonCode === 'OUTRO' && !customNote.trim()))
+  const nadaMudou       = !file && !status && expiry === (doc.expires_at ? doc.expires_at.slice(0, 10) : '')
 
   async function confirm() {
-    if (!reasonCode) return
+    if (rejectSemMotivo || nadaMudou) return
+    if (file && file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5MB — reduza o tamanho'); return }
     setSaving(true)
-    await onConfirm(doc.id, finalNote || 'Rejeitado pelo backoffice')
-    setSaving(false)
-    onClose()
+    try {
+      await onSubmit(doc.id, { file, expiry: expiry || null, status: status || null, note })
+      onClose()
+    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+    finally { setSaving(false) }
   }
+
+  const lbl = { fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:6, display:'block' }
+  const inp = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
-      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:460,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#dc2626',marginBottom:4 }}>Rejeitar Documento</div>
-        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
+      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:480,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)',maxHeight:'92vh',overflowY:'auto' }}>
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4 }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e' }}>✏️ Editar Documento</div>
+          <button onClick={onClose} style={{ background:'none',border:'none',cursor:'pointer',color:'#9B9B9B',fontSize:18,lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:6 }}>
           {doc.label} · {doc.suppliers?.razao_social}
         </div>
+        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9B9B9B',marginBottom:16 }}>
+          Status atual: <strong style={{ color: STATUS_COLOR[doc.status]||'#64748b' }}>{STATUS_LABEL[doc.status]||doc.status}</strong>
+          {doc.expires_at && ` · vence em ${doc.expires_at.slice(0,10)}`}
+        </div>
 
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Motivo</div>
-        <select value={reasonCode} onChange={e => setReasonCode(e.target.value)}
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#1a1c5e',marginBottom:12,boxSizing:'border-box' }}>
-          <option value="">Selecione um motivo...</option>
-          {reasons.filter(r => r.applies_to !== 'seal').map(r => (
-            <option key={r.code} value={r.code}>{r.label}</option>
-          ))}
-        </select>
-
-        {reasonCode === 'OUTRO' && (
-          <textarea value={customNote} onChange={e => setCustomNote(e.target.value)}
-            placeholder="Descreva o motivo..."
-            rows={3}
-            style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',boxSizing:'border-box',marginBottom:12 }}
-          />
+        {(doc.storage_path || doc.hoc_arquivo_id) && (
+          <Button variant="neutral" size="sm" style={{ marginBottom:16 }} onClick={() => onView(doc)}>
+            👁 Ver documento atual
+          </Button>
         )}
 
-        <div style={{ display:'flex',gap:8,marginTop:4 }}>
-          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="danger"  full disabled={!reasonCode || saving || (reasonCode==='OUTRO' && !customNote.trim())} onClick={confirm}>
-            {saving ? <Spinner size={14}/> : 'Confirmar Rejeição'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Modal de aprovação com data de expiração
-function ApproveModal({ doc, onConfirm, onClose }) {
-  const [expiry, setExpiry] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function confirm() {
-    setSaving(true)
-    await onConfirm(doc.id, expiry || null)
-    setSaving(false)
-    onClose()
-  }
-
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
-      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:400,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#15803d',marginBottom:4 }}>✓ Aprovar Documento</div>
-        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
-          {doc.label} · {doc.suppliers?.razao_social}
-        </div>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Data de Vencimento (opcional)</div>
-        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:16,boxSizing:'border-box' }}/>
-        <div style={{ display:'flex',gap:8 }}>
-          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="success" full disabled={saving} onClick={confirm}>
-            {saving ? <Spinner size={14}/> : 'Confirmar Aprovação'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Modal de substituição de arquivo (paridade HOC: analista troca o documento
-// e ajusta o vencimento; o documento fica VALID)
-function ReplaceModal({ doc, onConfirm, onClose }) {
-  const [file,   setFile]   = useState(null)
-  const [expiry, setExpiry] = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
-  const [note,   setNote]   = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function confirm() {
-    if (!file) return
-    if (file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5MB — reduza o tamanho'); return }
-    setSaving(true)
-    try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload  = () => resolve(reader.result.split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-      await onConfirm(doc.id, {
-        action: 'replace_file',
-        file: { name: file.name, mime: file.type, base64 },
-        expiresAt: expiry || undefined,
-        note: note.trim() || undefined,
-      })
-      onClose()
-    } catch (e) { alert('Erro ao substituir: ' + e.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
-      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:440,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e',marginBottom:4 }}>🔄 Substituir Documento</div>
-        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
-          {doc.label} · {doc.suppliers?.razao_social}
-        </div>
-
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Novo arquivo *</div>
+        <span style={lbl}>Substituir documento</span>
         <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files?.[0] || null)}
-          style={{ width:'100%',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14 }}/>
+          style={{ width:'100%', fontFamily:'DM Sans,sans-serif', fontSize:13, marginBottom:14 }}/>
 
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Nova data de vencimento</div>
-        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14,boxSizing:'border-box' }}/>
+        <span style={lbl}>Data de vencimento</span>
+        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} style={{ ...inp, marginBottom:14 }}/>
 
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Observação</div>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-          placeholder="Opcional — motivo da substituição"
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',boxSizing:'border-box',marginBottom:8 }}/>
+        <span style={lbl}>Status</span>
+        <select value={status} onChange={e => { setStatus(e.target.value); setReasonCode(''); setCustomNote('') }} style={{ ...inp, marginBottom:14 }}>
+          <option value="">Manter status atual</option>
+          <option value="VALID">✓ Aprovado</option>
+          <option value="REJECTED">✕ Reprovado</option>
+          <option value="NOT_APPLICABLE">◌ Não se aplica</option>
+        </select>
 
-        <div style={{ background:'#FFF3E8',border:'1px solid #F47E2F55',borderRadius:8,padding:'10px 12px',fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#9a5b1f',marginBottom:16 }}>
-          O documento substituído fica <strong>Aprovado</strong> com a data informada. A versão anterior permanece no histórico.
-        </div>
+        {status === 'REJECTED' ? (
+          <>
+            <span style={lbl}>Motivo da reprovação *</span>
+            <select value={reasonCode} onChange={e => setReasonCode(e.target.value)} style={{ ...inp, marginBottom:10 }}>
+              <option value="">Selecione um motivo...</option>
+              {reasons.filter(r => r.applies_to !== 'seal').map(r => (
+                <option key={r.code} value={r.code}>{r.label}</option>
+              ))}
+            </select>
+            {reasonCode === 'OUTRO' && (
+              <textarea value={customNote} onChange={e => setCustomNote(e.target.value)} rows={2}
+                placeholder="Descreva o motivo..." style={{ ...inp, resize:'vertical', marginBottom:10 }}/>
+            )}
+          </>
+        ) : (
+          <>
+            <span style={lbl}>Observação</span>
+            <textarea value={customNote} onChange={e => setCustomNote(e.target.value)} rows={2}
+              placeholder="Opcional" style={{ ...inp, resize:'vertical', marginBottom:10 }}/>
+          </>
+        )}
 
-        <div style={{ display:'flex',gap:8 }}>
+        {file && !status && (
+          <div style={{ background:'#FFF3E8', border:'1px solid #F47E2F55', borderRadius:8, padding:'8px 12px', fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9a5b1f', marginBottom:12 }}>
+            Documento substituído pelo analista fica <strong>Aprovado</strong>. A versão anterior permanece no histórico.
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8, marginTop:8 }}>
           <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" full disabled={!file || saving} onClick={confirm}>
-            {saving ? <Spinner size={14}/> : 'Substituir'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Modal de alteração de vencimento (renova documento vencido/a vencer)
-function EditExpiryModal({ doc, onConfirm, onClose }) {
-  const [expiry, setExpiry] = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
-  const [note,   setNote]   = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function confirm() {
-    if (!expiry) return
-    setSaving(true)
-    try {
-      await onConfirm(doc.id, { action: 'set_expiry', expiresAt: expiry, note: note.trim() || undefined })
-      onClose()
-    } catch (e) { alert('Erro ao alterar vencimento: ' + e.message) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
-      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:400,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e',marginBottom:4 }}>📅 Alterar Vencimento</div>
-        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#64748b',marginBottom:16 }}>
-          {doc.label} · {doc.suppliers?.razao_social}
-        </div>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Nova data de vencimento *</div>
-        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)}
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,marginBottom:14,boxSizing:'border-box' }}/>
-        <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:11,color:'#9B9B9B',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>Observação</div>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-          placeholder="Opcional — ex.: certidão renovada pelo órgão emissor"
-          style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical',boxSizing:'border-box',marginBottom:16 }}/>
-        <div style={{ display:'flex',gap:8 }}>
-          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="success" full disabled={!expiry || saving} onClick={confirm}>
-            {saving ? <Spinner size={14}/> : 'Salvar Data'}
+          <Button variant="primary" full disabled={saving || rejectSemMotivo || nadaMudou} onClick={confirm}>
+            {saving ? <Spinner size={14}/> : '💾 Salvar'}
           </Button>
         </div>
       </div>
@@ -392,11 +307,8 @@ export default function DocumentAnalysis() {
   // Ações inline
   const [docStatus,   setDocStatus]   = useState({}) // docId → status local
   const [saving,      setSaving]      = useState(new Set())
-  const [rejectModal, setRejectModal] = useState(null) // doc object
-  const [approveModal,setApproveModal] = useState(null)
   const [aiModal,     setAiModal]     = useState(null) // { doc, extractType }
-  const [replaceModal,setReplaceModal] = useState(null)
-  const [expiryModal, setExpiryModal] = useState(null)
+  const [editModal,   setEditModal]   = useState(null) // doc object
 
   const PAGE_SIZE = 50
 
@@ -440,20 +352,58 @@ export default function DocumentAnalysis() {
     sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy }))
   }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
 
-  async function handleApprove(docId, expiry) {
+  async function handleApprove(docId, expiry, status = 'VALID', note) {
     setSaving(p => new Set([...p, docId]))
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'VALID', expiresAt: expiry || undefined }),
+        body: JSON.stringify({ documentId: docId, status, expiresAt: expiry || undefined, note: note || undefined }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
-      setDocStatus(p => ({ ...p, [docId]: 'VALID' }))
-      setRows(p => p.map(d => d.id === docId ? { ...d, status: 'VALID', expires_at: expiry || d.expires_at } : d))
-    } catch (e) { alert('Erro ao aprovar: ' + e.message) }
+      setDocStatus(p => ({ ...p, [docId]: status }))
+      setRows(p => p.map(d => d.id === docId ? { ...d, status, expires_at: expiry || d.expires_at, review_note: note || d.review_note } : d))
+    } catch (e) { alert('Erro ao salvar: ' + e.message); throw e }
     finally { setSaving(p => { const n = new Set(p); n.delete(docId); return n }) }
+  }
+
+  // Abre o arquivo (Storage ELOS ou S3 legado do HOC)
+  async function viewDoc(doc) {
+    try {
+      const url = doc.storage_path
+        ? await documentApi.getSignedUrl(doc.storage_path)
+        : await documentApi.getHocFileUrl(doc.id)
+      window.open(url, '_blank')
+    } catch (e) { alert(e.message) }
+  }
+
+  // Modal único: orquestra substituição de arquivo, vencimento e status.
+  // 1) arquivo → replace_file (fica VALID) · 2) status → approve-document
+  // (dispara auto-finalização) · 3) só vencimento → set_expiry
+  async function handleEditSubmit(docId, { file, expiry, status, note }) {
+    if (file) {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve(reader.result.split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      await handleUpdateDoc(docId, {
+        action: 'replace_file',
+        file: { name: file.name, mime: file.type, base64 },
+        expiresAt: expiry || undefined,
+        note: note || undefined,
+      })
+      if (!status || status === 'VALID') return
+    }
+    if (status) {
+      if (status === 'REJECTED') await handleReject(docId, note)
+      else await handleApprove(docId, expiry, status, note)
+      return
+    }
+    // só a data mudou
+    await handleUpdateDoc(docId, { action: 'set_expiry', expiresAt: expiry, note: note || undefined })
   }
 
   // Substituir arquivo / alterar vencimento (admin-update-document)
@@ -698,43 +648,17 @@ export default function DocumentAnalysis() {
                     {isToday   && <div style={{ fontSize:10, color:'#d97706' }}>Hoje</div>}
                   </div>
 
-                  {/* Ações */}
+                  {/* Ações: 👁 ver rápido · 🤖 extração IA · ✏️ modal único */}
                   <div style={{ display:'flex', gap:5, justifyContent:'flex-end', flexWrap:'wrap' }}>
-                    {doc.storage_path && (() => {
-                      const aiType = getDocAiType(doc)
-                      return aiType ? (
-                        <Button variant="primary" size="sm"
-                          onClick={() => setAiModal({ doc, extractType: aiType })}>
-                          🤖
-                        </Button>
-                      ) : (
-                        <Button variant="neutral" size="sm" onClick={async () => {
-                          const url = await documentApi.getSignedUrl(doc.storage_path)
-                          window.open(url, '_blank')
-                        }}>👁</Button>
-                      )
-                    })()}
-                    {!doc.storage_path && doc.hoc_arquivo_id && (
-                      <Button variant="neutral" size="sm" onClick={async () => {
-                        try { const url = await documentApi.getHocFileUrl(doc.id); window.open(url, '_blank') }
-                        catch (e) { alert(e.message) }
-                      }}>👁</Button>
+                    {(doc.storage_path || doc.hoc_arquivo_id) && (
+                      <Button variant="neutral" size="sm" title="Ver documento" onClick={() => viewDoc(doc)}>👁</Button>
+                    )}
+                    {doc.storage_path && getDocAiType(doc) && (
+                      <Button variant="primary" size="sm" title="Extração IA"
+                        onClick={() => setAiModal({ doc, extractType: getDocAiType(doc) })}>🤖</Button>
                     )}
                     {isSaving ? <Spinner size={16}/> : (
-                      <>
-                        {(status === 'PENDING' || status === 'MISSING' || status === 'EXPIRED' || status === 'EXPIRING') && (
-                          <Button variant="success" size="sm" onClick={() => setApproveModal(doc)}>✓</Button>
-                        )}
-                        {(status === 'PENDING' || status === 'VALID' || status === 'EXPIRING') && (
-                          <Button variant="danger" size="sm" onClick={() => setRejectModal(doc)}>✕</Button>
-                        )}
-                        <Button variant="neutral" size="sm" title="Substituir documento"
-                          onClick={() => setReplaceModal(doc)}>🔄</Button>
-                        {(status === 'VALID' || status === 'EXPIRED' || status === 'EXPIRING') && (
-                          <Button variant="neutral" size="sm" title="Alterar vencimento"
-                            onClick={() => setExpiryModal(doc)}>📅</Button>
-                        )}
-                      </>
+                      <Button variant="primary" size="sm" onClick={() => setEditModal(doc)}>✏️ Editar</Button>
                     )}
                   </div>
                 </div>
@@ -758,15 +682,15 @@ export default function DocumentAnalysis() {
       )}
 
       {/* Modais */}
-      {rejectModal  && <RejectModal  doc={rejectModal}  reasons={reasons} onConfirm={handleReject}  onClose={() => setRejectModal(null)}/>}
-      {approveModal && <ApproveModal doc={approveModal} onConfirm={handleApprove} onClose={() => setApproveModal(null)}/>}
-      {replaceModal && <ReplaceModal doc={replaceModal} onConfirm={handleUpdateDoc} onClose={() => setReplaceModal(null)}/>}
-      {expiryModal  && <EditExpiryModal doc={expiryModal} onConfirm={handleUpdateDoc} onClose={() => setExpiryModal(null)}/>}
+      {editModal && (
+        <EditDocModal doc={editModal} reasons={reasons}
+          onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
+      )}
       {aiModal && (
         <DocAiModal
           doc={aiModal.doc}
           extractType={aiModal.extractType}
-          onApprove={doc => setApproveModal(doc)}
+          onApprove={doc => setEditModal(doc)}
           onClose={() => setAiModal(null)}
         />
       )}

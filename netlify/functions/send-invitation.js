@@ -13,9 +13,18 @@ const supabaseAdmin = createClient(
 
 // ── MODO A: Buyer convida supplier já cadastrado ────────────────────────────
 async function handleBuyerInvitation(body, h) {
+  // Também usado por CLIENTES convidando fornecedores JÁ CADASTRADOS
+  // (marketplace/aba Todos): passe clientId/clientName — o convite é
+  // registrado como CLIENT (entra na cadeia + relatórios do cliente).
   const { supplierId, supplierRazaoSocial, supplierCnpj, buyerName, buyerEmail, buyerId,
+          clientId, clientName, subsidiado,
           objective = 'homologacao', customMessage } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
+  let senderName = clientName || buyerName
+  if (clientId) {
+    const { data: cl } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()
+    if (cl?.razao_social) senderName = cl.razao_social
+  }
 
   // Busca todos os user_ids vinculados ao supplier
   const { data: userRoles, error: rolesErr } = await supabaseAdmin
@@ -38,14 +47,16 @@ async function handleBuyerInvitation(body, h) {
 
   const { data: invite, error: invErr } = await supabaseAdmin.from('invitations').insert({
     buyer_id:              buyerId             || null,
+    client_id:             clientId            || null,
     supplier_id:           supplierId,
-    buyer_name:            buyerName           || '',
+    buyer_name:            senderName          || '',
     buyer_email:           buyerEmail          || '',
     supplier_razao_social: supplierRazaoSocial || '',
     supplier_cnpj:         supplierCnpj        || '',
     supplier_email:        emails.join(', '),
     status:                'SENT',
-    invited_by_role:       'BUYER',
+    invited_by_role:       clientId ? 'CLIENT' : 'BUYER',
+    subsidiado:            subsidiado ?? null,
     objetivo:              objective === 'contato' ? 'contato' : 'homologacao',
   }).select('id, token').single()
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
@@ -59,7 +70,7 @@ async function handleBuyerInvitation(body, h) {
     const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     const messageHtml = customMessage?.trim()
       ? `<div style="white-space:pre-line;color:#374151;line-height:1.7">${esc(customMessage.trim())}</div>`
-      : `<p>A empresa <strong>${buyerName}</strong> ${isContato
+      : `<p>A empresa <strong>${senderName}</strong> ${isContato
           ? 'gostaria de entrar em contato com'
           : 'quer iniciar uma homologação com'} <strong>${supplierRazaoSocial}</strong>.</p>`
 
@@ -84,8 +95,8 @@ async function handleBuyerInvitation(body, h) {
       </div>`
 
     const subject = isContato
-      ? `${buyerName} quer entrar em contato — SIGEC-ELOS`
-      : `Convite de ${buyerName} — SIGEC-ELOS`
+      ? `${senderName} quer entrar em contato — SIGEC-ELOS`
+      : `Convite de ${senderName} — SIGEC-ELOS`
 
     await Promise.allSettled(emails.map(to =>
       fetch('https://api.resend.com/emails', {

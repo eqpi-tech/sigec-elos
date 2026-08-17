@@ -37,9 +37,11 @@ export function calculateScore(uploadedDocs = [], requiredDocs = []) {
     return calculateScoreLegacy(uploadedDocs)
   }
 
+  // "Não se aplica" conta como satisfeito: o documento não é exigível
+  // para este fornecedor (decisão do analista, paridade HOC)
   const validTypes = new Set(
     uploadedDocs
-      .filter(d => d.status === 'VALID')
+      .filter(d => d.status === 'VALID' || d.status === 'NOT_APPLICABLE')
       .map(d => String(d.type))
   )
 

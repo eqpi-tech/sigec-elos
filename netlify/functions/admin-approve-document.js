@@ -43,8 +43,11 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) }
   }
   const { documentId, status, expiresAt, note, inscriptionNumber } = body
-  if (!documentId || !['VALID', 'REJECTED'].includes(status)) {
-    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'documentId e status (VALID|REJECTED) são obrigatórios' }) }
+  if (!documentId || !['VALID', 'REJECTED', 'NOT_APPLICABLE'].includes(status)) {
+    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'documentId e status (VALID|REJECTED|NOT_APPLICABLE) são obrigatórios' }) }
+  }
+  if (status === 'REJECTED' && !note) {
+    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Motivo (note) é obrigatório para reprovação' }) }
   }
 
   // ── Atualizar documento ──────────────────────────────────────────
@@ -266,12 +269,32 @@ async function recalcSealScores(sb, supplierId) {
     }
   }
 
-  const validTypes = new Set((allDocs || []).filter(d => d.status === 'VALID').map(d => String(d.type)))
+  // NOT_APPLICABLE conta como satisfeito (doc não exigível p/ este fornecedor)
+  const validTypes = new Set((allDocs || []).filter(d => d.status === 'VALID' || d.status === 'NOT_APPLICABLE').map(d => String(d.type)))
 
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
     let req = [...(reqByOwner[owner] || [])]
     if (!req.length && seal.client_id) {
+      // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
+      const { data: fcRows } = await sb
+        .from('client_flow_categories')
+        .select('category_id, client_flows!inner(client_id, active)')
+        .eq('client_flows.client_id', seal.client_id)
+        .eq('client_flows.active', true)
+      const flowCatIds = [...new Set((fcRows || []).map(r => r.category_id))]
+      const docSet = new Set()
+      for (let i = 0; i < flowCatIds.length; i += 200) {
+        const { data: cdRows } = await sb
+          .from('category_documents')
+          .select('document_id')
+          .in('category_id', flowCatIds.slice(i, i + 200))
+        for (const r of (cdRows || [])) docSet.add(r.document_id)
+      }
+      req = [...docSet]
+    }
+    if (!req.length && seal.client_id) {
+      // Fallback 2 (legado): fluxo doc-a-doc
       const { data: flowRows } = await sb
         .from('client_document_flows')
         .select('catalog_id, client_flows!inner(active)')

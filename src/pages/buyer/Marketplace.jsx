@@ -56,6 +56,106 @@ function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
   )
 }
 
+// ── Convite em massa (fornecedores já selecionados — modal mostra só os
+//    campos COMUNS: objetivo, subsídio, mensagem; nada por fornecedor) ──────
+function MultiInviteModal({ suppliers, user, onClose, onSent }) {
+  const isClient = user?.role === 'CLIENT'
+  const senderName = user?.organization || user?.name || 'Nossa empresa'
+  const [objetivo, setObjetivo]     = useState('homologacao')
+  const [subsidiado, setSubsidiado] = useState(false)
+  const [message, setMessage]       = useState('')
+  const [sending, setSending]       = useState(false)
+  const [progress, setProgress]     = useState(0)
+
+  useEffect(() => {
+    setMessage(objetivo === 'contato'
+      ? `Olá!\n\nSomos a ${senderName} e gostaríamos de entrar em contato com sua empresa para conhecer melhor seus produtos e serviços.\n\nAguardamos seu retorno pela plataforma SIGEC-ELOS.`
+      : `Olá!\n\nA ${senderName} convida sua empresa para o nosso processo de homologação de fornecedores na plataforma SIGEC-ELOS.\n\nCom a homologação aprovada, sua empresa fica apta a fornecer para nós.`)
+  }, [objetivo, senderName])
+
+  const send = async () => {
+    setSending(true)
+    let ok = 0, fail = 0
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      for (const s of suppliers) {
+        try {
+          const res = await fetch('/.netlify/functions/send-invitation', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              supplierId: s.id,
+              supplierRazaoSocial: s.razao_social,
+              supplierCnpj: s.cnpj || '',
+              objective: objetivo,
+              customMessage: message.trim() || undefined,
+              ...(isClient
+                ? { clientId: user.clientId, clientName: senderName, subsidiado: objetivo === 'homologacao' ? subsidiado : undefined }
+                : { buyerId: user.buyerId, buyerName: senderName, buyerEmail: user.email }),
+            }),
+          })
+          if (res.ok) ok++; else fail++
+        } catch { fail++ }
+        setProgress(p => p + 1)
+      }
+      onSent(ok, fail)
+    } finally { setSending(false) }
+  }
+
+  const cardCss = (active) => ({
+    flex:1, padding:'12px 14px', borderRadius:12, cursor:'pointer', textAlign:'left',
+    border: active ? '2px solid #2E3192' : '1px solid #e2e4ef',
+    background: active ? 'rgba(46,49,146,.05)' : '#fff',
+  })
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:520, boxShadow:'0 20px 60px rgba(0,0,0,.2)', maxHeight:'92vh', overflowY:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>✉️ Convidar Fornecedores</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:18, lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:16 }}>
+          O convite será enviado para <strong style={{ color:'#2E3192' }}>{suppliers.length} fornecedor{suppliers.length !== 1 ? 'es' : ''}</strong> selecionado{suppliers.length !== 1 ? 's' : ''} — os dados de cada um já estão vinculados.
+        </div>
+
+        <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>Objetivo</div>
+        <div style={{ display:'flex', gap:10, marginBottom:16 }}>
+          <button onClick={() => setObjetivo('contato')} style={cardCss(objetivo === 'contato')}>
+            <div style={{ fontSize:18 }}>📞</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>Fazer contato</div>
+            <div style={{ fontSize:11, color:'#9B9B9B' }}>Aproximação comercial</div>
+          </button>
+          <button onClick={() => setObjetivo('homologacao')} style={cardCss(objetivo === 'homologacao')}>
+            <div style={{ fontSize:18 }}>🏅</div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>Solicitar homologação</div>
+            <div style={{ fontSize:11, color:'#9B9B9B' }}>Inicia o processo documental</div>
+          </button>
+        </div>
+
+        {isClient && objetivo === 'homologacao' && (
+          <label style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16, cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e' }}>
+            <input type="checkbox" checked={subsidiado} onChange={e => setSubsidiado(e.target.checked)}
+              style={{ width:15, height:15, accentColor:'#2E3192' }}/>
+            Homologação <strong>subsidiada</strong> (sua empresa custeia o processo destes fornecedores)
+          </label>
+        )}
+
+        <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>Mensagem (igual para todos)</div>
+        <textarea value={message} onChange={e => setMessage(e.target.value)} rows={6}
+          style={{ width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', boxSizing:'border-box', resize:'vertical', marginBottom:14 }}/>
+
+        <div style={{ display:'flex', gap:10 }}>
+          <Button variant="neutral" style={{ flex:1 }} onClick={onClose} disabled={sending}>Cancelar</Button>
+          <Button variant="primary" style={{ flex:1 }} onClick={send} disabled={sending}>
+            {sending ? `⏳ Enviando ${progress}/${suppliers.length}...` : `📨 Enviar ${suppliers.length} convite${suppliers.length !== 1 ? 's' : ''}`}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Seção colapsável do sidebar ───────────────────────────────────────────────
 function FilterSection({ title, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -141,6 +241,7 @@ export default function BuyerMarketplace() {
   const [searched,    setSearched]    = useState(!!_saved?.results?.length)
   const [selectedMap, setSelectedMap] = useState({})
   const [showRfq,     setShowRfq]     = useState(false)
+  const [inviteTargets, setInviteTargets] = useState(null) // array de suppliers p/ convite
 
   const toggleArr = (setter, val) => setter(arr => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val])
   const selectedList = Object.values(selectedMap)
@@ -371,6 +472,9 @@ export default function BuyerMarketplace() {
                     {' — '}
                     <button onClick={() => setSelectedMap({})} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
                   </span>
+                  <Button variant="primary" onClick={() => setInviteTargets(selectedList)}>
+                    ✉️ Convidar ({selectedList.length})
+                  </Button>
                   {user?.role === 'CLIENT'
                     ? <Button variant="orange" onClick={() => navigate('/cliente/rfq')}>📝 Criar Cotação (RFQ)</Button>
                     : user?.buyerPlan === 'pro'
@@ -487,6 +591,10 @@ export default function BuyerMarketplace() {
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
                       onClick={() => goToProfile(s.id)}>Ver Perfil</Button>
+                    <button onClick={() => setInviteTargets([s])} title="Enviar convite (dados já preenchidos)"
+                      style={{ padding:'5px 10px', borderRadius:8, border:'1px solid #e2e4ef', background:'#fff', color:'#2E3192', fontSize:12, cursor:'pointer' }}>
+                      ✉️
+                    </button>
                     <button onClick={() => setSelectedMap(m => { const n={...m}; if(n[s.id]) delete n[s.id]; else n[s.id]=s; return n })}
                       style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel?'#2E3192':'#e2e4ef'}`, background:isSel?'rgba(46,49,146,.1)':'#fff', color:isSel?'#2E3192':'#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
                       {isSel ? '✓' : '+'}
@@ -498,6 +606,16 @@ export default function BuyerMarketplace() {
           </div>
         )}
       </div>
+
+      {/* Modal convite em massa */}
+      {inviteTargets && (
+        <MultiInviteModal suppliers={inviteTargets} user={user}
+          onClose={() => setInviteTargets(null)}
+          onSent={(ok, fail) => {
+            setInviteTargets(null); setSelectedMap({})
+            alert(`✉️ ${ok} convite${ok !== 1 ? 's' : ''} enviado${ok !== 1 ? 's' : ''}${fail ? ` · ${fail} falha(s)` : ''}!`)
+          }}/>
+      )}
 
       {/* Modal RFQ */}
       {showRfq && (

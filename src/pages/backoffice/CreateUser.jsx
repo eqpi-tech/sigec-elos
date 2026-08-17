@@ -1,12 +1,64 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, Card, PageHeader } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 
 const ROLES = [
-  { value:'BUYER',  label:'Comprador', icon:'🔍', desc:'Acesso ao marketplace — requer análise prévia do time comercial' },
-  { value:'CLIENT', label:'Cliente',   icon:'🏢', desc:'Acesso completo ao HOC dos fornecedores — requer contrato assinado' },
-  { value:'ADMIN',  label:'Backoffice',icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação (EQPI)' },
+  { value:'BUYER',    label:'Comprador',  icon:'🔍', desc:'Acesso ao marketplace — requer análise prévia do time comercial' },
+  { value:'CLIENT',   label:'Cliente',    icon:'🏢', desc:'Acesso completo ao HOC dos fornecedores — requer contrato assinado' },
+  { value:'SUPPLIER', label:'Fornecedor', icon:'🏭', desc:'Usuário vinculado a um fornecedor já cadastrado na plataforma' },
+  { value:'ADMIN',    label:'Backoffice', icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação (EQPI)' },
 ]
+
+// Busca server-side de fornecedores (55k+ registros — nunca listar tudo)
+function SupplierSearch({ value, onChange, inp, lbl }) {
+  const [q, setQ] = useState('')
+  const [options, setOptions] = useState([])
+  const [selected, setSelected] = useState(null)
+
+  useEffect(() => {
+    if (q.trim().length < 3) { setOptions([]); return }
+    const t = setTimeout(async () => {
+      const digits = q.replace(/\D/g, '')
+      let query = supabase.from('suppliers').select('id, razao_social, cnpj').limit(15)
+      if (digits.length >= 4) query = query.ilike('cnpj', `%${digits}%`)
+      else query = query.ilike('razao_social', `%${q.trim()}%`)
+      const { data } = await query
+      setOptions(data || [])
+    }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  function pick(s) { setSelected(s); onChange(s.id); setQ(''); setOptions([]) }
+  function clear() { setSelected(null); onChange('') }
+
+  return (
+    <div style={{ marginBottom:16, position:'relative' }}>
+      <label style={lbl}>Fornecedor (empresa já cadastrada) *</label>
+      {selected ? (
+        <div style={{ ...inp, display:'flex', alignItems:'center', justifyContent:'space-between', background:'#f0fdf4', border:'1px solid #bbf7d0' }}>
+          <span style={{ fontSize:13 }}>{selected.razao_social} · {selected.cnpj}</span>
+          <button type="button" onClick={clear} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B' }}>✕</button>
+        </div>
+      ) : (
+        <>
+          <input value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Buscar por razão social ou CNPJ (mín. 3 caracteres)..." style={inp}/>
+          {options.length > 0 && (
+            <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,.12)', zIndex:100, maxHeight:240, overflowY:'auto' }}>
+              {options.map(s => (
+                <button key={s.id} type="button" onClick={() => pick(s)}
+                  style={{ display:'block', width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background:'#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e' }}>
+                  {s.razao_social}
+                  <span style={{ display:'block', fontSize:11, color:'#9B9B9B' }}>{s.cnpj}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
 function formatCnpj(v) {
   const n = v.replace(/\D/g,'').slice(0,14)
@@ -20,6 +72,7 @@ export default function BackofficeCreateUser() {
   const [org, setOrg]         = useState('')
   const [cnpj, setCnpj]       = useState('')
   const [role, setRole]       = useState('CLIENT')
+  const [supplierId, setSupplierId] = useState('')
   const [accessProfile, setAccessProfile] = useState('full')
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
@@ -34,7 +87,7 @@ export default function BackofficeCreateUser() {
       const res = await fetch('/.netlify/functions/admin-create-user', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile }),
+        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile, supplierId: supplierId || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -48,7 +101,7 @@ export default function BackofficeCreateUser() {
   const inp = { width:'100%', padding:'11px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
   const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
 
-  const roleLabel = { BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice / Analista' }
+  const roleLabel = { BUYER:'Comprador', CLIENT:'Cliente', SUPPLIER:'Fornecedor', ADMIN:'Backoffice / Analista' }
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:640, margin:'0 auto' }}>
@@ -87,6 +140,18 @@ export default function BackofficeCreateUser() {
                 O Comprador acessa o marketplace para buscar fornecedores certificados. Criação depende de análise comercial prévia.
               </div>
             </div>
+          )}
+
+          {role === 'SUPPLIER' && (
+            <div style={{ marginBottom:16, background:'#EEF6FF', border:'1px solid #93c5fd', borderRadius:10, padding:'10px 14px' }}>
+              <div style={{ fontSize:12, color:'#1d4ed8', fontFamily:'DM Sans,sans-serif' }}>
+                O usuário será vinculado a um fornecedor já cadastrado e entra com o perfil de módulos "Acesso Total". Use para suporte quando o titular não puder convidar pela tela de Equipe.
+              </div>
+            </div>
+          )}
+
+          {role === 'SUPPLIER' && (
+            <SupplierSearch value={supplierId} onChange={setSupplierId} inp={inp} lbl={lbl}/>
           )}
 
           <div style={{ marginBottom:16 }}>
@@ -137,7 +202,7 @@ export default function BackofficeCreateUser() {
           )}
 
           <Button type="submit" variant="primary" full size="lg" style={{ borderRadius:12 }}
-            disabled={loading || (role === 'CLIENT' && cnpj.replace(/\D/g,'').length !== 14)}>
+            disabled={loading || (role === 'CLIENT' && cnpj.replace(/\D/g,'').length !== 14) || (role === 'SUPPLIER' && !supplierId)}>
             {loading ? '⏳ Criando...' : `✅ Criar ${ROLES.find(r=>r.value===role)?.label}`}
           </Button>
         </form>

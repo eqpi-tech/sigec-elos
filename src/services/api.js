@@ -163,6 +163,24 @@ export const supplierApi = {
         }
       }
       if (!reqRows.length) {
+        // Fallback 1: categorias dos FLUXOS ATIVOS do cliente (patch_043)
+        const { data: fcRows } = await supabase
+          .from('client_flow_categories')
+          .select('category_id, client_flows!inner(client_id, active)')
+          .eq('client_flows.client_id', seal.client_id)
+          .eq('client_flows.active', true)
+        const flowCatIds = [...new Set((fcRows || []).map(r => r.category_id))]
+        for (let i = 0; i < flowCatIds.length; i += 200) {
+          const { data: cdRows } = await supabase
+            .from('category_documents')
+            .select('document_id, documents_catalog(id, name)')
+            .in('category_id', flowCatIds.slice(i, i + 200))
+          for (const r of (cdRows || []))
+            if (r.documents_catalog) reqRows.push({ document_id: r.document_id, name: r.documents_catalog.name })
+        }
+      }
+      if (!reqRows.length) {
+        // Fallback 2 (legado): fluxo doc-a-doc (ex.: Fluxo Padrão pré-043)
         const { data: flowRows } = await supabase
           .from('client_document_flows')
           .select('catalog_id, documents_catalog(id, name), client_flows!inner(active)')
@@ -400,7 +418,25 @@ export async function getRequiredTypesBySeal(supplierId) {
   for (const seal of (seals || [])) {
     const owner = seal.client_id || 'global'
     let req = [...(reqByOwner[owner] || [])]
-    // Fallback 1: cliente sem categorias vinculadas → fluxo manual do cliente
+    // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
+    if (!req.length && seal.client_id) {
+      const { data: fcRows } = await supabase
+        .from('client_flow_categories')
+        .select('category_id, client_flows!inner(client_id, active)')
+        .eq('client_flows.client_id', seal.client_id)
+        .eq('client_flows.active', true)
+      const flowCatIds = [...new Set((fcRows || []).map(r => r.category_id))]
+      const docSet = new Set()
+      for (let i = 0; i < flowCatIds.length; i += 200) {
+        const { data: cdRows } = await supabase
+          .from('category_documents')
+          .select('document_id')
+          .in('category_id', flowCatIds.slice(i, i + 200))
+        for (const r of (cdRows || [])) docSet.add(r.document_id)
+      }
+      req = [...docSet]
+    }
+    // Fallback 2 (legado): fluxo doc-a-doc
     if (!req.length && seal.client_id) {
       const { data: flowRows } = await supabase
         .from('client_document_flows')
@@ -410,7 +446,7 @@ export async function getRequiredTypesBySeal(supplierId) {
         .eq('client_flows.active', true)
       req = (flowRows || []).map(r => r.catalog_id)
     }
-    // Fallback 2: nada específico → fluxo padrão
+    // Fallback 3: nada específico → fluxo padrão
     if (!req.length) req = [...(reqByOwner['global'] || [])]
     requiredBySeal.set(seal.id, req)
   }

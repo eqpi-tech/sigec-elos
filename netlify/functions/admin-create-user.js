@@ -33,18 +33,26 @@ exports.handler = async (event) => {
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode:400, headers, body: JSON.stringify({ error:'JSON inválido' }) } }
 
-  const { name, email, role, organization, cnpj, accessProfile } = body
+  const { name, email, role, organization, cnpj, accessProfile, supplierId } = body
   // Perfil de acesso granular (patch_030): analyst só p/ ADMIN, readonly só p/ CLIENT
   const validProfiles = role === 'ADMIN' ? ['full','analyst'] : role === 'CLIENT' ? ['full','readonly'] : ['full']
   const finalProfile = validProfiles.includes(accessProfile) ? accessProfile : 'full'
   if (!name || !email || !role) return { statusCode:400, headers, body: JSON.stringify({ error:'name, email e role são obrigatórios' }) }
-  if (!['ADMIN','BUYER','CLIENT'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN, BUYER ou CLIENT' }) }
+  if (!['ADMIN','BUYER','CLIENT','SUPPLIER'].includes(role)) return { statusCode:400, headers, body: JSON.stringify({ error:'role deve ser ADMIN, BUYER, CLIENT ou SUPPLIER' }) }
   if (role === 'CLIENT' && !organization) return { statusCode:400, headers, body: JSON.stringify({ error:'organization (razão social) é obrigatório para CLIENT' }) }
   if (role === 'CLIENT' && !cnpj) return { statusCode:400, headers, body: JSON.stringify({ error:'cnpj é obrigatório para CLIENT' }) }
+  if (role === 'SUPPLIER' && !supplierId) return { statusCode:400, headers, body: JSON.stringify({ error:'supplierId (fornecedor existente) é obrigatório para SUPPLIER' }) }
 
   const password = generatePassword()
 
   try {
+    // SUPPLIER: valida o vínculo ANTES de criar o usuário (evita órfão no auth)
+    if (role === 'SUPPLIER') {
+      const { data: sup } = await supabaseAdmin
+        .from('suppliers').select('id').eq('id', supplierId).maybeSingle()
+      if (!sup) throw new Error('Fornecedor não encontrado para vincular o usuário')
+    }
+
     // 1. Cria o usuário no Supabase Auth
     const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email, password, email_confirm: true,
@@ -57,19 +65,21 @@ exports.handler = async (event) => {
       id: newUser.user.id, role, name
     }, { onConflict: 'id' })
 
-    // 3. Insere em user_roles (perfil de módulos "Acesso Total" p/ CLIENT — patch_038)
+    // 3. Insere em user_roles (perfil de módulos "Acesso Total" — patch_038)
     let moduleProfileId = null
-    if (role === 'CLIENT') {
+    if (role === 'CLIENT' || role === 'SUPPLIER') {
       try {
         const { data: total } = await supabaseAdmin.from('access_profiles')
-          .select('id').eq('role_type', 'CLIENT').eq('is_system', true).maybeSingle()
+          .select('id').eq('role_type', role).eq('is_system', true).maybeSingle()
         moduleProfileId = total?.id || null
       } catch { /* pré-patch_038 */ }
     }
     await supabaseAdmin.from('user_roles').insert({
       user_id: newUser.user.id, role, is_primary: true, access_profile: finalProfile,
       access_profile_id: moduleProfileId,
+      supplier_id: role === 'SUPPLIER' ? supplierId : null,
     })
+
 
     // 4. Se BUYER, cria registro na tabela buyers
     if (role === 'BUYER') {
@@ -127,7 +137,7 @@ exports.handler = async (event) => {
           <table style="width:100%;border-collapse:collapse;margin:24px 0">
             <tr>
               <td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%">Perfil</td>
-              <td style="padding:10px;border:1px solid #e2e8f0">${role === 'ADMIN' ? 'Analista Backoffice' : role === 'CLIENT' ? 'Cliente' : 'Comprador'}</td>
+              <td style="padding:10px;border:1px solid #e2e8f0">${role === 'ADMIN' ? 'Analista Backoffice' : role === 'CLIENT' ? 'Cliente' : role === 'SUPPLIER' ? 'Fornecedor' : 'Comprador'}</td>
             </tr>
             <tr>
               <td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold">E-mail</td>
