@@ -112,7 +112,7 @@ function AppRoutes() {
       <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']} module="questionario"><SupplierQuestionnaire/></Protect>} />
       <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />
       {/* Certificado: rota standalone (sem navbar) para impressão limpa */}
-      <Route path="/fornecedor/certificado/:sealId" element={<ProtectedRoute allowedRoles={['SUPPLIER']}><SupplierCertificate/></ProtectedRoute>} />
+      <Route path="/fornecedor/certificado/:sealId" element={<ProtectedRoute allowedRoles={['SUPPLIER','ADMIN']}><SupplierCertificate/></ProtectedRoute>} />
       <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']} module="equipe"><SupplierTeam/></Protect>} />
       <Route path="/fornecedor/dados"            element={<Protect roles={['SUPPLIER']} module="meus_dados"><SupplierMyData/></Protect>} />
       <Route path="/fornecedor/clientes"         element={<Protect roles={['SUPPLIER']} module="clientes_elos"><SupplierClientsDirectory/></Protect>} />

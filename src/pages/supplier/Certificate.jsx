@@ -25,30 +25,35 @@ export default function SupplierCertificate() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!sealId || !user?.supplierId) return
+    const isAdmin = user?.role === 'ADMIN'
+    if (!sealId || (!user?.supplierId && !isAdmin)) return
     ;(async () => {
       try {
-        const { data: seal } = await supabase
+        // ADMIN (backoffice) emite o certificado de qualquer fornecedor;
+        // fornecedor só emite o próprio
+        let q = supabase
           .from('seals')
           .select('*, clients(razao_social, cnpj)')
           .eq('id', sealId)
-          .eq('supplier_id', user.supplierId)
-          .maybeSingle()
+        if (!isAdmin) q = q.eq('supplier_id', user.supplierId)
+        const { data: seal } = await q.maybeSingle()
         if (!seal) throw new Error('Selo não encontrado')
         if (seal.status !== 'ACTIVE' || seal.client_suspended_at)
           throw new Error('O certificado só está disponível para selos ativos.')
 
+        const supplierId = isAdmin ? seal.supplier_id : user.supplierId
+
         const { data: supplier } = await supabase
           .from('suppliers')
           .select('razao_social, nome_fantasia, cnpj')
-          .eq('id', user.supplierId)
+          .eq('id', supplierId)
           .single()
 
         // Categorias do fluxo deste selo: do cliente (selo HOC) ou globais (selo ELOS)
         const { data: catRows } = await supabase
           .from('supplier_categories')
           .select('categories(id, name, client_id)')
-          .eq('supplier_id', user.supplierId)
+          .eq('supplier_id', supplierId)
         const cats = (catRows || [])
           .map(r => r.categories)
           .filter(c => c && (seal.client_id ? c.client_id === seal.client_id : !c.client_id))

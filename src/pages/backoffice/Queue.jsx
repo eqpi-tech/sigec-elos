@@ -467,13 +467,68 @@ export function BackofficeAnalysis() {
   // Considera impeditivo apenas documentos obrigatórios não-auto que ainda não foram enviados
   const hardBlocked = blockingMissing.filter(d => d.source !== 'AUTO' && !['37','61','62'].includes(String(d.type)))
 
+  // Selo do processo em análise (multi-selo: cada cliente tem o seu) e nome
+  // do cliente homologador — o selo Homologado leva o nome do cliente
+  const processSeal       = data?.seals?.find(s => s.status !== 'ACTIVE') || data?.seals?.[0] || null
+  const processClientName = processSeal?.clients?.razao_social || null
+
+  // 📧 Solicitar Documentos: e-mail ao fornecedor com a lista de pendências
+  const pendingDocs = (data?.documents || []).filter(d =>
+    ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
+  const handleRequestDocs = async () => {
+    if (!pendingDocs.length) { alert('Nenhum documento pendente para solicitar.'); return }
+    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s) pendente(s)?`)) return
+    setProcessing(true)
+    try {
+      const rows = pendingDocs.map(d =>
+        `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">${d.label}</td>
+         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${d.status==='REJECTED'?'#dc2626':'#b45309'}">${
+           d.status==='REJECTED' ? `Rejeitado${d.review_note ? ` — ${d.review_note}` : ''}`
+           : d.status==='EXPIRED' ? 'Vencido' : d.status==='EXPIRING' ? 'Vence em breve' : 'Não enviado'
+         }</td></tr>`).join('')
+      await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: data.user_id,
+          subject: `📋 Documentos pendentes na sua homologação — SIGEC-ELOS`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+            <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
+              <h1 style="color:#fff;margin:0 0 4px;font-size:24px">SIGEC-ELOS</h1>
+              <p style="color:#C7D2FE;margin:0;font-size:13px">Plataforma de Homologação de Fornecedores</p>
+            </div>
+            <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
+              <p style="color:#374151">Olá, <strong>${data.razao_social}</strong>!</p>
+              <p style="color:#374151">Para concluir sua homologação${processClientName ? ` com <strong>${processClientName}</strong>` : ''}, precisamos dos seguintes documentos:</p>
+              <table style="width:100%;border-collapse:collapse;margin:16px 0">
+                <tr><th style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;text-align:left;font-size:12px">Documento</th>
+                    <th style="padding:8px;background:#f8fafc;border:1px solid #e2e8f0;text-align:left;font-size:12px">Situação</th></tr>
+                ${rows}
+              </table>
+              <div style="text-align:center;margin-top:20px">
+                <a href="${window.location.origin}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">
+                  Enviar Documentos →
+                </a>
+              </div>
+            </div>
+            <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">
+              EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br
+            </div>
+          </div>`,
+        }),
+      })
+      alert(`📧 Solicitação enviada ao fornecedor (${pendingDocs.length} documento(s) listado(s)).`)
+    } catch (e) { alert('Erro ao enviar: ' + e.message) }
+    finally { setProcessing(false) }
+  }
+
   const handleApprove = async () => {
     if (hardBlocked.length > 0) {
       alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
       return
     }
     setProcessing(true)
-    await adminApi.approveSeal(id, level)
+    await adminApi.approveSeal(id, level, processSeal?.id)
     // Notificação de resultado
     try {
       await fetch('/.netlify/functions/send-email', {
@@ -1475,17 +1530,45 @@ export function BackofficeAnalysis() {
               <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:8,letterSpacing:.5,textTransform:'uppercase' }}>Tipo de Selo</div>
               <div style={{ display:'flex',gap:8 }}>
                 {[
-                  ['verificado','🔵 Verificado','Pré-homologação automática'],
-                  ['homologado','🏅 Homologado','Análise profissional'],
+                  ['verificado','🔵 ELOS Verificado','Pré-homologação automática'],
+                  ['homologado', processClientName ? `🏅 Homologado — ${processClientName}` : '🏅 Homologado', processClientName ? 'Selo leva o nome do cliente' : 'Análise profissional'],
                 ].map(([val,label,desc])=>(
                   <button key={val} onClick={()=>setLevel(val)}
                     style={{ flex:1,padding:'10px 8px',borderRadius:10,border:`2px solid ${level===val?'#2E3192':'#e2e4ef'}`,background:level===val?'rgba(46,49,146,.08)':'#fff',cursor:'pointer',textAlign:'center' }}>
-                    <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:12,color:level===val?'#2E3192':'#9B9B9B' }}>{label}</div>
+                    <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:12,color:level===val?'#2E3192':'#9B9B9B',lineHeight:1.3 }}>{label}</div>
                     <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:2 }}>{desc}</div>
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Selos do fornecedor (multi-selo por cliente) + certificado */}
+            {(data?.seals || []).length > 0 && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:6,letterSpacing:.5,textTransform:'uppercase' }}>Selos deste fornecedor</div>
+                {(data.seals).map(s => {
+                  const name = s.clients?.razao_social || s.seal_name || `ELOS ${s.level || ''}`
+                  const active = s.status === 'ACTIVE'
+                  return (
+                    <div key={s.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:10,border:'1px solid #eef0f6',marginBottom:6 }}>
+                      <span style={{ fontSize:13 }}>{active ? '🏅' : '⏳'}</span>
+                      <div style={{ flex:1,minWidth:0 }}>
+                        <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,color:'#1a1c5e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
+                        <div style={{ fontSize:10,color: active?'#15803d':s.status==='SUSPENDED'?'#dc2626':'#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
+                          {active ? `Ativo · score ${s.score ?? '—'}` : s.status==='SUSPENDED' ? 'Suspenso' : 'Em análise'}
+                        </div>
+                      </div>
+                      {active && (
+                        <button onClick={() => window.open(`/fornecedor/certificado/${s.id}`, '_blank')} title="Emitir certificado"
+                          style={{ padding:'5px 10px',borderRadius:8,border:'1px solid #e2e4ef',background:'#fff',color:'#2E3192',fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,cursor:'pointer',flexShrink:0 }}>
+                          🎓 Certificado
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             <div style={{ marginBottom:14 }}>
               <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:6,letterSpacing:.5,textTransform:'uppercase' }}>Motivo de Rejeição</div>
@@ -1510,7 +1593,7 @@ export function BackofficeAnalysis() {
               {sealAlreadyActive ? (
                 <>
                   <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:10, padding:'12px 16px', textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
-                    ✅ Selo ELOS {data?.seals?.[0]?.level} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
+                    ✅ Selo {data?.seals?.[0]?.clients?.razao_social || `ELOS ${data?.seals?.[0]?.level || ''}`} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
                   </div>
                   <Button variant="danger" full size="sm" style={{ borderRadius:10 }} disabled={processing} onClick={() => setRevertModal(true)}>
                     ↩ Reverter Análise
@@ -1518,14 +1601,21 @@ export function BackofficeAnalysis() {
                 </>
               ) : (
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
-                  {processing ? '⏳...' : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)` : `✅ Emitir Selo ELOS ${level === 'verificado' ? 'Verificado' : 'Homologado'}`}
+                  {processing ? '⏳...'
+                    : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)`
+                    : level === 'verificado' ? '✅ Emitir ELOS Verificado'
+                    : processClientName ? `✅ Homologar — ${processClientName}`
+                    : '✅ Aprovar Homologação'}
                 </Button>
               )}
               <Button variant="danger" full size="md" style={{ borderRadius:10 }} disabled={processing} onClick={handleReject}>
                 ❌ Rejeitar
               </Button>
-              <Button variant="neutral" full size="sm" style={{ borderRadius:10 }}>
-                📧 Solicitar Documentos
+              <Button variant="neutral" full size="sm" style={{ borderRadius:10 }}
+                disabled={processing || pendingDocs.length === 0}
+                onClick={handleRequestDocs}
+                title={pendingDocs.length === 0 ? 'Nenhum documento pendente' : `Solicitar ${pendingDocs.length} documento(s) por e-mail`}>
+                📧 Solicitar Documentos{pendingDocs.length > 0 ? ` (${pendingDocs.length})` : ''}
               </Button>
             </div>
           </Card>

@@ -657,7 +657,7 @@ export const adminApi = {
   getSealAnalysis: async (supplierId) => {
     const [supplierRes, sealsRes, docsRes, cnpjRes, catRes] = await Promise.allSettled([
       supabase.from('suppliers').select('*').eq('id', supplierId).maybeSingle(),
-      supabase.from('seals').select('*').eq('supplier_id', supplierId),
+      supabase.from('seals').select('*, clients(razao_social)').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
       supabase.from('cnpj_consultations')
         .select('id, supplier_id, cnpj, cnpj_data, sanctions_data, has_sanctions, consulted_at')
@@ -732,11 +732,15 @@ export const adminApi = {
     }
   },
 
-  approveSeal: async (supplierId, level) => {
-    const { error: sealErr } = await supabase
+  approveSeal: async (supplierId, level, sealId) => {
+    // Mundo multi-selo: aprova APENAS o selo em análise quando informado;
+    // sem sealId (legado), atualiza todos os selos do fornecedor
+    let q = supabase
       .from('seals')
       .update({ level, status: 'ACTIVE', issued_at: new Date().toISOString() })
       .eq('supplier_id', supplierId)
+    if (sealId) q = q.eq('id', sealId)
+    const { error: sealErr } = await q
     if (sealErr) throw new Error(sealErr.message)
 
     const { error: suppErr } = await supabase
