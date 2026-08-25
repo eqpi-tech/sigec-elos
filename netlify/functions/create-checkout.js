@@ -68,6 +68,7 @@ exports.handler = async (event) => {
       const session = await stripe.checkout.sessions.create({
         customer_email: userEmail,
         mode: 'subscription',
+        allow_promotion_codes: true,
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${frontendUrl}/comprador/plano?activated=true`,
         cancel_url:  `${frontendUrl}/comprador/plano`,
@@ -162,6 +163,9 @@ exports.handler = async (event) => {
     let sessionConfig = {
       customer_email:      userEmail,
       client_reference_id: supplierId,
+      // Campo de cupom no Checkout (ex.: FREETRIALELOS — 30 dias grátis no
+      // Verificado mensal; a restrição de produto é do próprio cupom no Stripe)
+      allow_promotion_codes: true,
       success_url: `${frontendUrl}/fornecedor/plano-ativo?session_id={CHECKOUT_SESSION_ID}&supplier=${supplierId}`,
       cancel_url:  `${frontendUrl}/cadastro`,
       metadata: {
