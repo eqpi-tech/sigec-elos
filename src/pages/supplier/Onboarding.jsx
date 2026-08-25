@@ -125,6 +125,21 @@ export default function SupplierOnboarding() {
       setCnpjData(result.cnpj)
       setSanctions(result.sanctions)
 
+      // BANCO PRIMEIRO: quem já está na base (homologado migrado do HOC) entra
+      // pelo caminho curto MESMO se a Receita falhar/limitar ou a situação não
+      // vier ATIVA — a verificação cadastral dele já foi feita na homologação.
+      const db = result.dbInfo || {}
+      if (db.isClient) {
+        setLookupError('🚫  Este CNPJ está registrado como cliente da plataforma. Para acessar, entre em contato: suporte@eqpitech.com.br')
+        return
+      }
+      if (db.isSupplier) {
+        setExistingSupplier({ id: db.supplierId, razao_social: db.razaoSocial })
+        if (db.hasActiveSeal) {
+          setExistingSeal({ status: 'ACTIVE' })
+          setStep(2); return
+        }
+      }
       if (!result.cnpj || !result.cnpj.cnpj) {
         setLookupError('❌  CNPJ não encontrado na Receita Federal. Verifique o número digitado.')
         return
@@ -133,18 +148,6 @@ export default function SupplierOnboarding() {
       if (situacao && situacao !== 'ATIVA') {
         setLookupError(`⚠️  Situação cadastral: ${situacao}. Regularize o CNPJ antes de prosseguir.`)
         return
-      }
-      const db = result.dbInfo || {}
-      if (db.isClient) {
-        setLookupError('🚫  Este CNPJ está registrado como cliente da plataforma. Para acessar, entre em contato: suporte@eqpitech.com.br')
-        return
-      }
-      if (db.isSupplier) {
-        setExistingSupplier({ id: db.supplierId })
-        if (db.hasActiveSeal) {
-          setExistingSeal({ status: 'ACTIVE' })
-          setStep(2); return
-        }
       }
       if (result.hasSanctions) {
         setLookupError('⚠️  Este CNPJ consta em listas de sanções ativas (CEIS/CNEP). A homologação poderá ser negada ou condicionada pelo backoffice.')
@@ -198,7 +201,7 @@ export default function SupplierOnboarding() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
       body: JSON.stringify({
-        cnpj: cnpj.replace(/\D/g,''), razao_social: cnpjData?.razao_social || name,
+        cnpj: cnpj.replace(/\D/g,''), razao_social: cnpjData?.razao_social || existingSupplier?.razao_social || name,
         nome_fantasia: cnpjData?.nome_fantasia || null, cnae_main: cnpjData?.cnae_fiscal_descricao || '',
         cnae_list: cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
         state: cnpjData?.uf || '', city: cnpjData?.municipio || '',
@@ -400,6 +403,17 @@ export default function SupplierOnboarding() {
               {step === 2 && (
                 <div>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Crie sua conta</div>
+                  {isExistingActive && (
+                    <div style={{ background:'linear-gradient(135deg,#1a1c5e,#2E3192)', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
+                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff', marginBottom:4 }}>
+                        🏅 Sua empresa já está homologada!
+                      </div>
+                      <div style={{ fontSize:12.5, color:'rgba(255,255,255,.75)', fontFamily:'DM Sans,sans-serif', lineHeight:1.6 }}>
+                        Encontramos sua homologação vigente — <strong style={{ color:'#F47E2F' }}>nenhum pagamento é necessário</strong>.
+                        Crie seu acesso em 2 passos e entre direto na plataforma, com perfil de <strong>fornecedor</strong> (seus selos e documentos) e de <strong>comprador</strong> (busca no marketplace com contatos liberados durante a vigência do selo).
+                      </div>
+                    </div>
+                  )}
                   {cnpjData && (
                     <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:12, padding:'12px 16px', marginBottom:20 }}>
                       <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>✅ Empresa encontrada</div>

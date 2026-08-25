@@ -175,7 +175,7 @@ exports.handler = async (event) => {
       )
       const [clientRes, supplierRes] = await Promise.allSettled([
         supabaseAdmin.from('clients').select('id').eq('cnpj', cnpj).maybeSingle(),
-        supabaseAdmin.from('suppliers').select('id, status').eq('cnpj', cnpj).maybeSingle(),
+        supabaseAdmin.from('suppliers').select('id, status, razao_social').eq('cnpj', cnpj).maybeSingle(),
       ])
       if (clientRes.value?.data) {
         dbInfo.isClient = true
@@ -183,9 +183,12 @@ exports.handler = async (event) => {
       if (supplierRes.value?.data) {
         dbInfo.isSupplier  = true
         dbInfo.supplierId  = supplierRes.value.data.id
+        dbInfo.razaoSocial = supplierRes.value.data.razao_social || null
+        // limit(1): fornecedor pode ter VÁRIOS selos ativos (um por cliente) —
+        // maybeSingle() sem limit erra com 2+ linhas e derrubava hasActiveSeal
         const { data: sealData } = await supabaseAdmin
           .from('seals').select('status').eq('supplier_id', supplierRes.value.data.id)
-          .eq('status', 'ACTIVE').maybeSingle()
+          .eq('status', 'ACTIVE').limit(1).maybeSingle()
         dbInfo.hasActiveSeal = !!sealData
 
         // REGRA: a consulta ATUALIZA o banco com os dados frescos da Receita —
