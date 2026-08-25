@@ -25,6 +25,14 @@ export const SCORE_WEIGHTS = {
 
 export const MAX_SCORE = 100
 
+// ── Selo ELOS Verificado = PRÉ-HOMOLOGAÇÃO ──────────────────────────────────
+// Regra de negócio (Ago/2026): o selo ELOS próprio exige apenas documentos
+// SIMPLES, todos automáticos ou automatizáveis — não deriva mais das
+// categorias (que seguem valendo para marketplace e homologações de cliente).
+export const ELOS_VERIFICADO_DOCS = ['37', '61', '62', '7', '42', '8']
+// 37 Cartão CNPJ (auto) · 61 Análise CNAEs (auto) · 62 Simples Nacional (auto)
+// 7 CRF FGTS (busca automática) · 42 CND Federal · 8 CNDT Trabalhista
+
 /**
  * Calcula score baseado nos documentos válidos vs total exigido.
  * @param {Array} uploadedDocs - [{type, status}] — documentos salvos no banco

@@ -272,9 +272,12 @@ async function recalcSealScores(sb, supplierId) {
   // NOT_APPLICABLE conta como satisfeito (doc não exigível p/ este fornecedor)
   const validTypes = new Set((allDocs || []).filter(d => d.status === 'VALID' || d.status === 'NOT_APPLICABLE').map(d => String(d.type)))
 
+  // Selo ELOS (sem cliente) = pré-homologação: denominador fixo de docs simples
+  const ELOS_VERIFICADO_DOCS = [37, 61, 62, 7, 42, 8]
+
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
-    let req = [...(reqByOwner[owner] || [])]
+    let req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
     if (!req.length && seal.client_id) {
       // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
       const { data: fcRows } = await sb

@@ -3,7 +3,7 @@
 // Todas as páginas funcionam sem alteração.
 
 import { supabase } from '../lib/supabase.js'
-import { calculateScore } from '../lib/score.js'
+import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const DOC_LABELS = {
@@ -209,26 +209,21 @@ export const supplierApi = {
       })
       documents.sort((a, b) => (a.label || '').localeCompare(b.label || '', 'pt-BR'))
     } else {
-      // Processo SIGEC: requisitos vindos das categorias do fornecedor
+      // Processo ELOS (pré-homologação): SÓ os documentos simples/automáticos
+      // do selo Verificado — as categorias valem p/ marketplace, não p/ exigência
       documents = [...uploadedDocs]
-      const { data: catRows } = await supabase
-        .from('supplier_categories').select('category_id').eq('supplier_id', supplierId)
-      if (catRows?.length) {
-        const { data: catDocRows } = await supabase
-          .from('category_documents')
-          .select('document_id, documents_catalog(id, name)')
-          .in('category_id', catRows.map(r => r.category_id))
-        if (catDocRows) {
-          const seen = new Set(uploadedDocs.map(d => String(d.type)))
-          catDocRows.forEach(row => {
-            const docId = String(row.document_id)
-            if (!seen.has(docId) && row.documents_catalog) {
-              seen.add(docId)
-              documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.documents_catalog.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
-            }
-          })
+      const { data: catalogRows } = await supabase
+        .from('documents_catalog')
+        .select('id, name')
+        .in('id', ELOS_VERIFICADO_DOCS.map(Number))
+      const seen = new Set(uploadedDocs.map(d => String(d.type)))
+      ;(catalogRows || []).forEach(row => {
+        const docId = String(row.id)
+        if (!seen.has(docId)) {
+          seen.add(docId)
+          documents.push({ id: `req-${docId}`, supplier_id: supplierId, type: docId, label: row.name, status: 'MISSING', source: 'REQUIRED', storage_path: null, created_at: null })
         }
-      }
+      })
     }
 
     documents.sort((a, b) => {
@@ -446,7 +441,9 @@ export async function getRequiredTypesBySeal(supplierId) {
         .eq('client_flows.active', true)
       req = (flowRows || []).map(r => r.catalog_id)
     }
-    // Fallback 3: nada específico → fluxo padrão
+    // Selo ELOS (sem cliente): denominador fixo da pré-homologação
+    if (!seal.client_id) req = ELOS_VERIFICADO_DOCS.map(Number)
+    // Fallback final: nada específico → fluxo padrão por categorias globais
     if (!req.length) req = [...(reqByOwner['global'] || [])]
     requiredBySeal.set(seal.id, req)
   }
