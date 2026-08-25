@@ -66,7 +66,9 @@ exports.handler = async (event) => {
         return { statusCode: 200, body: 'ok' }
       }
 
-      const endsAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+      // Mensal = 30 dias; anual = 365 (renovações estendem via webhook/Stripe)
+      const isMensal = (planType || '').includes('mensal')
+      const endsAt = new Date(Date.now() + (isMensal ? 30 : 365) * 24 * 60 * 60 * 1000).toISOString()
 
       // Ativa o plano
       const { error: planErr } = await supabase.from('plans').upsert({
@@ -101,16 +103,22 @@ exports.handler = async (event) => {
       const sealStatus = sealType === 'verificado' ? 'ACTIVE' : 'PENDING'
       const billingCycle = planType.includes('mensal') ? 'mensal' : 'anual'
 
-      // Cria/atualiza o Selo
-      const { error: sealErr } = await supabase.from('seals').upsert({
-        supplier_id:    supplierId,
+      // Cria/atualiza o Selo ELOS (client_id NULL). Sem upsert onConflict:
+      // o índice único de seals é parcial e o upsert falha (42P10) no mundo
+      // multi-selo — select→update/insert é o caminho seguro
+      const sealPayload = {
         level:          sealType === 'verificado' ? 'Simples' : 'Premium', // compatibilidade legada
         seal_type:      sealType,
+        seal_name:      sealType === 'verificado' ? 'ELOS Verificado' : 'ELOS Homologado',
         billing_cycle:  billingCycle,
         status:         sealStatus,
-        score:          0,
-        ...(sealStatus === 'ACTIVE' ? { issued_at: new Date().toISOString() } : {}),
-      }, { onConflict: 'supplier_id' })
+        ...(sealStatus === 'ACTIVE' ? { issued_at: new Date().toISOString(), expires_at: endsAt } : {}),
+      }
+      const { data: existingSeal } = await supabase.from('seals')
+        .select('id').eq('supplier_id', supplierId).is('client_id', null).limit(1).maybeSingle()
+      const { error: sealErr } = existingSeal
+        ? await supabase.from('seals').update(sealPayload).eq('id', existingSeal.id)
+        : await supabase.from('seals').insert({ ...sealPayload, supplier_id: supplierId, score: 0 })
 
       if (sealErr) console.error('Seal upsert error:', sealErr)
 
