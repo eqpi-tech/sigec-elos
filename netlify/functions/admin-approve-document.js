@@ -126,25 +126,32 @@ exports.handler = async (event) => {
     const valid = approved.length
     const score = total > 0 ? Math.round((valid / total) * 100) : 0
 
-    // Upsert do selo (suporta múltiplos selos por fornecedor após patch_012)
-    const sealFilter = clientId
-      ? { supplier_id: supplierId, client_id: clientId }
-      : { supplier_id: supplierId }
+    // Ativa o selo do processo. SEM upsert onConflict: o índice único de
+    // seals é parcial e o upsert falha SILENCIOSAMENTE (42P10) — era o bug
+    // do 'homologou mas continua pendente'. select→update/insert + erro checado
+    let sealQ = supabaseAdmin.from('seals').select('id, seal_name, seal_type')
+      .eq('supplier_id', supplierId)
+    sealQ = clientId ? sealQ.eq('client_id', clientId) : sealQ.is('client_id', null)
+    const { data: sealRow } = await sealQ.limit(1).maybeSingle()
 
-    await supabaseAdmin
-      .from('seals')
-      .upsert({
-        ...sealFilter,
-        seal_name:   sealName,
-        level:       sealLevel,
-        status:      'ACTIVE',
-        score,
-        issued_at:   new Date().toISOString(),
-        expires_at:  endsAt.toISOString(),
-        issued_by:   user.id,
-      }, {
-        onConflict: clientId ? 'supplier_id,client_id' : 'supplier_id',
-      })
+    const activation = {
+      status:     'ACTIVE',
+      score,
+      issued_at:  new Date().toISOString(),
+      expires_at: endsAt.toISOString(),
+      issued_by:  user.id,
+      // preserva nome/tipo já definidos (ex.: 'ELOS Verificado' do plano);
+      // fallback para o padrão do processo
+      ...(sealRow?.seal_name ? {} : { seal_name: sealName }),
+      ...(sealRow?.seal_type ? {} : { level: sealLevel }),
+    }
+    const { error: sealWriteErr } = sealRow
+      ? await supabaseAdmin.from('seals').update(activation).eq('id', sealRow.id)
+      : await supabaseAdmin.from('seals').insert({
+          ...activation, supplier_id: supplierId, client_id: clientId || null,
+          seal_name: sealRow?.seal_name || sealName, level: sealLevel,
+        })
+    if (sealWriteErr) console.error('[auto-approve] seal write:', sealWriteErr.message)
 
     // Atualiza status do fornecedor
     await supabaseAdmin.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
@@ -207,11 +214,12 @@ exports.handler = async (event) => {
     const rejectedLabels = rejected.map(d => d.label || `Documento tipo ${d.type}`).join(', ')
     const reason = `Homologação reprovada automaticamente. Documentos com pendências: ${rejectedLabels}. Corrija os documentos e solicite nova análise.`
 
-    await supabaseAdmin
-      .from('seals')
+    let rejQ = supabaseAdmin.from('seals')
       .update({ status: 'SUSPENDED', suspended_reason: reason })
       .eq('supplier_id', supplierId)
-      .is(clientId ? null : 'client_id', clientId || null)
+    rejQ = clientId ? rejQ.eq('client_id', clientId) : rejQ.is('client_id', null)
+    const { error: rejErr } = await rejQ
+    if (rejErr) console.error('[auto-reject] seal write:', rejErr.message)
 
     await supabaseAdmin.from('audit_log').insert({
       user_id: user.id, action: 'SEAL_AUTO_REJECTED',
