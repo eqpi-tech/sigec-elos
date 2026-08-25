@@ -21,6 +21,7 @@ Entidades: clients, catalog, categories, category_documents, suppliers,
 """
 import argparse
 import json
+import re
 import time
 from datetime import datetime, timezone
 
@@ -80,10 +81,12 @@ def strip_none(d):
     """HOC manda quando TEM valor; None não sobrescreve o ELOS."""
     return {k: v for k, v in d.items() if v is not None}
 
-def fetch_all(sb, table, select, page=1000, **eqs):
+def fetch_all(sb, table, select, order="id", page=1000, **eqs):
+    # ORDER estável é OBRIGATÓRIO: paginação PostgREST sem order repete/omite
+    # linhas entre páginas (diffs errados → deleções indevidas)
     out, offset = [], 0
     while True:
-        q = sb.table(table).select(select)
+        q = sb.table(table).select(select).order(order)
         for k, v in eqs.items():
             q = q.eq(k, v)
         res = q.range(offset, offset + page - 1).execute()
@@ -91,6 +94,13 @@ def fetch_all(sb, table, select, page=1000, **eqs):
         if not res.data or len(res.data) < page:
             return out
         offset += page
+
+def load_supplier_map_ordered(sb):
+    """cnpj → supplier_id com paginação ORDENADA (o load_supplier_map do v2
+    pagina sem order — omissões aqui virariam deleções indevidas no diff)."""
+    rows = fetch_all(sb, "suppliers", "id,cnpj")
+    return {re.sub(r"\D", "", r["cnpj"] or ""): r["id"] for r in rows if r.get("cnpj")}
+
 
 def max_wm(rows, *cols):
     best = None
@@ -292,14 +302,14 @@ def sync_supplier_categories(my, sb, dry):
     cur.execute("""SELECT fc.id_fornecedor, fc.id_categoria, f.cnpj
         FROM fornecedor_categorias fc JOIN fornecedor f ON f.id = fc.id_fornecedor""")
     rows = cur.fetchall(); cur.close()
-    supplier_map = load_supplier_map(sb)
+    supplier_map = load_supplier_map_ordered(sb)
     hoc_keys = set()
     for r in rows:
         sid = supplier_map.get(clean_cnpj(r["cnpj"]))
         if sid:
             hoc_keys.add((sid, CAT_ID_OFFSET + r["id_categoria"]))
 
-    elos = fetch_all(sb, "supplier_categories", "supplier_id,category_id")
+    elos = fetch_all(sb, "supplier_categories", "id,supplier_id,category_id")
     elos_keys = {(e["supplier_id"], e["category_id"]) for e in elos if e["category_id"] >= CAT_ID_OFFSET}
 
     to_add = [{"supplier_id": a, "category_id": b} for a, b in hoc_keys - elos_keys]
@@ -344,7 +354,7 @@ def sync_seals(my, sb, dry, wm):
             if r["update_date"] and r["update_date"].strftime("%Y-%m-%d %H:%M:%S") > new_wm:
                 new_wm = r["update_date"].strftime("%Y-%m-%d %H:%M:%S")
 
-    supplier_map = load_supplier_map(sb)
+    supplier_map = load_supplier_map_ordered(sb)
     client_map = load_client_map(sb)
     read = len(pairs); written = 0
 
@@ -411,7 +421,7 @@ def sync_documents(my, sb, dry, wm):
         cur.close(); return 0, 0, wm, None
     new_wm = max_wm(changed, "update_date", "create_date") or wm
     keys = {(r["id_fornecedor"], r["id_documento"]) for r in changed}
-    supplier_map = load_supplier_map(sb)
+    supplier_map = load_supplier_map_ordered(sb)
 
     written = 0
     for f_id, doc_id in keys:
@@ -463,14 +473,9 @@ def sync_hoc_log(my, sb, dry, last_id):
     rows = cur.fetchall(); cur.close()
     if not rows:
         return 0, 0, None, last_id
-    supplier_map_hoc = {}
-    offset = 0
-    while True:
-        res = sb.table("suppliers").select("hoc_id,id").not_.is_("hoc_id", "null").range(offset, offset + 999).execute()
-        for r in res.data or []:
-            supplier_map_hoc[r["hoc_id"]] = r["id"]
-        if not res.data or len(res.data) < 1000: break
-        offset += 1000
+    supplier_map_hoc = {r["hoc_id"]: r["id"]
+                        for r in fetch_all(sb, "suppliers", "id,hoc_id")
+                        if r.get("hoc_id") is not None}
 
     written = 0; max_id = last_id
     batch = []
