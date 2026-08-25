@@ -4,7 +4,10 @@ import { supabase } from '../lib/supabase.js'
 import { categoriesApi } from '../services/api.js'
 import { Spinner } from './ui.jsx'
 
+// Raízes da árvore global consolidada (HOC manda): 25481 Materiais · 25564 Serviços
+// (ids antigos da árvore ELOS mantidos para histórico/telas legadas)
 const ICONS = {
+  25481: '📦', 25564: '🔧',
   14466: '🔧', 14616: '📦',
   14889: '🚌', 14890: '🚌', 14891: '🚌', 14893: '🚛',
   31432: '💼', DEFAULT: '📋',
@@ -12,6 +15,27 @@ const ICONS = {
 
 // Normaliza string para comparação sem acento e case-insensitive
 const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+
+// Ícone por nome (fallback p/ categorias da árvore HOC, que não têm id mapeado)
+const ICON_KEYWORDS = [
+  ['transporte', '🚛'], ['veiculo', '🚗'], ['locacao', '🚌'],
+  ['mecanic', '🔩'], ['eletric', '⚡'], ['automacao', '🤖'], ['sistema', '💻'],
+  ['informatica', '💻'], ['telecom', '📡'],
+  ['juridic', '⚖️'], ['advocati', '⚖️'], ['contab', '📊'], ['consultor', '💼'],
+  ['engenharia', '📐'], ['construcao', '🏗️'], ['obra', '🏗️'], ['manutencao', '🔧'],
+  ['limpeza', '🧹'], ['seguranca', '🛡️'], ['vigilancia', '🛡️'],
+  ['alimenta', '🍽️'], ['saude', '🏥'], ['medic', '🏥'], ['laborator', '🔬'],
+  ['ambiental', '🌱'], ['residuo', '♻️'], ['agua', '💧'], ['energia', '⚡'],
+  ['equipamento', '⚙️'], ['ferramenta', '🛠️'], ['material', '📦'],
+  ['quimic', '🧪'], ['combustivel', '⛽'], ['grafic', '🖨️'], ['editorial', '🖨️'],
+  ['treinamento', '🎓'], ['operacion', '🏭'],
+]
+function iconFor(cat) {
+  if (ICONS[cat.id]) return ICONS[cat.id]
+  const n = norm(cat.name)
+  for (const [kw, icon] of ICON_KEYWORDS) if (n.includes(kw)) return icon
+  return ICONS.DEFAULT
+}
 
 // clientIds: inclui as categorias custom desses clientes além da árvore global
 // (fornecedor convidado por cliente HOC vê o fluxo do cliente — patch_032)
@@ -281,7 +305,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
             <div key={parent.id} style={{ border:`2px solid ${isOpen?'#2E3192':'#e2e4ef'}`, borderRadius:14, overflow:'hidden', transition:'border .15s' }}>
               <div onClick={() => toggleParent(parent.id)}
                 style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:isOpen?'rgba(46,49,146,.05)':'#fff', cursor:'pointer', userSelect:'none' }}>
-                <span style={{ fontSize:22 }}>{ICONS[parent.id] || ICONS.DEFAULT}</span>
+                <span style={{ fontSize:22 }}>{iconFor(parent)}</span>
                 <div style={{ flex:1 }}>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{parent.name}</div>
                   {selCount > 0 && <div style={{ fontSize:11, color:'#F47E2F', fontWeight:700, marginTop:1 }}>{selCount} subcategoria{selCount>1?'s':''} selecionada{selCount>1?'s':''}</div>}
