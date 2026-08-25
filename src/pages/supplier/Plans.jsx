@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { paymentsApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
+import { planLabel } from '../../lib/planLabels.js'
 import { Button, Card, PageHeader, Spinner } from '../../components/ui.jsx'
 
 const SEALS = [
@@ -39,6 +41,18 @@ export default function SupplierPlans() {
   const [loading, setLoading] = useState(null)
   const [error,   setError]   = useState('')
   const [billing, setBilling] = useState({ verificado: 'anual' })
+  const [currentPlan, setCurrentPlan] = useState(null)
+
+  useEffect(() => {
+    if (!user?.supplierId) return
+    supabase.from('plans').select('type, status, ends_at')
+      .eq('supplier_id', user.supplierId).maybeSingle()
+      .then(({ data }) => setCurrentPlan(data))
+  }, [user?.supplierId])
+
+  // card correspondente ao plano vigente ('verificado_mensal' → card 'verificado')
+  const currentCardType = currentPlan?.status === 'ACTIVE'
+    ? (currentPlan.type || '').replace(/_(mensal|anual)$/, '') : null
 
   const handleSubscribe = async (sealType, price, cycle) => {
     if (!user?.supplierId) { setError('Complete o cadastro da empresa antes de assinar um plano.'); return }
@@ -57,6 +71,19 @@ export default function SupplierPlans() {
     <div style={{ maxWidth:860, margin:'0 auto', padding:'32px 24px' }}>
       <PageHeader title="Selos SIGEC-ELOS" subtitle="Escolha o nível de homologação para sua empresa"/>
 
+      {currentPlan?.status === 'ACTIVE' && (
+        <div style={{ background:'linear-gradient(135deg,#1a1c5e,#2E3192)', borderRadius:14, padding:'16px 22px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#fff' }}>
+              ⭐ Seu plano atual: {planLabel(currentPlan.type)}
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12.5, color:'rgba(255,255,255,.7)', marginTop:2 }}>
+              Válido até {currentPlan.ends_at?.slice(0,10) || '—'} · os valores abaixo servem de referência para upgrade ou renovação
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:12, padding:'12px 16px', marginBottom:20, fontSize:13, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>
       )}
@@ -69,7 +96,10 @@ export default function SupplierPlans() {
           const busy    = loading === seal.type
 
           return (
-            <div key={seal.type} style={{ background:'#fff', borderRadius:20, padding:'28px 24px', border:seal.highlight?`2px solid ${seal.color}`:'1px solid #e2e4ef', position:'relative', boxShadow:seal.highlight?`0 8px 32px rgba(244,126,47,.15)`:'0 2px 12px rgba(0,0,0,.04)' }}>
+            <div key={seal.type} style={{ background:'#fff', borderRadius:20, padding:'28px 24px', border: currentCardType===seal.type ? '2px solid #22c55e' : seal.highlight?`2px solid ${seal.color}`:'1px solid #e2e4ef', position:'relative', boxShadow:seal.highlight?`0 8px 32px rgba(244,126,47,.15)`:'0 2px 12px rgba(0,0,0,.04)' }}>
+              {currentCardType===seal.type && (
+                <span style={{ position:'absolute', top:-11, right:20, fontSize:10, fontWeight:800, fontFamily:'Montserrat,sans-serif', background:'#22c55e', color:'#fff', padding:'3px 12px', borderRadius:20 }}>SEU PLANO ATUAL</span>
+              )}
               {seal.badge && (
                 <div style={{ position:'absolute', top:-14, left:'50%', transform:'translateX(-50%)', background:'linear-gradient(135deg,#F47E2F,#ff9a52)', color:'#fff', fontSize:11, fontWeight:800, letterSpacing:1, padding:'4px 16px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap' }}>
                   ✦ {seal.badge}

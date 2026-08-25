@@ -3,6 +3,34 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { categoriesApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import CategorySelector from '../../components/CategorySelector.jsx'
+
+// Resumo das categorias já selecionadas — visível sem expandir a árvore
+function SelectedSummary({ selectedIds, onRemove }) {
+  const [names, setNames] = useState({})
+  useEffect(() => {
+    const ids = [...selectedIds].filter(id => !(id in names))
+    if (!ids.length) return
+    supabase.from('categories').select('id, name').in('id', ids)
+      .then(({ data }) => setNames(p => ({ ...p, ...Object.fromEntries((data||[]).map(c => [c.id, c.name])) })))
+  }, [selectedIds])
+  if (selectedIds.size === 0) return null
+  return (
+    <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.12)', borderRadius:12, padding:'14px 18px', marginBottom:16 }}>
+      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e', marginBottom:8 }}>
+        ✅ Suas categorias selecionadas ({selectedIds.size})
+      </div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+        {[...selectedIds].map(id => (
+          <span key={id} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11.5, background:'#fff', border:'1px solid #c7cdf5', padding:'4px 10px', borderRadius:20, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+            {names[id] || `#${id}`}
+            <button onClick={() => onRemove(id)} title="Remover"
+              style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, lineHeight:1, padding:0 }}>✕</button>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
 import { Button, Card, Spinner, PageHeader } from '../../components/ui.jsx'
 
 export default function SupplierCategories() {
@@ -77,6 +105,8 @@ export default function SupplierCategories() {
       </Card>
 
       <Card style={{ borderRadius:16, padding:'20px 24px' }}>
+        <SelectedSummary selectedIds={selectedIds}
+          onRemove={(id) => { setSelectedIds(p => { const n = new Set(p); n.delete(id); return n }); setDirty(true) }}/>
         <CategorySelector
           selectedIds={selectedIds}
           onChange={handleChange}

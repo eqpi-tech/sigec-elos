@@ -99,8 +99,10 @@ exports.handler = async (event) => {
         HOC:               'homologado',
       }
       const sealType   = sealTypeMap[planType] || 'homologado'
-      // Verificado ativa imediatamente; Homologado entra na fila do backoffice
-      const sealStatus = sealType === 'verificado' ? 'ACTIVE' : 'PENDING'
+      // Regra (25/08): NENHUM selo ativa direto no pagamento. O Verificado
+      // exige os 6 docs da pré-homologação + análise do backoffice — a
+      // auto-finalização (admin-approve-document) ativa quando tudo é revisado
+      const sealStatus = 'PENDING'
       const billingCycle = planType.includes('mensal') ? 'mensal' : 'anual'
 
       // Cria/atualiza o Selo ELOS (client_id NULL). Sem upsert onConflict:

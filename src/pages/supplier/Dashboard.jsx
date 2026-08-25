@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
 import { planName, planCycle } from '../../lib/planLabels.js'
+import { ELOS_VERIFICADO_DOCS } from '../../lib/score.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -39,14 +40,21 @@ export default function SupplierDashboard() {
       // seals já vêm com clients(razao_social) do me() atualizado
       setSeals(s.seals || [])
 
-      // Contagem de docs exigidos pelas categorias do fornecedor
-      const { data: catRows } = await supabase
-        .from('supplier_categories').select('category_id').eq('supplier_id', user.supplierId)
-      if (catRows?.length) {
-        const catIds = catRows.map(r => r.category_id)
-        const { data: catDocs } = await supabase
-          .from('category_documents').select('document_id').in('category_id', catIds)
-        setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
+      // Denominador de docs: fornecedor SÓ-ELOS (sem processo de cliente)
+      // exige apenas a pré-homologação (6 docs simples); com cliente,
+      // vale a soma das categorias do(s) processo(s)
+      const hasClientSeal = (s.seals || []).some(x => x.client_id)
+      if (!hasClientSeal) {
+        setRequired(ELOS_VERIFICADO_DOCS.length)
+      } else {
+        const { data: catRows } = await supabase
+          .from('supplier_categories').select('category_id').eq('supplier_id', user.supplierId)
+        if (catRows?.length) {
+          const catIds = catRows.map(r => r.category_id)
+          const { data: catDocs } = await supabase
+            .from('category_documents').select('document_id').in('category_id', catIds)
+          setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
+        }
       }
 
       // Modal de alerta: mostra uma vez por sessão se há docs EXPIRED ou REJECTED

@@ -248,6 +248,28 @@ exports.handler = async (event) => {
       access_profile_id: supplierProfileId,
     }, { onConflict: 'user_id,role' })
 
+    // 3b-2. Quadro societário da Receita (QSA da BrasilAPI) — só quando o
+    // fornecedor ainda não tem sócios (não sobrescreve legado/manual)
+    try {
+      const qsa = body.cnpj_full_data?.qsa || []
+      if (qsa.length) {
+        const { count } = await supabaseAdmin.from('supplier_partners')
+          .select('id', { count: 'exact', head: true }).eq('supplier_id', supplier.id)
+        if (!count) {
+          const rows = qsa
+            .filter(q => q?.nome_socio)
+            .map(q => ({
+              supplier_id: supplier.id,
+              tipo: (q.identificador_de_socio === 1 || /jur/i.test(q.qualificacao_socio || '')) ? 'pj' : 'pf',
+              nome: q.nome_socio,
+              cargo: q.qualificacao_socio || 'Sócio',
+              cpf_cnpj: String(q.cnpj_cpf_do_socio || '').replace(/\D/g, '') || null,
+            }))
+          if (rows.length) await supabaseAdmin.from('supplier_partners').insert(rows)
+        }
+      }
+    } catch (e) { console.warn('QSA partners (não crítico):', e.message) }
+
     // 3c. Todo fornecedor ganha também perfil BUYER para acessar o marketplace
     try {
       const { data: existingBuyer } = await supabaseAdmin
