@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { categoriesApi } from '../services/api.js'
+import { ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 import { Spinner } from './ui.jsx'
 
 // Raízes da árvore global consolidada (HOC manda): 25481 Materiais · 25564 Serviços
@@ -52,7 +53,17 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
   const [customParent, setCustomParent] = useState(null)
   const [savingCustom, setSavingCustom] = useState(false)
   const [requiredDocs, setRequiredDocs] = useState([])
+  const [elosDocs,     setElosDocs]     = useState([])
   const [loadingDocs,  setLoadingDocs]  = useState(false)
+
+  // Docs da pré-homologação ELOS (lista fixa — src/lib/score.js)
+  useEffect(() => {
+    if (!showDocuments || clientIds?.length) return
+    supabase.from('documents_catalog')
+      .select('id, name, auto_collect')
+      .in('id', ELOS_VERIFICADO_DOCS.map(Number))
+      .then(({ data }) => setElosDocs(data || []))
+  }, [showDocuments])
   const [loading,      setLoading]      = useState(true)
   const [loadError,    setLoadError]    = useState('')
   const treesRef = useRef({})   // ref para acesso síncrono nas funções
@@ -349,23 +360,67 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
         })}
       </div>
 
-      {/* Documentos exigidos */}
+      {/* Documentos exigidos — dois contextos:
+          · Fluxo ELOS (sem cliente): quadro 1 = pré-homologação (o que vale
+            AGORA, docs simples/automáticos); quadro 2 = referência por
+            categoria (só vale ao se homologar para um cliente específico)
+          · Fluxo de cliente (convite/portal → clientIds): quadro único com
+            as exigências reais do processo */}
       {showDocuments && selectedIds.size > 0 && (
-        <div style={{ marginTop:16, padding:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:12 }}>
-          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', marginBottom:10 }}>
-            📋 Documentos exigidos ({loadingDocs ? '...' : requiredDocs.length})
-          </div>
-          {loadingDocs ? <Spinner size={20}/> : (
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {requiredDocs.map(doc => (
-                <span key={doc.id} style={{ fontSize:11, background:'#fff', border:'1px solid #e2e4ef', padding:'4px 10px', borderRadius:20, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>
-                  {doc.auto_collect && <span style={{ color:'#22c55e', marginRight:4 }}>⚡</span>}
-                  {doc.name}
-                </span>
-              ))}
+        clientIds?.length ? (
+          <div style={{ marginTop:16, padding:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:12 }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', marginBottom:10 }}>
+              📋 Documentos exigidos para sua homologação ({loadingDocs ? '...' : requiredDocs.length})
             </div>
-          )}
-        </div>
+            {loadingDocs ? <Spinner size={20}/> : (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {requiredDocs.map(doc => (
+                  <span key={doc.id} style={{ fontSize:11, background:'#fff', border:'1px solid #e2e4ef', padding:'4px 10px', borderRadius:20, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>
+                    {doc.auto_collect && <span style={{ color:'#22c55e', marginRight:4 }}>⚡</span>}
+                    {doc.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ marginTop:16, padding:16, background:'rgba(34,197,94,.06)', border:'1px solid rgba(34,197,94,.25)', borderRadius:12 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>
+                🏅 Selo ELOS (pré-homologação) — o que você precisa agora ({elosDocs.length || 6})
+              </div>
+              <div style={{ fontSize:11.5, color:'#4b5563', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>
+                Documentos simples — a maioria é coletada <strong>automaticamente</strong> no cadastro.
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {elosDocs.map(doc => (
+                  <span key={doc.id} style={{ fontSize:11, background:'#fff', border:'1px solid #bbf7d0', padding:'4px 10px', borderRadius:20, color:'#15803d', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                    {doc.auto_collect && <span style={{ color:'#22c55e', marginRight:4 }}>⚡</span>}
+                    {doc.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginTop:10, padding:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:12 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', marginBottom:4 }}>
+                📋 Homologação para clientes — referência ({loadingDocs ? '...' : requiredDocs.length})
+              </div>
+              <div style={{ fontSize:11.5, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>
+                Estes documentos só são exigidos <strong>quando você se homologar para um cliente específico</strong> (por convite ou pelo portal do cliente) — e cada cliente pode pedir mais ou menos que isso. Para o Selo ELOS, vale apenas o quadro verde acima.
+              </div>
+              {loadingDocs ? <Spinner size={20}/> : (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {requiredDocs.map(doc => (
+                    <span key={doc.id} style={{ fontSize:11, background:'#fff', border:'1px solid #e2e4ef', padding:'4px 10px', borderRadius:20, color:'#64748b', fontFamily:'DM Sans,sans-serif' }}>
+                      {doc.auto_collect && <span style={{ color:'#22c55e', marginRight:4 }}>⚡</span>}
+                      {doc.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )
       )}
 
       {/* Categoria customizada */}
