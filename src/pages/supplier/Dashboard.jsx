@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
+import { planName, planCycle } from '../../lib/planLabels.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -158,7 +159,7 @@ export default function SupplierDashboard() {
         <KpiCard label="Processos Ativos" value={processes.filter(p=>p.effStatus==='ACTIVE').length} sub={`de ${processes.length} total`} subColor="#9B9B9B" icon="🔄" iconBg="rgba(46,49,146,.1)" />
         <KpiCard label="Docs Válidos"     value={`${docsOk}/${totalDocs}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
         <KpiCard label="Em Análise"       value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />
-        <KpiCard label="Plano"            value={supplier.activePlan?.type||'—'} sub={supplier.activePlan?`Válido até ${supplier.activePlan.ends_at?.slice(0,10)||'—'}`:'Sem plano ativo'} subColor={supplier.activePlan?'#22c55e':'#ef4444'} icon="⭐" iconBg="rgba(244,126,47,.1)" />
+        <KpiCard label="Plano"            value={planName(supplier.activePlan?.type)} sub={supplier.activePlan?`${planCycle(supplier.activePlan.type) ? planCycle(supplier.activePlan.type) + ' · ' : ''}Válido até ${supplier.activePlan.ends_at?.slice(0,10)||'—'}`:'Sem plano ativo'} subColor={supplier.activePlan?'#22c55e':'#ef4444'} icon="⭐" iconBg="rgba(244,126,47,.1)" />
       </div>
 
       {/* ── Carteira de Selos ── */}
