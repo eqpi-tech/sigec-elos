@@ -25,7 +25,8 @@ const ISENTO_KEYWORDS = ['inscrição estadual', 'inscrição municipal', 'ie es
 const DOC_LINKS = {
   7:  'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf',
   8:  'https://cndt-certidao.tst.jus.br/inicio.faces',
-  42: 'https://solucoes.receita.fazenda.gov.br/servicos/certidaointernet/PJ/Emitir',
+  // Receita migrou o portal de certidões (endereço antigo → 404)
+  42: 'https://servicos.receitafederal.gov.br/servico/certidoes/#/home',
   40: null, // Alvará — emitido pela prefeitura (varia por município)
   19: null, // Licença ambiental — emitida pelo órgão estadual
 }
