@@ -678,9 +678,29 @@ export const adminApi = {
     const uploadedByType = {}
     uploadedDocs.forEach(d => { uploadedByType[String(d.type)] = d })
 
-    // Constrói lista completa: docs exigidos pelas categorias + docs já enviados
+    // Constrói lista completa: exigidos + já enviados.
+    // Fornecedor SÓ-ELOS (sem processo de cliente): exigência é a PRÉ-
+    // homologação (6 docs simples) — categorias NÃO entram na análise.
     let fullDocList = [...uploadedDocs]
-    if (catRes.status === 'fulfilled' && catRes.value.data?.length) {
+    const hasClientSeal = sealsRes.status === 'fulfilled'
+      && (sealsRes.value.data || []).some(x => x.client_id)
+    if (!hasClientSeal) {
+      const { data: elosCat } = await supabase
+        .from('documents_catalog').select('id, name')
+        .in('id', ELOS_VERIFICADO_DOCS.map(Number))
+      const seen = new Set(uploadedDocs.map(d => String(d.type)))
+      ;(elosCat || []).forEach(row => {
+        const docId = String(row.id)
+        if (!seen.has(docId)) {
+          seen.add(docId)
+          fullDocList.push({
+            id: `req-${docId}`, supplier_id: supplierId, type: docId,
+            label: row.name, status: 'MISSING', source: 'REQUIRED',
+            storage_path: null, created_at: null,
+          })
+        }
+      })
+    } else if (catRes.status === 'fulfilled' && catRes.value.data?.length) {
       const catIds = catRes.value.data.map(r => r.category_id)
       const { data: catDocRows } = await supabase
         .from('category_documents')
@@ -973,18 +993,30 @@ export const adminApi = {
   getMetrics: async () => {
     // Queries independentes com tratamento de erro individual
     // Selos: busca supplier_ids e deduplica — um fornecedor pode ter N selos (um por cliente HOC)
+    // count estimado (exato sob RLS estoura timeout → KPI zerado e tela lenta);
+    // selos paginados COM ORDER (range sem order é capado/instável no PostgREST)
+    const fetchSealSuppliers = async (status) => {
+      let out = [], from = 0
+      for (;;) {
+        const { data } = await supabase.from('seals').select('id, supplier_id')
+          .eq('status', status).order('id').range(from, from + 999)
+        out = out.concat(data || [])
+        if (!data || data.length < 1000) return out
+        from += 1000
+      }
+    }
     const [suppliersRes, activeSealsRes, pendingSealsRes, planRes] = await Promise.allSettled([
-      supabase.from('suppliers').select('*', { count: 'exact', head: true }),
-      supabase.from('seals').select('supplier_id').eq('status', 'ACTIVE').range(0, 9999),
-      supabase.from('seals').select('supplier_id').eq('status', 'PENDING').range(0, 9999),
+      supabase.from('suppliers').select('id', { count: 'estimated', head: true }),
+      fetchSealSuppliers('ACTIVE'),
+      fetchSealSuppliers('PENDING'),
       supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE'),
     ])
 
     const totalSuppliers  = suppliersRes.status === 'fulfilled'  ? (suppliersRes.value.count  || 0) : 0
     const activeSeals     = activeSealsRes.status === 'fulfilled'
-      ? new Set((activeSealsRes.value.data || []).map(s => s.supplier_id)).size : 0
+      ? new Set((activeSealsRes.value || []).map(s => s.supplier_id)).size : 0
     const pendingAnalysis = pendingSealsRes.status === 'fulfilled'
-      ? new Set((pendingSealsRes.value.data || []).map(s => s.supplier_id)).size : 0
+      ? new Set((pendingSealsRes.value || []).map(s => s.supplier_id)).size : 0
     const planData        = planRes.status === 'fulfilled' ? (planRes.value.data || []) : []
 
     const mrrBrl = planData.reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)

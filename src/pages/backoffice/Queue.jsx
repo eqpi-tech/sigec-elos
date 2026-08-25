@@ -284,7 +284,10 @@ export function BackofficeAnalysis() {
     adminApi.getSealAnalysis(id)
       .then(d => {
         setData(d)
-        setLevel(d.seals?.[0]?.seal_type || d.seals?.[0]?.level === 'Premium' ? 'homologado' : 'homologado')
+        // Tipo do selo NÃO é escolha do analista: deriva do processo —
+        // cliente ⇒ homologado; ELOS ⇒ o que o fornecedor comprou
+        const ps = (d.seals || []).find(x => x.status !== 'ACTIVE') || d.seals?.[0]
+        setLevel(ps?.client_id ? 'homologado' : (ps?.seal_type || 'homologado'))
         // Sugere data de expiração = fim do plano do fornecedor
         if (d.plan?.ends_at) setApproveExpiry(d.plan.ends_at.slice(0, 10))
         // Email de início de análise (único por ciclo — deduplica via audit_log)
@@ -1534,18 +1537,15 @@ export function BackofficeAnalysis() {
             </div>
 
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:8,letterSpacing:.5,textTransform:'uppercase' }}>Tipo de Selo</div>
-              <div style={{ display:'flex',gap:8 }}>
-                {[
-                  ['verificado','🔵 ELOS Verificado','Pré-homologação automática'],
-                  ['homologado', processClientName ? `🏅 Homologado — ${processClientName}` : '🏅 Homologado', processClientName ? 'Selo leva o nome do cliente' : 'Análise profissional'],
-                ].map(([val,label,desc])=>(
-                  <button key={val} onClick={()=>setLevel(val)}
-                    style={{ flex:1,padding:'10px 8px',borderRadius:10,border:`2px solid ${level===val?'#2E3192':'#e2e4ef'}`,background:level===val?'rgba(46,49,146,.08)':'#fff',cursor:'pointer',textAlign:'center' }}>
-                    <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:12,color:level===val?'#2E3192':'#9B9B9B',lineHeight:1.3 }}>{label}</div>
-                    <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:2 }}>{desc}</div>
-                  </button>
-                ))}
+              <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#9B9B9B',marginBottom:8,letterSpacing:.5,textTransform:'uppercase' }}>Tipo de Selo do Processo</div>
+              {/* Somente leitura: definido pelo plano/convite do fornecedor */}
+              <div style={{ padding:'12px 14px',borderRadius:10,border:'1.5px solid #2E3192',background:'rgba(46,49,146,.05)',textAlign:'center' }}>
+                <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#2E3192',lineHeight:1.3 }}>
+                  {level === 'verificado' ? '🔵 ELOS Verificado' : processClientName ? `🏅 Homologado — ${processClientName}` : '🏅 ELOS Homologado'}
+                </div>
+                <div style={{ fontSize:10,color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',marginTop:2 }}>
+                  {level === 'verificado' ? 'Pré-homologação (6 documentos simples) — definido pelo plano do fornecedor' : processClientName ? 'Selo leva o nome do cliente' : 'Definido pelo plano do fornecedor'}
+                </div>
               </div>
             </div>
 
