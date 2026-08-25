@@ -1,0 +1,54 @@
+# Sincronização diária HOC → ELOS (mão única) — ver docs/SYNC_HOC_ELOS.md
+# Secrets necessários: HOC_SYNC_CONFIG (conteúdo do hoc_migration_config.json)
+name: Sync — HOC para ELOS
+
+on:
+  schedule:
+    - cron: '0 6 * * *'    # 06:00 UTC = 03:00 BRT — sync incremental diário
+    - cron: '0 7 * * 0'    # domingos 04:00 BRT — fase details completa (sócios/bancários/balanços/questionários)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry-run (não escreve no ELOS)'
+        type: boolean
+        default: true
+
+jobs:
+  sync-daily:
+    name: Sync incremental diário
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Dependências
+        run: pip install --quiet mysql-connector-python supabase
+      - name: Config (secret)
+        run: echo "$HOC_SYNC_CONFIG" > scripts/hoc_migration_config.json
+        env:
+          HOC_SYNC_CONFIG: ${{ secrets.HOC_SYNC_CONFIG }}
+      - name: Executa sync
+        working-directory: scripts
+        run: |
+          python sync_hoc_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+
+  sync-details-semanal:
+    name: Fase details (semanal)
+    if: github.event.schedule == '0 7 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Dependências
+        run: pip install --quiet mysql-connector-python supabase
+      - name: Config (secret)
+        run: echo "$HOC_SYNC_CONFIG" > scripts/hoc_migration_config.json
+        env:
+          HOC_SYNC_CONFIG: ${{ secrets.HOC_SYNC_CONFIG }}
+      - name: Fase details
+        working-directory: scripts
+        run: python migrate_hoc_v2.py --phase details
