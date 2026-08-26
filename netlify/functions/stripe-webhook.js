@@ -2,7 +2,8 @@
 // Processa webhooks do Stripe
 // Configure em: Stripe Dashboard → Developers → Webhooks
 // Endpoint URL: https://elos.eqpitech.com.br/.netlify/functions/stripe-webhook
-// Eventos: checkout.session.completed, customer.subscription.deleted, invoice.payment_failed
+// Eventos: checkout.session.completed, invoice.payment_succeeded (fila NFSe),
+//          customer.subscription.deleted, invoice.payment_failed
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const { createClient } = require('@supabase/supabase-js')
@@ -68,6 +69,19 @@ exports.handler = async (event) => {
 
       // Mensal = 30 dias; anual = 365 (renovações estendem via webhook/Stripe)
       const isMensal = (planType || '').includes('mensal')
+      // Pagamento AVULSO (homologação de convidado, mode=payment): NFSe
+      if (session.mode === 'payment' && (session.amount_total ?? 0) > 0) {
+        await supabase.from('nfe_invoices').upsert({
+          supplier_id: supplierId, source: 'STRIPE',
+          stripe_session_id: session.id,
+          amount_cents: session.amount_total, currency: session.currency || 'brl',
+          plan_type: planType || 'homologado',
+          description: 'Serviço de Análise Cadastral — Homologação SIGEC-ELOS',
+          paid_at: new Date().toISOString(), status: 'PENDING',
+        }, { onConflict: 'stripe_session_id', ignoreDuplicates: true })
+          .then(({ error: e2 }) => e2 && console.error('[nfe-queue]', e2.message))
+      }
+
       const endsAt = new Date(Date.now() + (isMensal ? 30 : 365) * 24 * 60 * 60 * 1000).toISOString()
 
       // Ativa o plano
@@ -157,6 +171,47 @@ exports.handler = async (event) => {
     }
 
     // ── Assinatura cancelada ────────────────────────────────────────
+    // ── Fatura de assinatura PAGA → fila de NFSe (patch_049) ────────
+    // Cobre 1ª cobrança e RENOVAÇÕES. Só pagamento EFETIVO entra como
+    // PENDING; cupom 100% (amount_paid=0) registra como SKIPPED_ZERO.
+    if (type === 'invoice.payment_succeeded') {
+      const invoice = data.object
+      try {
+        // resolve o fornecedor via assinatura → plans.stripe_sub_id
+        const subId = invoice.subscription
+        let supplierId = null, planType = null
+        if (subId) {
+          const { data: plan } = await supabase
+            .from('plans').select('supplier_id, type').eq('stripe_sub_id', subId).maybeSingle()
+          supplierId = plan?.supplier_id || null
+          planType   = plan?.type || null
+        }
+        const amount = invoice.amount_paid ?? 0
+        const desc   = `Serviço de Análise Cadastral — Assinatura SIGEC-ELOS${planType ? ` (${planType})` : ''}`
+        const { error: qErr } = await supabase.from('nfe_invoices').upsert({
+          supplier_id:       supplierId,
+          source:            'STRIPE',
+          stripe_invoice_id: invoice.id,
+          amount_cents:      amount,
+          currency:          invoice.currency || 'brl',
+          plan_type:         planType,
+          description:       desc,
+          paid_at:           new Date((invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
+          status:            amount > 0 ? 'PENDING' : 'SKIPPED_ZERO',
+        }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true })
+        if (qErr) console.error('[nfe-queue]', qErr.message)
+        else if (amount > 0) {
+          // tentativa imediata de emissão (o cron diário é a rede de segurança)
+          fetch(`${process.env.URL}/.netlify/functions/nfe-emit-pending`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
+          }).catch(() => {})
+        }
+        console.log(`🧾 NFSe enfileirada: invoice ${invoice.id} · R$ ${(amount/100).toFixed(2)} · ${amount > 0 ? 'PENDING' : 'SKIPPED_ZERO (cupom)'}`)
+      } catch (e) { console.error('[nfe-queue]', e.message) }
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
     if (type === 'customer.subscription.deleted') {
       const sub = data.object
 

@@ -46,3 +46,14 @@ jobs:
             exit 1
           fi
           echo "✅ Lembretes processados com sucesso"
+
+  nfe-emissao:
+    name: Emissão de NFSe pendentes (varredura)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/nfe-emit-pending")
+          echo "resultado: $response"
