@@ -20,12 +20,25 @@ exports.handler = async (event) => {
     if (!nota?.id)
       return { statusCode: 200, body: 'Teste de webhook recebido' }
 
-    const { error } = await supabaseAdmin.from('nfe_invoices').update({
+    // 3 desfechos da emissão: SUCESSO (Issued) · FALHA (IssueFailed/
+    // Cancelled) · ERRO (Error). Falha/erro NUNCA reenfileiram sozinhos —
+    // ficam FAILED com o motivo para decisão humana (regra anti-duplicação:
+    // reenvio só acontece devolvendo a linha a PENDING manualmente).
+    const st = String(nota.status || '').toLowerCase()
+    const upd = {
       nfe_status:         nota.status || null,
       numero:             nota.number ? String(nota.number) : null,
       codigo_verificacao: nota.checkCode || null,
-      ...(String(nota.status || '').toLowerCase() === 'cancelled' ? { status: 'FAILED', log_erro: 'Cancelada na NFE.io' } : {}),
-    }).eq('nfeio_id', nota.id)
+    }
+    if (st === 'issued') {
+      upd.status = 'EMITTED'
+      upd.log_erro = null
+    } else if (['issuefailed', 'failed', 'cancelled', 'error'].includes(st)) {
+      upd.status = 'FAILED'
+      upd.log_erro = `NFE.io retornou "${nota.status}"${nota.flowMessage ? `: ${nota.flowMessage}` : ''} — verifique no painel e, para reemitir, volte a linha para PENDING`
+    }
+    // demais status (Processing/WaitingSend...) só atualizam nfe_status
+    const { error } = await supabaseAdmin.from('nfe_invoices').update(upd).eq('nfeio_id', nota.id)
     if (error) console.error('[nfeio-webhook]', error.message)
 
     console.log(`[nfeio-webhook] nota ${nota.id} → ${nota.status} (nº ${nota.number || '—'})`)
