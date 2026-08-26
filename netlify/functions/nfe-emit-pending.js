@@ -120,13 +120,31 @@ exports.handler = async (event) => {
   const { data: pending } = await supabaseAdmin
     .from('nfe_invoices')
     .select('*, suppliers(cnpj, razao_social, inscricao_municipal, email, email_financeiro, address, hoc_extra, city, state)')
-    .eq('status', 'PENDING')
+    .eq('status', 'PENDING')   // PROCESSING/NEEDS_REVIEW NUNCA são retomados automaticamente
     .order('created_at')
     .limit(20)
 
-  let emitted = 0, failed = 0, kept = 0
+  // ═══ GARANTIA ANTI-DUPLICAÇÃO (NFE.io bloqueia por reenvio) ═══
+  // 1) Claim ATÔMICO: status PENDING→PROCESSING com condição — se outra
+  //    execução (cron × pós-webhook) pegou antes, o update retorna vazio e
+  //    esta instância PULA a linha.
+  // 2) ≤1 envio automático por nota: depois que a chamada à NFE.io é
+  //    INICIADA, qualquer resultado ambíguo (timeout/rede/5xx — a nota pode
+  //    ter sido aceita lá) vira NEEDS_REVIEW e NUNCA é reenviado sozinho.
+  //    Humano confere no painel da NFE.io e, se não emitiu, volta a linha
+  //    para PENDING manualmente.
+  let emitted = 0, failed = 0, review = 0, skippedClaim = 0
   for (const inv of (pending || [])) {
     const sup = inv.suppliers
+
+    // claim atômico
+    const { data: claimed } = await supabaseAdmin.from('nfe_invoices')
+      .update({ status: 'PROCESSING', attempts: (inv.attempts || 0) + 1, last_attempt_at: new Date().toISOString() })
+      .eq('id', inv.id).eq('status', 'PENDING')
+      .select('id')
+    if (!claimed?.length) { skippedClaim++; continue }
+
+    let callStarted = false
     try {
       if (!sup?.cnpj) throw Object.assign(new Error('Fornecedor sem CNPJ'), { nonRetryable: true })
       const addr = sup.address || {}
@@ -135,10 +153,10 @@ exports.handler = async (event) => {
 
       const payload = mapearParaNfeIo(sup, inv, codigoIbge)
       if (!payload.borrower.address.city.code) {
-        // mesma regra do lambda: sem IBGE a NFE.io rejeita — falha não-retryável
         throw Object.assign(new Error(`Cadastro incompleto: IBGE não resolvido (cep=${addr.cep || hocEnd.cep || '—'})`), { nonRetryable: true })
       }
 
+      callStarted = true   // a partir daqui, ambiguidade = NEEDS_REVIEW
       const res = await fetch(
         `https://api.nfe.io/v1/companies/${process.env.NFE_COMPANY_ID}/serviceinvoices?apikey=${process.env.NFE_API_KEY}`,
         {
@@ -149,9 +167,8 @@ exports.handler = async (event) => {
       )
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const err = Object.assign(new Error(`NFe.io ${res.status}: ${JSON.stringify(body).slice(0, 800)}`),
+        throw Object.assign(new Error(`NFe.io ${res.status}: ${JSON.stringify(body).slice(0, 800)}`),
           { nonRetryable: res.status >= 400 && res.status < 500 })
-        throw err
       }
 
       await supabaseAdmin.from('nfe_invoices').update({
@@ -160,19 +177,32 @@ exports.handler = async (event) => {
       }).eq('id', inv.id)
       emitted++
     } catch (e) {
-      if (e.nonRetryable) {
+      if (e.nonRetryable && !callStarted) {
+        // erro NOSSO, antes de falar com a NFE.io — seguro marcar FAILED
+        await supabaseAdmin.from('nfe_invoices').update({
+          status: 'FAILED', log_erro: String(e.message).slice(0, 4000), serie: PARAMS.serie,
+        }).eq('id', inv.id)
+        failed++
+      } else if (e.nonRetryable) {
+        // 4xx da NFE.io: rejeitou o payload — não emitiu, mas registra como
+        // FAILED (não-retryável) para não insistir e queimar cota
         await supabaseAdmin.from('nfe_invoices').update({
           status: 'FAILED', log_erro: String(e.message).slice(0, 4000), serie: PARAMS.serie,
         }).eq('id', inv.id)
         failed++
       } else {
-        // 5xx/rede: mantém PENDING — próxima varredura tenta de novo
-        console.warn(`[nfe] retry depois: ${inv.id} — ${e.message}`)
-        kept++
+        // AMBÍGUO (timeout/rede/5xx com chamada iniciada, ou falha pré-chamada
+        // de rede): a nota PODE ter sido aceita na NFE.io — NUNCA reenviar
+        // automaticamente. Revisão humana obrigatória.
+        await supabaseAdmin.from('nfe_invoices').update({
+          status: 'NEEDS_REVIEW',
+          log_erro: `Resultado ambíguo (${callStarted ? 'chamada iniciada' : 'pré-chamada'}): ${String(e.message).slice(0, 3000)}. Confira no painel NFE.io se a nota saiu; se NÃO saiu, volte status para PENDING.`,
+        }).eq('id', inv.id)
+        review++
       }
     }
   }
 
-  console.log(`[nfe-emit-pending] emitidas=${emitted} falhas=${failed} mantidas=${kept}`)
-  return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ emitted, failed, kept, pending: (pending || []).length }) }
+  console.log(`[nfe-emit-pending] emitidas=${emitted} falhas=${failed} revisão=${review} claim_perdido=${skippedClaim}`)
+  return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ emitted, failed, needs_review: review, pending: (pending || []).length }) }
 }
