@@ -248,6 +248,26 @@ exports.handler = async (event) => {
       access_profile_id: supplierProfileId,
     }, { onConflict: 'user_id,role' })
 
+    // 3b-1. Endereço COMPLETO da Receita → suppliers.address (jsonb).
+    // Sem isso o cadastro espontâneo fica sem CEP e a NFSe é rejeitada
+    // (caso LITUR). Não sobrescreve endereço já existente.
+    try {
+      const cd = body.cnpj_full_data
+      if (cd?.cep && !supplier.address?.cep) {
+        await supabaseAdmin.from('suppliers').update({
+          address: {
+            cep:        String(cd.cep).replace(/\D/g, ''),
+            logradouro: [cd.descricao_tipo_de_logradouro, cd.logradouro].filter(Boolean).join(' '),
+            numero:     cd.numero || 'S/N',
+            complemento: cd.complemento || '',
+            bairro:     cd.bairro || '',
+            municipio:  cd.municipio || '',
+            uf:         cd.uf || '',
+          },
+        }).eq('id', supplier.id)
+      }
+    } catch (e) { console.warn('address Receita (não crítico):', e.message) }
+
     // 3b-2. Quadro societário da Receita (QSA da BrasilAPI) — só quando o
     // fornecedor ainda não tem sócios (não sobrescreve legado/manual)
     try {
