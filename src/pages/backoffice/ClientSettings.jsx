@@ -166,16 +166,16 @@ export default function BackofficeClientSettings() {
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {filtered.map(c => (
             <Card key={c.id} style={{ borderRadius:12, padding:'16px 20px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
-                <div style={{ flex:1, minWidth:200 }}>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>{c.razao_social}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={c.razao_social}>{c.razao_social}</div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>{c.cnpj || '—'}</div>
                 </div>
 
-                <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
                   <div style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Preço da Homologação</div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:16, color:'#1a1c5e' }}>
+                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2, whiteSpace:'nowrap' }}>Preço da Homologação</div>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:16, color:'#1a1c5e', whiteSpace:'nowrap' }}>
                       {(() => {
                         // Todos os preços praticados (normal + subsidiado) dos fluxos;
                         // sem fluxos com preço → preço único legado
@@ -190,9 +190,9 @@ export default function BackofficeClientSettings() {
                   </div>
 
                   <div style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Modalidade Preferencial</div>
+                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2, whiteSpace:'nowrap' }}>Modalidade Preferencial</div>
                     <span style={{
-                      fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif',
+                      fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap',
                       color: c.homologation_payer === 'client' ? '#059669' : '#2E3192',
                       background: c.homologation_payer === 'client' ? 'rgba(5,150,105,.1)' : 'rgba(46,49,146,.08)',
                     }}>
