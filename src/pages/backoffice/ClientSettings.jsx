@@ -131,13 +131,13 @@ export default function BackofficeClientSettings() {
   return (
     <div style={{ padding:'24px 32px', maxWidth:960, margin:'0 auto' }}>
       <PageHeader title="Configurações de Clientes"
-        subtitle="Preço de homologação por convite e modalidade de pagamento"/>
+        subtitle="Preços de homologação por fluxo e modalidade preferencial"/>
 
       {/* Explicação */}
       <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:12, padding:'12px 16px', marginBottom:20, fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', lineHeight:1.6 }}>
-        <strong>Como funciona:</strong> Quando um fornecedor aceita um convite deste cliente, o preço definido aqui é cobrado.
-        Se <em>Fornecedor paga</em>: o valor é cobrado via Stripe no cadastro.
-        Se <em>Cliente subsidia</em>: o fornecedor não paga nada — o acerto é feito fora da plataforma conforme contrato.
+        <strong>Como funciona:</strong> O preço da homologação vem do FLUXO em que o fornecedor cai (cada fluxo tem preço normal e subsidiado).
+        Cada convite define a modalidade: <em>Fornecedor paga</em> cobra via Stripe no cadastro; <em>Cliente subsidia</em> não cobra nada — o acerto é feito com o cliente conforme contrato.
+        A modalidade configurada aqui é apenas a preferencial (pré-seleção dos convites).
       </div>
 
       {inviteMsg.ok && (
@@ -173,28 +173,24 @@ export default function BackofficeClientSettings() {
                 </div>
 
                 <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                  {(flowsByClient[c.id]?.length) ? (
-                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', maxWidth:340 }}>
-                      {flowsByClient[c.id].map(f => (
-                        <span key={f.id} title={f.price_subsidized != null ? `Subsidiado: ${fmtBRL(f.price_subsidized)}` : ''}
-                          style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif',
-                            color: f.is_default ? '#92400e' : '#2E3192',
-                            background: f.is_default ? '#fef3c7' : 'rgba(46,49,146,.08)' }}>
-                          {f.is_default ? '⭐ ' : ''}{f.name}{f.price != null ? ` ${fmtBRL(f.price)}` : ' (sem preço)'}
-                        </span>
-                      ))}
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Preço da Homologação</div>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:16, color:'#1a1c5e' }}>
+                      {(() => {
+                        // Todos os preços praticados (normal + subsidiado) dos fluxos;
+                        // sem fluxos com preço → preço único legado
+                        const prices = (flowsByClient[c.id] || [])
+                          .flatMap(f => [f.price, f.price_subsidized])
+                          .filter(v => v != null).map(Number)
+                        if (!prices.length) return fmtBRL(c.homologation_price ?? 390)
+                        const min = Math.min(...prices), max = Math.max(...prices)
+                        return min === max ? fmtBRL(min) : `De ${fmtBRL(min)} até ${fmtBRL(max)}`
+                      })()}
                     </div>
-                  ) : (
-                    <div style={{ textAlign:'center' }}>
-                      <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Preço convite</div>
-                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#1a1c5e' }}>
-                        R$ {(c.homologation_price ?? 390).toLocaleString('pt-BR', { minimumFractionDigits:0 })}
-                      </div>
-                    </div>
-                  )}
+                  </div>
 
                   <div style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Modalidade</div>
+                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Modalidade Preferencial</div>
                     <span style={{
                       fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif',
                       color: c.homologation_payer === 'client' ? '#059669' : '#2E3192',
@@ -209,7 +205,7 @@ export default function BackofficeClientSettings() {
                     ✏ Editar
                   </Button>
                   <Button variant="primary" size="sm"
-                    onClick={() => { setInviteForm(EMPTY_INVITE); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
+                    onClick={() => { setInviteForm({ ...EMPTY_INVITE, subsidiado: c.homologation_payer === 'client' }); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
                     📨 Convidar fornecedor
                   </Button>
                 </div>
@@ -282,7 +278,10 @@ export default function BackofficeClientSettings() {
             )}
 
             <div style={{ marginBottom:20 }}>
-              <span style={lbl}>Quem paga a homologação</span>
+              <span style={lbl}>Modalidade preferencial</span>
+              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:8 }}>
+                Todo cliente pode atuar nas duas modalidades — cada convite define a sua. Esta é a pré-seleção dos convites e a regra quando o convite não especifica.
+              </div>
               <div style={{ display:'flex', gap:8 }}>
                 {[
                   ['supplier', '💳 Fornecedor paga', 'O fornecedor é cobrado via Stripe no cadastro'],
