@@ -171,7 +171,7 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
 
 // Modal ÚNICO de edição (paridade HOC): ver, substituir arquivo, vencimento,
 // status (Aprovado/Reprovado/Não se aplica) e motivo — tudo em um lugar.
-function EditDocModal({ doc, reasons, onView, onSubmit, onClose }) {
+function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
   const [file, setFile]           = useState(null)
   const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
   const [status, setStatus]       = useState('')       // '' = manter atual
@@ -215,6 +215,13 @@ function EditDocModal({ doc, reasons, onView, onSubmit, onClose }) {
           Status atual: <strong style={{ color: STATUS_COLOR[doc.status]||'#64748b' }}>{STATUS_LABEL[doc.status]||doc.status}</strong>
           {doc.expires_at && ` · vence em ${doc.expires_at.slice(0,10)}`}
         </div>
+
+        {rule && (
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1e40af', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:14, whiteSpace:'pre-line' }}>
+            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom:4 }}>📋 Como validar este documento</strong>
+            {rule}
+          </div>
+        )}
 
         {(doc.storage_path || doc.hoc_arquivo_id) && (
           <Button variant="neutral" size="sm" style={{ marginBottom:16 }} onClick={() => onView(doc)}>
@@ -684,6 +691,7 @@ export default function DocumentAnalysis() {
       {/* Modais */}
       {editModal && (
         <EditDocModal doc={editModal} reasons={reasons}
+          rule={catalog.find(c => String(c.id) === String(editModal.type))?.validation_rule}
           onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
       )}
       {aiModal && (
