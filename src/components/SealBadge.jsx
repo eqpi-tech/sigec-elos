@@ -19,7 +19,10 @@ export default function SealBadge({ seal, size = 'md', showScore = false }) {
 
   const isSusp   = !!(seal.client_suspended_at || seal.status === 'SUSPENDED')
   const status   = isSusp ? 'SUSPENDED' : (seal.status || 'PENDING')
-  const sMeta    = STATUS_META[status] ?? STATUS_META.PENDING
+  let sMeta      = STATUS_META[status] ?? STATUS_META.PENDING
+  // Homologação com exceção (carta do cliente): rótulo próprio, tom âmbar
+  if (status === 'ACTIVE' && seal.exception)
+    sMeta = { ...sMeta, dot:'#f59e0b', label:'Homologado com Exceção' }
   const isActive = status === 'ACTIVE'
   const isPending = status === 'PENDING'
 

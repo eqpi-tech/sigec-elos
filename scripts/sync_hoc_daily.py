@@ -381,7 +381,9 @@ def sync_seals(my, sb, dry, wm):
             expiry = to_date_str(row["data_validade"])
             rec = {"status": seal_status, "level": seal_level, "seal_type": "homologado",
                    "seal_name": f"Homologado – {cliente_nome}",
-                   "hoc_process_id": row["proc_id"], "hoc_expiry_date": expiry}
+                   "hoc_process_id": row["proc_id"], "hoc_expiry_date": expiry,
+                   # paridade HOC: resultado "Aprovado Com Carta" = homologação com exceção
+                   "exception": any("carta" in (r or "").lower() for r in resultados)}
             if seal_status == "ACTIVE":
                 rec["expires_at"] = expiry
         else:

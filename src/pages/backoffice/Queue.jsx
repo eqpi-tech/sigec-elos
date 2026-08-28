@@ -253,6 +253,8 @@ export function BackofficeAnalysis() {
   const [rejectCustom,   setRejectCustom]   = useState('')
   // Número de inscrição (Municipal/Estadual)
   const [approveInscription, setApproveInscription] = useState('')
+  // Cartas de exceção do processo (patch_051)
+  const [exLetters,     setExLetters]     = useState([])
   // Log do Processo
   const [logData,       setLogData]       = useState([])
   const [logLoading,    setLogLoading]    = useState(false)
@@ -284,6 +286,13 @@ export function BackofficeAnalysis() {
     adminApi.getSealAnalysis(id)
       .then(d => {
         setData(d)
+        const sealIds = (d.seals || []).map(x => x.id)
+        if (sealIds.length) {
+          supabase.from('supplier_category_approvals')
+            .select('id, seal_id, category_id, status, letter_path, letter_name, client_note, categories(name)')
+            .in('seal_id', sealIds)
+            .then(({ data: rows }) => setExLetters(rows || []))
+        }
         // Tipo do selo NÃO é escolha do analista: deriva do processo —
         // cliente ⇒ homologado; ELOS ⇒ o que o fornecedor comprou
         const ps = (d.seals || []).find(x => x.status !== 'ACTIVE') || d.seals?.[0]
@@ -523,6 +532,25 @@ export function BackofficeAnalysis() {
       alert(`📧 Solicitação enviada ao fornecedor (${pendingDocs.length} documento(s) listado(s)).`)
     } catch (e) { alert('Erro ao enviar: ' + e.message) }
     finally { setProcessing(false) }
+  }
+
+  const handleApproveException = async () => {
+    const pend = exLetters.filter(l => l.seal_id === processSeal?.id && l.status === 'EXCEPTION_REQUESTED')
+    if (!pend.length) return
+    if (!window.confirm(`Homologar COM EXCEÇÃO as categorias: ${pend.map(l => l.categories?.name || l.category_id).join(', ')}?\nDocumentos reprovados/faltantes destas categorias ficam cobertos pela carta do cliente.`)) return
+    setProcessing(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/.netlify/functions/exception-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'approve', sealId: processSeal.id, note: obs || undefined }),
+      })
+      const out = await res.json()
+      if (!res.ok) throw new Error(out.error)
+      alert(`🏅 Homologado com Exceção — categorias: ${out.categorias.join(', ')}`)
+      window.location.reload()
+    } catch (e) { alert('Erro: ' + e.message); setProcessing(false) }
   }
 
   const handleApprove = async () => {
@@ -1549,6 +1577,34 @@ export function BackofficeAnalysis() {
               </div>
             </div>
 
+            {/* Cartas de Exceção (patch_051) */}
+            {exLetters.filter(l => l.seal_id === processSeal?.id).length > 0 && (
+              <div style={{ marginBottom:14, padding:'12px 14px', borderRadius:10, background:'rgba(245,158,11,.07)', border:'1px solid rgba(245,158,11,.35)' }}>
+                <div style={{ fontSize:11,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#92400e',marginBottom:8,letterSpacing:.5,textTransform:'uppercase' }}>📜 Cartas de Exceção do Cliente</div>
+                {exLetters.filter(l => l.seal_id === processSeal?.id).map(l => (
+                  <div key={l.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid rgba(245,158,11,.15)' }}>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,color:'#1a1c5e' }}>{l.categories?.name || `Categoria ${l.category_id}`}</div>
+                      <div style={{ fontSize:10,color: l.status==='EXCEPTION_APPROVED' ? '#15803d' : '#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
+                        {l.status==='EXCEPTION_APPROVED' ? '✓ Exceção aprovada' : 'Carta anexada — aguardando decisão'}
+                      </div>
+                    </div>
+                    {l.letter_path && (
+                      <button onClick={async () => { try { const u = await documentApi.getSignedUrl(l.letter_path); window.open(u,'_blank') } catch(e){ alert(e.message) } }}
+                        style={{ padding:'4px 10px',borderRadius:8,border:'1px solid #e2e4ef',background:'#fff',fontSize:11,cursor:'pointer',fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#92400e',flexShrink:0 }}>
+                        👁 Carta
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {exLetters.some(l => l.seal_id === processSeal?.id && l.status === 'EXCEPTION_REQUESTED') && (
+                  <Button variant="orange" full size="sm" style={{ borderRadius:10, marginTop:10 }} disabled={processing} onClick={handleApproveException}>
+                    🏅 Homologar com Exceção
+                  </Button>
+                )}
+              </div>
+            )}
+
             {/* Selos do fornecedor (multi-selo por cliente) + certificado */}
             {(data?.seals || []).length > 0 && (
               <div style={{ marginBottom:14 }}>
@@ -1562,7 +1618,7 @@ export function BackofficeAnalysis() {
                       <div style={{ flex:1,minWidth:0 }}>
                         <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,color:'#1a1c5e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
                         <div style={{ fontSize:10,color: active?'#15803d':s.status==='SUSPENDED'?'#dc2626':'#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
-                          {active ? `Ativo · score ${s.score ?? '—'}` : s.status==='SUSPENDED' ? 'Suspenso' : 'Em análise'}
+                          {active ? `${s.exception ? 'Homologado com Exceção' : 'Ativo'} · score ${s.score ?? '—'}` : s.status==='SUSPENDED' ? 'Suspenso' : 'Em análise'}
                         </div>
                       </div>
                       {active && (

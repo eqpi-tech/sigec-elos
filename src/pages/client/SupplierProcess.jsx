@@ -50,6 +50,91 @@ const DOC_BORDER = { VALID:'#dcfce7', PENDING:'#fed7aa', MISSING:'#e2e4ef', REJE
 
 const TABS = ['Resumo', 'Documentos', 'Inteligência CNPJ']
 
+
+// ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
+//    reprovado/faltante; backoffice então homologa com exceção ────────────
+function ExceptionLetters({ seal, supplierId, clientId }) {
+  const [cats, setCats]       = useState([])
+  const [letters, setLetters] = useState({})   // category_id → row
+  const [busy, setBusy]       = useState(null)
+  const [open, setOpen]       = useState(false)
+
+  useEffect(() => {
+    if (!seal?.id) return
+    supabase.from('supplier_categories')
+      .select('category_id, categories!inner(id, name, client_id)')
+      .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
+      .then(({ data }) => setCats((data || []).map(r => r.categories)))
+    supabase.from('supplier_category_approvals')
+      .select('category_id, status, letter_name, approved_at')
+      .eq('seal_id', seal.id)
+      .then(({ data }) => setLetters(Object.fromEntries((data || []).map(r => [r.category_id, r]))))
+  }, [seal?.id])
+
+  if (!seal || seal.status === 'ACTIVE' && !Object.keys(letters).length && !open) {
+    // processo já homologado sem exceção pendente → seção discreta
+  }
+  if (!seal || !cats.length) return null
+
+  async function upload(cat, file) {
+    setBusy(cat.id)
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file)
+      })
+      const { data: { session } } = await supabase.auth.getSession()
+      const resp = await fetch('/.netlify/functions/exception-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'upload', sealId: seal.id, categoryId: cat.id,
+          file: { name: file.name, mime: file.type, base64 } }),
+      })
+      const out = await resp.json()
+      if (!resp.ok) throw new Error(out.error)
+      setLetters(p => ({ ...p, [cat.id]: { category_id: cat.id, status: 'EXCEPTION_REQUESTED', letter_name: file.name } }))
+    } catch (e) { alert('Erro ao anexar carta: ' + e.message) }
+    finally { setBusy(null) }
+  }
+
+  return (
+    <Card style={{ borderRadius:14, padding:'18px 22px', marginBottom:16, border:'1px solid rgba(245,158,11,.35)' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width:'100%', background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:10, textAlign:'left', padding:0 }}>
+        <span style={{ fontSize:18 }}>📜</span>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#92400e' }}>Carta de Exceção</div>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>
+            Aprove uma categoria específica mesmo com documento reprovado — anexe a carta e o backoffice homologa com exceção
+          </div>
+        </div>
+        <span style={{ color:'#9B9B9B', fontSize:12 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:8 }}>
+          {cats.map(cat => {
+            const l = letters[cat.id]
+            return (
+              <div key={cat.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:'1px solid #eef0f6' }}>
+                <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>{cat.name}</span>
+                {l?.status === 'EXCEPTION_APPROVED' ? (
+                  <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>✓ Exceção aprovada</span>
+                ) : l ? (
+                  <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b45309', background:'#fef3c7', padding:'3px 10px', borderRadius:20 }}>📜 Carta anexada — aguardando backoffice</span>
+                ) : (
+                  <label style={{ fontSize:11, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#2E3192', border:'1px dashed #2E319266', padding:'6px 12px', borderRadius:8, cursor: busy ? 'wait' : 'pointer' }}>
+                    {busy === cat.id ? 'Enviando…' : '📎 Anexar carta'}
+                    <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!busy}
+                      onChange={e => e.target.files?.[0] && upload(cat, e.target.files[0])}/>
+                  </label>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function ClientSupplierProcess() {
   const { supplierId } = useParams()
   const { user } = useAuth()
@@ -169,6 +254,8 @@ export default function ClientSupplierProcess() {
           </div>
         </div>
       </Card>
+
+      <ExceptionLetters seal={seal} supplierId={supplierId} clientId={user?.clientId}/>
 
       {/* Modal Dados Bancários */}
       {bankModal && (
