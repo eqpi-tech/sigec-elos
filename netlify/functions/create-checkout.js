@@ -85,7 +85,14 @@ exports.handler = async (event) => {
     // ── CASOS 1 e 2: Fornecedor ───────────────────────────────────────────────
 
     // Resolver preço e pagador via inviteToken (fornecedor convidado ou tagueado)
-    let effectivePrice = priceYearly || 390
+    // Default: preço do ELOS Homologado em app_settings (Preços ELOS no backoffice)
+    let defaultHomologado = 690
+    try {
+      const { data: st } = await supabaseAdmin.from('app_settings')
+        .select('value').eq('key', 'elos_prices').maybeSingle()
+      if (st?.value?.homologado_anual != null) defaultHomologado = Number(st.value.homologado_anual)
+    } catch { /* mantém fallback */ }
+    let effectivePrice = priceYearly || defaultHomologado
     let clientPayer    = 'supplier'
     let clientId       = null
     let isInvitedSupplier = false

@@ -38,7 +38,13 @@ const NAVS = {
         { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', desc:'Buscar e abrir fichas de fornecedores' },
         { path:'/backoffice/homologados',        label:'Homologados',     icon:'✅', desc:'Fornecedores com selo ativo' },
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
-        { path:'/backoffice/feriados',           label:'Feriados',        icon:'📅', desc:'Datas que ajustam os prazos do farol' },
+      ],
+    },
+    {
+      key:'config', label:'Configurações Gerais', icon:'⚙️',
+      children: [
+        { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', desc:'Valores dos planos da plataforma' },
+        { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', desc:'Datas que ajustam os prazos do farol' },
         { path:'/backoffice/catalogo-documentos', label:'Catálogo de Docs', icon:'🗂️', desc:'Tipos de documento e regras de validação' },
       ],
     },

@@ -19,6 +19,7 @@ export default function BackofficeClientSettings() {
   const [inviteMsg,   setInviteMsg]   = useState({ ok:'', err:'' })
   const [flowsByClient, setFlowsByClient] = useState({})  // client_id → [fluxos c/ preço]
   const [flowEdits, setFlowEdits] = useState({})          // flow_id → { price, price_subsidized, is_default }
+  const [elosHomologado, setElosHomologado] = useState(690)  // fallback: Preços ELOS
 
   async function loadFlows() {
     // Fluxos ativos de todos os clientes (paginado — PostgREST corta em 1000)
@@ -42,6 +43,8 @@ export default function BackofficeClientSettings() {
       .order('razao_social')
       .then(({ data }) => { setClients(data || []); setLoading(false) })
     loadFlows()
+    supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
+      .then(({ data }) => { if (data?.value?.homologado_anual != null) setElosHomologado(Number(data.value.homologado_anual)) })
   }, [])
 
   const filtered = clients.filter(c => {
@@ -182,7 +185,7 @@ export default function BackofficeClientSettings() {
                         const prices = (flowsByClient[c.id] || [])
                           .flatMap(f => [f.price, f.price_subsidized])
                           .filter(v => v != null).map(Number)
-                        if (!prices.length) return fmtBRL(c.homologation_price ?? 390)
+                        if (!prices.length) return fmtBRL(c.homologation_price ?? elosHomologado)
                         const min = Math.min(...prices), max = Math.max(...prices)
                         return min === max ? fmtBRL(min) : `De ${fmtBRL(min)} até ${fmtBRL(max)}`
                       })()}
@@ -201,7 +204,7 @@ export default function BackofficeClientSettings() {
                   </div>
 
                   <Button variant="neutral" size="sm"
-                    onClick={() => setEditing({ id: c.id, homologation_price: c.homologation_price ?? 390, homologation_payer: c.homologation_payer ?? 'supplier' })}>
+                    onClick={() => setEditing({ id: c.id, homologation_price: c.homologation_price ?? elosHomologado, homologation_payer: c.homologation_payer ?? 'supplier' })}>
                     ✏ Editar
                   </Button>
                   <Button variant="primary" size="sm"
@@ -272,7 +275,7 @@ export default function BackofficeClientSettings() {
                   onChange={e => setEditing(p => ({...p, homologation_price: e.target.value}))}
                   style={inp}/>
                 <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                  Padrão: R$ 390. Este cliente não tem fluxos com preço — crie fluxos em Fluxo de Homologação para preços por nível.
+                  Padrão: preço do ELOS Homologado ({fmtBRL(elosHomologado)}, em Configurações Gerais → Preços ELOS). Este cliente não tem fluxos com preço — crie fluxos em Fluxo de Homologação para preços por nível.
                 </div>
               </div>
             )}

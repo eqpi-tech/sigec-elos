@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { supabase } from '../../lib/supabase.js'
 import { Card, PageHeader, Spinner } from '../../components/ui.jsx'
 import { paymentsApi } from '../../services/api.js'
 
@@ -24,6 +25,14 @@ export default function BuyerPlan() {
   const { user, reloadProfile } = useAuth()
   const [cycle,   setCycle]   = useState('anual')
   const [loading, setLoading] = useState(false)
+  const [elosPrices, setElosPrices] = useState({})  // app_settings.elos_prices
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
+      .then(({ data }) => setElosPrices(data?.value || {}))
+  }, [])
+  const proAnual  = elosPrices.comprador_pro_anual ?? 1990
+  const proMensal = elosPrices.comprador_pro_mensal ?? 199
 
   // Verifica se voltou do Stripe com ativação
   useEffect(() => {
@@ -138,11 +147,13 @@ export default function BuyerPlan() {
             </div>
 
             <div style={{ fontSize:28, fontWeight:800, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:2 }}>
-              {cycle === 'anual' ? 'R$ 1.990' : 'R$ 199'}
+              {`R$ ${(cycle === 'anual' ? proAnual : proMensal).toLocaleString('pt-BR')}`}
               <span style={{ fontSize:14, fontWeight:400, color:'#9B9B9B' }}>/{cycle === 'anual' ? 'ano' : 'mês'}</span>
             </div>
-            {cycle === 'anual' && (
-              <div style={{ fontSize:11, color:'#22c55e', fontWeight:600, marginBottom:12 }}>Economia de R$ 398 vs mensal</div>
+            {cycle === 'anual' && proMensal * 12 > proAnual && (
+              <div style={{ fontSize:11, color:'#22c55e', fontWeight:600, marginBottom:12 }}>
+                Economia de R$ {(proMensal * 12 - proAnual).toLocaleString('pt-BR')} vs mensal
+              </div>
             )}
 
             <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>

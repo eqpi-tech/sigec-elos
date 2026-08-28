@@ -7,6 +7,7 @@ import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
+// Fallback local — a fonte é app_settings.elos_prices (Preços ELOS no backoffice)
 const PLAN_PRICES = {
   verificado: 199,
   homologado: 690,
@@ -38,6 +39,14 @@ export default function SupplierOnboarding() {
 
   // ── Supplier state ────────────────────────────────────────────────
   const [invitation, setInvitation]         = useState(null)
+  const [elosPrices, setElosPrices]         = useState({})   // app_settings.elos_prices
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
+      .then(({ data }) => setElosPrices(data?.value || {}))
+  }, [])
+  const planPrice   = (t) => (t === 'verificado' || t === 'Simples' ? elosPrices.verificado_anual : elosPrices.homologado_anual) ?? PLAN_PRICES[t]
+  const mensalPrice = elosPrices.verificado_mensal ?? BILLING_PRICE.verificado_mensal
   const [existingSeal, setExistingSeal]     = useState(null)
   const [existingSupplier, setExistingSupplier] = useState(null)
 
@@ -237,7 +246,7 @@ export default function SupplierOnboarding() {
     setLoading(true); setError('')
     try {
       const { supplier, sessionToken } = await createAuthAndSupplier()
-      const priceValue = isMensal ? BILLING_PRICE.verificado_mensal : (invitation?.client_price || PLAN_PRICES[planType])
+      const priceValue = isMensal ? mensalPrice : (invitation?.client_price || planPrice(planType))
       const stripeType = isMensal ? 'verificado_mensal' : `${planType}_anual`
       const { url } = await paymentsApi.createCheckout({
         planType: stripeType, cnaeCount: 3, supplierId: supplier.id,
@@ -248,7 +257,7 @@ export default function SupplierOnboarding() {
   }
 
   const isMensal = planType === 'verificado' && billingCycle === 'mensal'
-  const price    = isMensal ? BILLING_PRICE.verificado_mensal : PLAN_PRICES[planType]
+  const price    = isMensal ? mensalPrice : planPrice(planType)
 
   // ── Buyer handlers ────────────────────────────────────────────────
   const handleBuyerCnpjLookup = async () => {

@@ -36,6 +36,7 @@ import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
 import BackofficeUsers               from './pages/backoffice/Users.jsx'
 import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlows.jsx'
 import BackofficeDocumentCatalog from './pages/backoffice/DocumentCatalog.jsx'
+import BackofficeElosPricing from './pages/backoffice/ElosPricing.jsx'
 import BackofficeDocumentAnalysis    from './pages/backoffice/DocumentAnalysis.jsx'
 import BackofficeClientSettings     from './pages/backoffice/ClientSettings.jsx'
 import BackofficeLandingPages        from './pages/backoffice/LandingPages.jsx'
@@ -138,6 +139,7 @@ function AppRoutes() {
       <Route path="/backoffice/perfis"          element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUserProfiles/></Protect>} />
       <Route path="/backoffice/fluxo-documentos"    element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientDocumentFlows/></Protect>} />
       <Route path="/backoffice/catalogo-documentos" element={<Protect roles={['ADMIN']}><BackofficeDocumentCatalog/></Protect>} />
+      <Route path="/backoffice/precos"              element={<Protect roles={['ADMIN']}><BackofficeElosPricing/></Protect>} />
       <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
       <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientSettings/></Protect>} />
       <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeLandingPages/></Protect>} />
