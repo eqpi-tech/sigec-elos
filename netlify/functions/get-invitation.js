@@ -18,7 +18,7 @@ exports.handler = async (event) => {
 
   const { data: inv, error } = await supabaseAdmin
     .from('invitations')
-    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, flow_id, viewed_at, clients(razao_social, terms_content), buyers(razao_social)')
+    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, flow_id, viewed_at, client_flows(price, price_subsidized), clients(razao_social, terms_content, homologation_price), buyers(razao_social)')
     .eq('token', token)
     .maybeSingle()
 
@@ -64,6 +64,9 @@ exports.handler = async (event) => {
       client_id:             inv.client_id,
       flow_id:               inv.flow_id,   // fluxo (nível) em que o fornecedor cai ao se cadastrar
       flow_category_ids:     flowCategoryIds,  // null = sem restrição de fluxo
+      // Preço exibido no onboarding quando o FORNECEDOR paga (não subsidiado):
+      // fluxo do convite > preço legado do cliente (o checkout revalida server-side)
+      client_price:          inv.client_flows?.price ?? inv.clients?.homologation_price ?? null,
       client_terms:          clientTerms,  // termos personalizados do cliente (pode ser null)
     }),
   }

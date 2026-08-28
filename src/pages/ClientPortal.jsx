@@ -89,6 +89,8 @@ export default function ClientPortal() {
   const [cnpj, setCnpj]           = useState('')
   const [activeTab, setActiveTab] = useState('register')
   const [scrolled, setScrolled]   = useState(false)
+  const [flows, setFlows]         = useState([])       // fluxos (pacotes) do cliente
+  const [chosenFlow, setChosenFlow] = useState(null)   // fluxo escolhido no card
 
   // Fetch LP config from Supabase
   useEffect(() => {
@@ -100,7 +102,15 @@ export default function ClientPortal() {
       .single()
       .then(({ data, error }) => {
         if (error || !data) { setNotFound(true) }
-        else { setClient(data) }
+        else {
+          setClient(data)
+          // Pacotes = fluxos do cliente com preço NÃO subsidiado definido;
+          // sem nenhum preço → mantém os planos padrão ELOS
+          supabase.from('client_flows')
+            .select('id, name, description, price, is_default')
+            .eq('client_id', data.client_id).eq('active', true).order('name')
+            .then(({ data: fl }) => setFlows((fl || []).filter(f => f.price != null)))
+        }
         setLoading(false)
       })
   }, [slug])
@@ -123,7 +133,7 @@ export default function ClientPortal() {
   const handleRegister = () => {
     const raw = cnpj.replace(/\D/g, '')
     if (raw.length !== 14) { alert('Informe um CNPJ válido com 14 dígitos.'); return }
-    navigate(`/cadastro?cnpj=${raw}&ref=${slug}`)
+    navigate(`/cadastro?cnpj=${raw}&ref=${slug}${chosenFlow ? `&flow=${chosenFlow}` : ''}`)
   }
 
   const handleLogin = () => navigate('/login')
@@ -522,14 +532,42 @@ export default function ClientPortal() {
             Licenças SIGEC-ELOS
           </span>
           <h2 style={{ fontFamily: fontDisplay, fontSize: mobile ? 28 : 36, fontWeight: 700, marginTop: 12, color: '#0D1B2A' }}>
-            Escolha o plano ideal para sua empresa
+            {flows.length ? 'Pacotes de homologação' : 'Escolha o plano ideal para sua empresa'}
           </h2>
           <p style={{ fontSize: 16, color: '#667085', marginTop: 12, maxWidth: 580, margin: '12px auto 0' }}>
-            Assinatura anual com valores acessíveis. A {companyName} não recebe
-            nenhum benefício financeiro com estas anuidades.
+            {flows.length
+              ? `Cada pacote define as categorias e os documentos exigidos no processo de homologação da ${companyName}.`
+              : `Assinatura anual com valores acessíveis. A ${companyName} não recebe nenhum benefício financeiro com estas anuidades.`}
           </p>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(2, 1fr)',
+        {flows.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : `repeat(${Math.min(flows.length, 3)}, 1fr)`,
+            gap: 28, maxWidth: 1020, margin: '0 auto' }}>
+            {flows.map((fl) => (
+              <div key={fl.id} className={`plan-card${fl.is_default ? ' popular' : ''}`}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0D1B2A', marginBottom: 4 }}>{fl.name}</h3>
+                <div style={{ marginBottom: 24 }}>
+                  <span style={{ fontSize: 14, color: '#667085' }}>R$</span>
+                  <span style={{ fontSize: 44, fontWeight: 700, color: fl.is_default ? accent : secondary, marginLeft: 2 }}>
+                    {Number(fl.price).toFixed(2).replace('.', ',')}
+                  </span>
+                  <span style={{ fontSize: 15, color: '#98A2B3' }}>/homologação</span>
+                </div>
+                {fl.description && (
+                  <p style={{ fontSize: 14, color: '#475467', margin: '0 0 28px', minHeight: 40 }}>{fl.description}</p>
+                )}
+                <button className="btn-primary"
+                  onClick={() => { setChosenFlow(fl.id); document.getElementById('cadastro')?.scrollIntoView({ behavior: 'smooth' }) }}
+                  style={{ width: '100%', background: fl.is_default ? accent : secondary,
+                    outline: chosenFlow === fl.id ? `3px solid ${accent}` : 'none' }}>
+                  {chosenFlow === fl.id ? '✓ Selecionado — informe o CNPJ' : 'Iniciar Cadastro'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: flows.length ? 'none' : 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(2, 1fr)',
           gap: 28, maxWidth: 780, margin: '0 auto' }}>
           {ELOS_PLANS.map((plan) => (
             <div key={plan.id} className={`plan-card${plan.popular ? ' popular' : ''}`}>

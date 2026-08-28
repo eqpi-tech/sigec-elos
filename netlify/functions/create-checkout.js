@@ -93,17 +93,25 @@ exports.handler = async (event) => {
     if (inviteToken) {
       const { data: inv } = await supabaseAdmin
         .from('invitations')
-        .select('client_id, clients(homologation_price, homologation_payer)')
+        .select('client_id, subsidiado, flow_id, client_flows(price, price_subsidized), clients(homologation_price, homologation_payer)')
         .eq('token', inviteToken)
         .maybeSingle()
 
       if (inv?.client_id) {
         isInvitedSupplier = true
         clientId    = inv.client_id
-        clientPayer = inv.clients?.homologation_payer || 'supplier'
-        if (inv.clients?.homologation_price) {
-          effectivePrice = Number(inv.clients.homologation_price)
-        }
+        // Pagador: o convite manda (subsidiado true/false); sem info, config do cliente
+        clientPayer = inv.subsidiado === true ? 'client'
+                    : inv.subsidiado === false ? 'supplier'
+                    : (inv.clients?.homologation_payer || 'supplier')
+        // Preço: fluxo do convite > preço legado do cliente > default.
+        // Subsidiado usa price_subsidized (registro p/ relatório); quem paga
+        // no Stripe usa sempre o preço NÃO subsidiado.
+        const flowPrice = clientPayer === 'client'
+          ? (inv.client_flows?.price_subsidized ?? inv.client_flows?.price)
+          : (inv.client_flows?.price ?? inv.client_flows?.price_subsidized)
+        if (flowPrice != null) effectivePrice = Number(flowPrice)
+        else if (inv.clients?.homologation_price) effectivePrice = Number(inv.clients.homologation_price)
       }
     }
 

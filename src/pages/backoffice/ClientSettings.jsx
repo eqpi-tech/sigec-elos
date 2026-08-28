@@ -3,7 +3,9 @@ import { supabase } from '../../lib/supabase.js'
 import { invitationsApi } from '../../services/api.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
-const EMPTY_INVITE = { razao_social:'', cnpj:'', email:'', telefone:'', contato:'', tipo_fornecedor:'servico', subsidiado:false, escopo:'' }
+const EMPTY_INVITE = { razao_social:'', cnpj:'', email:'', telefone:'', contato:'', tipo_fornecedor:'servico', subsidiado:false, escopo:'', flow_id:'' }
+
+const fmtBRL = v => `R$ ${Number(v).toFixed(2).replace('.', ',')}`
 
 export default function BackofficeClientSettings() {
   const [clients,  setClients]  = useState([])
@@ -15,6 +17,23 @@ export default function BackofficeClientSettings() {
   const [inviteForm,  setInviteForm]  = useState(EMPTY_INVITE)
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteMsg,   setInviteMsg]   = useState({ ok:'', err:'' })
+  const [flowsByClient, setFlowsByClient] = useState({})  // client_id → [fluxos c/ preço]
+  const [flowEdits, setFlowEdits] = useState({})          // flow_id → { price, price_subsidized, is_default }
+
+  async function loadFlows() {
+    // Fluxos ativos de todos os clientes (paginado — PostgREST corta em 1000)
+    const all = []
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase.from('client_flows')
+        .select('id, client_id, name, price, price_subsidized, is_default, active')
+        .eq('active', true).order('client_id').order('name').range(from, from + 999)
+      all.push(...(data || []))
+      if (!data || data.length < 1000) break
+    }
+    const map = {}
+    for (const f of all) (map[f.client_id] = map[f.client_id] || []).push(f)
+    setFlowsByClient(map)
+  }
 
   useEffect(() => {
     supabase
@@ -22,6 +41,7 @@ export default function BackofficeClientSettings() {
       .select('id, razao_social, cnpj, homologation_price, homologation_payer, created_at')
       .order('razao_social')
       .then(({ data }) => { setClients(data || []); setLoading(false) })
+    loadFlows()
   }, [])
 
   const filtered = clients.filter(c => {
@@ -37,10 +57,43 @@ export default function BackofficeClientSettings() {
         .update({ homologation_price: Number(editing.homologation_price), homologation_payer: editing.homologation_payer })
         .eq('id', editing.id)
       if (error) throw error
+
+      // Preços por fluxo (quando o cliente tem fluxos)
+      const flows = flowsByClient[editing.id] || []
+      const defaultFlowId = Object.entries(flowEdits).find(([, v]) => v.is_default)?.[0]
+        || flows.find(f => f.is_default)?.id
+      for (const f of flows) {
+        const ed = flowEdits[f.id]
+        const payload = {
+          price:            ed?.price === '' ? null : ed?.price != null ? Number(ed.price) : f.price,
+          price_subsidized: ed?.price_subsidized === '' ? null : ed?.price_subsidized != null ? Number(ed.price_subsidized) : f.price_subsidized,
+          is_default:       f.id === defaultFlowId,
+        }
+        // Índice único parcial: desmarca antes de marcar o novo padrão
+        if (!payload.is_default && f.is_default) {
+          const { error: e1 } = await supabase.from('client_flows').update(payload).eq('id', f.id)
+          if (e1) throw e1
+        }
+      }
+      for (const f of flows) {
+        const ed = flowEdits[f.id]
+        const payload = {
+          price:            ed?.price === '' ? null : ed?.price != null ? Number(ed.price) : f.price,
+          price_subsidized: ed?.price_subsidized === '' ? null : ed?.price_subsidized != null ? Number(ed.price_subsidized) : f.price_subsidized,
+          is_default:       f.id === defaultFlowId,
+        }
+        if (payload.is_default || !f.is_default) {
+          const { error: e2 } = await supabase.from('client_flows').update(payload).eq('id', f.id)
+          if (e2) throw e2
+        }
+      }
+
       setClients(prev => prev.map(c => c.id === editing.id
         ? { ...c, homologation_price: Number(editing.homologation_price), homologation_payer: editing.homologation_payer }
         : c
       ))
+      await loadFlows()
+      setFlowEdits({})
       setEditing(null)
     } catch (e) { alert('Erro: ' + e.message) }
     finally { setSaving(false) }
@@ -61,6 +114,7 @@ export default function BackofficeClientSettings() {
         subsidiado:      inviteForm.subsidiado,
         escopo:          inviteForm.escopo,
         client_id:       inviteModal.id,
+        flow_id:         inviteForm.flow_id || (flowsByClient[inviteModal.id] || []).find(f => f.is_default)?.id || null,
         invited_by_role: 'ADMIN',
       }, session?.access_token)
       setInviteMsg({ ok:`Convite enviado para ${inviteForm.email} em nome de ${inviteModal.razao_social}!`, err:'' })
@@ -119,12 +173,25 @@ export default function BackofficeClientSettings() {
                 </div>
 
                 <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                  <div style={{ textAlign:'center' }}>
-                    <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Preço convite</div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#1a1c5e' }}>
-                      R$ {(c.homologation_price ?? 390).toLocaleString('pt-BR', { minimumFractionDigits:0 })}
+                  {(flowsByClient[c.id]?.length) ? (
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', maxWidth:340 }}>
+                      {flowsByClient[c.id].map(f => (
+                        <span key={f.id} title={f.price_subsidized != null ? `Subsidiado: ${fmtBRL(f.price_subsidized)}` : ''}
+                          style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif',
+                            color: f.is_default ? '#92400e' : '#2E3192',
+                            background: f.is_default ? '#fef3c7' : 'rgba(46,49,146,.08)' }}>
+                          {f.is_default ? '⭐ ' : ''}{f.name}{f.price != null ? ` ${fmtBRL(f.price)}` : ' (sem preço)'}
+                        </span>
+                      ))}
                     </div>
-                  </div>
+                  ) : (
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Preço convite</div>
+                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#1a1c5e' }}>
+                        R$ {(c.homologation_price ?? 390).toLocaleString('pt-BR', { minimumFractionDigits:0 })}
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ textAlign:'center' }}>
                     <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:2 }}>Modalidade</div>
@@ -163,16 +230,56 @@ export default function BackofficeClientSettings() {
               {clients.find(c => c.id === editing.id)?.razao_social}
             </div>
 
-            <div style={{ marginBottom:14 }}>
-              <span style={lbl}>Valor cobrado do fornecedor (R$)</span>
-              <input type="number" min="0" step="0.01"
-                value={editing.homologation_price}
-                onChange={e => setEditing(p => ({...p, homologation_price: e.target.value}))}
-                style={inp}/>
-              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                Padrão: R$ 390. Aplica-se apenas a fornecedores que chegam via convite deste cliente.
+            {(flowsByClient[editing.id]?.length) ? (
+              <div style={{ marginBottom:14 }}>
+                <span style={lbl}>Preços por fluxo de homologação</span>
+                <div style={{ border:'1px solid #e2e4ef', borderRadius:10, overflow:'hidden' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr 60px', gap:6, padding:'6px 10px', background:'#f8f9fc', fontSize:9, fontFamily:'Montserrat,sans-serif', fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.4, alignItems:'center' }}>
+                    <span>Fluxo</span><span>Não subsid. (R$)</span><span>Subsidiado (R$)</span><span>Padrão</span>
+                  </div>
+                  {flowsByClient[editing.id].map(f => {
+                    const ed = flowEdits[f.id] || {}
+                    return (
+                      <div key={f.id} style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr 60px', gap:6, padding:'6px 10px', borderTop:'1px solid #f1f2f8', alignItems:'center' }}>
+                        <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:700, color:'#1a1c5e' }}>{f.name}</span>
+                        <input type="number" min="0" step="0.01"
+                          value={ed.price ?? f.price ?? ''}
+                          onChange={e => setFlowEdits(p => ({ ...p, [f.id]: { ...p[f.id], price: e.target.value } }))}
+                          style={{ ...inp, padding:'6px 8px', fontSize:12.5 }}/>
+                        <input type="number" min="0" step="0.01"
+                          value={ed.price_subsidized ?? f.price_subsidized ?? ''}
+                          onChange={e => setFlowEdits(p => ({ ...p, [f.id]: { ...p[f.id], price_subsidized: e.target.value } }))}
+                          style={{ ...inp, padding:'6px 8px', fontSize:12.5 }}/>
+                        <input type="radio" name="defaultFlow"
+                          checked={Object.entries(flowEdits).some(([, v]) => v.is_default)
+                            ? !!flowEdits[f.id]?.is_default
+                            : !!f.is_default}
+                          onChange={() => setFlowEdits(p => {
+                            const n = {}
+                            for (const fl of flowsByClient[editing.id]) n[fl.id] = { ...p[fl.id], is_default: fl.id === f.id }
+                            return n
+                          })}
+                          style={{ accentColor:'#2E3192', justifySelf:'center' }}/>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                  O preço da homologação SEMPRE vem do fluxo do fornecedor. O ⭐ padrão recebe os espontâneos (portal/LP). O portal exibe o preço não subsidiado.
+                </div>
               </div>
-            </div>
+            ) : (
+              <div style={{ marginBottom:14 }}>
+                <span style={lbl}>Valor cobrado do fornecedor (R$)</span>
+                <input type="number" min="0" step="0.01"
+                  value={editing.homologation_price}
+                  onChange={e => setEditing(p => ({...p, homologation_price: e.target.value}))}
+                  style={inp}/>
+                <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                  Padrão: R$ 390. Este cliente não tem fluxos com preço — crie fluxos em Fluxo de Homologação para preços por nível.
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom:20 }}>
               <span style={lbl}>Quem paga a homologação</span>
@@ -254,6 +361,18 @@ export default function BackofficeClientSettings() {
                     <option value="sim">Sim — cliente subsidia</option>
                   </select>
                 </div>
+                {(flowsByClient[inviteModal.id]?.length) > 0 && (
+                  <div style={{ gridColumn:'1 / -1' }}>
+                    <span style={lbl}>Fluxo de homologação</span>
+                    <select value={inviteForm.flow_id || (flowsByClient[inviteModal.id] || []).find(f => f.is_default)?.id || ''}
+                      onChange={e=>setInviteForm(f=>({...f, flow_id: e.target.value}))} style={inp}>
+                      {flowsByClient[inviteModal.id].map(fl => {
+                        const price = inviteForm.subsidiado ? (fl.price_subsidized ?? fl.price) : (fl.price ?? fl.price_subsidized)
+                        return <option key={fl.id} value={fl.id}>{fl.name}{fl.is_default ? ' (padrão)' : ''}{price != null ? ` — ${fmtBRL(price)}` : ''}</option>
+                      })}
+                    </select>
+                  </div>
+                )}
                 <div style={{ gridColumn:'1 / -1' }}>
                   <span style={lbl}>Escopo da homologação</span>
                   <textarea rows={2} value={inviteForm.escopo} onChange={e=>setInviteForm(f=>({...f, escopo:e.target.value}))}

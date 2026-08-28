@@ -30,6 +30,7 @@ export default function SupplierOnboarding() {
   const _params     = new URLSearchParams(window.location.search)
   const inviteToken = _params.get('token')
   const refSlug     = _params.get('ref')
+  const refFlowId   = _params.get('flow')   // pacote escolhido no portal do cliente
   const cnpjParam   = _params.get('cnpj')
 
   // Toggle: 'supplier' | 'buyer'
@@ -211,6 +212,7 @@ export default function SupplierOnboarding() {
         terms_accepted: true, data_sharing_accepted: true,
         cnpj_full_data: cnpjData || null, category_ids: [...selectedCategories],
         invitation_token: inviteToken || undefined, ref_slug: refSlug || undefined,
+        ref_flow_id: refFlowId || undefined,
         is_existing_active: isExAct || undefined,
       }),
     })

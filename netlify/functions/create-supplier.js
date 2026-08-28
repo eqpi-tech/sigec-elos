@@ -41,6 +41,7 @@ exports.handler = async (event) => {
       sanctions_checked, sanctions_result,
       invitation_token,
       ref_slug,
+      ref_flow_id,
       is_existing_active,
     } = body
 
@@ -393,9 +394,18 @@ exports.handler = async (event) => {
           .single()
 
         if (lp?.client_id) {
-          // Espontâneo via LP do cliente → cai no fluxo PADRÃO do cliente
-          const { data: defFlow } = await supabaseAdmin.from('client_flows')
-            .select('id').eq('client_id', lp.client_id).eq('is_default', true).eq('active', true).maybeSingle()
+          // Espontâneo via LP: fluxo escolhido no portal (validado) ou o PADRÃO
+          let defFlow = null
+          if (ref_flow_id) {
+            const { data: chosen } = await supabaseAdmin.from('client_flows')
+              .select('id').eq('id', ref_flow_id).eq('client_id', lp.client_id).eq('active', true).maybeSingle()
+            defFlow = chosen || null
+          }
+          if (!defFlow) {
+            const { data: def } = await supabaseAdmin.from('client_flows')
+              .select('id').eq('client_id', lp.client_id).eq('is_default', true).eq('active', true).maybeSingle()
+            defFlow = def || null
+          }
           await supabaseAdmin.from('invitations').insert({
             client_id:        lp.client_id,
             supplier_id:      supplier.id,
