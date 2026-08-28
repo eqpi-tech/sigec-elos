@@ -85,6 +85,9 @@ function ClientSearchCombo({ clients, value, onChange }) {
 function FlowFormModal({ flow, onSave, onClose, busy }) {
   const [name, setName] = useState(flow?.name || '')
   const [description, setDescription] = useState(flow?.description || '')
+  const [price, setPrice] = useState(flow?.price ?? '')
+  const [priceSub, setPriceSub] = useState(flow?.price_subsidized ?? '')
+  const [isDefault, setIsDefault] = useState(!!flow?.is_default)
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(15,17,60,.45)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -102,13 +105,32 @@ function FlowFormModal({ flow, onSave, onClose, busy }) {
         <span style={lbl}>Descrição</span>
         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
           placeholder="Opcional — quando este fluxo se aplica"
-          style={{ ...inputCss, resize:'vertical', marginBottom:20 }} />
+          style={{ ...inputCss, resize:'vertical', marginBottom:14 }} />
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+          <div>
+            <span style={lbl}>Preço (R$) — não subsidiado</span>
+            <input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)}
+              placeholder="0,00" style={{ ...inputCss, fontSize:14 }} />
+          </div>
+          <div>
+            <span style={lbl}>Preço (R$) — subsidiado</span>
+            <input type="number" min="0" step="0.01" value={priceSub} onChange={e => setPriceSub(e.target.value)}
+              placeholder="0,00" style={{ ...inputCss, fontSize:14 }} />
+          </div>
+        </div>
+        <label style={{ ...font, fontSize:13, color:'#1a1c5e', display:'flex', alignItems:'center', gap:8, marginBottom:20, cursor:'pointer' }}>
+          <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} style={{ accentColor:'#2E3192' }} />
+          ⭐ Fluxo padrão — fornecedores espontâneos (sem convite) caem neste fluxo
+        </label>
         <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
           <button onClick={onClose} disabled={busy}
             style={{ padding:'10px 20px', borderRadius:10, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', ...font, fontSize:13, fontWeight:600, color:'#64748b' }}>
             Cancelar
           </button>
-          <button onClick={() => onSave({ name: name.trim(), description: description.trim() || null })}
+          <button onClick={() => onSave({ name: name.trim(), description: description.trim() || null,
+              price: price === '' ? null : Number(price),
+              price_subsidized: priceSub === '' ? null : Number(priceSub),
+              is_default: isDefault })}
             disabled={busy || !name.trim()}
             style={{ padding:'10px 20px', borderRadius:10, border:'none', background: name.trim() ? '#2E3192' : '#c7c9e2', cursor: name.trim() ? 'pointer' : 'not-allowed', ...font, fontSize:13, fontWeight:700, color:'#fff' }}>
             {busy ? '...' : flow ? 'Salvar' : 'Criar Fluxo'}
@@ -164,6 +186,12 @@ function FlowsTab({ clientId, categories, setError }) {
   async function saveFlow(values) {
     setModalBusy(true)
     try {
+      // Só pode haver 1 fluxo padrão por cliente (índice único parcial)
+      if (values.is_default) {
+        const { error: defErr } = await supabase.from('client_flows')
+          .update({ is_default: false }).eq('client_id', clientId).eq('is_default', true)
+        if (defErr) throw defErr
+      }
       if (modal.flow) {
         const { error } = await supabase.from('client_flows').update(values).eq('id', modal.flow.id)
         if (error) throw error
@@ -230,9 +258,16 @@ function FlowsTab({ clientId, categories, setError }) {
               background: f.id === flowId ? 'rgba(46,49,146,.05)' : '#fff', opacity: f.active ? 1 : .55 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
               <span style={{ ...font, fontSize:13, fontWeight:700, color:'#1a1c5e', flex:1 }}>{f.name}</span>
+              {f.is_default && <span style={{ fontSize:9, fontWeight:700, color:'#92400e', background:'#fef3c7', padding:'2px 7px', borderRadius:20, ...titleF }}>⭐ padrão</span>}
               {!f.active && <span style={{ fontSize:9, fontWeight:700, color:'#9B9B9B', background:'#f1f2f8', padding:'2px 7px', borderRadius:20, ...titleF }}>inativo</span>}
             </div>
             {f.description && <div style={{ ...font, fontSize:11, color:'#9B9B9B', marginTop:3 }}>{f.description}</div>}
+            {(f.price != null || f.price_subsidized != null) && (
+              <div style={{ ...font, fontSize:11, color:'#15803d', marginTop:3 }}>
+                💰 {f.price != null ? `R$ ${Number(f.price).toFixed(2).replace('.', ',')}` : '—'}
+                {f.price_subsidized != null && ` · subsidiado R$ ${Number(f.price_subsidized).toFixed(2).replace('.', ',')}`}
+              </div>
+            )}
             <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:8 }}>
               <span style={{ ...font, fontSize:11, color:'#64748b', flex:1 }}>
                 {f.id === flowId ? `📦 ${flowCats.length} categorias` : ''}

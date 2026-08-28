@@ -17,13 +17,25 @@ async function handleBuyerInvitation(body, h) {
   // (marketplace/aba Todos): passe clientId/clientName — o convite é
   // registrado como CLIENT (entra na cadeia + relatórios do cliente).
   const { supplierId, supplierRazaoSocial, supplierCnpj, buyerName, buyerEmail, buyerId,
-          clientId, clientName, subsidiado,
+          clientId, clientName, subsidiado, flowId,
           objective = 'homologacao', customMessage } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
   let senderName = clientName || buyerName
+  let resolvedFlowId = null
   if (clientId) {
     const { data: cl } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()
     if (cl?.razao_social) senderName = cl.razao_social
+    // Fluxo do convite: o informado (validado) ou o padrão do cliente
+    if (flowId) {
+      const { data: fl } = await supabaseAdmin.from('client_flows')
+        .select('id').eq('id', flowId).eq('client_id', clientId).eq('active', true).maybeSingle()
+      resolvedFlowId = fl?.id || null
+    }
+    if (!resolvedFlowId) {
+      const { data: def } = await supabaseAdmin.from('client_flows')
+        .select('id').eq('client_id', clientId).eq('is_default', true).eq('active', true).maybeSingle()
+      resolvedFlowId = def?.id || null
+    }
   }
 
   // Busca todos os user_ids vinculados ao supplier
@@ -57,6 +69,7 @@ async function handleBuyerInvitation(body, h) {
     status:                'SENT',
     invited_by_role:       clientId ? 'CLIENT' : 'BUYER',
     subsidiado:            subsidiado ?? null,
+    flow_id:               resolvedFlowId,
     objetivo:              objective === 'contato' ? 'contato' : 'homologacao',
   }).select('id, token').single()
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
@@ -112,7 +125,7 @@ async function handleBuyerInvitation(body, h) {
 
 // ── MODO B: Client/Admin convida empresa ainda não cadastrada ──────────────
 async function handleClientInvitation(body, callerUser, h) {
-  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, invited_by_role = 'CLIENT', objetivo = 'homologacao', message } = body
+  const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, flow_id, invited_by_role = 'CLIENT', objetivo = 'homologacao', message } = body
   if (!razao_social || !email) return { statusCode:400, headers:h, body: JSON.stringify({ error:'razao_social e email são obrigatórios' }) }
 
   // Perfil readonly (patch_030) não envia convites
@@ -150,6 +163,21 @@ async function handleClientInvitation(body, callerUser, h) {
     objetivo,
   }
   if (client_id)        invitePayload.client_id       = client_id
+  // Fluxo do convite: o informado (validado contra o cliente) ou o padrão do cliente
+  if (client_id) {
+    let flowId = null
+    if (flow_id) {
+      const { data: fl } = await supabaseAdmin.from('client_flows')
+        .select('id').eq('id', flow_id).eq('client_id', client_id).eq('active', true).maybeSingle()
+      flowId = fl?.id || null
+    }
+    if (!flowId) {
+      const { data: def } = await supabaseAdmin.from('client_flows')
+        .select('id').eq('client_id', client_id).eq('is_default', true).eq('active', true).maybeSingle()
+      flowId = def?.id || null
+    }
+    if (flowId) invitePayload.flow_id = flowId
+  }
   if (buyer_id)         invitePayload.buyer_id         = buyer_id
   if (tipo_fornecedor)  invitePayload.tipo_fornecedor  = tipo_fornecedor
   if (subsidiado != null) invitePayload.subsidiado     = subsidiado

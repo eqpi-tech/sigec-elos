@@ -17,7 +17,7 @@ function formatCnpj(v) {
 
 const EMPTY_FORM = {
   objetivo:'', razao_social:'', cnpj:'', email:'', telefone:'', contato:'',
-  tipo_fornecedor:'servico', subsidiado: false, escopo:'', message:'',
+  tipo_fornecedor:'servico', subsidiado: false, escopo:'', message:'', flow_id:'',
 }
 
 // Templates de mensagem por objetivo (editáveis na tela antes do envio)
@@ -40,6 +40,7 @@ export default function ClientInvitations() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]           = useState(EMPTY_FORM)
   const [clientName, setClientName] = useState('')
+  const [flows, setFlows]         = useState([])   // fluxos ativos do cliente (com preço)
   const location = useLocation()
 
   // Razão social do cliente para os templates de mensagem
@@ -47,6 +48,10 @@ export default function ClientInvitations() {
     if (!user?.clientId) return
     supabase.from('clients').select('razao_social').eq('id', user.clientId).maybeSingle()
       .then(({ data }) => setClientName(data?.razao_social || ''))
+    supabase.from('client_flows')
+      .select('id, name, price, price_subsidized, is_default')
+      .eq('client_id', user.clientId).eq('active', true).order('name')
+      .then(({ data }) => setFlows(data || []))
   }, [user?.clientId])
 
   // Ao escolher o objetivo, gera o template (a mensagem continua editável)
@@ -110,6 +115,7 @@ export default function ClientInvitations() {
         escopo:          form.objetivo === 'contato' ? '' : form.escopo,
         message:         form.message,
         client_id:       user.clientId,
+        flow_id:         form.objetivo === 'contato' ? null : (form.flow_id || flows.find(f => f.is_default)?.id || null),
         invited_by_role: 'CLIENT',
       }, session?.access_token)
 
@@ -296,6 +302,26 @@ export default function ClientInvitations() {
                     </div>
                   </div>
                 </div>
+
+                {flows.length > 0 && (
+                  <div style={{ marginBottom:14 }}>
+                    <label style={lbl}>Fluxo de homologação *</label>
+                    <select value={form.flow_id || flows.find(f => f.is_default)?.id || ''}
+                      onChange={e=>setForm(f=>({...f, flow_id:e.target.value}))} style={inp}>
+                      {flows.map(fl => {
+                        const price = form.subsidiado ? (fl.price_subsidized ?? fl.price) : (fl.price ?? fl.price_subsidized)
+                        return (
+                          <option key={fl.id} value={fl.id}>
+                            {fl.name}{fl.is_default ? ' (padrão)' : ''}{price != null ? ` — R$ ${Number(price).toFixed(2).replace('.', ',')}` : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                      Define as categorias e documentos exigidos quando o fornecedor se cadastrar
+                    </div>
+                  </div>
+                )}
 
                 {form.subsidiado && (
                   <div style={{ marginBottom:14, background:'#f0fdf4', border:'1px solid #86efac', borderRadius:10, padding:'10px 14px' }}>

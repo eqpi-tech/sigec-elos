@@ -386,7 +386,8 @@ export default function SupplierOnboarding() {
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16 }}>Selecione todas as categorias relevantes. Os documentos exigidos serão calculados automaticamente.</div>
                   <div style={{ maxHeight:340, overflowY:'auto', paddingRight:4 }}>
                     <CategorySelector selectedIds={selectedCategories} onChange={setSelectedCategories} showDocuments={true} cnpjData={cnpjData}
-                      clientIds={invitation?.client_id ? [invitation.client_id] : undefined} />
+                      clientIds={invitation?.client_id ? [invitation.client_id] : undefined}
+                      allowedIds={invitation?.flow_category_ids || undefined} />
                   </div>
                   <div style={{ display:'flex', gap:8, marginTop:20 }}>
                     <Button variant="neutral" full onClick={() => setStep(0)}>← Voltar</Button>

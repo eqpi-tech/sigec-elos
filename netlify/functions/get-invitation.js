@@ -18,7 +18,7 @@ exports.handler = async (event) => {
 
   const { data: inv, error } = await supabaseAdmin
     .from('invitations')
-    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, viewed_at, clients(razao_social, terms_content), buyers(razao_social)')
+    .select('id, status, supplier_razao_social, supplier_email, supplier_cnpj, subsidiado, tipo_fornecedor, escopo, client_id, buyer_id, flow_id, viewed_at, clients(razao_social, terms_content), buyers(razao_social)')
     .eq('token', token)
     .maybeSingle()
 
@@ -39,6 +39,15 @@ exports.handler = async (event) => {
   const senderName  = inv.clients?.razao_social || inv.buyers?.razao_social || null
   const clientTerms = inv.clients?.terms_content || null  // null = usar termos padrão
 
+  // Categorias do fluxo do convite: o onboarding restringe a seleção a elas
+  // (buscadas aqui com service role — o onboarding roda pré-auth, sem RLS)
+  let flowCategoryIds = null
+  if (inv.flow_id) {
+    const { data: fc } = await supabaseAdmin
+      .from('client_flow_categories').select('category_id').eq('flow_id', inv.flow_id)
+    flowCategoryIds = (fc || []).map(r => r.category_id)
+  }
+
   return {
     statusCode: 200,
     headers: h,
@@ -53,6 +62,8 @@ exports.handler = async (event) => {
       escopo:                inv.escopo,
       sender_name:           senderName,
       client_id:             inv.client_id,
+      flow_id:               inv.flow_id,   // fluxo (nível) em que o fornecedor cai ao se cadastrar
+      flow_category_ids:     flowCategoryIds,  // null = sem restrição de fluxo
       client_terms:          clientTerms,  // termos personalizados do cliente (pode ser null)
     }),
   }

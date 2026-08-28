@@ -320,16 +320,43 @@ exports.handler = async (event) => {
       if (catErr) console.warn('supplier_categories insert warn:', catErr.message)
     }
 
+    // Garante o processo do cliente (seal com client_id) já vinculado ao FLUXO
+    // do convite — é o flow_id que dá o preço da homologação no relatório.
+    async function ensureClientSeal(clientId, flowId) {
+      if (!clientId) return
+      try {
+        let fid = flowId || null
+        if (!fid) {
+          // Espontâneo / convite sem fluxo → fluxo padrão do cliente
+          const { data: def } = await supabaseAdmin.from('client_flows')
+            .select('id').eq('client_id', clientId).eq('is_default', true).eq('active', true).maybeSingle()
+          fid = def?.id || null
+        }
+        const { data: existing } = await supabaseAdmin.from('seals')
+          .select('id, flow_id').eq('supplier_id', supplier.id).eq('client_id', clientId).limit(1)
+        if (existing?.length) {
+          if (!existing[0].flow_id && fid)
+            await supabaseAdmin.from('seals').update({ flow_id: fid }).eq('id', existing[0].id)
+        } else {
+          const { error: csErr } = await supabaseAdmin.from('seals')
+            .insert({ supplier_id: supplier.id, client_id: clientId, flow_id: fid, status: 'PENDING', score: 0 })
+          if (csErr && csErr.code !== '23505') console.warn('client seal create warn:', csErr.message)
+        }
+      } catch (e) { console.warn('ensureClientSeal (não crítico):', e.message) }
+    }
+
     // 5. Vincula convite ao fornecedor recém-criado (pelo token do URL, e-mail ou CNPJ)
     try {
       const cleanCnpj = cnpj.replace(/\D/g, '')
 
       if (invitation_token) {
         // Prioridade 1: token único do link de convite
-        await supabaseAdmin.from('invitations')
+        const { data: linkedInv } = await supabaseAdmin.from('invitations')
           .update({ status: 'REGISTERED', supplier_id: supplier.id })
           .eq('token', invitation_token)
           .neq('status', 'REGISTERED')
+          .select('client_id, flow_id')
+        if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id)
       } else {
         // Fallback: tenta pelo e-mail E pelo CNPJ (convites antigos sem token)
         const { data: { user: currentUser } } = await supabaseAdmin.auth.admin.getUserById(user.id)
@@ -338,7 +365,7 @@ exports.handler = async (event) => {
         // Busca convites pendentes que combinam com e-mail ou CNPJ
         const { data: matchingInvites } = await supabaseAdmin
           .from('invitations')
-          .select('id')
+          .select('id, client_id, flow_id')
           .neq('status', 'REGISTERED')
           .or(userEmail
             ? `supplier_email.eq.${userEmail},supplier_cnpj.eq.${cleanCnpj}`
@@ -349,6 +376,8 @@ exports.handler = async (event) => {
           await supabaseAdmin.from('invitations')
             .update({ status: 'REGISTERED', supplier_id: supplier.id })
             .in('id', ids)
+          for (const inv of matchingInvites)
+            if (inv.client_id) await ensureClientSeal(inv.client_id, inv.flow_id)
         }
       }
     } catch (e) { console.warn('invitation link (não crítico):', e.message) }
@@ -364,13 +393,18 @@ exports.handler = async (event) => {
           .single()
 
         if (lp?.client_id) {
+          // Espontâneo via LP do cliente → cai no fluxo PADRÃO do cliente
+          const { data: defFlow } = await supabaseAdmin.from('client_flows')
+            .select('id').eq('client_id', lp.client_id).eq('is_default', true).eq('active', true).maybeSingle()
           await supabaseAdmin.from('invitations').insert({
             client_id:        lp.client_id,
             supplier_id:      supplier.id,
             supplier_cnpj:    cnpj.replace(/\D/g, ''),
             status:           'REGISTERED',
             invited_by_role:  'CLIENT',
+            flow_id:          defFlow?.id || null,
           })
+          await ensureClientSeal(lp.client_id, defFlow?.id || null)
           console.log(`🔗 Fornecedor vinculado ao cliente via LP slug="${ref_slug}"`)
         }
       } catch (e) { console.warn('LP invitation link (não crítico):', e.message) }

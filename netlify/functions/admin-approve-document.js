@@ -105,7 +105,7 @@ exports.handler = async (event) => {
   // Busca convite para descobrir client_id e nome do cliente
   const { data: invite } = await supabaseAdmin
     .from('invitations')
-    .select('client_id, clients(razao_social)')
+    .select('client_id, flow_id, clients(razao_social)')
     .eq('supplier_id', supplierId)
     .not('client_id', 'is', null)
     .order('created_at', { ascending: false })
@@ -129,7 +129,7 @@ exports.handler = async (event) => {
     // Ativa o selo do processo. SEM upsert onConflict: o índice único de
     // seals é parcial e o upsert falha SILENCIOSAMENTE (42P10) — era o bug
     // do 'homologou mas continua pendente'. select→update/insert + erro checado
-    let sealQ = supabaseAdmin.from('seals').select('id, seal_name, seal_type')
+    let sealQ = supabaseAdmin.from('seals').select('id, seal_name, seal_type, flow_id')
       .eq('supplier_id', supplierId)
     sealQ = clientId ? sealQ.eq('client_id', clientId) : sealQ.is('client_id', null)
     const { data: sealRow } = await sealQ.limit(1).maybeSingle()
@@ -144,6 +144,8 @@ exports.handler = async (event) => {
       // fallback para o padrão do processo
       ...(sealRow?.seal_name ? {} : { seal_name: sealName }),
       ...(sealRow?.seal_type ? {} : { level: sealLevel }),
+      // fluxo do convite → selo (dá o preço da homologação nos relatórios)
+      ...(!sealRow?.flow_id && invite?.flow_id ? { flow_id: invite.flow_id } : {}),
     }
     const { error: sealWriteErr } = sealRow
       ? await supabaseAdmin.from('seals').update(activation).eq('id', sealRow.id)

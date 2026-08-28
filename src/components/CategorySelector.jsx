@@ -40,7 +40,17 @@ function iconFor(cat) {
 
 // clientIds: inclui as categorias custom desses clientes além da árvore global
 // (fornecedor convidado por cliente HOC vê o fluxo do cliente — patch_032)
-export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined }) {
+// allowedIds: restringe as categorias DO CLIENTE às do fluxo do convite
+// (globais/marketplace não são afetadas); null/undefined = sem restrição
+export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined, allowedIds = undefined }) {
+  const allowSet = allowedIds?.length ? new Set(allowedIds.map(Number)) : null
+  const filterTree = (tree) => {
+    if (!allowSet || !tree) return tree
+    const gcs = (tree.grandchildren || []).filter(g => !g.client_id || allowSet.has(Number(g.id)))
+    const withGc = new Set(gcs.map(g => g.parent_id))
+    const children = (tree.children || []).filter(c => !c.client_id || allowSet.has(Number(c.id)) || withGc.has(c.id))
+    return { children, grandchildren: gcs }
+  }
   const [parents,      setParents]      = useState([])
   const [expanded,     setExpanded]     = useState(new Set())
   const [trees,        setTrees]        = useState({})
@@ -93,7 +103,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     }
     Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds))).then(results => {
       const patch = {}
-      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
+      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = filterTree(r.value) })
       if (Object.keys(patch).length) {
         setTrees(prev => {
           const updated = { ...prev, ...patch }
@@ -132,7 +142,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     if (treesRef.current[parentId]) return
     setLoadingTree(prev => new Set([...prev, parentId]))
     try {
-      const tree = await categoriesApi.getTree(parentId, clientIds)
+      const tree = filterTree(await categoriesApi.getTree(parentId, clientIds))
       setTrees(prev => ({ ...prev, [parentId]: tree }))
     } finally {
       setLoadingTree(prev => { const n = new Set(prev); n.delete(parentId); return n })
@@ -197,7 +207,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       if (unloaded.length) {
         const results = await Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds)))
         const patch = {}
-        results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
+        results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = filterTree(r.value) })
         if (Object.keys(patch).length) {
           const updated = { ...treesRef.current, ...patch }
           treesRef.current = updated
