@@ -40,14 +40,6 @@ const NAVS = {
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
       ],
     },
-    {
-      key:'config', label:'Configurações Gerais', icon:'⚙️',
-      children: [
-        { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', desc:'Valores dos planos da plataforma' },
-        { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', desc:'Datas que ajustam os prazos do farol' },
-        { path:'/backoffice/catalogo-documentos', label:'Catálogo de Docs', icon:'🗂️', desc:'Tipos de documento e regras de validação' },
-      ],
-    },
     { path:'/backoffice/metricas',    label:'Métricas',    icon:'📊' },
     { path:'/backoffice/comunicados', label:'Comunicados', icon:'📢' },
     {
@@ -65,6 +57,14 @@ const NAVS = {
         { path:'/backoffice/usuarios',      label:'Lista de Usuários', icon:'👤', desc:'Bloquear, redefinir senha, editar' },
         { path:'/backoffice/criar-usuario', label:'Novo Usuário',      icon:'➕', desc:'Criar comprador, cliente ou analista' },
         { path:'/backoffice/perfis',        label:'Perfis de Usuário', icon:'🎛️', desc:'Módulos por perfil para clientes e fornecedores' },
+      ],
+    },
+    {
+      key:'config', label:'Configurações Gerais', icon:'⚙️',
+      children: [
+        { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', desc:'Valores dos planos da plataforma' },
+        { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', desc:'Datas que ajustam os prazos do farol' },
+        { path:'/backoffice/catalogo-documentos', label:'Catálogo de Docs', icon:'🗂️', desc:'Tipos de documento e regras de validação' },
       ],
     },
   ],
