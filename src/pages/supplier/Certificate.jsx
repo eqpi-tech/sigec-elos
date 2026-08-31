@@ -167,6 +167,10 @@ export default function SupplierCertificate() {
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 700, fontSize: 10, letterSpacing: 1.5, color: '#8a8fa8', textTransform: 'uppercase', marginBottom: 4 }}>Certificado Nº</div>
                   <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#1a1c5e', fontWeight: 700 }}>{certNumber}</div>
+                  <a href={`https://elos.eqpitech.com.br/verificar?code=${certNumber}`} target="_blank" rel="noopener noreferrer"
+                    style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 10, color: '#2E3192', textDecoration: 'none', display: 'inline-block', marginTop: 3 }}>
+                    🔎 elos.eqpitech.com.br/verificar?code={certNumber}
+                  </a>
                   <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 11.5, color: '#8a8fa8', marginTop: 6 }}>
                     Emitido em {fmtDate(new Date().toISOString())}
                   </div>
@@ -202,7 +206,7 @@ export default function SupplierCertificate() {
 
               {/* Nota de verificação */}
               <div style={{ textAlign: 'center', marginTop: 16, fontFamily: 'DM Sans,sans-serif', fontSize: 9.5, color: '#a8adc2' }}>
-                Verifique a autenticidade e a situação atual em <strong>elos.eqpitech.com.br/verificar</strong> informando o número do certificado ·
+                Verifique a autenticidade e a situação atual deste certificado em <strong>elos.eqpitech.com.br/verificar</strong> — basta informar o número acima (ou usar o link impresso ao lado dele) ·
                 A validade está condicionada à manutenção da regularidade documental do fornecedor na plataforma SIGEC-ELOS.
               </div>
             </div>
