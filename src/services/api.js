@@ -882,9 +882,11 @@ export const adminApi = {
     if (docType) q = q.eq('type', String(docType))
 
     // Filtro status
-    if (statusFilter === 'vencido')     q = q.eq('status', 'EXPIRED').not('expires_at','is',null).lt('expires_at', today.toISOString())
-    else if (statusFilter === 'hoje')   q = q.not('expires_at','is',null).gte('expires_at', today.toISOString()).lte('expires_at', todayEnd.toISOString())
-    else if (statusFilter === '5dias')  q = q.not('expires_at','is',null).gt('expires_at', todayEnd.toISOString()).lte('expires_at', in5days.toISOString())
+    // Vencido = data passada (mesma regra do Farol). Nada muda status p/
+    // EXPIRED automaticamente — filtrar por status='EXPIRED' retornava vazio.
+    if (statusFilter === 'vencido')     q = q.not('expires_at','is',null).lt('expires_at', today.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
+    else if (statusFilter === 'hoje')   q = q.not('expires_at','is',null).gte('expires_at', today.toISOString()).lte('expires_at', todayEnd.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
+    else if (statusFilter === '5dias')  q = q.not('expires_at','is',null).gt('expires_at', todayEnd.toISOString()).lte('expires_at', in5days.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
     else if (statusFilter === 'pendente') q = q.eq('status','PENDING')
     else if (statusFilter === 'analise')  q = q.in('status',['PENDING','MISSING'])
     else if (statusFilter && statusFilter !== 'todos') q = q.eq('status', statusFilter)
@@ -970,16 +972,22 @@ export const adminApi = {
     const iso5days   = in5days.toISOString()
 
     const docFields = 'id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)'
+    // Ignora status em que o vencimento não importa (mesma regra do filtro
+    // 'vencido' da Análise de Documentos — telas precisam bater)
+    const skipStatuses = '(REJECTED,NOT_APPLICABLE,MISSING)'
     const [vencRes, hojeRes, futuroRes] = await Promise.allSettled([
       supabase.from('documents').select(docFields)
         .not('expires_at', 'is', null).lt('expires_at', isoStart)
+        .not('status', 'in', skipStatuses)
         .order('expires_at', { ascending: true }).range(0, 4999),
       supabase.from('documents').select(docFields)
         .not('expires_at', 'is', null).gte('expires_at', isoStart).lte('expires_at', isoEnd)
+        .not('status', 'in', skipStatuses)
         .order('expires_at', { ascending: true }).range(0, 4999),
       // futuro = apenas próximos 5 dias (janela operacional definida)
       supabase.from('documents').select(docFields)
         .not('expires_at', 'is', null).gt('expires_at', isoEnd).lte('expires_at', iso5days)
+        .not('status', 'in', skipStatuses)
         .order('expires_at', { ascending: true }).range(0, 4999),
     ])
 
