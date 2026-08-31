@@ -44,6 +44,8 @@ const TabBtn = ({ active, onClick, children }) => (
 )
 
 // ── Aba 1: Visão Geral ─────────────────────────────────────────────────────
+const SEAL_STATUS_PT = { ACTIVE:'Ativos', PENDING:'Pendentes', SUSPENDED:'Suspensos', EXPIRED:'Vencidos' }
+
 function OverviewTab({ data }) {
   const { stripePlans, sealCounts, supplierCount, subsidized } = data
   const active = stripePlans.filter(p => p.status === 'ACTIVE')
@@ -61,17 +63,21 @@ function OverviewTab({ data }) {
         <KpiCard label="Assinaturas Stripe" value={active.length} sub={`${paid.length} pagas · ${coupon.length} cupom/trial`} subColor="#2E3192" icon="💳" iconBg="rgba(46,49,146,.1)"/>
         <KpiCard label="MRR (Stripe)" value={fmtBRL(mrr)} sub="Assinaturas ativas" subColor="#22c55e" icon="💰" iconBg="rgba(244,126,47,.1)"/>
         <KpiCard label="Homologações subsidiadas" value={subsidized.length} sub={subsPendentes ? `${subsPendentes} em processo` : 'faturáveis ao cliente'} subColor="#f59e0b" icon="🤝" iconBg="rgba(245,158,11,.1)"/>
-        <KpiCard label="Fornecedores" value={supplierCount.toLocaleString('pt-BR')} sub={`${sealCounts.active.toLocaleString('pt-BR')} selos ativos`} subColor="#9B9B9B" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
+        <KpiCard label="Fornecedores" value={supplierCount.toLocaleString('pt-BR')} sub={`${sealCounts.activeSuppliers.toLocaleString('pt-BR')} homologados`} subColor="#9B9B9B" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
       </div>
       <Card style={{ borderRadius:16, padding:'20px 24px' }}>
         <SectionTitle>Selos por status</SectionTitle>
         <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginTop:8 }}>
-          {Object.entries(sealCounts.byStatus).map(([st, n]) => (
+          {Object.entries(sealCounts.byStatus).map(([st, v]) => (
             <div key={st} style={{ padding:'10px 18px', borderRadius:12, background:'#f8f9fc', textAlign:'center' }}>
-              <div style={{ ...titleF, fontWeight:900, fontSize:20, color:'#1a1c5e' }}>{n.toLocaleString('pt-BR')}</div>
-              <div style={{ ...font, fontSize:11, color:'#9B9B9B' }}>{st}</div>
+              <div style={{ ...titleF, fontWeight:900, fontSize:20, color:'#1a1c5e' }}>{(v.processos||0).toLocaleString('pt-BR')}</div>
+              <div style={{ ...font, fontSize:11, color:'#9B9B9B' }}>{SEAL_STATUS_PT[st] || st}</div>
+              <div style={{ ...font, fontSize:10.5, color:'#c0c2d4' }}>{(v.fornecedores||0).toLocaleString('pt-BR')} fornecedores</div>
             </div>
           ))}
+        </div>
+        <div style={{ ...font, fontSize:11.5, color:'#9B9B9B', marginTop:10 }}>
+          Um fornecedor pode ter mais de um processo (um por cliente) — por isso o nº de processos é maior que o de fornecedores.
         </div>
       </Card>
     </>
@@ -263,12 +269,10 @@ export default function BackofficeMetrics() {
           p.nfse = emitted ? `nº ${emitted.numero}` : null
         }
 
-        // Selos (contagens por status, paginado seria pesado — usa head/count por status)
-        const sealStatuses = ['ACTIVE', 'PENDING', 'SUSPENDED', 'EXPIRED']
-        const sealCountsArr = await Promise.all(sealStatuses.map(st =>
-          supabase.from('seals').select('*', { count:'estimated', head:true }).eq('status', st)))
-        const byStatus = {}
-        sealStatuses.forEach((st, i) => { byStatus[st] = sealCountsArr[i].count || 0 })
+        // Contagens EXATAS via RPC (patch_057) — 'estimated' mostrava números defasados
+        const { data: rpc } = await supabase.rpc('admin_metrics')
+        const byStatus = rpc?.seals_by_status || {}
+        const exactSuppliers = rpc?.suppliers_total
 
         // Subsidiados: convites subsidiado=true com selo do mesmo (fornecedor, cliente)
         const subInvites = await fetchAllRows(() => supabase.from('invitations')
@@ -304,7 +308,12 @@ export default function BackofficeMetrics() {
             }))
         }
 
-        setData({ stripePlans, sealCounts: { byStatus, active: byStatus.ACTIVE }, supplierCount: supCountRes.count || 0, subsidized })
+        setData({
+          stripePlans,
+          sealCounts: { byStatus, active: byStatus.ACTIVE?.processos || 0, activeSuppliers: byStatus.ACTIVE?.fornecedores || 0 },
+          supplierCount: exactSuppliers ?? supCountRes.count ?? 0,
+          subsidized,
+        })
       } catch (e) { setError(e.message) }
     })()
   }, [])

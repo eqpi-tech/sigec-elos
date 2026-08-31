@@ -4,6 +4,7 @@
 
 import { supabase } from '../lib/supabase.js'
 import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
+import { planLabel } from '../lib/planLabels.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const DOC_LABELS = {
@@ -999,50 +1000,38 @@ export const adminApi = {
   },
 
   getMetrics: async () => {
-    // Queries independentes com tratamento de erro individual
-    // Selos: busca supplier_ids e deduplica — um fornecedor pode ter N selos (um por cliente HOC)
-    // count estimado (exato sob RLS estoura timeout → KPI zerado e tela lenta);
-    // selos paginados COM ORDER (range sem order é capado/instável no PostgREST)
-    const fetchSealSuppliers = async (status) => {
-      let out = [], from = 0
-      for (;;) {
-        const { data } = await supabase.from('seals').select('id, supplier_id')
-          .eq('status', status).order('id').range(from, from + 999)
-        out = out.concat(data || [])
-        if (!data || data.length < 1000) return out
-        from += 1000
-      }
-    }
-    const [suppliersRes, activeSealsRes, pendingSealsRes, planRes] = await Promise.allSettled([
-      supabase.from('suppliers').select('id', { count: 'estimated', head: true }),
-      fetchSealSuppliers('ACTIVE'),
-      fetchSealSuppliers('PENDING'),
-      supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE'),
+    // Contagens EXATAS via RPC admin_metrics (patch_057) — o count 'estimated'
+    // do PostgREST usava estatísticas defasadas (37k vs 55,8k reais).
+    // MRR/receita: só assinaturas Stripe (planos HOC migrados não têm receita).
+    const [rpcRes, planRes] = await Promise.allSettled([
+      supabase.rpc('admin_metrics'),
+      supabase.from('plans').select('type, price_yearly').eq('status', 'ACTIVE').eq('source', 'STRIPE'),
     ])
+    const m     = rpcRes.status === 'fulfilled' ? (rpcRes.value.data || {}) : {}
+    const seals = m.seals_by_status || {}
+    const planData = planRes.status === 'fulfilled' ? (planRes.value.data || []) : []
 
-    const totalSuppliers  = suppliersRes.status === 'fulfilled'  ? (suppliersRes.value.count  || 0) : 0
-    const activeSeals     = activeSealsRes.status === 'fulfilled'
-      ? new Set((activeSealsRes.value || []).map(s => s.supplier_id)).size : 0
-    const pendingAnalysis = pendingSealsRes.status === 'fulfilled'
-      ? new Set((pendingSealsRes.value || []).map(s => s.supplier_id)).size : 0
-    const planData        = planRes.status === 'fulfilled' ? (planRes.value.data || []) : []
-
-    const mrrBrl = planData.reduce((acc, p) => acc + (Number(p.price_yearly) / 12), 0)
-    const simples = planData.filter(p => p.type === 'Simples')
-    const premium = planData.filter(p => p.type === 'Premium')
+    const mrrOf = p => p.type?.includes('mensal')
+      ? Number(p.price_yearly || 0)
+      : Number(p.price_yearly || 0) / 12
+    const mrrBrl = planData.reduce((acc, p) => acc + mrrOf(p), 0)
+    const byPlan = {}
+    for (const p of planData) {
+      const k = planLabel(p.type) || p.type || '—'
+      byPlan[k] = byPlan[k] || { count: 0, rev: 0 }
+      byPlan[k].count++
+      byPlan[k].rev += mrrOf(p)
+    }
 
     return {
-      totalSuppliers: totalSuppliers || 0,
-      activeSeals:    activeSeals    || 0,
-      pendingAnalysis: pendingAnalysis || 0,
-      mrrBrl: Math.round(mrrBrl),
-      mrrGrowth: 18,
-      byPlan: {
-        Simples: { count: simples.length, rev: Math.round(simples.reduce((a,p) => a + Number(p.price_yearly)/12, 0)) },
-        Premium: { count: premium.length, rev: Math.round(premium.reduce((a,p) => a + Number(p.price_yearly)/12, 0)) },
-      },
-      newThisMonth: 12,
-      churnRate: 2.1,
+      totalSuppliers:  m.suppliers_total || 0,
+      newThisMonth:    m.suppliers_new_month || 0,
+      activeSeals:     seals.ACTIVE?.fornecedores || 0,   // fornecedores homologados (distintos)
+      activeProcesses: seals.ACTIVE?.processos    || 0,   // processos (1 por cliente)
+      pendingAnalysis: seals.PENDING?.fornecedores || 0,
+      sealsByStatus:   seals,
+      mrrBrl,
+      byPlan,
     }
   },
 

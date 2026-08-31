@@ -86,8 +86,8 @@ export default function BackofficeOverview() {
     Promise.allSettled([adminApi.getMetrics(), adminApi.getQueue(), adminApi.getDocumentFarol()])
       .then(([metricsRes, queueRes, farolRes]) => {
         setMetrics(metricsRes.status === 'fulfilled' ? metricsRes.value : {
-          totalSuppliers:0, activeSeals:0, pendingAnalysis:0, mrrBrl:0, mrrGrowth:0,
-          byPlan:{ Simples:{count:0,rev:0}, Premium:{count:0,rev:0} }, newThisMonth:0, churnRate:0,
+          totalSuppliers:0, activeSeals:0, activeProcesses:0, pendingAnalysis:0, mrrBrl:0,
+          byPlan:{}, newThisMonth:0,
         })
         setQueue(queueRes.status  === 'fulfilled' ? queueRes.value  : [])
         setFarol(farolRes.status  === 'fulfilled' ? farolRes.value  : null)
@@ -117,9 +117,9 @@ export default function BackofficeOverview() {
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
-        <KpiCard label="Fornecedores" value={metrics.totalSuppliers.toLocaleString()} sub={`+${metrics.newThisMonth} este mês`} subColor="#2E3192" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
-        <KpiCard label="Selos Ativos"  value={metrics.activeSeals.toLocaleString()}    sub="homologados"                          subColor="#22c55e" icon="✅" iconBg="rgba(34,197,94,.1)"/>
-        <KpiCard label="MRR"           value={metrics.mrrBrl>0?`R$ ${(metrics.mrrBrl/1000).toFixed(1)}k`:'R$ 0'} sub={`+${metrics.mrrGrowth}% vs mês ant.`} subColor="#F47E2F" icon="💰" iconBg="rgba(244,126,47,.1)"/>
+        <KpiCard label="Fornecedores" value={metrics.totalSuppliers.toLocaleString('pt-BR')} sub={`+${metrics.newThisMonth} este mês`} subColor="#2E3192" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
+        <KpiCard label="Homologados"   value={metrics.activeSeals.toLocaleString('pt-BR')}    sub={`${(metrics.activeProcesses||0).toLocaleString('pt-BR')} processos ativos`} subColor="#22c55e" icon="✅" iconBg="rgba(34,197,94,.1)"/>
+        <KpiCard label="MRR (Stripe)"  value={`R$ ${metrics.mrrBrl.toLocaleString('pt-BR', { maximumFractionDigits:2 })}`} sub="Assinaturas ativas" subColor="#F47E2F" icon="💰" iconBg="rgba(244,126,47,.1)"/>
         <KpiCard label="Pendentes"     value={metrics.pendingAnalysis}                 sub="Aguardando análise"                   subColor="#f59e0b" icon="⏳" iconBg="rgba(245,158,11,.1)"/>
       </div>
 
@@ -230,15 +230,18 @@ export default function BackofficeOverview() {
 
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-            <SectionTitle>Receita por Plano</SectionTitle>
-            {Object.entries(metrics.byPlan).map(([plan, d]) => (
+            <SectionTitle>Receita por Plano (Stripe)</SectionTitle>
+            {!Object.keys(metrics.byPlan).length && (
+              <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Nenhuma assinatura Stripe ativa</div>
+            )}
+            {Object.entries(metrics.byPlan).map(([plan, d], i) => (
               <div key={plan} style={{ marginBottom:14 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:'#1a1c5e' }}>{plan==='Premium'?'⭐':'🏷️'} {plan}</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:plan==='Premium'?'#ea580c':'#2E3192' }}>R$ {(d.rev/1000).toFixed(1)}k</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:'#1a1c5e' }}>🏷️ {plan} <span style={{ color:'#9B9B9B', fontWeight:400 }}>({d.count})</span></span>
+                  <span style={{ fontSize:13, fontWeight:700, color: i%2 ? '#ea580c' : '#2E3192' }}>R$ {d.rev.toLocaleString('pt-BR', { maximumFractionDigits:2 })}/mês</span>
                 </div>
                 <div style={{ height:8, borderRadius:8, background:'#f4f5f9', overflow:'hidden' }}>
-                  <div style={{ width:`${metrics.mrrBrl>0?(d.rev/metrics.mrrBrl*100):0}%`, height:'100%', background:plan==='Premium'?'#F47E2F':'#2E3192', borderRadius:8 }}/>
+                  <div style={{ width:`${metrics.mrrBrl>0?(d.rev/metrics.mrrBrl*100):0}%`, height:'100%', background: i%2 ? '#F47E2F' : '#2E3192', borderRadius:8 }}/>
                 </div>
               </div>
             ))}
