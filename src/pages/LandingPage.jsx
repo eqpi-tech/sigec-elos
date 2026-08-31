@@ -732,7 +732,7 @@ export default function LandingPage() {
             <div style={{ fontSize:11, color:'rgba(255,255,255,.2)', marginTop:2 }}>CNPJ 21.270.860/0001-15 · São Paulo, SP</div>
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-            {[['Entrar',()=>navigate('/login')],['Fornecedor',()=>navigate('/cadastro')],['Comprador',()=>navigate('/cadastro?type=buyer')]].map(([l,fn]) => (
+            {[['Entrar',()=>navigate('/login')],['Fornecedor',()=>navigate('/cadastro')],['Comprador',()=>navigate('/cadastro?type=buyer')],['🎓 Verificar Certificado',()=>navigate('/verificar')]].map(([l,fn]) => (
               <button key={l} onClick={fn} style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', cursor:'pointer', fontSize:12, fontFamily:'DM Sans,sans-serif' }}>{l}</button>
             ))}
             <a href="https://eqpitech.com.br" target="_blank" rel="noopener noreferrer" style={{ background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.08)', borderRadius:8, padding:'7px 16px', color:'rgba(255,255,255,.45)', fontSize:12, textDecoration:'none', fontFamily:'DM Sans,sans-serif' }}>EQPI Tech</a>

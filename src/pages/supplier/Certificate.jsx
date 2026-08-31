@@ -202,7 +202,7 @@ export default function SupplierCertificate() {
 
               {/* Nota de verificação */}
               <div style={{ textAlign: 'center', marginTop: 16, fontFamily: 'DM Sans,sans-serif', fontSize: 9.5, color: '#a8adc2' }}>
-                A autenticidade deste certificado pode ser verificada junto à EQPI Tech informando o número do certificado ·
+                Verifique a autenticidade e a situação atual em <strong>elos.eqpitech.com.br/verificar</strong> informando o número do certificado ·
                 A validade está condicionada à manutenção da regularidade documental do fornecedor na plataforma SIGEC-ELOS.
               </div>
             </div>

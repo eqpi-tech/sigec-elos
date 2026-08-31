@@ -46,6 +46,7 @@ import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import SupplierTeam             from './pages/supplier/Team.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import Privacidade   from './pages/Privacidade.jsx'
+import VerifyCertificate from './pages/VerifyCertificate.jsx'
 import ClientPortal  from './pages/ClientPortal.jsx'
 import PortalLogin   from './pages/PortalLogin.jsx'
 import DemoPage      from './pages/DemoPage.jsx'
@@ -97,6 +98,7 @@ function AppRoutes() {
     <Routes>
       {/* Public */}
       <Route path="/privacidade"       element={<Privacidade/>} />
+      <Route path="/verificar"         element={<VerifyCertificate/>} />
       <Route path="/login"            element={<Login/>} />
       <Route path="/cadastro"         element={<SupplierOnboarding/>} />
       <Route path="/redefinir-senha"  element={<ResetPassword/>} />
