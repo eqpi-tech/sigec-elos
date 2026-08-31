@@ -40,7 +40,7 @@ const NAVS = {
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
       ],
     },
-    { path:'/backoffice/metricas',    label:'Métricas',    icon:'📊' },
+    { path:'/backoffice/metricas',    label:'Financeiro',  icon:'💰' },
     { path:'/backoffice/comunicados', label:'Comunicados', icon:'📢' },
     {
       key:'clientes', label:'Clientes', icon:'🏢',

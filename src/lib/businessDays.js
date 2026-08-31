@@ -34,3 +34,14 @@ export function adjustToBusinessDay(date, holidaySet) {
   while (!isBusinessDay(d, holidaySet)) d.setDate(d.getDate() + 1)
   return d
 }
+
+// Soma N dias ÚTEIS à data (usado p/ prever repasse Stripe: pagamento + 3)
+export function addBusinessDays(date, n, holidaySet) {
+  const d = new Date(date)
+  let added = 0
+  while (added < n) {
+    d.setDate(d.getDate() + 1)
+    if (isBusinessDay(d, holidaySet)) added++
+  }
+  return d
+}

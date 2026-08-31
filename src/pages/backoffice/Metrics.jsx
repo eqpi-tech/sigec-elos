@@ -4,9 +4,11 @@
 //   · Subsidiados: relatório p/ o financeiro faturar os clientes
 //     (seals.flow_id → preço subsidiado do fluxo; convite subsidiado)
 import { useState, useEffect, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase.js'
 import { Card, KpiCard, Spinner, PageHeader, SectionTitle, Button } from '../../components/ui.jsx'
 import { planLabel, planName } from '../../lib/planLabels.js'
+import { getHolidaySet, addBusinessDays } from '../../lib/businessDays.js'
 
 const font   = { fontFamily:'DM Sans,sans-serif' }
 const titleF = { fontFamily:'Montserrat,sans-serif' }
@@ -25,15 +27,14 @@ async function fetchAllRows(build) {
   return all
 }
 
-function downloadCsv(filename, header, rows) {
-  const esc = v => {
-    const s = String(v ?? '')
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const csv = '﻿' + [header, ...rows].map(r => r.map(esc).join(';')).join('\n')
-  const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }))
-  const a = Object.assign(document.createElement('a'), { href:url, download:filename })
-  a.click(); URL.revokeObjectURL(url)
+function downloadXlsx(filename, sheetName, header, rows) {
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+  ws['!cols'] = header.map((h, i) => ({
+    wch: Math.min(46, Math.max(String(h).length, ...rows.map(r => String(r[i] ?? '').length)) + 2),
+  }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+  XLSX.writeFile(wb, filename)
 }
 
 const TabBtn = ({ active, onClick, children }) => (
@@ -92,11 +93,12 @@ function SubscriptionsTab({ data }) {
     <Card style={{ borderRadius:16, padding:'20px 24px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <SectionTitle>Assinaturas via Stripe</SectionTitle>
-        <Button variant="neutral" size="sm" onClick={() => downloadCsv('assinaturas_elos.csv',
-          ['Fornecedor','CNPJ','Plano','Status','Pagamento','Valor','Início','Fim','NFSe'],
+        <Button variant="neutral" size="sm" onClick={() => downloadXlsx('assinaturas_elos.xlsx', 'Assinaturas',
+          ['Fornecedor','CNPJ','Plano','Status','Pagamento','Valor','Pago em','Repasse Stripe (prev.)','Início','Fim','NFSe'],
           stripePlans.map(p => [p.supplier?.razao_social, p.supplier?.cnpj, planLabel(p.type) || p.type, p.status,
-            p.paidFlag ? 'Pago' : 'Cupom/Trial', p.price_yearly ?? '', fmtD(p.starts_at), fmtD(p.ends_at), p.nfse || '']))}>
-          ⬇️ CSV
+            p.paidFlag ? 'Pago' : 'Cupom/Trial', p.price_yearly ?? '', fmtD(p.paidAt), fmtD(p.repasseAt),
+            fmtD(p.starts_at), fmtD(p.ends_at), p.nfse || '']))}>
+          ⬇️ Excel
         </Button>
       </div>
       {!stripePlans.length ? (
@@ -106,7 +108,7 @@ function SubscriptionsTab({ data }) {
           <table style={{ width:'100%', borderCollapse:'collapse', ...font, fontSize:13 }}>
             <thead>
               <tr style={{ textAlign:'left', color:'#9B9B9B', ...titleF, fontSize:10, textTransform:'uppercase', letterSpacing:.5 }}>
-                {['Fornecedor','Plano','Status','Pagamento','Valor','Vigência','NFSe'].map(h => <th key={h} style={{ padding:'8px 10px', borderBottom:'1px solid #e2e4ef' }}>{h}</th>)}
+                {['Fornecedor','Plano','Status','Pagamento','Valor','Pago em','Repasse (prev.)','Vigência','NFSe'].map(h => <th key={h} style={{ padding:'8px 10px', borderBottom:'1px solid #e2e4ef' }}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -127,6 +129,8 @@ function SubscriptionsTab({ data }) {
                       ? <span style={{ color:'#15803d', fontWeight:700 }}>💳 Pago</span>
                       : <span style={{ color:'#92400e', fontWeight:700 }}>🎟️ Cupom/Trial</span>}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtBRL(p.price_yearly)}{p.type?.includes('mensal') ? '/mês' : '/ano'}</td>
+                    <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtD(p.paidAt)}</td>
+                    <td style={{ padding:'10px', whiteSpace:'nowrap' }} title="Previsão: pagamento + 3 dias úteis">{fmtD(p.repasseAt)}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>
                       {fmtD(p.starts_at)} → {fmtD(p.ends_at)}
                       {expiring && <span title="Renova/vence em até 30 dias" style={{ marginLeft:6 }}>⏰</span>}
@@ -149,13 +153,16 @@ function SubscriptionsTab({ data }) {
 // ── Aba 3: Subsidiados (faturamento ao cliente) ────────────────────────────
 function SubsidizedTab({ data, period, setPeriod }) {
   const { subsidized } = data
+  const [clientFilter, setClientFilter] = useState('')
+  const clientNames = useMemo(() => [...new Set(subsidized.map(r => r.clientName).filter(Boolean))].sort(), [subsidized])
   const filtered = useMemo(() => subsidized.filter(r => {
+    if (clientFilter && r.clientName !== clientFilter) return false
     if (!period.from && !period.to) return true
     const d = r.issued_at ? r.issued_at.slice(0, 10) : null
     if (period.from && (!d || d < period.from)) return false
     if (period.to && (!d || d > period.to)) return false
     return true
-  }), [subsidized, period])
+  }), [subsidized, period, clientFilter])
 
   const byClient = useMemo(() => {
     const map = {}
@@ -175,14 +182,22 @@ function SubsidizedTab({ data, period, setPeriod }) {
     <Card style={{ borderRadius:16, padding:'20px 24px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:6 }}>
         <SectionTitle>Homologações subsidiadas — faturar ao cliente</SectionTitle>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={inp}>
+            <option value="">Todos os clientes</option>
+            {clientNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
           <input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} style={inp}/>
           <span style={{ ...font, fontSize:12, color:'#9B9B9B' }}>até</span>
           <input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} style={inp}/>
-          <Button variant="neutral" size="sm" onClick={() => downloadCsv('subsidiados_elos.csv',
-            ['Cliente','Fornecedor','CNPJ','Fluxo','Status do selo','Homologado em','Valor subsidiado'],
-            filtered.map(r => [r.clientName, r.supplierName, r.cnpj, r.flowName, r.status, fmtD(r.issued_at), r.valor ?? '']))}>
-            ⬇️ CSV p/ financeiro
+          <Button variant="neutral" size="sm" onClick={() => {
+            const slug = (clientFilter || 'todos_clientes').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+            const periodo = period.from || period.to ? `_${period.from || 'inicio'}_a_${period.to || 'hoje'}` : ''
+            downloadXlsx(`subsidiados_${slug}${periodo}.xlsx`, clientFilter || 'Subsidiados',
+              ['Cliente','Fornecedor','CNPJ','Fluxo','Status do selo','Homologado em','Valor subsidiado'],
+              filtered.map(r => [r.clientName, r.supplierName, r.cnpj, r.flowName, r.status, fmtD(r.issued_at), r.valor ?? '']))
+          }}>
+            ⬇️ Excel p/ financeiro
           </Button>
         </div>
       </div>
@@ -249,7 +264,7 @@ export default function BackofficeMetrics() {
           supabase.from('plans')
             .select('id, type, status, price_yearly, starts_at, ends_at, stripe_sub_id, suppliers(razao_social, cnpj)')
             .eq('source', 'STRIPE').order('starts_at', { ascending: false }),
-          supabase.from('nfe_invoices').select('supplier_id, status, amount_cents, numero'),
+          supabase.from('nfe_invoices').select('supplier_id, status, amount_cents, numero, paid_at'),
           supabase.from('suppliers').select('*', { count:'estimated', head:true }),
         ])
         const nfeBySupplier = {}
@@ -261,10 +276,15 @@ export default function BackofficeMetrics() {
         // paidFlag: existe NFSe emitida/na fila com valor > 0 para o fornecedor
         const { data: planSup } = await supabase.from('plans').select('id, supplier_id').eq('source', 'STRIPE')
         const supByPlan = Object.fromEntries((planSup || []).map(r => [r.id, r.supplier_id]))
+        const holidays = await getHolidaySet()
         for (const p of stripePlans) {
           const list = nfeBySupplier[supByPlan[p.id]] || []
           const paidNfe = list.find(n => (n.amount_cents || 0) > 0)
           p.paidFlag = !!paidNfe
+          // Data do pagamento (fatura Stripe) e previsão do repasse:
+          // Stripe não expõe payout aqui → pagamento + 3 dias úteis
+          p.paidAt    = paidNfe?.paid_at || null
+          p.repasseAt = p.paidAt ? addBusinessDays(new Date(p.paidAt), 3, holidays) : null
           const emitted = list.find(n => n.status === 'EMITTED' && n.numero)
           p.nfse = emitted ? `nº ${emitted.numero}` : null
         }
@@ -323,7 +343,7 @@ export default function BackofficeMetrics() {
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
-      <PageHeader title="Métricas e Faturamento" subtitle="Assinaturas Stripe, homologações subsidiadas e visão operacional"/>
+      <PageHeader title="Financeiro" subtitle="Assinaturas Stripe, homologações subsidiadas e visão operacional"/>
       <div style={{ display:'flex', gap:8, marginBottom:20 }}>
         <TabBtn active={tab==='geral'} onClick={() => setTab('geral')}>📊 Visão Geral</TabBtn>
         <TabBtn active={tab==='assinaturas'} onClick={() => setTab('assinaturas')}>💳 Assinaturas</TabBtn>
