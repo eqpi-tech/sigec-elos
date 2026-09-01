@@ -462,10 +462,14 @@ export default function ClientSupplierProcess() {
                       </div>
                     )}
                   </div>
-                  {doc.storage_path && (
+                  {(doc.storage_path || doc.hoc_arquivo_id) && (
                     <Button variant="neutral" size="sm" onClick={async () => {
-                      const url = await documentApi.getSignedUrl(doc.storage_path)
-                      window.open(url, '_blank')
+                      try {
+                        const url = doc.storage_path
+                          ? await documentApi.getSignedUrl(doc.storage_path)
+                          : await documentApi.getHocFileUrl(doc.id)
+                        window.open(url, '_blank')
+                      } catch { alert('Erro ao abrir documento') }
                     }}>
                       👁 Ver
                     </Button>

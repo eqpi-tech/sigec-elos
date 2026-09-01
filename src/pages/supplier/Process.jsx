@@ -247,6 +247,19 @@ export default function SupplierProcess() {
                 {doc.source === 'AUTO' && (
                   <span style={{ fontSize:10, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>⚡ Auto</span>
                 )}
+                {(doc.storage_path || doc.hoc_arquivo_id) && (
+                  <button onClick={async () => {
+                      try {
+                        const url = doc.storage_path
+                          ? await documentApi.getSignedUrl(doc.storage_path)
+                          : await documentApi.getHocFileUrl(doc.id)
+                        window.open(url, '_blank')
+                      } catch { alert('Erro ao abrir documento') }
+                    }}
+                    style={{ background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, padding:'6px 12px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#2E3192', fontWeight:600, flexShrink:0 }}>
+                    👁 Ver
+                  </button>
+                )}
               </div>
             ))
           )}

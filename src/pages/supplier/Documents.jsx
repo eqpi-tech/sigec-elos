@@ -280,9 +280,12 @@ export default function SupplierDocuments() {
     finally { setUploading(null) }
   }
 
-  const handleViewDoc = async (storagePath) => {
+  // Abre arquivo do storage novo OU migrado do HOC (S3, via get-hoc-file)
+  const handleViewDoc = async (doc) => {
     try {
-      const url = await documentApi.getSignedUrl(storagePath)
+      const url = doc?.storage_path
+        ? await documentApi.getSignedUrl(doc.storage_path)
+        : await documentApi.getHocFileUrl(doc.id)
       window.open(url, '_blank')
     } catch (e) { showToast('Erro ao abrir documento', 'error') }
   }
@@ -390,10 +393,10 @@ export default function SupplierDocuments() {
         )}
 
         {/* Ver documento enviado (qualquer doc com arquivo) */}
-        {up?.storage_path && !isInstant && (
+        {(up?.storage_path || up?.hoc_arquivo_id) && !isInstant && (
           <Button variant="neutral" size="sm"
             title="Visualizar documento enviado"
-            onClick={() => handleViewDoc(up.storage_path)}>
+            onClick={() => handleViewDoc(up)}>
             👁 Ver
           </Button>
         )}
@@ -490,7 +493,7 @@ export default function SupplierDocuments() {
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 {presentation?.storage_path && (
-                  <Button variant="neutral" size="sm" onClick={() => handleViewDoc(presentation.storage_path)}>👁 Ver</Button>
+                  <Button variant="neutral" size="sm" onClick={() => handleViewDoc(presentation)}>👁 Ver</Button>
                 )}
                 <input type="file" accept=".pdf,.pptx,.ppt" ref={presentationRef} style={{ display:'none' }}
                   onChange={e => handlePresentationUpload(e.target.files[0])}/>
