@@ -93,6 +93,7 @@ async function handleBuyerInvitation(body, h) {
     subsidiado:            subsidiado ?? null,
     flow_id:               resolvedFlowId,
     objetivo:              objective === 'contato' ? 'contato' : 'homologacao',
+    message:               customMessage?.trim() || null,  // persistida p/ reparo/lembrete fiéis (patch_061)
   }).select('id, token').single()
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
 
@@ -183,6 +184,7 @@ async function handleClientInvitation(body, callerUser, h) {
     status:                'SENT',
     invited_by_role,
     objetivo,
+    message:               message?.trim() || null,  // persistida (patch_061)
   }
   if (client_id)        invitePayload.client_id       = client_id
   // Fluxo do convite: o informado (validado contra o cliente) ou o padrão do cliente
