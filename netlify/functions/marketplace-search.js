@@ -29,11 +29,22 @@ exports.handler = async (event) => {
     const wantsSealFilter = clientSealMin > 0 || (sealType && sealType !== 'Todos')
 
     // ── Passo 1: filtrar por categoria ─────────────────────────────────
+    // RPC expande p/ as categorias equivalentes DE CLIENTE (match por nome):
+    // 99,9% dos vínculos migrados do HOC apontam p/ cópias por cliente —
+    // o .in() direto na árvore global achava só 4 fornecedores (patch_060)
     let allowedSupplierIds = null
     if (categoryIds.length > 0) {
-      const { data: catRows } = await supabase
-        .from('supplier_categories').select('supplier_id').in('category_id', categoryIds)
-      allowedSupplierIds = [...new Set((catRows || []).map(r => r.supplier_id))]
+      const { data: rpcRows, error: rpcErr } = await supabase
+        .rpc('marketplace_category_suppliers', { cat_ids: categoryIds.map(Number) })
+      if (rpcErr) {
+        console.error('[marketplace-search] rpc categorias:', rpcErr.message)
+        // fallback: comportamento antigo (só árvore global)
+        const { data: catRows } = await supabase
+          .from('supplier_categories').select('supplier_id').in('category_id', categoryIds)
+        allowedSupplierIds = [...new Set((catRows || []).map(r => r.supplier_id))]
+      } else {
+        allowedSupplierIds = [...new Set((rpcRows || []).map(r => r.supplier_id))]
+      }
       if (allowedSupplierIds.length === 0) return empty()
     }
 
