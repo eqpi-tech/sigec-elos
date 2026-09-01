@@ -135,7 +135,7 @@ export default function Navbar() {
         <div style={{ cursor:'pointer', flexShrink:0, marginRight: clientLogo ? 10 : 0 }} onClick={() => go(items[0]?.path || '/')}>
           {clientLogo ? (
             <img src={clientLogo} alt="" onError={e => { e.currentTarget.src = '/logo.png' }}
-              style={{ height:38, maxWidth:150, width:'auto', objectFit:'contain', display:'block', background:'#fff', borderRadius:8, padding:'3px 8px' }} />
+              style={{ height:40, maxWidth:160, width:'auto', objectFit:'contain', display:'block' }} />
           ) : (
             <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:36, width:'auto', objectFit:'contain', display:'block' }} />
           )}
