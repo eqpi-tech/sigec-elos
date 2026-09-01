@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
-import { supabase } from '../../lib/supabase.js'
 import { KpiCard, Card, PageHeader, Spinner, Badge, ScoreBar } from '../../components/ui.jsx'
 
 export default function ClientDashboard() {
@@ -11,14 +10,6 @@ export default function ClientDashboard() {
   const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [logoUrl, setLogoUrl] = useState(null)  // logo da LP personalizada (se houver)
-
-  useEffect(() => {
-    if (!user?.clientId) return
-    supabase.from('client_landing_pages').select('logo_url')
-      .eq('client_id', user.clientId).eq('is_active', true).not('logo_url', 'is', null).limit(1)
-      .then(({ data: lp }) => setLogoUrl(lp?.[0]?.logo_url || null))
-  }, [user?.clientId])
 
   useEffect(() => {
     if (!user?.clientId) return
@@ -39,15 +30,7 @@ export default function ClientDashboard() {
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
       <PageHeader
-        title={
-          <span style={{ display:'inline-flex', alignItems:'center', gap:12 }}>
-            {logoUrl && (
-              <img src={logoUrl} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
-                style={{ height:38, maxWidth:130, objectFit:'contain', borderRadius:6 }}/>
-            )}
-            Olá, {user.name?.split(' ')[0]}!
-          </span>
-        }
+        title={`Olá, ${user.name?.split(' ')[0]}!`}
         subtitle="Acompanhe o processo de homologação dos seus fornecedores"
         action={{ label:'Convidar Fornecedor', onClick: () => navigate('/cliente/convites') }}
       />

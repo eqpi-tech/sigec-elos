@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
 import { hasModule } from '../lib/modules.js'
+import { supabase } from '../lib/supabase.js'
 
 const NAVS = {
   SUPPLIER: [
@@ -80,6 +81,14 @@ export default function Navbar() {
   const [open,        setOpen]        = useState(false)
   const [openGroup,   setOpenGroup]   = useState(null)   // key of open dropdown
   const [mobileGroup, setMobileGroup] = useState(null)   // key of expanded mobile section
+  const [clientLogo,  setClientLogo]  = useState(null)   // logo da LP do cliente (visão CLIENT)
+
+  useEffect(() => {
+    if (user?.role !== 'CLIENT' || !user?.clientId) { setClientLogo(null); return }
+    supabase.from('client_landing_pages').select('logo_url')
+      .eq('client_id', user.clientId).eq('is_active', true).not('logo_url', 'is', null).limit(1)
+      .then(({ data }) => setClientLogo(data?.[0]?.logo_url || null))
+  }, [user?.role, user?.clientId])
 
   if (!user) return null
 
@@ -122,9 +131,14 @@ export default function Navbar() {
       onMouseLeave={() => setOpenGroup(null)}>
       <div style={{ display:'flex', alignItems:'center', padding:'0 16px', height:58, gap:12 }}>
 
-        {/* Logo */}
-        <div style={{ cursor:'pointer', flexShrink:0 }} onClick={() => go(items[0]?.path || '/')}>
-          <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:36, width:'auto', objectFit:'contain', display:'block' }} />
+        {/* Logo: cliente com LP personalizada vê o próprio logo no lugar do SIGEC-ELOS */}
+        <div style={{ cursor:'pointer', flexShrink:0, marginRight: clientLogo ? 10 : 0 }} onClick={() => go(items[0]?.path || '/')}>
+          {clientLogo ? (
+            <img src={clientLogo} alt="" onError={e => { e.currentTarget.src = '/logo.png' }}
+              style={{ height:38, maxWidth:150, width:'auto', objectFit:'contain', display:'block', background:'#fff', borderRadius:8, padding:'3px 8px' }} />
+          ) : (
+            <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:36, width:'auto', objectFit:'contain', display:'block' }} />
+          )}
         </div>
 
         {/* ── Desktop nav ────────────────────────────────────────────── */}
