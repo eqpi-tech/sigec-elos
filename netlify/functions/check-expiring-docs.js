@@ -122,7 +122,7 @@ exports.handler = async (event) => {
     // separadamente via auth.admin.getUserById (mais confiável)
     const { data: expiringDocs, error } = await supabase
       .from('documents')
-      .select('id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id)')
+      .select('id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id, email)')
       .eq('status', 'VALID')
       .gte('expires_at', today)
       .lte('expires_at', limit30)
@@ -166,7 +166,12 @@ exports.handler = async (event) => {
     let sent = 0, urgent = 0
 
     for (const [supplierId, { supplier, docs }] of Object.entries(bySupplier)) {
-      const email = emailMap[supplier.user_id]
+      // e-mail do usuário → fallback: e-mail do CADASTRO (migrados sem login)
+      let email = emailMap[supplier.user_id]
+      if (!email) {
+        const cand = String(supplier?.email || '').split(/[;,]/)[0].trim()
+        if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cand)) email = cand
+      }
       if (!email) {
         results.push({ supplierId, status: 'no_email' })
         continue

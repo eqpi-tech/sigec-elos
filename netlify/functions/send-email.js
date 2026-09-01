@@ -13,21 +13,32 @@ exports.handler = async (event) => {
     return { statusCode:400, headers, body: JSON.stringify({ error:'JSON inválido' }) }
   }
 
-  const { to, userId, subject, html } = body
+  const { to, userId, supplierId, subject, html } = body
   if (!subject || !html) return { statusCode:400, headers, body: JSON.stringify({ error:'subject e html são obrigatórios' }) }
 
-  // Resolve o destinatário
+  // Resolve o destinatário: to → e-mail do usuário → e-mail do CADASTRO do
+  // fornecedor (migrados do HOC não têm login; sem o fallback o envio falhava)
   let recipient = to
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  )
   if (!recipient && userId) {
     try {
-      const supabaseAdmin = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      )
       const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(userId)
       recipient = user?.email
     } catch (e) {
       console.warn('Lookup userId falhou:', e.message)
+    }
+  }
+  if (!recipient && supplierId) {
+    try {
+      const { data: sup } = await supabaseAdmin.from('suppliers')
+        .select('email').eq('id', supplierId).maybeSingle()
+      const cand = String(sup?.email || '').split(/[;,]/)[0].trim()
+      if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cand)) recipient = cand
+    } catch (e) {
+      console.warn('Lookup supplierId falhou:', e.message)
     }
   }
 

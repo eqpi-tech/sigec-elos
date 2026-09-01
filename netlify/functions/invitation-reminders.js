@@ -66,7 +66,8 @@ exports.handler = async (event) => {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
           body: JSON.stringify({
             from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-            to: [inv.supplier_email],
+            // supplier_email pode vir com múltiplos endereços separados por vírgula
+            to: inv.supplier_email.split(/[;,]/).map(e => e.trim()).filter(e => /@/.test(e)).slice(0, 5),
             subject: `Lembrete: ${clientName} aguarda seu cadastro — SIGEC-ELOS`,
             html: `
               <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">

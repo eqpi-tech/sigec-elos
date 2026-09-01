@@ -503,6 +503,7 @@ export function BackofficeAnalysis() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: data.user_id,
+          supplierId: data.id,  // fallback: e-mail do cadastro (fornecedor sem login)
           subject: `📋 Documentos pendentes na sua homologação — SIGEC-ELOS`,
           html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
             <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
