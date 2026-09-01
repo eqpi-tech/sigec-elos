@@ -21,6 +21,18 @@ async function handleBuyerInvitation(body, h) {
           objective = 'homologacao', customMessage } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
   let senderName = clientName || buyerName
+  // Dedupe implícito: já convidado por este cliente, ou já em processo
+  // (selo) com ele → não reenvia; responde ok+skipped p/ o lote contar
+  if (clientId) {
+    const { data: dupInv } = await supabaseAdmin.from('invitations')
+      .select('id').eq('client_id', clientId).eq('supplier_id', supplierId).limit(1)
+    if (dupInv?.length)
+      return { statusCode: 200, headers: h, body: JSON.stringify({ ok: true, skipped: 'already_invited' }) }
+    const { data: dupSeal } = await supabaseAdmin.from('seals')
+      .select('id').eq('client_id', clientId).eq('supplier_id', supplierId).limit(1)
+    if (dupSeal?.length)
+      return { statusCode: 200, headers: h, body: JSON.stringify({ ok: true, skipped: 'already_in_process' }) }
+  }
   let resolvedFlowId = null
   if (clientId) {
     const { data: cl } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()

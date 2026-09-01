@@ -75,7 +75,7 @@ function MultiInviteModal({ suppliers, user, onClose, onSent }) {
 
   const send = async () => {
     setSending(true)
-    let ok = 0, fail = 0
+    let ok = 0, fail = 0, skip = 0
     try {
       const { data: { session } } = await supabase.auth.getSession()
       for (const s of suppliers) {
@@ -94,11 +94,15 @@ function MultiInviteModal({ suppliers, user, onClose, onSent }) {
                 : { buyerId: user.buyerId, buyerName: senderName, buyerEmail: user.email }),
             }),
           })
-          if (res.ok) ok++; else fail++
+          if (!res.ok) fail++
+          else {
+            const j = await res.json().catch(() => ({}))
+            if (j.skipped) skip++; else ok++   // já convidado/em processo → pulado
+          }
         } catch { fail++ }
         setProgress(p => p + 1)
       }
-      onSent(ok, fail)
+      onSent(ok, fail, skip)
     } finally { setSending(false) }
   }
 
@@ -240,6 +244,7 @@ export default function BuyerMarketplace() {
   const [loading,     setLoading]     = useState(false)
   const [searched,    setSearched]    = useState(!!_saved?.results?.length)
   const [selectedMap, setSelectedMap] = useState({})
+  const [allList,     setAllList]     = useState(_saved?.allList ?? [])  // resultado COMPLETO (id/razão/cnpj)
   const [showRfq,     setShowRfq]     = useState(false)
   const [inviteTargets, setInviteTargets] = useState(null) // array de suppliers p/ convite
 
@@ -257,23 +262,24 @@ export default function BuyerMarketplace() {
       .finally(() => setGeoLoading(false))
   }, [cepInput])
 
-  const saveState = (list, tot) => {
+  const saveState = (list, tot, allL = allList) => {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({
       q, cnae, cityInput, states, categoryIds: [...categoryIds], sizes, certs,
       sealType, clientSealMin, simples, capitalMin, capitalMax,
-      cepInput, geoRadius, geoCenter, results: list, total: tot,
+      cepInput, geoRadius, geoCenter, results: list, total: tot, allList: allL,
     }))
   }
 
   const runSearch = async () => {
     setLoading(true); setSearched(true)
     try {
-      const { data, total: tot } = await marketplaceApi.search({
+      const { data, total: tot, all } = await marketplaceApi.search({
         q, cnae, city: cityInput, states, categoryIds: [...categoryIds], sizes, certs,
         sealType, clientSealMin, simples, capitalMin, capitalMax,
       })
 
       let list = data || []
+      setAllList(all || list)
 
       // Filtro de geolocalização em JS (haversine)
       if (geoCenter?.lat && geoCenter?.lng) {
@@ -294,7 +300,7 @@ export default function BuyerMarketplace() {
 
       setResults(list)
       setTotal(tot || list.length)
-      saveState(list, tot || list.length)
+      saveState(list, tot || list.length, all || list)
     } finally { setLoading(false) }
   }
 
@@ -464,7 +470,23 @@ export default function BuyerMarketplace() {
               }
               {geoCenter?.lat && <span style={{ color:'#059669' }}> Ordenado por proximidade.</span>}
             </div>
-            <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+            <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+              {results.length > 0 && (
+                <>
+                  <button onClick={() => setSelectedMap(prev => {
+                      const n = { ...prev }; results.forEach(s => { n[s.id] = s }); return n
+                    })}
+                    style={{ background:'none', border:'1px solid #e2e4ef', borderRadius:20, padding:'6px 14px', color:'#2E3192', fontSize:12, cursor:'pointer', fontWeight:600, fontFamily:'DM Sans,sans-serif' }}>
+                    ☑️ Selecionar página ({results.length})
+                  </button>
+                  {allList.length > results.length && (
+                    <button onClick={() => setSelectedMap(Object.fromEntries(allList.map(s => [s.id, s])))}
+                      style={{ background:'none', border:'1px solid #2E3192', borderRadius:20, padding:'6px 14px', color:'#2E3192', fontSize:12, cursor:'pointer', fontWeight:700, fontFamily:'DM Sans,sans-serif' }}>
+                      ☑️☑️ Selecionar todo o resultado ({allList.length})
+                    </button>
+                  )}
+                </>
+              )}
               {selectedList.length > 0 && (
                 <>
                   <span style={{ fontSize:12, color:'#2E3192', fontWeight:600 }}>
@@ -611,9 +633,11 @@ export default function BuyerMarketplace() {
       {inviteTargets && (
         <MultiInviteModal suppliers={inviteTargets} user={user}
           onClose={() => setInviteTargets(null)}
-          onSent={(ok, fail) => {
+          onSent={(ok, fail, skip) => {
             setInviteTargets(null); setSelectedMap({})
-            alert(`✉️ ${ok} convite${ok !== 1 ? 's' : ''} enviado${ok !== 1 ? 's' : ''}${fail ? ` · ${fail} falha(s)` : ''}!`)
+            alert(`✉️ ${ok} convite${ok !== 1 ? 's' : ''} enviado${ok !== 1 ? 's' : ''}` +
+              `${skip ? ` · ${skip} pulado(s) — já convidado ou em processo` : ''}` +
+              `${fail ? ` · ${fail} falha(s)` : ''}!`)
           }}/>
       )}
 

@@ -107,7 +107,7 @@ exports.handler = async (event) => {
     }
 
     const SELECT = 'id, razao_social, cnpj, cnae_main, state, city, services, certifications, employee_range, capital_social, simples_nacional, latitude, longitude, status'
-    const MAX_POOL = 600  // pool de candidatos antes dos filtros JS
+    const MAX_POOL = 2000  // pool de candidatos antes dos filtros JS (cobre os ~770 homologados)
 
     let suppliers = []
     if (allowedSupplierIds) {
@@ -213,7 +213,10 @@ exports.handler = async (event) => {
     })
 
     const sliced = results.slice(0, 50)
-    return { statusCode: 200, headers, body: JSON.stringify({ data: sliced, total: results.length }) }
+    // 'all': lista mínima do resultado COMPLETO — habilita "Selecionar todo o
+    // resultado" no convite em massa sem re-buscar
+    const all = results.map(s => ({ id: s.id, razao_social: s.razao_social, cnpj: s.cnpj }))
+    return { statusCode: 200, headers, body: JSON.stringify({ data: sliced, total: results.length, all }) }
 
   } catch (err) {
     console.error('marketplace-search error:', err)
