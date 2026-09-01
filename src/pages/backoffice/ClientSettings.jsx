@@ -39,8 +39,8 @@ export default function BackofficeClientSettings() {
   useEffect(() => {
     supabase
       .from('clients')
-      .select('id, razao_social, cnpj, homologation_price, homologation_payer, created_at')
-      .order('razao_social')
+      .select('id, razao_social, cnpj, homologation_price, homologation_payer, active, created_at')
+      .order('active', { ascending: false }).order('razao_social')
       .then(({ data }) => { setClients(data || []); setLoading(false) })
     loadFlows()
     supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
@@ -168,10 +168,13 @@ export default function BackofficeClientSettings() {
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {filtered.map(c => (
-            <Card key={c.id} style={{ borderRadius:12, padding:'16px 20px' }}>
+            <Card key={c.id} style={{ borderRadius:12, padding:'16px 20px', opacity: c.active === false ? .6 : 1 }}>
               <div style={{ display:'flex', alignItems:'center', gap:16 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={c.razao_social}>{c.razao_social}</div>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={c.razao_social}>
+                    {c.razao_social}
+                    {c.active === false && <span style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', background:'#f1f2f8', padding:'2px 8px', borderRadius:20, marginLeft:8, verticalAlign:'middle' }}>INATIVO (HOC)</span>}
+                  </div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>{c.cnpj || '—'}</div>
                 </div>
 
@@ -207,10 +210,12 @@ export default function BackofficeClientSettings() {
                     onClick={() => setEditing({ id: c.id, homologation_price: c.homologation_price ?? elosHomologado, homologation_payer: c.homologation_payer ?? 'supplier' })}>
                     ✏ Editar
                   </Button>
-                  <Button variant="primary" size="sm"
-                    onClick={() => { setInviteForm({ ...EMPTY_INVITE, subsidiado: c.homologation_payer === 'client' }); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
-                    📨 Convidar fornecedor
-                  </Button>
+                  {c.active !== false && (
+                    <Button variant="primary" size="sm"
+                      onClick={() => { setInviteForm({ ...EMPTY_INVITE, subsidiado: c.homologation_payer === 'client' }); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
+                      📨 Convidar fornecedor
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>

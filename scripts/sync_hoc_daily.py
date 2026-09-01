@@ -127,6 +127,8 @@ def sync_clients(my, sb, dry):
             "sigla": safe_str(row.get("sigla")),
             "cnpj": clean_cnpj(row["cnpj"]),
         })
+        # espelha o ativo do HOC (patch_059) — False é valor válido, fora do strip_none
+        rec["active"] = bool(row["ativo"])
         if dry: written += 1; continue
         res = sb.table("clients").select("id").eq("hoc_id", row["id"]).execute()
         if res.data:
