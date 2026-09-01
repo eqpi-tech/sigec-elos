@@ -131,8 +131,12 @@ def sync_clients(my, sb, dry):
         res = sb.table("clients").select("id").eq("hoc_id", row["id"]).execute()
         if res.data:
             sb.table("clients").update(rec).eq("id", res.data[0]["id"]).execute()
-        else:
+        elif row["ativo"]:
+            # cliente INATIVO no HOC e ausente no ELOS não é recriado
+            # (caso Equipo Gestão duplicada, hoc_id 32, removida em 01/09)
             sb.table("clients").insert(rec).execute()
+        else:
+            continue
         written += 1
     return len(rows), written, None, None
 
