@@ -68,6 +68,16 @@ async function handleBuyerInvitation(body, h) {
       if (user?.email) emails.push(user.email)
     } catch (e) { console.warn('[send-invitation] getUserById failed for', uid, e.message) }
   }
+  // Fornecedor sem conta na plataforma (migrado do HOC): usa o e-mail do
+  // CADASTRO — sem isso o convite era criado mas NENHUM e-mail saía
+  if (!emails.length) {
+    const { data: sup } = await supabaseAdmin.from('suppliers')
+      .select('email').eq('id', supplierId).maybeSingle()
+    for (const e of String(sup?.email || '').split(/[;,]/)) {
+      const t = e.trim()
+      if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t)) emails.push(t)
+    }
+  }
 
   const { data: invite, error: invErr } = await supabaseAdmin.from('invitations').insert({
     buyer_id:              buyerId             || null,
