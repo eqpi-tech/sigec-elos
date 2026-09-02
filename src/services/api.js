@@ -1216,10 +1216,14 @@ export const clientApi = {
 
     let seals = []
     if (supplierIds.length) {
+      // SÓ selos do processo com ESTE cliente — sem o filtro, o selo do
+      // fornecedor com QUALQUER cliente contava como homologação nossa
+      // (26 convites novos apareciam como 22 homologados + 4 em análise)
       const { data: sealsData } = await supabase
         .from('seals')
         .select('supplier_id, level, status, score')
         .in('supplier_id', supplierIds)
+        .eq('client_id', clientId)
       seals = sealsData || []
     }
     const sealMap = seals.reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
