@@ -60,7 +60,18 @@ function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
 //    campos COMUNS: objetivo, subsídio, mensagem; nada por fornecedor) ──────
 function MultiInviteModal({ suppliers, user, onClose, onSent }) {
   const isClient = user?.role === 'CLIENT'
-  const senderName = user?.organization || user?.name || 'Nossa empresa'
+  // Remetente = NOME DA EMPRESA (nunca o nome do usuário — user.organization
+  // não existe no AuthContext e o fallback vazava o nome da pessoa)
+  const [senderName, setSenderName] = useState('Nossa empresa')
+  useEffect(() => {
+    if (isClient && user?.clientId) {
+      supabase.from('clients').select('razao_social, nome_fantasia').eq('id', user.clientId).maybeSingle()
+        .then(({ data }) => { if (data) setSenderName(data.nome_fantasia || data.razao_social) })
+    } else if (user?.buyerId) {
+      supabase.from('buyers').select('razao_social').eq('id', user.buyerId).maybeSingle()
+        .then(({ data }) => { if (data?.razao_social) setSenderName(data.razao_social) })
+    }
+  }, [isClient, user?.clientId, user?.buyerId])
   const [objetivo, setObjetivo]     = useState('homologacao')
   const [subsidiado, setSubsidiado] = useState(false)
   const [message, setMessage]       = useState('')

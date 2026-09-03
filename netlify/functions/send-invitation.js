@@ -21,6 +21,12 @@ async function handleBuyerInvitation(body, h) {
           objective = 'homologacao', customMessage } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
   let senderName = clientName || buyerName
+  // Remetente SEMPRE pelo nome da EMPRESA (defesa server-side: o front já
+  // vazou nome de usuário aqui) — comprador sem clientId resolve via buyers
+  if (!clientId && buyerId) {
+    const { data: by } = await supabaseAdmin.from('buyers').select('razao_social').eq('id', buyerId).maybeSingle()
+    if (by?.razao_social) senderName = by.razao_social
+  }
   // Dedupe implícito: já convidado por este cliente, ou já em processo
   // (selo) com ele → não reenvia; responde ok+skipped p/ o lote contar
   if (clientId) {

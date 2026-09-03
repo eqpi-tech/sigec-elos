@@ -25,8 +25,8 @@ const buildTemplate = (objetivo, razao, clientName, userName) => {
   const dest = razao?.trim() || 'fornecedor'
   const emp  = clientName || 'Nossa empresa'
   if (objetivo === 'contato')
-    return `Olá, ${dest}!\n\nSomos a ${emp}. Conhecemos o perfil da sua empresa e gostaríamos de entrar em contato para explorar oportunidades de parceria.\n\nFicamos à disposição para uma conversa.\n\nAtenciosamente,\n${userName || emp}`
-  return `Olá, ${dest}!\n\nA ${emp} convida sua empresa para o processo de homologação de fornecedores através da plataforma SIGEC-ELOS.\n\nPelo link abaixo você completa o cadastro e a documentação de forma digital e ágil.\n\nAtenciosamente,\n${userName || emp}`
+    return `Olá, ${dest}!\n\nSomos a ${emp}. Conhecemos o perfil da sua empresa e gostaríamos de entrar em contato para explorar oportunidades de parceria.\n\nFicamos à disposição para uma conversa.\n\nAtenciosamente,\nEquipe ${emp}`
+  return `Olá, ${dest}!\n\nA ${emp} convida sua empresa para o processo de homologação de fornecedores através da plataforma SIGEC-ELOS.\n\nPelo link abaixo você completa o cadastro e a documentação de forma digital e ágil.\n\nAtenciosamente,\nEquipe ${emp}`
 }
 
 export default function ClientInvitations() {

@@ -157,6 +157,13 @@ export default function SupplierProfile() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteObjective, setInviteObjective] = useState('') // 'contato' | 'homologacao'
   const [inviteMsg,       setInviteMsg]       = useState('')
+  const [buyerOrg,        setBuyerOrg]        = useState('')  // razão social do comprador (nunca o nome do usuário)
+
+  useEffect(() => {
+    if (!user?.buyerId) return
+    supabase.from('buyers').select('razao_social').eq('id', user.buyerId).maybeSingle()
+      .then(({ data: b }) => { if (b?.razao_social) setBuyerOrg(b.razao_social) })
+  }, [user?.buyerId])
   const [catsExpanded,    setCatsExpanded]    = useState(false)
 
   const SESSION_KEY = 'marketplace_state'
@@ -190,7 +197,7 @@ export default function SupplierProfile() {
   const handleObjectiveChange = (obj) => {
     setInviteObjective(obj)
     const supp = ss(data?.cnpjData?.razao_social || data?.razao_social)
-    const buyer = user?.name || 'Comprador SIGEC-ELOS'
+    const buyer = buyerOrg || 'Comprador SIGEC-ELOS'
     setInviteMsg(getTemplate(obj, supp, buyer))
   }
 
@@ -208,7 +215,7 @@ export default function SupplierProfile() {
           supplierRazaoSocial: ss(data?.cnpjData?.razao_social || data?.razao_social),
           supplierCnpj:        fmtCNPJ(data?.cnpj || ''),
           buyerId:             user.buyerId,
-          buyerName:           user.name || 'Comprador SIGEC-ELOS',
+          buyerName:           buyerOrg || 'Comprador SIGEC-ELOS',
           buyerEmail:          user.email || '',
           invited_by_role:     'BUYER',
           objective:           inviteObjective,
