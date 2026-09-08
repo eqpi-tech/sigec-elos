@@ -835,15 +835,15 @@ export function BackofficeAnalysis() {
         <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:15,color:'#9B9B9B',marginBottom:24 }}>
           {outcome==='approved'?'Fornecedor agora visível no marketplace.':`Notificação enviada ao fornecedor por e-mail.`}
         </div>
-        <Button variant="primary" onClick={()=>navigate('/backoffice/fila')}>← Voltar à fila</Button>
+        <Button variant="primary" onClick={()=>navigate('/backoffice/processos')}>← Voltar à busca de processos</Button>
       </div>
     )
   }
 
   return (
     <div style={{ maxWidth:980,margin:'0 auto',padding:'24px' }}>
-      <button onClick={()=>navigate('/backoffice/fila')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2E3192',fontSize:14,fontFamily:'DM Sans,sans-serif',fontWeight:600,marginBottom:16,display:'flex',alignItems:'center',gap:6,padding:0 }}>
-        ← Voltar à fila
+      <button onClick={()=>navigate('/backoffice/processos')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2E3192',fontSize:14,fontFamily:'DM Sans,sans-serif',fontWeight:600,marginBottom:16,display:'flex',alignItems:'center',gap:6,padding:0 }}>
+        ← Voltar à busca de processos
       </button>
 
       {/* Banner de alerta de sanção no topo */}
@@ -1707,7 +1707,7 @@ export function BackofficeAnalysis() {
                 setProcessing(true)
                 try {
                   await adminApi.revertSeal(id, revertReason.trim())
-                  navigate('/backoffice/fila')
+                  navigate('/backoffice/processos')
                 } catch(e) {
                   alert('Erro ao reverter: ' + e.message)
                   setProcessing(false)
