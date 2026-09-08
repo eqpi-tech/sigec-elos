@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { Button, Spinner } from '../components/ui.jsx'
 
 export default function ResetPassword() {
   const navigate = useNavigate()
+  // ?welcome=1 → modo PRIMEIRO ACESSO (campanha homologados HOC): textos de
+  // boas-vindas e, ao concluir, entra direto no painel (sessão já ativa)
+  const [params] = useSearchParams()
+  const isWelcome = params.get('welcome') === '1'
   const [ready, setReady]     = useState(false)    // token válido recebido
   const [invalid, setInvalid] = useState(false)    // token inválido/expirado
   const [password, setPassword]   = useState('')
@@ -61,7 +65,8 @@ export default function ResetPassword() {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw new Error(error.message)
       setDone(true)
-      setTimeout(() => navigate('/login'), 3000)
+      // Primeiro acesso: já autenticado → direto ao painel; senão, login
+      setTimeout(() => navigate(isWelcome ? '/' : '/login'), isWelcome ? 1500 : 3000)
     } catch (err) {
       setError(err.message)
     } finally { setLoading(false) }
@@ -116,10 +121,10 @@ export default function ResetPassword() {
       <div style={cardStyle}>
         <div style={{ fontSize:52, marginBottom:12 }}>✅</div>
         <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:20, color:'#1a1c5e', marginBottom:8 }}>
-          Senha alterada!
+          {isWelcome ? 'Tudo pronto!' : 'Senha alterada!'}
         </div>
         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:8 }}>
-          Redirecionando para o login em instantes...
+          {isWelcome ? 'Entrando no seu painel...' : 'Redirecionando para o login em instantes...'}
         </div>
         <Spinner size={24} />
       </div>
@@ -143,10 +148,12 @@ export default function ResetPassword() {
           <img src="/logo.png" alt="SIGEC-ELOS" style={{ height:50, objectFit:'contain' }} />
         </div>
         <h2 style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:22, color:'#1a1c5e', marginBottom:6 }}>
-          Redefinir senha
+          {isWelcome ? 'Bem-vindo ao ELOS! 👋' : 'Redefinir senha'}
         </h2>
         <p style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:24 }}>
-          Escolha uma nova senha para sua conta.
+          {isWelcome
+            ? 'Sua empresa e sua homologação já estão na plataforma. Defina sua senha para entrar.'
+            : 'Escolha uma nova senha para sua conta.'}
         </p>
 
         <form onSubmit={handleSubmit}>
