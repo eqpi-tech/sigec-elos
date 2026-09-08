@@ -51,4 +51,6 @@ jobs:
           HOC_SYNC_CONFIG: ${{ secrets.HOC_SYNC_CONFIG }}
       - name: Fase details
         working-directory: scripts
-        run: python migrate_hoc_v2.py --phase details
+        # Fase longa (~6min): 1 retry cobre queda transitória de conexão
+        # com o RDS do HOC (caso de 06/09 — 'Lost connection to MySQL server')
+        run: python migrate_hoc_v2.py --phase details || (echo '⚠️ retry em 60s...' && sleep 60 && python migrate_hoc_v2.py --phase details)
