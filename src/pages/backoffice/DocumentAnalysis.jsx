@@ -7,8 +7,9 @@ import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../.
 
 const STATUS_OPTIONS = [
   { value: 'todos',    label: 'Todos os status' },
-  { value: 'pendente', label: 'Pendente (aguardando envio)' },
-  { value: 'analise',  label: 'Em análise (PENDING)' },
+  { value: 'analise',  label: 'Em aberto (p/ analisar + não enviados)' },
+  { value: 'pendente', label: 'Aguardando análise (enviado)' },
+  { value: 'MISSING',  label: 'Não enviado' },
   { value: 'vencido',  label: 'Vencido' },
   { value: 'hoje',     label: 'Vence hoje' },
   { value: '5dias',    label: 'Próximos 5 dias' },
