@@ -139,7 +139,7 @@ exports.handler = async (event) => {
 
   // Enviar e-mail com credenciais
   try {
-    const baseUrl = process.env.URL || 'https://sigecelos.com.br'
+    const baseUrl = process.env.URL || 'https://elos.eqpitech.com.br'
     await fetch(`${baseUrl}/.netlify/functions/send-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

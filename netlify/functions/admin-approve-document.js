@@ -345,7 +345,7 @@ function buildApprovalEmail(supplier, sealName, score, expiresAt) {
         <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Validade</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">Ate ${expStr}</td></tr>
       </table>
       <div style="text-align:center">
-        <a href="https://sigecelos.com.br/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
+        <a href="https://elos.eqpitech.com.br/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
       </div>
     </div>
     <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
@@ -364,7 +364,7 @@ function buildRejectionEmail(supplier, rejectedDocs) {
       <ul style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:16px 16px 16px 32px;color:#dc2626">${list}</ul>
       <p>Corrija os documentos e solicite uma nova analise pelo painel do fornecedor.</p>
       <div style="text-align:center;margin-top:24px">
-        <a href="https://sigecelos.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Corrigir documentos →</a>
+        <a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Corrigir documentos →</a>
       </div>
     </div>
     <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
