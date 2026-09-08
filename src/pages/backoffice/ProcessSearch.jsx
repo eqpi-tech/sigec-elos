@@ -167,19 +167,11 @@ export default function BackofficeProcessSearch() {
     }
 
     // ── Fluxo B: busca por texto/CNPJ (sem filtro de cliente) ─────────────────
-    // Sem texto e sem cliente → retorna os 50 mais recentes
-    const PAGE_LIMIT = 50
-    let suppQuery = supabase
-      .from('suppliers')
-      .select('id, razao_social, cnpj, city, state, status, created_at')
-      .order(qTrim ? 'razao_social' : 'created_at', { ascending: !qTrim ? false : true })
-      .limit(qTrim ? 200 : PAGE_LIMIT)
-
-    if (!showInactive) { suppQuery = suppQuery.neq('status', 'INACTIVE'); suppQuery = suppQuery.is('archived_at', null) }
-    if (qNums.length >= 8) suppQuery = suppQuery.ilike('cnpj', `%${qNums}%`)
-    else suppQuery = suppQuery.ilike('razao_social', `%${qTrim}%`)
-
-    const { data: suppliers, error } = await suppQuery
+    // Via RPC admin_search_suppliers (patch_067): ilike não é leakproof e,
+    // sob RLS, o planner não usa o índice trigram — a busca direta levava
+    // ~12s (timeout) e a tela vinha vazia. SECURITY DEFINER: 3ms com índice.
+    const { data: suppliers, error } = await supabase
+      .rpc('admin_search_suppliers', { q: qTrim || '', show_inactive: !!showInactive })
     if (error) { console.error(error); setLoading(false); return }
     if (!suppliers?.length) { setResults([]); setLoading(false); return }
 
