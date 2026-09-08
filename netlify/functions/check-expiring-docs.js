@@ -86,34 +86,35 @@ exports.handler = async (event) => {
       .lte('expires_at', in5d.toISOString())
       .gte('expires_at', today)
 
+    // Orçamento de tempo: a function é morta pelo Netlify em ~26s — o job
+    // roda DIARIAMENTE, então processar parcial e devolver 200 é correto
+    // (o restante entra amanhã). Era a causa do 'Failed in 33 seconds'.
+    const startedAt = Date.now()
+    const budgetLeft = () => 20000 - (Date.now() - startedAt)
+
     if (autoExpiring?.length) {
-      console.log(`🔄 Auto-renovando ${autoExpiring.length} documento(s) AUTO...`)
+      // Teto por execução + chamadas em paralelo com timeout individual
+      const batch = autoExpiring.slice(0, 15)
+      console.log(`🔄 Auto-renovando ${batch.length}/${autoExpiring.length} documento(s) AUTO...`)
       const baseUrl = process.env.URL || process.env.FRONTEND_URL || 'https://sigecelos.com.br'
-
-      for (const doc of autoExpiring) {
+      const renew = async (doc) => {
+        const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
+        if (!cnpj) return
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), 6000)
         try {
-          const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
-          if (!cnpj) continue
-
-          if (doc.type === '37' || doc.type === '61' || doc.type === '62') {
-            // Re-consulta BrasilAPI (collect-document lida com CNPJ, CNAEs, Simples)
-            await fetch(`${baseUrl}/.netlify/functions/collect-document`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
-              body: JSON.stringify({ supplierId: doc.supplier_id, docType: doc.type, cnpj }),
-            })
-          } else if (doc.type === '7') {
-            // Re-consulta FGTS CRF
-            await fetch(`${baseUrl}/.netlify/functions/fgts-crf-lookup`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
-              body: JSON.stringify({ supplierId: doc.supplier_id, cnpj }),
-            })
-          }
-          console.log(`  ✓ Renovado doc ${doc.type} para supplier ${doc.supplier_id}`)
+          const fn = doc.type === '7' ? 'fgts-crf-lookup' : 'collect-document'
+          await fetch(`${baseUrl}/.netlify/functions/${fn}`, {
+            method: 'POST', signal: ctrl.signal,
+            headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+            body: JSON.stringify({ supplierId: doc.supplier_id, docType: doc.type, cnpj }),
+          })
         } catch (e) {
-          console.warn(`  ✗ Falha ao renovar doc ${doc.type} para ${doc.supplier_id}:`, e.message)
-        }
+          console.warn(`  ✗ renovação doc ${doc.type} supplier ${doc.supplier_id}:`, e.message)
+        } finally { clearTimeout(t) }
+      }
+      for (let i = 0; i < batch.length && budgetLeft() > 8000; i += 5) {
+        await Promise.allSettled(batch.slice(i, i + 5).map(renew))
       }
     }
 
@@ -123,7 +124,7 @@ exports.handler = async (event) => {
     const { data: expiringDocs, error } = await supabase
       .from('documents')
       .select('id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id, email)')
-      .eq('status', 'VALID')
+      .in('status', ['VALID', 'EXPIRING'])   // EXPIRING continua nos marcos 3/1/0
       .gte('expires_at', today)
       .lte('expires_at', limit30)
       .order('expires_at', { ascending: true })
@@ -133,8 +134,14 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ message: 'Nenhum documento vencendo em 30 dias', count: 0 }) }
     }
 
-    // Agrupa por supplier_id
-    const bySupplier = expiringDocs.reduce((acc, doc) => {
+    // Notifica só nos MARCOS (30/15/7/3/1/0 dias p/ vencer) — sem isso o
+    // fornecedor receberia o MESMO aviso todos os dias por 30 dias
+    const NOTIFY_DAYS = new Set([30, 15, 7, 3, 1, 0])
+    const daysLeft = (d) => Math.ceil((new Date(d.expires_at) - now) / (24 * 60 * 60 * 1000))
+    const docsToNotify = expiringDocs.filter(d => NOTIFY_DAYS.has(Math.max(0, daysLeft(d))))
+
+    // Agrupa por supplier_id (apenas quem tem marco hoje)
+    const bySupplier = docsToNotify.reduce((acc, doc) => {
       const sid = doc.supplier_id
       acc[sid] = acc[sid] || { supplier: doc.suppliers, docs: [] }
       acc[sid].docs.push(doc)
@@ -165,7 +172,16 @@ exports.handler = async (event) => {
     const results = []
     let sent = 0, urgent = 0
 
+    // Marca EXPIRING em lote (todos os ≤7d, não só os do marco de hoje)
+    const urgentIds = expiringDocs.filter(d => new Date(d.expires_at) <= in7d).map(d => d.id)
+    for (let i = 0; i < urgentIds.length; i += 200) {
+      await supabase.from('documents').update({ status: 'EXPIRING' })
+        .in('id', urgentIds.slice(i, i + 200)).eq('status', 'VALID')
+    }
+    urgent = urgentIds.length
+
     for (const [supplierId, { supplier, docs }] of Object.entries(bySupplier)) {
+      if (budgetLeft() < 3000) { results.push({ supplierId, status: 'deferred_budget' }); continue }
       // e-mail do usuário → fallback: e-mail do CADASTRO (migrados sem login)
       let email = emailMap[supplier.user_id]
       if (!email) {
@@ -175,15 +191,6 @@ exports.handler = async (event) => {
       if (!email) {
         results.push({ supplierId, status: 'no_email' })
         continue
-      }
-
-      // Marca documentos urgentes (≤7 dias) como EXPIRING no banco
-      const urgentDocs = docs.filter(d => new Date(d.expires_at) <= in7d)
-      if (urgentDocs.length) {
-        await supabase.from('documents')
-          .update({ status: 'EXPIRING' })
-          .in('id', urgentDocs.map(d => d.id))
-        urgent += urgentDocs.length
       }
 
       // Envia e-mail de notificação
