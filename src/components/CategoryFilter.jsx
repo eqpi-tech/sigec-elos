@@ -28,6 +28,16 @@ export default function CategoryFilter({ selectedIds = new Set(), onChange }) {
     setTrees(prev => { const n={...prev,[parentId]:tree}; treesRef.current=n; return n })
   }
 
+  // Marcar um nó intermediário CASCATEIA para os filhos: selecionar só o
+  // pai não encontrava ninguém (fornecedores vinculam nos nós-folha)
+  const toggleCascade = (child, allGrandkids) => {
+    const ids = [child.id, ...allGrandkids.map(g => g.id)]
+    const allSel = ids.every(id => selectedIds.has(id))
+    const next = new Set(selectedIds)
+    ids.forEach(id => (allSel ? next.delete(id) : next.add(id)))
+    onChange(next)
+  }
+
   const toggle = (id) => {
     const next = new Set(selectedIds)
     if (next.has(id)) next.delete(id)
@@ -143,17 +153,23 @@ export default function CategoryFilter({ selectedIds = new Set(), onChange }) {
                   ) : (
                     (tree.children||[]).filter(c => matches(c.name) || (tree.grandchildren||[]).some(g=>g.parent_id===c.id&&matches(g.name))).map(child => {
                       const grandkids = (tree.grandchildren||[]).filter(g=>g.parent_id===child.id && matches(g.name))
+                      const allGrandkids = (tree.grandchildren||[]).filter(g=>g.parent_id===child.id)
                       const hasGrand  = grandkids.length > 0
-                      const childSel  = selectedIds.has(child.id)
+                      // Com filhos: marcado = pai + TODOS os filhos selecionados
+                      const childSel  = allGrandkids.length
+                        ? [child.id, ...allGrandkids.map(g=>g.id)].every(id => selectedIds.has(id))
+                        : selectedIds.has(child.id)
 
                       return (
                         <div key={child.id} style={{marginBottom:hasGrand?4:0}}>
                           <label style={{display:'flex',alignItems:'center',gap:7,padding:'4px 4px',cursor:'pointer',borderRadius:6,transition:'background .1s'}}
                             onMouseOver={e=>e.currentTarget.style.background='rgba(46,49,146,.05)'}
                             onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                            <input type="checkbox" checked={childSel} onChange={()=>toggle(child.id)}
+                            <input type="checkbox" checked={childSel}
+                              ref={el => { if (el) el.indeterminate = !childSel && allGrandkids.some(g => selectedIds.has(g.id)) }}
+                              onChange={()=> allGrandkids.length ? toggleCascade(child, allGrandkids) : toggle(child.id)}
                               style={{width:13,height:13,accentColor:'#2E3192',cursor:'pointer',flexShrink:0}}/>
-                            <span style={{fontSize:12,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif'}}>{child.name}</span>
+                            <span style={{fontSize:12,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif',fontWeight:hasGrand?600:400}}>{child.name}</span>
                           </label>
                           {hasGrand && grandkids.map(g => (
                             <label key={g.id} style={{display:'flex',alignItems:'center',gap:7,padding:'3px 4px 3px 20px',cursor:'pointer',borderRadius:6,transition:'background .1s'}}
