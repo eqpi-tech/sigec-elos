@@ -4,6 +4,7 @@ import { can } from './lib/permissions.js'
 import { hasModule } from './lib/modules.js'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import Navbar from './components/Navbar.jsx'
+import OnboardingTour from './components/OnboardingTour.jsx'
 import { Spinner } from './components/ui.jsx'
 
 import Login from './pages/Login.jsx'
@@ -77,6 +78,7 @@ function AppLayout({ children }) {
     <div style={{ display:'flex',flexDirection:'column',minHeight:'100vh' }}>
       <Navbar/>
       <main style={{ flex:1 }}>{children}</main>
+      <OnboardingTour/>
     </div>
   )
 }
