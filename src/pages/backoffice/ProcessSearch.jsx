@@ -60,6 +60,11 @@ function ClientSearchCombo({ clients, value, onChange }) {
   )
 }
 
+// Pseudo-cliente de INTERFACE p/ processos ELOS puros (selo client_id NULL):
+// permite filtrar e exibir 'ELOS' como cliente do processo SEM criar um
+// cliente fictício no banco (client_id NULL = ELOS é premissa do sistema)
+const ELOS_PSEUDO_CLIENT = { id: '__ELOS__', razao_social: '⭐ ELOS (processo próprio, sem cliente)' }
+
 // Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
 // só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)' }
@@ -104,7 +109,8 @@ export default function BackofficeProcessSearch() {
     const buildClientMap = (seals, invites) => {
       const m = {}
       const add = (sid, cid) => {
-        const name = clientIdToName[cid]
+        // selo sem cliente = processo ELOS próprio → exibe 'ELOS'
+        const name = cid == null ? 'ELOS' : clientIdToName[cid]
         if (!name) return
         if (!m[sid]) m[sid] = []
         if (!m[sid].includes(name)) m[sid].push(name)
@@ -116,15 +122,20 @@ export default function BackofficeProcessSearch() {
 
     // ── Fluxo A: filtro de cliente ────────────────────────────────────────────
     // Busca por client_id nos selos (sem IN clause de IDs) — evita URL longa
+    // '__ELOS__' = processos ELOS puros (selo com client_id NULL)
     if (filterClient) {
+      const isElos = filterClient === ELOS_PSEUDO_CLIENT.id
+      let sealQ = supabase.from('seals')
+        .select('supplier_id, level, status, score, issued_at, client_id')
+        .range(0, 4999)
+      sealQ = isElos ? sealQ.is('client_id', null) : sealQ.eq('client_id', filterClient)
       const [sealRes, invRes] = await Promise.allSettled([
-        supabase.from('seals')
-          .select('supplier_id, level, status, score, issued_at, client_id')
-          .eq('client_id', filterClient)
-          .range(0, 4999),
-        supabase.from('invitations')
-          .select('supplier_id, client_id')
-          .eq('client_id', filterClient),
+        sealQ,
+        isElos
+          ? Promise.resolve({ data: [] })
+          : supabase.from('invitations')
+              .select('supplier_id, client_id')
+              .eq('client_id', filterClient),
       ])
 
       const clientSeals   = sealRes.status === 'fulfilled' ? (sealRes.value.data   || []) : []
@@ -225,7 +236,7 @@ export default function BackofficeProcessSearch() {
             style={{ flex:1, minWidth:220, padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', outline:'none' }}
           />
           {clients.length > 0 && (
-            <ClientSearchCombo clients={clients} value={filterClient} onChange={setFilterClient}/>
+            <ClientSearchCombo clients={[ELOS_PSEUDO_CLIENT, ...clients]} value={filterClient} onChange={setFilterClient}/>
           )}
           <Button variant="primary" onClick={handleSearch}>Pesquisar</Button>
         </div>
