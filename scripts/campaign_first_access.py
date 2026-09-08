@@ -61,8 +61,13 @@ sup_map = {r[0]: (str(r[1]), r[2]) for r in pg.run("""
     where sup.hoc_id is not null and exists
       (select 1 from seals s where s.supplier_id = sup.id and s.status = 'ACTIVE')""")}
 auth_emails = {r[0].lower() for r in pg.run("select email from auth.users where email is not null")}
-sup_with_login = {str(r[0]) for r in pg.run(
-    "select distinct supplier_id from user_roles where role='SUPPLIER' and supplier_id is not null")}
+# Só logins PRÉ-campanha contam (contas da campanha têm metadata 'campanha');
+# sem isso, o 1º usuário criado fazia os COLEGAS da mesma empresa serem pulados
+sup_with_login = {str(r[0]) for r in pg.run("""
+    select distinct ur.supplier_id from user_roles ur
+    join auth.users au on au.id = ur.user_id
+    where ur.role='SUPPLIER' and ur.supplier_id is not null
+      and coalesce(au.raw_user_meta_data->>'campanha','') = ''""")}
 ap = pg.run("select id from access_profiles where role_type='SUPPLIER' and is_system=true limit 1")
 APID = str(ap[0][0]) if ap else None
 
@@ -103,8 +108,11 @@ for i, (email, info) in enumerate(items):
         if email in auth_emails:
             status = 'skip_email_exists'
         else:
-            vincs = [(sup_map[h][0], sup_map[h][1], h) for h in info['vinculos']]
-            vincs = [(sid, rz, h) for sid, rz, h in vincs if sid not in sup_with_login]
+            vincs, _seen = [], set()
+            for h in info['vinculos']:  # dedupe (HOC tem vínculo duplicado p/ 15 usuários)
+                sid, rz = sup_map[h]
+                if sid in _seen or sid in sup_with_login: continue
+                _seen.add(sid); vincs.append((sid, rz, h))
             if not vincs:
                 status = 'skip_supplier_has_login'
             else:
@@ -112,11 +120,11 @@ for i, (email, info) in enumerate(items):
                     "email": email, "password": secrets.token_urlsafe(24), "email_confirm": True,
                     "user_metadata": {"name": info['nome'], "campanha": "primeiro_acesso_homologados"}})
                 uid = u['id']
-                for j, (sid, rz, h) in enumerate(vincs):
-                    pg.run("""insert into user_roles (user_id, role, supplier_id, is_primary, is_active, access_profile_id)
-                              values (:u,'SUPPLIER',:s,:p,true,:a)""",
-                           u=uid, s=sid, p=(j == 0), a=APID)
-                    sup_with_login.add(sid)
+                # schema atual: UNIQUE(user_id, role) → 1 vínculo SUPPLIER por
+                # usuário; extras ficam no audit p/ evolução futura do schema
+                sid, rz, h = vincs[0]
+                pg.run("""insert into user_roles (user_id, role, supplier_id, is_primary, is_active, access_profile_id)
+                          values (:u,'SUPPLIER',:s,true,true,:a)""", u=uid, s=sid, a=APID)
                 pg.run("update profiles set supplier_id=:s where id=:u", s=vincs[0][0], u=uid)
                 pg.run("""insert into audit_log (user_id, action, entity_type, entity_id, metadata)
                           values (:u,'CAMPAIGN_FIRST_ACCESS','supplier',:s,:m::jsonb)""",
