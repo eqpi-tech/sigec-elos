@@ -876,8 +876,18 @@ export const adminApi = {
 
     let q = supabase
       .from('documents')
-      .select('id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, hoc_arquivo_id, created_at, updated_at, suppliers(id, razao_social, cnpj)', { count: 'exact' })
+      .select(`id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, hoc_arquivo_id, created_at, updated_at, suppliers${supplierSearch?.trim() ? '!inner' : ''}(id, razao_social, cnpj)`, { count: 'exact' })
       .not('label', 'is', null)
+
+    // Busca por fornecedor NO SERVIDOR (antes era client-side APÓS a
+    // paginação: só olhava os 50 primeiros docs da base → CNPJ existente
+    // com docs pendentes vinha vazio)
+    if (supplierSearch?.trim()) {
+      const s = supplierSearch.trim()
+      const digits = s.replace(/\D/g, '')
+      if (digits.length >= 8) q = q.ilike('suppliers.cnpj', `%${digits}%`)
+      else                    q = q.ilike('suppliers.razao_social', `%${s}%`)
+    }
 
     // Filtro tipo de documento
     if (docType) q = q.eq('type', String(docType))
@@ -907,16 +917,7 @@ export const adminApi = {
     const { data, error, count } = await q
     if (error) throw new Error(error.message)
 
-    let rows = data || []
-
-    // Filtro por nome/CNPJ do fornecedor (client-side — PostgREST não faz ilike em join)
-    if (supplierSearch?.trim()) {
-      const s = supplierSearch.trim().toLowerCase()
-      rows = rows.filter(d =>
-        d.suppliers?.razao_social?.toLowerCase().includes(s) ||
-        d.suppliers?.cnpj?.replace(/\D/g,'').includes(s.replace(/\D/g,''))
-      )
-    }
+    const rows = data || []
 
     // Filtro por nome do cliente (via subquery: supplier → invitations → clients)
     // Implementado na camada de componente (join complexo, baixo volume na prática)
