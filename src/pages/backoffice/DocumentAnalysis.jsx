@@ -488,10 +488,11 @@ export default function DocumentAnalysis() {
       return adjustToBusinessDay(dt, holidaySet).toLocaleDateString('pt-BR')
     }
     const BOM     = '﻿'
-    const headers = ['Fornecedor', 'CNPJ', 'Documento', 'Status', 'Enviado em', 'Data limite de análise', 'Vencimento', 'Fonte']
+    const headers = ['Fornecedor', 'CNPJ', 'Cliente(s) do processo', 'Documento', 'Status', 'Enviado em', 'Data limite de análise', 'Vencimento', 'Fonte']
     const csvRows = exportRows.map(d => [
       d.suppliers?.razao_social || '',
       fmtCnpj(d.suppliers?.cnpj),
+      d.client_names || '',
       d.label || '',
       STATUS_LABEL[d.status] || d.status || '',
       fmtDate(d.created_at),
@@ -627,6 +628,12 @@ export default function DocumentAnalysis() {
                     <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                       {doc.suppliers?.cnpj || '—'}
                     </div>
+                    {doc.client_names && (
+                      <div style={{ fontSize:10.5, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, marginTop:3, lineHeight:1.35 }}
+                        title={doc.client_names}>
+                        🏢 {doc.client_names}
+                      </div>
+                    )}
                   </div>
 
                   {/* Documento */}
