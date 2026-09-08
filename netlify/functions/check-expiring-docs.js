@@ -75,6 +75,12 @@ exports.handler = async (event) => {
     const today   = now.toISOString().slice(0,10)
     const limit30 = in30d.toISOString().slice(0,10)
 
+    // Mesma regra do Farol/Análise (patch_069): só processos OPERÁVEIS —
+    // fornecedor suspenso ou de cliente inativo não recebe aviso/renovação
+    const { data: eligibleRows } = await supabase.rpc('analysable_supplier_ids')
+    const eligible = new Set((eligibleRows || []).map(r =>
+      typeof r === 'string' ? r : r.analysable_supplier_ids || Object.values(r)[0]))
+
     // ── Auto-renovação: documentos AUTO vencendo em ≤5 dias ──────────────────
     const AUTO_DOC_TYPES = ['37','61','62','7'] // CNPJ, CNAEs, Simples Nacional, FGTS
     const { data: autoExpiring } = await supabase
@@ -92,10 +98,11 @@ exports.handler = async (event) => {
     const startedAt = Date.now()
     const budgetLeft = () => 20000 - (Date.now() - startedAt)
 
-    if (autoExpiring?.length) {
+    const autoEligible = (autoExpiring || []).filter(d => !eligible.size || eligible.has(d.supplier_id))
+    if (autoEligible.length) {
       // Teto por execução + chamadas em paralelo com timeout individual
-      const batch = autoExpiring.slice(0, 15)
-      console.log(`🔄 Auto-renovando ${batch.length}/${autoExpiring.length} documento(s) AUTO...`)
+      const batch = autoEligible.slice(0, 15)
+      console.log(`🔄 Auto-renovando ${batch.length}/${autoEligible.length} documento(s) AUTO...`)
       const baseUrl = process.env.URL || process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
       const renew = async (doc) => {
         const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
@@ -138,7 +145,7 @@ exports.handler = async (event) => {
     // fornecedor receberia o MESMO aviso todos os dias por 30 dias
     const NOTIFY_DAYS = new Set([30, 15, 7, 3, 1, 0])
     const daysLeft = (d) => Math.ceil((new Date(d.expires_at) - now) / (24 * 60 * 60 * 1000))
-    const docsToNotify = expiringDocs.filter(d => NOTIFY_DAYS.has(Math.max(0, daysLeft(d))))
+    const docsToNotify = expiringDocs.filter(d => NOTIFY_DAYS.has(Math.max(0, daysLeft(d))) && (!eligible.size || eligible.has(d.supplier_id)))
 
     // Agrupa por supplier_id (apenas quem tem marco hoje)
     const bySupplier = docsToNotify.reduce((acc, doc) => {
@@ -173,7 +180,7 @@ exports.handler = async (event) => {
     let sent = 0, urgent = 0
 
     // Marca EXPIRING em lote (todos os ≤7d, não só os do marco de hoje)
-    const urgentIds = expiringDocs.filter(d => new Date(d.expires_at) <= in7d).map(d => d.id)
+    const urgentIds = expiringDocs.filter(d => new Date(d.expires_at) <= in7d && (!eligible.size || eligible.has(d.supplier_id))).map(d => d.id)
     for (let i = 0; i < urgentIds.length; i += 200) {
       await supabase.from('documents').update({ status: 'EXPIRING' })
         .in('id', urgentIds.slice(i, i + 200)).eq('status', 'VALID')
