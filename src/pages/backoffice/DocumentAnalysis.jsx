@@ -7,9 +7,7 @@ import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../.
 
 const STATUS_OPTIONS = [
   { value: 'todos',    label: 'Todos os status' },
-  { value: 'analise',  label: 'Em aberto (p/ analisar + não enviados)' },
-  { value: 'pendente', label: 'Aguardando análise (enviado)' },
-  { value: 'MISSING',  label: 'Não enviado' },
+  { value: 'pendente', label: 'Aguardando análise' },
   { value: 'vencido',  label: 'Vencido' },
   { value: 'hoje',     label: 'Vence hoje' },
   { value: '5dias',    label: 'Próximos 5 dias' },
@@ -300,7 +298,9 @@ export default function DocumentAnalysis() {
   // Filtros
   const [docType,       setDocType]       = useState(saved.docType ?? '')
   const [supplierSearch,setSupplierSearch] = useState(saved.supplierSearch ?? '')
-  const [statusFilter,  setStatusFilter]  = useState(saved.statusFilter ?? 'analise')
+  // 'analise' (legado, salvo em sessões antigas) equivale a 'pendente'
+  const [statusFilter,  setStatusFilter]  = useState(
+    saved.statusFilter === 'analise' ? 'pendente' : (saved.statusFilter ?? 'pendente'))
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
   const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'expires_asc')
 
@@ -565,7 +565,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setStatusFilter('analise'); setExpiresUntil(''); setSortBy('expires_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setStatusFilter('pendente'); setExpiresUntil(''); setSortBy('expires_asc') }}>
               Limpar filtros
             </Button>
           </div>
