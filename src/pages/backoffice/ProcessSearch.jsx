@@ -60,15 +60,17 @@ function ClientSearchCombo({ clients, value, onChange }) {
   )
 }
 
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado' }
-const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B'  }
+// Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
+// só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)' }
+const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8' }
 
 export default function BackofficeProcessSearch() {
   const navigate  = useNavigate()
   const inputRef  = useRef(null)
 
   const [q,           setQ]           = useState('')
-  const [filterType,  setFilterType]  = useState('Todos')   // Todos | ACTIVE | PENDING | SUSPENDED
+  const [filterType,  setFilterType]  = useState('Todos')   // Todos | ACTIVE | PENDING | SUSPENDED | CADASTRO
   const [filterClient,setFilterClient]= useState('')         // client_id ou ''
   const [showInactive,setShowInactive]= useState(false)
   const [results,     setResults]     = useState([])
@@ -159,7 +161,7 @@ export default function BackofficeProcessSearch() {
         ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
       }))
       if (filterType !== 'Todos')
-        enriched = enriched.filter(s => (s.seal?.status || 'PENDING') === filterType)
+        enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
 
       setResults(enriched)
       setLoading(false)
@@ -196,7 +198,7 @@ export default function BackofficeProcessSearch() {
       ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
     }))
     if (filterType !== 'Todos')
-      enriched = enriched.filter(s => (s.seal?.status || 'PENDING') === filterType)
+      enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
 
     setResults(enriched)
     setLoading(false)
@@ -230,7 +232,7 @@ export default function BackofficeProcessSearch() {
 
         <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
           <div style={{ display:'flex', gap:6 }}>
-            {['Todos','ACTIVE','PENDING','SUSPENDED'].map(f => (
+            {['Todos','ACTIVE','PENDING','SUSPENDED','CADASTRO'].map(f => (
               <button key={f} onClick={() => setFilterType(f)}
                 style={{ padding:'6px 12px', borderRadius:20, border:`1px solid ${filterType===f?SEAL_COLOR[f]||'#2E3192':'#e2e4ef'}`, background:filterType===f?`${SEAL_COLOR[f]||'#2E3192'}12`:'#fff', color:filterType===f?SEAL_COLOR[f]||'#2E3192':'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {f === 'Todos' ? 'Todos' : SEAL_LABEL[f]}
@@ -271,7 +273,7 @@ export default function BackofficeProcessSearch() {
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {results.map((s, i) => {
-              const sealStatus = s.seal?.status || 'PENDING'
+              const sealStatus = s.seal?.status || 'CADASTRO'
               const sealColor  = SEAL_COLOR[sealStatus] || '#9B9B9B'
               const isInactive = s.status === 'INACTIVE'
               return (
@@ -285,7 +287,7 @@ export default function BackofficeProcessSearch() {
                       <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 }}>
                         <span style={{ fontSize:14, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif' }}>{s.razao_social}</span>
                         <span style={{ fontSize:10, fontWeight:700, color:sealColor, background:`${sealColor}18`, padding:'2px 8px', borderRadius:20 }}>
-                          {SEAL_LABEL[sealStatus] || 'Em análise'}
+                          {SEAL_LABEL[sealStatus] || sealStatus}
                         </span>
                         {isInactive && (
                           <span style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', background:'#f0f0f0', padding:'2px 8px', borderRadius:20 }}>Inativo</span>

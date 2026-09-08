@@ -377,6 +377,24 @@ def sync_seals(my, sb, dry, wm):
         row = cur.fetchone()
         supplier_id = None; client_id = client_map.get(c_id)
 
+        # EM ANÁLISE no HOC (regra 09/09): sem homologação vigente, mas com
+        # processo ativo que passou de aceite+pagamento (boleto pago ou
+        # subsidiado, fora do pré-cadastro) → selo PENDING no ELOS.
+        # Pré-cadastro/boleto em aberto NÃO é análise.
+        in_analysis = None
+        if not row:
+            cur.execute("""SELECT p.id AS proc_id, f.cnpj,
+                       c.razao_social AS cliente_razao, c.sigla AS cliente_sigla
+                FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo
+                JOIN fornecedor f ON f.id = p.id_fornecedor
+                JOIN cliente c ON c.id = fl.id_cliente
+                WHERE p.id_fornecedor = %s AND fl.id_cliente = %s
+                  AND p.ativo = 1 AND p.data_validade IS NULL
+                  AND COALESCE(p.pre_cadastro, 0) = 0
+                  AND (p.boleto_pago = 1 OR p.subsidiado = 1)
+                ORDER BY p.id DESC LIMIT 1""", (f_id, c_id))
+            in_analysis = cur.fetchone()
+
         if row:
             supplier_id = supplier_map.get(clean_cnpj(row["cnpj"]))
             if not supplier_id or not client_id: continue
@@ -392,6 +410,13 @@ def sync_seals(my, sb, dry, wm):
                    "exception": any("carta" in (r or "").lower() for r in resultados)}
             if seal_status == "ACTIVE":
                 rec["expires_at"] = expiry
+        elif in_analysis:
+            supplier_id = supplier_map.get(clean_cnpj(in_analysis["cnpj"]))
+            if not supplier_id or not client_id: continue
+            cliente_nome = safe_str(in_analysis["cliente_razao"]) or safe_str(in_analysis["cliente_sigla"]) or f"HOC-{c_id}"
+            rec = {"status": "PENDING", "seal_type": "homologado",
+                   "seal_name": f"Em análise – {cliente_nome}",
+                   "hoc_process_id": in_analysis["proc_id"]}
         else:
             # par sem processo válido: selo existente expira (nunca deleta)
             cur.execute("SELECT cnpj FROM fornecedor WHERE id = %s", (f_id,))
@@ -404,7 +429,7 @@ def sync_seals(my, sb, dry, wm):
         res = sb.table("seals").select("id,status").eq("supplier_id", supplier_id).eq("client_id", client_id).execute()
         if res.data:
             sb.table("seals").update(rec).eq("id", res.data[0]["id"]).execute()
-        elif row:
+        elif row or in_analysis:
             sb.table("seals").insert({**rec, "supplier_id": supplier_id, "client_id": client_id}).execute()
         written += 1
         if rec.get("status") == "ACTIVE":
