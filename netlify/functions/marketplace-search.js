@@ -93,7 +93,13 @@ exports.handler = async (event) => {
     const applyFilters = (query) => {
       if (states.length > 0)  query = query.in('state', states)
       if (city)               query = query.ilike('city', `%${city}%`)
-      if (cnae)               query = query.ilike('cnae_main', `%${cnae}%`)
+      if (cnae) {
+        // Busca por CNAE aceita qualquer formato (4299-5/99, 42.99-5-99, 4299599)
+        // e olha principal E secundários (colunas só-dígitos do patch_068)
+        const cd = String(cnae).replace(/\D/g, '')
+        if (cd.length >= 2) query = query.or(`cnae_main_digits.ilike.%${cd}%,cnae_all_digits.ilike.%${cd}%`)
+        else                query = query.ilike('cnae_main', `%${cnae}%`)
+      }
       if (simples === true)   query = query.eq('simples_nacional', true)
       if (simples === false)  query = query.eq('simples_nacional', false)
       if (capitalMin != null) query = query.gte('capital_social', capitalMin)
