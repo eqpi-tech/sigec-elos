@@ -870,59 +870,21 @@ export const adminApi = {
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
   listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, expiresUntil, sortBy = 'expires_asc', page = 0, pageSize = 50 } = {}) => {
-    const today      = new Date(); today.setHours(0, 0, 0, 0)
-    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
-    const in5days    = new Date(today); in5days.setDate(in5days.getDate() + 5); in5days.setHours(23, 59, 59, 999)
-
-    let q = supabase
-      .from('documents')
-      .select(`id, type, label, status, source, expires_at, review_note, supplier_id, storage_path, hoc_arquivo_id, created_at, updated_at, suppliers${supplierSearch?.trim() ? '!inner' : ''}(id, razao_social, cnpj)`, { count: 'exact' })
-      .not('label', 'is', null)
-
-    // Busca por fornecedor NO SERVIDOR (antes era client-side APÓS a
-    // paginação: só olhava os 50 primeiros docs da base → CNPJ existente
-    // com docs pendentes vinha vazio)
-    if (supplierSearch?.trim()) {
-      const s = supplierSearch.trim()
-      const digits = s.replace(/\D/g, '')
-      if (digits.length >= 8) q = q.ilike('suppliers.cnpj', `%${digits}%`)
-      else                    q = q.ilike('suppliers.razao_social', `%${s}%`)
-    }
-
-    // Filtro tipo de documento
-    if (docType) q = q.eq('type', String(docType))
-
-    // Filtro status
-    // Vencido = data passada (mesma regra do Farol). Nada muda status p/
-    // EXPIRED automaticamente — filtrar por status='EXPIRED' retornava vazio.
-    if (statusFilter === 'vencido')     q = q.not('expires_at','is',null).lt('expires_at', today.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
-    else if (statusFilter === 'hoje')   q = q.not('expires_at','is',null).gte('expires_at', today.toISOString()).lte('expires_at', todayEnd.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
-    else if (statusFilter === '5dias')  q = q.not('expires_at','is',null).gt('expires_at', todayEnd.toISOString()).lte('expires_at', in5days.toISOString()).not('status','in','(REJECTED,NOT_APPLICABLE,MISSING)')
-    else if (statusFilter === 'pendente') q = q.eq('status','PENDING')
-    else if (statusFilter === 'analise')  q = q.in('status',['PENDING','MISSING'])
-    else if (statusFilter && statusFilter !== 'todos') q = q.eq('status', statusFilter)
-
-    // Filtro vencimento até (date string YYYY-MM-DD)
-    if (expiresUntil) q = q.not('expires_at','is',null).lte('expires_at', new Date(expiresUntil + 'T23:59:59').toISOString())
-
-    // Ordenação
-    if (sortBy === 'expires_asc')   q = q.order('expires_at', { ascending: true,  nullsFirst: false })
-    else if (sortBy === 'expires_desc') q = q.order('expires_at', { ascending: false, nullsFirst: false })
-    else if (sortBy === 'status')   q = q.order('status', { ascending: true })
-    else                            q = q.order('created_at', { ascending: false })
-
-    // Paginação
-    q = q.range(page * pageSize, (page + 1) * pageSize - 1)
-
-    const { data, error, count } = await q
+    // RPC admin_list_documents (patch_069): a fila só traz documentos de
+    // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
+    // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
+    // fora. Também elimina o custo de RLS por linha (ilike não-leakproof).
+    const { data, error } = await supabase.rpc('admin_list_documents', {
+      p_doc_type:      docType ? String(docType) : null,
+      p_status:        statusFilter || 'todos',
+      p_expires_until: expiresUntil || null,
+      p_search:        supplierSearch?.trim() || null,
+      p_sort:          sortBy,
+      p_page:          page,
+      p_size:          pageSize,
+    })
     if (error) throw new Error(error.message)
-
-    const rows = data || []
-
-    // Filtro por nome do cliente (via subquery: supplier → invitations → clients)
-    // Implementado na camada de componente (join complexo, baixo volume na prática)
-
-    return { rows, total: count || 0, page, pageSize }
+    return { rows: data?.rows || [], total: data?.total || 0, page, pageSize }
   },
 
   getRejectionReasons: async () => {
@@ -965,38 +927,11 @@ export const adminApi = {
   },
 
   getDocumentFarol: async () => {
-    // Janela: vencidos + hoje + próximos 5 dias (reduz volume e foco operacional)
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
-    const in5days    = new Date(todayStart); in5days.setDate(in5days.getDate() + 5); in5days.setHours(23, 59, 59, 999)
-    const isoStart   = todayStart.toISOString()
-    const isoEnd     = todayEnd.toISOString()
-    const iso5days   = in5days.toISOString()
-
-    const docFields = 'id, label, expires_at, status, supplier_id, suppliers(razao_social, cnpj)'
-    // Ignora status em que o vencimento não importa (mesma regra do filtro
-    // 'vencido' da Análise de Documentos — telas precisam bater)
-    const skipStatuses = '(REJECTED,NOT_APPLICABLE,MISSING)'
-    const [vencRes, hojeRes, futuroRes] = await Promise.allSettled([
-      supabase.from('documents').select(docFields)
-        .not('expires_at', 'is', null).lt('expires_at', isoStart)
-        .not('status', 'in', skipStatuses)
-        .order('expires_at', { ascending: true }).range(0, 4999),
-      supabase.from('documents').select(docFields)
-        .not('expires_at', 'is', null).gte('expires_at', isoStart).lte('expires_at', isoEnd)
-        .not('status', 'in', skipStatuses)
-        .order('expires_at', { ascending: true }).range(0, 4999),
-      // futuro = apenas próximos 5 dias (janela operacional definida)
-      supabase.from('documents').select(docFields)
-        .not('expires_at', 'is', null).gt('expires_at', isoEnd).lte('expires_at', iso5days)
-        .not('status', 'in', skipStatuses)
-        .order('expires_at', { ascending: true }).range(0, 4999),
-    ])
-
-    const vencidos = vencRes.status    === 'fulfilled' ? (vencRes.value.data    || []) : []
-    const hoje     = hojeRes.status    === 'fulfilled' ? (hojeRes.value.data    || []) : []
-    const futuro   = futuroRes.status  === 'fulfilled' ? (futuroRes.value.data  || []) : []
-
+    // RPC admin_document_farol (patch_069): só processos operáveis —
+    // suspenso/cliente inativo não entra no farol (regra 09/09)
+    const { data, error } = await supabase.rpc('admin_document_farol')
+    if (error) throw new Error(error.message)
+    const vencidos = data?.vencidos || [], hoje = data?.hoje || [], futuro = data?.futuro || []
     return { vencidos, hoje, futuro, all: [...vencidos, ...hoje, ...futuro] }
   },
 
