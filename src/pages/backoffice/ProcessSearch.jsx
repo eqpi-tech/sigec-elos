@@ -298,8 +298,9 @@ export default function BackofficeProcessSearch() {
                       </div>
 
                       {s.clients.length > 0 && (
-                        <div style={{ fontSize:11, color:'#64748b', fontFamily:'DM Sans,sans-serif' }}>
-                          Cliente{s.clients.length > 1 ? 's' : ''}: {s.clients.join(', ')}
+                        <div style={{ fontSize:11.5, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, marginTop:3, lineHeight:1.4 }}
+                          title={s.clients.join(' · ')}>
+                          🏢 {s.clients.join(' · ')}
                         </div>
                       )}
 
