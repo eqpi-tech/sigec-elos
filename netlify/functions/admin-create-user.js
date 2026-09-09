@@ -65,13 +65,21 @@ exports.handler = async (event) => {
       id: newUser.user.id, role, name
     }, { onConflict: 'id' })
 
-    // 3. Insere em user_roles (perfil de módulos "Acesso Total" — patch_038)
+    // 3. Perfil de módulos: o ESCOLHIDO na tela (validado) ou "Acesso Total"
+    //    (fix 09/09: antes ignorava os perfis criados — sempre Acesso Total)
     let moduleProfileId = null
     if (role === 'CLIENT' || role === 'SUPPLIER') {
       try {
-        const { data: total } = await supabaseAdmin.from('access_profiles')
-          .select('id').eq('role_type', role).eq('is_system', true).maybeSingle()
-        moduleProfileId = total?.id || null
+        if (body.moduleProfileId) {
+          const { data: chosen } = await supabaseAdmin.from('access_profiles')
+            .select('id').eq('id', body.moduleProfileId).eq('role_type', role).maybeSingle()
+          moduleProfileId = chosen?.id || null
+        }
+        if (!moduleProfileId) {
+          const { data: total } = await supabaseAdmin.from('access_profiles')
+            .select('id').eq('role_type', role).eq('is_system', true).maybeSingle()
+          moduleProfileId = total?.id || null
+        }
       } catch { /* pré-patch_038 */ }
     }
     await supabaseAdmin.from('user_roles').insert({

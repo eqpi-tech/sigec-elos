@@ -25,6 +25,22 @@ export const MODULES = {
   ],
 }
 
+// AÇÕES dentro dos módulos (nível abaixo do menu — 09/09/2026).
+// Guardadas na MESMA lista modules do perfil, com prefixo 'acao:'.
+export const ACTIONS = {
+  CLIENT: [
+    { key: 'acao:ver_documentos',    label: 'Ver documentos do fornecedor', icon: '👁', desc: 'Abrir/baixar arquivos no processo do fornecedor' },
+    { key: 'acao:novo_convite',      label: 'Enviar convites',              icon: '✉️', desc: 'Convidar fornecedores (individual e em massa)' },
+    { key: 'acao:nova_cotacao',      label: 'Criar cotações (RFQ)',         icon: '📝', desc: 'Abrir novas solicitações de cotação' },
+    { key: 'acao:carta_excecao',     label: 'Enviar Carta de Exceção',      icon: '📜', desc: 'Anexar carta aprovando categoria com pendência' },
+    { key: 'acao:enviar_doc_cliente',label: 'Enviar documentos do cliente', icon: '📎', desc: 'Anexar documentos de responsabilidade do cliente no processo (ex.: Laudo GETEC — VIX)' },
+  ],
+  SUPPLIER: [
+    { key: 'acao:enviar_documentos', label: 'Enviar documentos',            icon: '📤', desc: 'Upload e substituição de documentos' },
+    { key: 'acao:mudar_categorias',  label: 'Mudar categorias',             icon: '📦', desc: 'Alterar as categorias de atuação' },
+  ],
+}
+
 // Módulo liberado para o usuário?
 // Sem perfil vinculado (modules null) → acesso total (fallback seguro:
 // nunca tranca um usuário fora por falta de vínculo)
@@ -32,5 +48,16 @@ export function hasModule(user, key) {
   if (!user) return false
   if (!['SUPPLIER', 'CLIENT'].includes(user.role)) return true
   if (!user.modules) return true
+  return user.modules.includes(key)
+}
+
+// Ação liberada? Perfis criados ANTES das ações (nenhuma chave 'acao:' na
+// lista) continuam permitindo tudo — o bloqueio só vale para perfis que
+// configuraram ações explicitamente.
+export function hasAction(user, key) {
+  if (!user) return false
+  if (!['SUPPLIER', 'CLIENT'].includes(user.role)) return true
+  if (!user.modules) return true
+  if (!user.modules.some(k => String(k).startsWith('acao:'))) return true
   return user.modules.includes(key)
 }

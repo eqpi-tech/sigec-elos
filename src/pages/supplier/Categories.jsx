@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { categoriesApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -91,7 +92,7 @@ export default function SupplierCategories() {
         title="Minhas Categorias"
         subtitle={`${selectedIds.size} categoria${selectedIds.size !== 1 ? 's' : ''} selecionada${selectedIds.size !== 1 ? 's' : ''}`}
         action={
-          <Button variant="orange" size="lg" style={{ borderRadius:12 }} disabled={!dirty || saving} onClick={handleSave}>
+          <Button variant="orange" size="lg" style={{ borderRadius:12 }} disabled={!dirty || saving || !hasAction(user, 'acao:mudar_categorias')} title={!hasAction(user, 'acao:mudar_categorias') ? 'Seu perfil não permite mudar categorias' : undefined} onClick={handleSave}>
             {saving ? <><Spinner size={16}/> Salvando...</> : '💾 Salvar alterações'}
           </Button>
         }
@@ -121,7 +122,7 @@ export default function SupplierCategories() {
             <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#fff' }}>
               Você tem alterações não salvas
             </span>
-            <Button variant="orange" size="md" style={{ borderRadius:10 }} disabled={saving} onClick={handleSave}>
+            <Button variant="orange" size="md" style={{ borderRadius:10 }} disabled={saving || !hasAction(user, 'acao:mudar_categorias')} onClick={handleSave}>
               {saving ? '⏳ Salvando...' : '💾 Salvar agora'}
             </Button>
           </div>

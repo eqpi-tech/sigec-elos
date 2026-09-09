@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { hasAction } from '../../lib/modules.js'
 import { clientApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
@@ -54,6 +55,8 @@ const TABS = ['Resumo', 'Documentos', 'Inteligência CNPJ']
 // ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
 //    reprovado/faltante; backoffice então homologa com exceção ────────────
 function ExceptionLetters({ seal, supplierId, clientId }) {
+  const { user: exUser } = useAuth()
+  const podeCarta = hasAction(exUser, 'acao:carta_excecao')
   const [cats, setCats]       = useState([])
   const [letters, setLetters] = useState({})   // category_id → row
   const [busy, setBusy]       = useState(null)
@@ -119,18 +122,101 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
                   <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>✓ Exceção aprovada</span>
                 ) : l ? (
                   <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b45309', background:'#fef3c7', padding:'3px 10px', borderRadius:20 }}>📜 Carta anexada — aguardando backoffice</span>
-                ) : (
+                ) : podeCarta ? (
                   <label style={{ fontSize:11, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#2E3192', border:'1px dashed #2E319266', padding:'6px 12px', borderRadius:8, cursor: busy ? 'wait' : 'pointer' }}>
                     {busy === cat.id ? 'Enviando…' : '📎 Anexar carta'}
                     <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!busy}
                       onChange={e => e.target.files?.[0] && upload(cat, e.target.files[0])}/>
                   </label>
+                ) : (
+                  <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão p/ anexar</span>
                 )}
               </div>
             )
           })}
         </div>
       )}
+    </Card>
+  )
+}
+
+
+// ── Documentos do CLIENTE no processo (responsibility='cliente' no fluxo —
+//    ex.: Laudo Técnico da GETEC no fluxo VIX). Upload gated por perfil. ──
+function ClientProcessDocs({ seal, supplierId, existingDocs }) {
+  const { user: cdUser } = useAuth()
+  const podeEnviar = hasAction(cdUser, 'acao:enviar_doc_cliente')
+  const [reqDocs, setReqDocs] = useState([])
+  const [busy, setBusy] = useState(null)
+  const [sent, setSent] = useState({})
+
+  useEffect(() => {
+    if (!seal?.flow_id) return
+    ;(async () => {
+      const { data: fc } = await supabase.from('client_flow_categories')
+        .select('category_id').eq('flow_id', seal.flow_id)
+      const catIds = (fc || []).map(r => r.category_id)
+      if (!catIds.length) return
+      const { data: cd } = await supabase.from('category_documents')
+        .select('document_id, documents_catalog!inner(id, name, responsibility)')
+        .in('category_id', catIds).eq('documents_catalog.responsibility', 'cliente')
+      const seen = new Set()
+      setReqDocs((cd || []).map(r => r.documents_catalog)
+        .filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true }))
+    })()
+  }, [seal?.flow_id])
+
+  if (!seal?.flow_id || !reqDocs.length) return null
+
+  async function upload(docType, file) {
+    setBusy(docType.id)
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file)
+      })
+      const { data: { session } } = await supabase.auth.getSession()
+      const resp = await fetch('/.netlify/functions/client-upload-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ supplierId, docTypeId: docType.id, file: { name: file.name, mime: file.type, base64 } }),
+      })
+      const out = await resp.json()
+      if (!resp.ok) throw new Error(out.error)
+      setSent(p => ({ ...p, [docType.id]: true }))
+    } catch (e) { alert('Erro ao enviar: ' + e.message) }
+    finally { setBusy(null) }
+  }
+
+  return (
+    <Card style={{ borderRadius:14, padding:'18px 22px', marginBottom:16, border:'1px solid rgba(46,49,146,.25)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+        <span style={{ fontSize:18 }}>📎</span>
+        <div>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e' }}>Documentos da sua responsabilidade</div>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>Este processo exige documento(s) anexado(s) pela sua empresa</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {reqDocs.map(d => {
+          const already = sent[d.id] || (existingDocs || []).some(x => String(x.type) === String(d.id) && (x.storage_path || x.hoc_arquivo_id))
+          return (
+            <div key={d.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:'1px solid #eef0f6' }}>
+              <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>{d.name}</span>
+              {already ? (
+                <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>✓ Anexado</span>
+              ) : podeEnviar ? (
+                <label style={{ fontSize:11, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#2E3192', border:'1px dashed #2E319266', padding:'6px 12px', borderRadius:8, cursor: busy ? 'wait' : 'pointer' }}>
+                  {busy === d.id ? 'Enviando…' : '📎 Anexar'}
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!busy}
+                    onChange={e => e.target.files?.[0] && upload(d, e.target.files[0])}/>
+                </label>
+              ) : (
+                <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão p/ anexar</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </Card>
   )
 }
@@ -174,6 +260,8 @@ export default function ClientSupplierProcess() {
   if (!data)   return null
 
   const seal    = data.seals?.[0] || null
+  // Selo do processo com ESTE cliente (carrega o flow_id → docs do cliente)
+  const mySeal  = data.seals?.find(s => s.client_id === user?.clientId) || seal
   const cnpjC   = data.cnpj_consultation
   const cnpjDat = cnpjC?.cnpj_data
   const sanctions = cnpjC?.sanctions_data
@@ -255,6 +343,7 @@ export default function ClientSupplierProcess() {
         </div>
       </Card>
 
+      <ClientProcessDocs seal={mySeal} supplierId={supplierId} existingDocs={docs}/>
       <ExceptionLetters seal={seal} supplierId={supplierId} clientId={user?.clientId}/>
 
       {/* Modal Dados Bancários */}
@@ -462,7 +551,7 @@ export default function ClientSupplierProcess() {
                       </div>
                     )}
                   </div>
-                  {(doc.storage_path || doc.hoc_arquivo_id) && (
+                  {(doc.storage_path || doc.hoc_arquivo_id) && hasAction(user, 'acao:ver_documentos') && (
                     <Button variant="neutral" size="sm" onClick={async () => {
                       try {
                         const url = doc.storage_path

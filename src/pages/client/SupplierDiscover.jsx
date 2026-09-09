@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useParams, useNavigate } from 'react-router-dom'
 import { marketplaceApi, invitationsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -510,7 +511,12 @@ export default function ClientSupplierDiscover() {
 
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button variant="orange" full disabled={inviting} onClick={sendInvite}>
+              {!hasAction(user, 'acao:novo_convite') && (
+                <div style={{ background:'#fff7ed', border:'1px solid #fde68a', borderRadius:10, padding:'8px 12px', marginBottom:10, fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e' }}>
+                  Seu perfil não permite enviar convites.
+                </div>
+              )}
+              <Button variant="orange" full disabled={inviting || !hasAction(user, 'acao:novo_convite')} onClick={sendInvite}>
                 {inviting ? '⏳ Enviando...' : '🤝 Confirmar Convite'}
               </Button>
             </div>

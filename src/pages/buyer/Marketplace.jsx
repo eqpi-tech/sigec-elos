@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { marketplaceApi, rfqApi } from '../../services/api.js'
@@ -505,9 +506,11 @@ export default function BuyerMarketplace() {
                     {' — '}
                     <button onClick={() => setSelectedMap({})} style={{ background:'none', border:'none', color:'#ea580c', fontSize:12, cursor:'pointer', fontWeight:600 }}>Limpar</button>
                   </span>
-                  <Button variant="primary" onClick={() => setInviteTargets(selectedList)}>
-                    ✉️ Convidar ({selectedList.length})
-                  </Button>
+                  {(user?.role !== 'CLIENT' || hasAction(user, 'acao:novo_convite')) && (
+                    <Button variant="primary" onClick={() => setInviteTargets(selectedList)}>
+                      ✉️ Convidar ({selectedList.length})
+                    </Button>
+                  )}
                   {user?.role === 'CLIENT'
                     ? <Button variant="orange" onClick={() => navigate('/cliente/rfq')}>📝 Criar Cotação (RFQ)</Button>
                     : user?.buyerPlan === 'pro'

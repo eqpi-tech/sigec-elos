@@ -3,6 +3,7 @@ import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi, categoriesApi, assertivaApi, getRequiredTypesBySeal } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
+import { hasAction } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
 
 // Relatório Assertiva 360 — emissão via API interna (on-demand)
@@ -426,8 +427,10 @@ export default function SupplierDocuments() {
                 {isIsentoMarked ? '✓ Isento' : 'Isento'}
               </button>
             )}
-            {/* Upload: permitido apenas para MISSING, REJECTED e EXPIRED */}
-            {['MISSING','REJECTED','EXPIRED'].includes(status) ? (
+            {/* Upload: MISSING/REJECTED/EXPIRED + permissão de perfil (acao:enviar_documentos) */}
+            {['MISSING','REJECTED','EXPIRED'].includes(status) && !hasAction(user, 'acao:enviar_documentos') ? (
+              <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap' }} title="Seu perfil não permite enviar documentos">sem permissão</span>
+            ) : ['MISSING','REJECTED','EXPIRED'].includes(status) ? (
               <>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
                   ref={el => fileRefs.current[doc.id] = el}

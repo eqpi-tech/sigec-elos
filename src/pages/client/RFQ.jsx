@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { clientRfqApi } from '../../services/api.js'
@@ -201,7 +202,7 @@ export default function ClientRFQ() {
     <div style={{ padding:'24px 32px', maxWidth:900, margin:'0 auto' }}>
       <PageHeader title="Solicitações de Cotação (RFQ)"
         subtitle="Envie cotações para todos os fornecedores homologados em uma categoria"
-        action={<Button variant="primary" onClick={() => setShowNew(true)}>+ Nova Cotação</Button>}
+        action={hasAction(user, 'acao:nova_cotacao') ? <Button variant="primary" onClick={() => setShowNew(true)}>+ Nova Cotação</Button> : undefined}
       />
 
       {loading ? (

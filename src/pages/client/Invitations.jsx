@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { invitationsApi } from '../../services/api.js'
@@ -137,7 +138,7 @@ export default function ClientInvitations() {
       <PageHeader
         title="Convites"
         subtitle={`${invites.length} convite${invites.length !== 1 ? 's' : ''} enviado${invites.length !== 1 ? 's' : ''}`}
-        action={can(user, 'client_invite') ? { label:'+ Novo Convite', onClick: () => setShowModal(true) } : undefined}
+        action={can(user, 'client_invite') && hasAction(user, 'acao:novo_convite') ? { label:'+ Novo Convite', onClick: () => setShowModal(true) } : undefined}
       />
 
       {success && (

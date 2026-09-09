@@ -4,7 +4,7 @@
 // "Acesso Total" é de sistema: não edita, não exclui.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
-import { MODULES } from '../../lib/modules.js'
+import { MODULES, ACTIONS } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 const TYPE_LABEL = { SUPPLIER: 'Fornecedor', CLIENT: 'Cliente' }
@@ -33,7 +33,7 @@ export default function BackofficeUserProfiles() {
 
   useEffect(() => { load() }, [load])
 
-  const openNew  = (roleType) => setModal({ name: '', role_type: roleType, modules: new Set(MODULES[roleType].map(m => m.key)) })
+  const openNew  = (roleType) => setModal({ name: '', role_type: roleType, modules: new Set([...MODULES[roleType].map(m => m.key), ...(ACTIONS[roleType]||[]).map(a => a.key)]) })
   const openEdit = (p) => setModal({ id: p.id, name: p.name, role_type: p.role_type, modules: new Set(p.modules || []) })
 
   const toggleModule = (key) => setModal(m => {
@@ -149,7 +149,7 @@ export default function BackofficeUserProfiles() {
             </div>
 
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:8 }}>
-              Módulos ({modal.modules.size}/{MODULES[modal.role_type].length})
+              Módulos ({[...modal.modules].filter(k => !k.startsWith('acao:')).length}/{MODULES[modal.role_type].length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
               {MODULES[modal.role_type].map(m => (
@@ -167,6 +167,31 @@ export default function BackofficeUserProfiles() {
                 </label>
               ))}
             </div>
+
+            {/* Ações dentro dos módulos (nível abaixo do menu — 09/09) */}
+            {(ACTIONS[modal.role_type] || []).length > 0 && (
+              <>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, margin:'4px 0 8px' }}>
+                  Ações permitidas ({[...modal.modules].filter(k => k.startsWith('acao:')).length}/{ACTIONS[modal.role_type].length})
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
+                  {ACTIONS[modal.role_type].map(a => (
+                    <label key={a.key}
+                      style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 14px', borderRadius:10, cursor:'pointer',
+                        border:`1.5px solid ${modal.modules.has(a.key) ? '#7c3aed' : '#e2e4ef'}`,
+                        background: modal.modules.has(a.key) ? 'rgba(124,58,237,.04)' : '#fff' }}>
+                      <input type="checkbox" checked={modal.modules.has(a.key)} onChange={() => toggleModule(a.key)}
+                        style={{ accentColor:'#7c3aed' }}/>
+                      <span style={{ fontSize:15 }}>{a.icon}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12.5, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{a.label}</div>
+                        <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{a.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
 
             {error && (
               <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'9px 12px', marginBottom:14, fontSize:12.5, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>

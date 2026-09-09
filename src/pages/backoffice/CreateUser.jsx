@@ -74,6 +74,13 @@ export default function BackofficeCreateUser() {
   const [role, setRole]       = useState('CLIENT')
   const [supplierId, setSupplierId] = useState('')
   const [accessProfile, setAccessProfile] = useState('full')
+  const [moduleProfiles, setModuleProfiles] = useState([])       // perfis reais (access_profiles)
+  const [moduleProfileId, setModuleProfileId] = useState('')
+
+  useEffect(() => {
+    supabase.from('access_profiles').select('id, name, role_type, is_system').order('role_type').order('name')
+      .then(({ data }) => setModuleProfiles(data || []))
+  }, [])
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState('')
@@ -87,7 +94,7 @@ export default function BackofficeCreateUser() {
       const res = await fetch('/.netlify/functions/admin-create-user', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile, supplierId: supplierId || undefined }),
+        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile, supplierId: supplierId || undefined, moduleProfileId: moduleProfileId || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -175,6 +182,21 @@ export default function BackofficeCreateUser() {
             <div style={{ marginBottom:16 }}>
               <label style={lbl}>CNPJ da Empresa *</label>
               <input value={cnpj} onChange={e=>setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0001-00" required style={inp} />
+            </div>
+          )}
+
+          {(role === 'CLIENT' || role === 'SUPPLIER') && (
+            <div style={{ marginBottom:16 }}>
+              <label style={lbl}>Perfil de módulos e ações</label>
+              <select value={moduleProfileId} onChange={e=>setModuleProfileId(e.target.value)} style={inp}>
+                <option value="">Acesso Total (padrão)</option>
+                {moduleProfiles.filter(p => p.role_type === role && !p.is_system).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                Perfis criados em Usuários → Perfis de Usuário (módulos do menu + ações permitidas)
+              </div>
             </div>
           )}
 
