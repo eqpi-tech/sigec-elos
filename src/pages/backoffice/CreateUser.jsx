@@ -200,13 +200,12 @@ export default function BackofficeCreateUser() {
             </div>
           )}
 
-          {(role === 'ADMIN' || role === 'CLIENT') && (
+          {role === 'ADMIN' && (
             <div style={{ marginBottom:16 }}>
               <label style={lbl}>Perfil de acesso</label>
               <select value={accessProfile} onChange={e=>setAccessProfile(e.target.value)} style={inp}>
                 <option value="full">Completo — todas as funções do papel</option>
-                {role === 'ADMIN'  && <option value="analyst">Analista — análises apenas, sem gestão de usuários/clientes</option>}
-                {role === 'CLIENT' && <option value="readonly">Somente leitura — visualiza sem convidar ou editar</option>}
+                <option value="analyst">Analista — análises apenas, sem gestão de usuários/clientes</option>
               </select>
             </div>
           )}
