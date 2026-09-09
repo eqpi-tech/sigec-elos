@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { hasAction } from '../../lib/modules.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
@@ -208,8 +209,8 @@ export default function ClientSuppliers() {
       <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e4ef', marginBottom:24 }}>
         {[
           ['meus', `Meus Fornecedores (${mySuppliers.length})`],
-          ['todos', 'Todos os Fornecedores'],
-          ['interessados', '💡 Interessados'],
+          ...(hasAction(user, 'acao:todos_fornecedores') ? [['todos', 'Todos os Fornecedores']] : []),
+          ...(hasAction(user, 'acao:interessados') ? [['interessados', '💡 Interessados']] : []),
         ].map(([tab, label]) => (
           <button key={tab} onClick={() => handleTabChange(tab)}
             style={{ padding:'10px 22px', background:'none', border:'none', borderBottom:`3px solid ${activeTab===tab?'#2E3192':'transparent'}`, color:activeTab===tab?'#2E3192':'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, cursor:'pointer', marginBottom:-2 }}>
@@ -307,14 +308,14 @@ export default function ClientSuppliers() {
       )}
 
       {/* ── Tab: Todos os Fornecedores — busca completa (mesma tela do comprador) ── */}
-      {activeTab === 'todos' && (
+      {activeTab === 'todos' && hasAction(user, 'acao:todos_fornecedores') && (
         <div style={{ margin:'0 -32px' }}>
           <BuyerMarketplace/>
         </div>
       )}
 
       {/* ── Tab: Fornecedores com Intenção de Prestar Serviços ── */}
-      {activeTab === 'interessados' && (
+      {activeTab === 'interessados' && hasAction(user, 'acao:interessados') && (
         <InterestsReport clientId={user?.clientId} navigate={navigate}/>
       )}
 
