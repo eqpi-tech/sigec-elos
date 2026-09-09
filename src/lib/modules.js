@@ -29,15 +29,15 @@ export const MODULES = {
 // Guardadas na MESMA lista modules do perfil, com prefixo 'acao:'.
 export const ACTIONS = {
   CLIENT: [
-    { key: 'acao:ver_documentos',    label: 'Ver documentos do fornecedor', icon: '👁', desc: 'Abrir/baixar arquivos no processo do fornecedor' },
-    { key: 'acao:novo_convite',      label: 'Enviar convites',              icon: '✉️', desc: 'Convidar fornecedores (individual e em massa)' },
-    { key: 'acao:nova_cotacao',      label: 'Criar cotações (RFQ)',         icon: '📝', desc: 'Abrir novas solicitações de cotação' },
-    { key: 'acao:carta_excecao',     label: 'Enviar Carta de Exceção',      icon: '📜', desc: 'Anexar carta aprovando categoria com pendência' },
-    { key: 'acao:enviar_doc_cliente',label: 'Enviar documentos do cliente', icon: '📎', desc: 'Anexar documentos de responsabilidade do cliente no processo (ex.: Laudo GETEC — VIX)' },
+    { key: 'acao:ver_documentos',    module: 'fornecedores', label: 'Ver documentos do fornecedor', icon: '👁', desc: 'Abrir/baixar arquivos no processo do fornecedor' },
+    { key: 'acao:carta_excecao',     module: 'fornecedores', label: 'Enviar Carta de Exceção',      icon: '📜', desc: 'Anexar carta aprovando categoria com pendência' },
+    { key: 'acao:enviar_doc_cliente',module: 'fornecedores', label: 'Enviar documentos do cliente', icon: '📎', desc: 'Anexar documentos de responsabilidade do cliente no processo (ex.: Laudo GETEC — VIX)' },
+    { key: 'acao:novo_convite',      module: 'convites',     label: 'Enviar convites',              icon: '✉️', desc: 'Convidar fornecedores (individual e em massa)' },
+    { key: 'acao:nova_cotacao',      module: 'rfq',          label: 'Criar cotações (RFQ)',         icon: '📝', desc: 'Abrir novas solicitações de cotação' },
   ],
   SUPPLIER: [
-    { key: 'acao:enviar_documentos', label: 'Enviar documentos',            icon: '📤', desc: 'Upload e substituição de documentos' },
-    { key: 'acao:mudar_categorias',  label: 'Mudar categorias',             icon: '📦', desc: 'Alterar as categorias de atuação' },
+    { key: 'acao:enviar_documentos', module: 'documentos',   label: 'Enviar documentos',            icon: '📤', desc: 'Upload e substituição de documentos' },
+    { key: 'acao:mudar_categorias',  module: 'categorias',   label: 'Mudar categorias',             icon: '📦', desc: 'Alterar as categorias de atuação' },
   ],
 }
 

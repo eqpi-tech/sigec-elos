@@ -38,7 +38,13 @@ export default function BackofficeUserProfiles() {
 
   const toggleModule = (key) => setModal(m => {
     const next = new Set(m.modules)
-    next.has(key) ? next.delete(key) : next.add(key)
+    if (next.has(key)) {
+      next.delete(key)
+      // desmarcar um MÓDULO remove as ações aninhadas nele
+      ;(ACTIONS[m.role_type] || []).filter(a => a.module === key).forEach(a => next.delete(a.key))
+    } else {
+      next.add(key)
+    }
     return { ...m, modules: next }
   })
 
@@ -72,7 +78,10 @@ export default function BackofficeUserProfiles() {
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
 
-  const moduleLabel = (roleType, key) => MODULES[roleType]?.find(m => m.key === key)?.label || key
+  const moduleLabel = (roleType, key) =>
+    MODULES[roleType]?.find(m => m.key === key)?.label
+    || ACTIONS[roleType]?.find(a => a.key === key)?.label
+    || key
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:960, margin:'0 auto' }}>
@@ -152,46 +161,43 @@ export default function BackofficeUserProfiles() {
               Módulos ({[...modal.modules].filter(k => !k.startsWith('acao:')).length}/{MODULES[modal.role_type].length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
-              {MODULES[modal.role_type].map(m => (
-                <label key={m.key}
-                  style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:10, cursor:'pointer',
-                    border:`1.5px solid ${modal.modules.has(m.key) ? '#2E3192' : '#e2e4ef'}`,
-                    background: modal.modules.has(m.key) ? 'rgba(46,49,146,.04)' : '#fff' }}>
-                  <input type="checkbox" checked={modal.modules.has(m.key)} onChange={() => toggleModule(m.key)}
-                    style={{ accentColor:'#2E3192' }}/>
-                  <span style={{ fontSize:16 }}>{m.icon}</span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{m.label}</div>
-                    <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{m.desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-
-            {/* Ações dentro dos módulos (nível abaixo do menu — 09/09) */}
-            {(ACTIONS[modal.role_type] || []).length > 0 && (
-              <>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, margin:'4px 0 8px' }}>
-                  Ações permitidas ({[...modal.modules].filter(k => k.startsWith('acao:')).length}/{ACTIONS[modal.role_type].length})
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
-                  {ACTIONS[modal.role_type].map(a => (
-                    <label key={a.key}
-                      style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 14px', borderRadius:10, cursor:'pointer',
-                        border:`1.5px solid ${modal.modules.has(a.key) ? '#7c3aed' : '#e2e4ef'}`,
-                        background: modal.modules.has(a.key) ? 'rgba(124,58,237,.04)' : '#fff' }}>
-                      <input type="checkbox" checked={modal.modules.has(a.key)} onChange={() => toggleModule(a.key)}
-                        style={{ accentColor:'#7c3aed' }}/>
-                      <span style={{ fontSize:15 }}>{a.icon}</span>
+              {MODULES[modal.role_type].map(m => {
+                const modActions = (ACTIONS[modal.role_type] || []).filter(a => a.module === m.key)
+                const modOn = modal.modules.has(m.key)
+                return (
+                  <div key={m.key}>
+                    <label
+                      style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', cursor:'pointer',
+                        borderRadius: modOn && modActions.length ? '10px 10px 0 0' : 10,
+                        border:`1.5px solid ${modOn ? '#2E3192' : '#e2e4ef'}`,
+                        background: modOn ? 'rgba(46,49,146,.04)' : '#fff' }}>
+                      <input type="checkbox" checked={modOn} onChange={() => toggleModule(m.key)}
+                        style={{ accentColor:'#2E3192' }}/>
+                      <span style={{ fontSize:16 }}>{m.icon}</span>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12.5, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{a.label}</div>
-                        <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{a.desc}</div>
+                        <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{m.label}</div>
+                        <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{m.desc}</div>
                       </div>
                     </label>
-                  ))}
-                </div>
-              </>
-            )}
+                    {/* Ações do módulo: só aparecem/valem com o módulo marcado */}
+                    {modOn && modActions.length > 0 && (
+                      <div style={{ border:'1.5px solid #2E3192', borderTop:'none', borderRadius:'0 0 10px 10px', background:'#fafbff', padding:'6px 14px 8px 40px', display:'flex', flexDirection:'column', gap:4 }}>
+                        {modActions.map(a => (
+                          <label key={a.key} style={{ display:'flex', alignItems:'center', gap:9, cursor:'pointer', padding:'3px 0' }}>
+                            <input type="checkbox" checked={modal.modules.has(a.key)} onChange={() => toggleModule(a.key)}
+                              style={{ accentColor:'#7c3aed', width:13, height:13 }}/>
+                            <span style={{ fontSize:13 }}>{a.icon}</span>
+                            <span style={{ fontSize:12, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{a.label}</span>
+                            <span style={{ fontSize:10.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>· {a.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
 
             {error && (
               <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'9px 12px', marginBottom:14, fontSize:12.5, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>
