@@ -664,7 +664,7 @@ export const adminApi = {
         .limit(1),
       // Busca categorias do fornecedor com nomes para exibição na ficha
       supabase.from('supplier_categories')
-        .select('category_id, categories(id, name, parent_id)')
+        .select('category_id, categories(id, name, parent_id, codigo, client_id)')
         .eq('supplier_id', supplierId),
     ])
 
@@ -736,9 +736,19 @@ export const adminApi = {
       return (a.label||'').localeCompare(b.label||'', 'pt-BR')
     })
 
-    const categories = catRes.status === 'fulfilled'
+    let categories = catRes.status === 'fulfilled'
       ? (catRes.value.data || []).map(r => r.categories).filter(Boolean)
       : []
+    // CNAE vinculado à categoria (item 8, 09/09): cópias por cliente não têm
+    // código — resolve pela categoria GLOBAL homônima
+    const semCodigo = categories.filter(c => !c.codigo && c.client_id)
+    if (semCodigo.length) {
+      const { data: globs } = await supabase.from('categories')
+        .select('name, codigo').is('client_id', null).not('codigo', 'is', null)
+        .in('name', [...new Set(semCodigo.map(c => c.name))])
+      const byName = Object.fromEntries((globs || []).map(g => [g.name.trim().toLowerCase(), g.codigo]))
+      categories = categories.map(c => c.codigo ? c : { ...c, codigo: byName[(c.name || '').trim().toLowerCase()] || null })
+    }
 
     return {
       ...supplier,

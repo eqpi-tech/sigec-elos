@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -25,6 +25,25 @@ const SORT_OPTIONS = [
 
 const STATUS_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#9B9B9B', REJECTED:'#ef4444', EXPIRED:'#ef4444', EXPIRING:'#f59e0b', NOT_APPLICABLE:'#64748b' }
 const STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Rejeitado', EXPIRED:'Vencido', EXPIRING:'Vence em breve', NOT_APPLICABLE:'Não se aplica' }
+
+
+// Normaliza valores financeiros pt-BR p/ número com 2 casas (item 5, 09/09):
+// '1.234.567,89' → 1234567.89 · '123.456' (ponto+3 díg. = MILHAR) → 123456
+// · '1234567.8' → 1234567.80. Evita o ponto de milhar lido pela IA virar decimal.
+function parseMoneyBR(v) {
+  if (v == null || v === '') return null
+  if (typeof v === 'number') return Math.round(v * 100) / 100
+  let s = String(v).replace(/[R$\s]/g, '')
+  const neg = /^-|\(.*\)$/.test(s); s = s.replace(/[()\-]/g, '')
+  if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')          // formato BR completo
+  } else if (/\.\d{3}(\.|$)/.test(s)) {
+    s = s.replace(/\./g, '')                             // só pontos de milhar
+  }                                                        // senão: ponto é decimal mesmo
+  const n = parseFloat(s)
+  if (isNaN(n)) return null
+  return Math.round((neg ? -n : n) * 100) / 100
+}
 
 function getDocAiType(doc) {
   const label = (doc.label || '').toLowerCase()
@@ -55,7 +74,12 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
       if (!res.ok) throw new Error(result.error)
       if (result.extracted) {
         if (extractType === 'bank') setBankData(p => ({ ...p, ...result.extracted }))
-        else setDreData(p => ({ ...p, ...result.extracted }))
+        else {
+          const norm = { ...result.extracted }
+          for (const k of ['receita','ativo','passivo','lucro','ebitda','estoque'])
+            if (k in norm) norm[k] = parseMoneyBR(norm[k])
+          setDreData(p => ({ ...p, ...norm }))
+        }
       }
       if (result.warning) alert('⚠️ ' + result.warning)
     } catch (e) { alert('Erro na extração: ' + e.message) }
@@ -73,8 +97,12 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
         )
         if (error) throw error
       } else {
+        const clean = { ...dreData }
+        for (const k of ['receita','ativo','passivo','lucro','ebitda','estoque'])
+          if (k in clean) clean[k] = parseMoneyBR(clean[k])
+        if (clean.year) clean.year = parseInt(clean.year, 10)
         const { error } = await supabase.from('supplier_financials')
-          .upsert({ ...dreData, supplier_id: doc.supplier_id, verified_by: userId, verified_at: new Date().toISOString() },
+          .upsert({ ...clean, supplier_id: doc.supplier_id, verified_by: userId, verified_at: new Date().toISOString() },
             { onConflict: 'supplier_id,year' })
         if (error) throw error
       }
@@ -146,8 +174,9 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
             ].map(([field, label]) => (
               <div key={field}>
                 <label style={lbl}>{label}</label>
-                <input type="number" value={dreData[field] ?? ''} placeholder="0"
-                  onChange={e => setDreData(p => ({ ...p, [field]: e.target.value ? Number(e.target.value) : null }))}
+                <input value={dreData[field] ?? ''} placeholder="0,00"
+                  onChange={e => setDreData(p => ({ ...p, [field]: e.target.value }))}
+                  onBlur={e => { if (field !== 'year') setDreData(p => ({ ...p, [field]: parseMoneyBR(e.target.value) })) }}
                   style={inp}/>
               </div>
             ))}
@@ -174,6 +203,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
   const [file, setFile]           = useState(null)
   const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
   const [status, setStatus]       = useState('')       // '' = manter atual
+  const [inscription, setInscription] = useState(doc.inscription_number || '')
   const [reasonCode, setReasonCode] = useState('')
   const [customNote, setCustomNote] = useState('')
   const [saving, setSaving]       = useState(false)
@@ -191,7 +221,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
     if (file && file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5MB — reduza o tamanho'); return }
     setSaving(true)
     try {
-      await onSubmit(doc.id, { file, expiry: expiry || null, status: status || null, note })
+      await onSubmit(doc.id, { file, expiry: expiry || null, status: status || null, note, inscriptionNumber: inscription.trim() || null })
       onClose()
     } catch (e) { alert('Erro ao salvar: ' + e.message) }
     finally { setSaving(false) }
@@ -232,11 +262,23 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files?.[0] || null)}
           style={{ width:'100%', fontFamily:'DM Sans,sans-serif', fontSize:13, marginBottom:14 }}/>
 
+        <span style={lbl}>Nº de inscrição (Estadual/Municipal, quando aplicável)</span>
+        <input value={inscription} onChange={e => setInscription(e.target.value)}
+          placeholder="Ex.: 123.456.789.000" style={{ ...inp, marginBottom:14 }}/>
+
         <span style={lbl}>Data de vencimento</span>
         <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} style={{ ...inp, marginBottom:14 }}/>
 
         <span style={lbl}>Status</span>
-        <select value={status} onChange={e => { setStatus(e.target.value); setReasonCode(''); setCustomNote('') }} style={{ ...inp, marginBottom:14 }}>
+        <select value={status} onChange={e => {
+            const v = e.target.value
+            setStatus(v); setReasonCode(''); setCustomNote('')
+            // Regra (09/09): aprovação sem validade informada → análise + 1 ano
+            if (v === 'VALID' && !expiry) {
+              const d = new Date(); d.setFullYear(d.getFullYear() + 1)
+              setExpiry(d.toISOString().slice(0, 10))
+            }
+          }} style={{ ...inp, marginBottom:14 }}>
           <option value="">Manter status atual</option>
           <option value="VALID">✓ Aprovado</option>
           <option value="REJECTED">✕ Reprovado</option>
@@ -346,6 +388,7 @@ export default function DocumentAnalysis() {
       setRows(result.rows)
       setTotal(result.total)
       setPage(pg)
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy, page: pg }))
     } catch (e) {
       console.error(e)
     } finally {
@@ -353,21 +396,28 @@ export default function DocumentAnalysis() {
     }
   }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
 
-  useEffect(() => { fetchDocs(0) }, [fetchDocs])
+  // Primeira carga restaura também a PÁGINA salva (voltar da visualização
+  // de um documento mantém o analista onde estava)
+  const firstLoad = useRef(true)
+  useEffect(() => {
+    const pg = firstLoad.current ? (saved.page || 0) : 0
+    firstLoad.current = false
+    fetchDocs(pg)
+  }, [fetchDocs])
 
   // Salva os filtros a cada mudança
   useEffect(() => {
-    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy }))
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy, page }))
   }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
 
-  async function handleApprove(docId, expiry, status = 'VALID', note) {
+  async function handleApprove(docId, expiry, status = 'VALID', note, inscriptionNumber) {
     setSaving(p => new Set([...p, docId]))
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status, expiresAt: expiry || undefined, note: note || undefined }),
+        body: JSON.stringify({ documentId: docId, status, expiresAt: expiry || undefined, note: note || undefined, inscriptionNumber: inscriptionNumber || undefined }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       setDocStatus(p => ({ ...p, [docId]: status }))
@@ -389,7 +439,7 @@ export default function DocumentAnalysis() {
   // Modal único: orquestra substituição de arquivo, vencimento e status.
   // 1) arquivo → replace_file (fica VALID) · 2) status → approve-document
   // (dispara auto-finalização) · 3) só vencimento → set_expiry
-  async function handleEditSubmit(docId, { file, expiry, status, note }) {
+  async function handleEditSubmit(docId, { file, expiry, status, note, inscriptionNumber }) {
     if (file) {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -407,7 +457,7 @@ export default function DocumentAnalysis() {
     }
     if (status) {
       if (status === 'REJECTED') await handleReject(docId, note)
-      else await handleApprove(docId, expiry, status, note)
+      else await handleApprove(docId, expiry, status, note, inscriptionNumber)
       return
     }
     // só a data mudou

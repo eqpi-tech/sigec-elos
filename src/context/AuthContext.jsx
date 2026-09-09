@@ -1,10 +1,11 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)
+  const lastUserIdRef         = useRef(null)
   const [loading, setLoading] = useState(true)
 
   const buildUser = (authUser, profile) => {
@@ -122,6 +123,12 @@ export function AuthProvider({ children }) {
     // FIX: setLoading(true) ANTES de fetchProfile para que RootRedirect
     // mostre o spinner enquanto o perfil carrega — evita blank page pós-login
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const uid = session?.user?.id || null
+      // TOKEN_REFRESHED/refoco de aba com o MESMO usuário: ignora — antes
+      // cada troca de janela remontava o app (loading global) e as telas
+      // perdiam aba/página/rolagem (reclamação da análise de documentos)
+      if (uid && uid === lastUserIdRef.current && _event !== 'USER_UPDATED') return
+      lastUserIdRef.current = uid
       setLoading(true)
       fetchProfile(session?.user || null)
     })

@@ -132,14 +132,16 @@ exports.handler = async (event) => {
       })
     }
 
-    // Análise CNAEs — doc 61 (dados já capturados, backoffice analisa)
+    // Análise CNAEs — doc 61: coleta automática, mas APROVAÇÃO HUMANA
+    // (regra 09/09: o vínculo CNAE×categorias é validado pelo backoffice;
+    // a IA fica como apoio ao fornecedor na escolha das categorias)
     if (body.cnpj_full_data?.cnae_fiscal) {
       autoDocuments.push({
         supplier_id:  supplier.id,
         type:         '61',
         label:        'Analise CNAES',
         source:       'AUTO',
-        status:       'VALID',
+        status:       'PENDING',
         storage_path: null,
         metadata: {
           auto_collect: true,

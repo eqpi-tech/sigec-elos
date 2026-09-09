@@ -190,14 +190,14 @@ export default function SupplierDocuments() {
           },
         })
       }
-      // Doc 61 — Análise CNAEs
+      // Doc 61 — Análise CNAEs: coleta auto, APROVAÇÃO HUMANA (regra 09/09)
       if (allReqDocs.find(d => d.id === 61) && cnpj?.cnae_fiscal) {
         docsToCreate.push({
           supplier_id:  supplierId,
           type:         '61',
           label:        'Analise CNAES',
           source:       'AUTO',
-          status:       'VALID',
+          status:       'PENDING',
           storage_path: null,
           metadata:     { auto_collect: true, source: 'BrasilAPI', cnae: cnpj?.cnae_fiscal, descricao: cnpj?.cnae_fiscal_descricao },
         })
