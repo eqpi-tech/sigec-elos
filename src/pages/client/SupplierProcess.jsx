@@ -49,7 +49,7 @@ const DOC_STATUS_LABEL = { VALID:'Aprovado', PENDING:'Aguardando análise', MISS
 const DOC_BG = { VALID:'#f0fdf4', PENDING:'#fff7ed', MISSING:'#f9fafb', REJECTED:'#fff5f5', EXPIRED:'#fff5f5', EXPIRING:'#fffbeb' }
 const DOC_BORDER = { VALID:'#dcfce7', PENDING:'#fed7aa', MISSING:'#e2e4ef', REJECTED:'#fee2e2', EXPIRED:'#fee2e2', EXPIRING:'#fde68a' }
 
-const TABS = ['Resumo', 'Documentos', 'Inteligência CNPJ']
+const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ']
 
 
 // ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
@@ -218,6 +218,80 @@ function ClientProcessDocs({ seal, supplierId, existingDocs }) {
         })}
       </div>
     </Card>
+  )
+}
+
+
+// ── Questionários do fornecedor no processo (visão CLIENTE) ───────────────
+// (a) questionário migrado do HOC (seals.hoc_questionario: [{questao, resposta}])
+// (b) questionários ELOS do cliente + respostas do fornecedor (RLS já permitia
+//     a leitura — faltava a tela; reclamação 10/09)
+function QuestionnairesTab({ supplierId, clientId, hocQ }) {
+  const [qs, setQs]       = useState([])   // questionários do cliente c/ perguntas
+  const [answers, setAnswers] = useState({}) // question_id → answer row
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const { data: list } = await supabase.from('questionnaires')
+          .select('id, title, active, questionnaire_questions(id, text, type, options, required, order_index)')
+          .eq('client_id', clientId)
+        setQs(list || [])
+        const qids = (list || []).flatMap(q => (q.questionnaire_questions || []).map(x => x.id))
+        if (qids.length) {
+          const { data: ans } = await supabase.from('questionnaire_answers')
+            .select('question_id, answer_boolean, answer_text, updated_at')
+            .eq('supplier_id', supplierId).in('question_id', qids)
+          setAnswers(Object.fromEntries((ans || []).map(a => [a.question_id, a])))
+        }
+      } finally { setLoading(false) }
+    })()
+  }, [supplierId, clientId])
+
+  const fmtAns = (a) => {
+    if (!a) return null
+    if (a.answer_boolean === true)  return 'Sim'
+    if (a.answer_boolean === false) return 'Não'
+    return a.answer_text || null
+  }
+
+  if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={30}/></div>
+  const hasHoc = Array.isArray(hocQ) && hocQ.length > 0
+  const hasElos = qs.some(q => (q.questionnaire_questions || []).length)
+  if (!hasHoc && !hasElos) return (
+    <Card style={{ borderRadius:14, padding:'32px', textAlign:'center' }}>
+      <div style={{ fontSize:30, marginBottom:8 }}>📋</div>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B' }}>Nenhum questionário respondido neste processo ainda.</div>
+    </Card>
+  )
+
+  const row = (q, a, i) => (
+    <div key={i} style={{ padding:'10px 14px', borderRadius:10, background:'#f8faff', border:'1px solid #eef0f6', marginBottom:6 }}>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', fontWeight:600 }}>{q}</div>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, marginTop:3,
+        color: a == null ? '#9B9B9B' : /^n[aã]o/i.test(String(a)) ? '#dc2626' : '#15803d', fontWeight:700 }}>
+        {a == null ? 'Não respondida' : String(a)}
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      {hasElos && qs.map(q => (
+        <Card key={q.id} style={{ borderRadius:14, padding:'20px 24px', marginBottom:16 }}>
+          <SectionTitle>📋 {q.title}</SectionTitle>
+          {(q.questionnaire_questions || []).sort((a,b) => a.order_index - b.order_index)
+            .map(qq => row(qq.text, fmtAns(answers[qq.id]), qq.id))}
+        </Card>
+      ))}
+      {hasHoc && (
+        <Card style={{ borderRadius:14, padding:'20px 24px', marginBottom:16 }}>
+          <SectionTitle>📋 Questionário da homologação (HOC)</SectionTitle>
+          {hocQ.map((item, i) => row(item.questao, item.resposta, i))}
+        </Card>
+      )}
+    </>
   )
 }
 
@@ -571,6 +645,10 @@ export default function ClientSupplierProcess() {
       )}
 
       {/* ── Tab: Inteligência CNPJ ── */}
+      {tab === 'Questionários' && (
+        <QuestionnairesTab supplierId={supplierId} clientId={user?.clientId} hocQ={mySeal?.hoc_questionario}/>
+      )}
+
       {tab === 'Inteligência CNPJ' && (
         <div style={{ display:'grid', gap:16 }}>
 
