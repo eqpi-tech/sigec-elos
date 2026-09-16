@@ -1,0 +1,578 @@
+{
+ "Suprimentos": {
+  "headers": [
+   "Cartão CNPJ",
+   "Sintegra",
+   "Análise de Cnaes",
+   "Certidão de Regularidade do FGTS",
+   "CND Tributos Municipais ou Mobiliários",
+   "CNDT Certidão Negativa de Débitos Trabalhistas",
+   "Certidão de Ação Trabalhista em Tramitação – TRT",
+   "Certidão de Débitos Trabalhistas da Secretaria de Trabalho (Ministério do Trabalho e Previdência)",
+   "\"Lista suja\" - trabalho escravo",
+   "Comprovante de Conta Bancária (cópia de cartão ou folha do cheque ou extratos e atestado/declaração do banco)",
+   "CND Tributos Estaduais",
+   "CND Tributos Federal e à Dívida Ativa da União",
+   "Cadastro Ceis",
+   "Inscrição Estadual",
+   "Inscrição Municipal",
+   "Contrato Social",
+   "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+   "Autorização Agência Nacional de Petróleo - Registro ANP",
+   "Alvará de Funcionamento",
+   "Certificado de Regularidade - IBAMA (CTF)",
+   "Licença de Operação",
+   "Certificado da Polícia Federal",
+   "AVCB (Auto de Vistoria do Corpo de Bombeiros) ou CLCB Certificado de Licença do Corpo de Bombeiros",
+   "Balanço + DRE (com assinatura do contador)",
+   "Relatório Assertiva",
+   "Cadastro no Sistema MTR do órgão correspondente (SINIR, FEAM, INEA, SIGOR, etc)",
+   "Certificado ou Declaração de destinação final do resíduo",
+   "Certificado de calibração do Instrumento utilizado para medição",
+   "Anotação de Responsabildiade Técnica (ART) ou Anotação de Função Técnica (AFT)",
+   "Laudo de Estanqueidade",
+   "Certificado de Conformidade Inmetro para Pneus Novos Rodoviários",
+   "Comprovação de experiência para desempenho da atividade contratada",
+   "Alvará Sanitário Municipal",
+   "Registro no Conselho de Classe do Responsável Técnico",
+   "Registro da empresa no Conselho de Classe e constatação do profissional no Quadro Técnico, quando tratar-se de contratação de PJ",
+   "Ficha com Dados de Segurança (FDS/FISPQ)",
+   "Comprovante detalhado da execução dos serviços (ordem de serviço)",
+   "PMOC - Plano de Manutenção, Operação e Controle do Arcondicionado assinado pelo responsável técnico",
+   "CNH (manobristas)",
+   "Hitórico de Manutenção ou Último Registro de Manutenção",
+   "Certificado de Calibração dos Instrumentos",
+   "Laudo Técnico da GETEC (Formulário interno VixPar) (pode ser inserido pela VIX)",
+   "ASO - Atestado de Saúde Ocupacional",
+   "Registro da Arma junto a Polícia Federal",
+   "Autorização de funcionamento concedida pelo Departamento de Polícia Federal ou pela Secretaria de Segurança Pública de Estado",
+   "Carteira Nacional de Vigilante (CNV)",
+   "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+   "PCMSO",
+   "PGR",
+   "Questionário de Compliance"
+  ],
+  "cats": [
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "SERVIÇO DE CALIBRAÇÃO DE INSTRUMENTO DE MEDIÇÃO E CRONOTACÓGRAFO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certificado de calibração do Instrumento utilizado para medição",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "LAVAGEM DE VEÍCULOS NA OPERAÇÃO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Licença de Operação",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "LANTERNAGEM, PINTURA E JATEAMENTO (PROVEDOR FIXO)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Licença de Operação",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "SERVIÇO DE MECÂNICA EM GERAL, COMPONENTES E SISTEMA DE INJEÇÃO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Licença de Operação",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "SERVIÇO DE RASTREAMENTO E MONITORAMENTO DE FROTA",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Laudo Técnico da GETEC (Formulário interno VixPar) (pode ser inserido pela VIX)",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "MANUTEÇÃO DE AR CONDICIONADO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "PMOC - Plano de Manutenção, Operação e Controle do Arcondicionado assinado pelo responsável técnico",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "COMPRA EM AGREGADOS DE EMPRESA DE EXTRAÇÃO MINERAL (AREIA E BRITA)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certificado de Regularidade - IBAMA (CTF)",
+     "Licença de Operação",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "LOCAÇÃO DE FROTA PESADA E EQUIPAMENTO PARA OPERAÇÃO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Hitórico de Manutenção ou Último Registro de Manutenção",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "MATERIAL",
+    "nome": "AQUISIÇÃO DE BATERIAS (DISTRIBUIDOR)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Contrato Social",
+     "Certificado de Regularidade - IBAMA (CTF)",
+     "Licença de Operação",
+     "Relatório Assertiva",
+     "Cadastro no Sistema MTR do órgão correspondente (SINIR, FEAM, INEA, SIGOR, etc)",
+     "Certificado ou Declaração de destinação final do resíduo",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "MATERIAL",
+    "nome": "AQUISIÇÃO COMBUSTIVEL (DISTRIBUIDOR/TRR)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Contrato Social",
+     "Autorização Agência Nacional de Petróleo - Registro ANP",
+     "Certificado de Regularidade - IBAMA (CTF)",
+     "Licença de Operação",
+     "Relatório Assertiva",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "MATERIAL",
+    "nome": "AQUISIÇÃO DE PNEUS VIA FABRICANTE",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Contrato Social",
+     "Certificado de Regularidade - IBAMA (CTF)",
+     "Licença de Operação",
+     "Relatório Assertiva",
+     "Certificado de Conformidade Inmetro para Pneus Novos Rodoviários",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "USINAGEM, SOLDA TRATAMENTO E REVESTIMENTO DE METAIS EM EQUIPAMENTOS",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Licença de Operação",
+     "Certificado de calibração do Instrumento utilizado para medição",
+     "Comprovação de experiência para desempenho da atividade contratada",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "SERVIÇO DE INSTALAÇÃO/TROCA DE ACESSÓRIOS EM VEÍCULOS",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Certificado de calibração do Instrumento utilizado para medição",
+     "Comprovação de experiência para desempenho da atividade contratada",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "MANUTENÇÃO DO ELEVADOR AUTOMOTIVO",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certificado de calibração do Instrumento utilizado para medição",
+     "Anotação de Responsabildiade Técnica (ART) ou Anotação de Função Técnica (AFT)",
+     "Comprovação de experiência para desempenho da atividade contratada",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "REFORMADORA DE PNEUS",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certificado de Regularidade - IBAMA (CTF)",
+     "Licença de Operação",
+     "Certificado de calibração do Instrumento utilizado para medição",
+     "Certificado de Calibração dos Instrumentos",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "CONTROLE DE PRAGAS (DESINSETIZAÇÃO/DESRATIZAÇÃO)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Anotação de Responsabildiade Técnica (ART) ou Anotação de Função Técnica (AFT)",
+     "Alvará Sanitário Municipal",
+     "Registro no Conselho de Classe do Responsável Técnico",
+     "Registro da empresa no Conselho de Classe e constatação do profissional no Quadro Técnico, quando tratar-se de contratação de PJ",
+     "Ficha com Dados de Segurança (FDS/FISPQ)",
+     "Comprovante detalhado da execução dos serviços (ordem de serviço)",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "HIGIENIZAÇÃO DE CAIXAS D'ÁGUA",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Alvará de Funcionamento",
+     "Registro no Conselho de Classe do Responsável Técnico",
+     "Registro da empresa no Conselho de Classe e constatação do profissional no Quadro Técnico, quando tratar-se de contratação de PJ",
+     "Comprovante detalhado da execução dos serviços (ordem de serviço)",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 3,
+    "grupo": "SERVIÇOS",
+    "nome": "VIGILANCIA PATRIMONIAL ARMADA",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certidão de Regularidade do FGTS",
+     "CNDT Certidão Negativa de Débitos Trabalhistas",
+     "\"Lista suja\" - trabalho escravo",
+     "CND Tributos Estaduais",
+     "CND Tributos Federal e à Dívida Ativa da União",
+     "Contrato Social",
+     "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+     "ASO - Atestado de Saúde Ocupacional",
+     "Registro da Arma junto a Polícia Federal",
+     "Autorização de funcionamento concedida pelo Departamento de Polícia Federal ou pela Secretaria de Segurança Pública de Estado",
+     "Carteira Nacional de Vigilante (CNV)",
+     "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 3,
+    "grupo": "SERVIÇOS",
+    "nome": "VIGILANCIA PATRIMONIAL ARMADA QUARTEIRIZADA",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certidão de Regularidade do FGTS",
+     "CNDT Certidão Negativa de Débitos Trabalhistas",
+     "\"Lista suja\" - trabalho escravo",
+     "CND Tributos Estaduais",
+     "CND Tributos Federal e à Dívida Ativa da União",
+     "Contrato Social",
+     "ASO - Atestado de Saúde Ocupacional",
+     "Registro da Arma junto a Polícia Federal",
+     "Autorização de funcionamento concedida pelo Departamento de Polícia Federal ou pela Secretaria de Segurança Pública de Estado",
+     "Carteira Nacional de Vigilante (CNV)",
+     "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 3,
+    "grupo": "SERVIÇOS",
+    "nome": "PORTARIA",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "Certidão de Regularidade do FGTS",
+     "CNDT Certidão Negativa de Débitos Trabalhistas",
+     "\"Lista suja\" - trabalho escravo",
+     "CND Tributos Estaduais",
+     "CND Tributos Federal e à Dívida Ativa da União",
+     "Contrato Social",
+     "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+     "ASO - Atestado de Saúde Ocupacional",
+     "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 3,
+    "grupo": "SERVIÇOS",
+    "nome": "LIMPEZA PREDIAL E DE ÔNIBUS (PROVEDOR FIXO)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "\"Lista suja\" - trabalho escravo",
+     "CND Tributos Estaduais",
+     "CND Tributos Federal e à Dívida Ativa da União",
+     "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+     "ASO - Atestado de Saúde Ocupacional",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   },
+   {
+    "nivel": 3,
+    "grupo": "SERVIÇOS",
+    "nome": "LAVAGEM DE VEÍCULOS (PROVEDOR FIXO)",
+    "docs": [
+     "Cartão CNPJ",
+     "Sintegra",
+     "\"Lista suja\" - trabalho escravo",
+     "CND Tributos Estaduais",
+     "CND Tributos Federal e à Dívida Ativa da União",
+     "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+     "CNH (manobristas)",
+     "ASO - Atestado de Saúde Ocupacional",
+     "PCMSO",
+     "PGR",
+     "Questionário de Compliance"
+    ]
+   }
+  ]
+ },
+ "Medicina": {
+  "headers": [
+   "Cartão CNPJ",
+   "Análise de Cnaes",
+   "Certidão de Regularidade do FGTS",
+   "CND Tributos Municipais ou Mobiliários",
+   "CNDT Certidão Negativa de Débitos Trabalhistas",
+   "Certidão de Ação Trabalhista em Tramitação – TRT",
+   "Certidão de Débitos Trabalhistas da Secretaria de Trabalho (Ministério do Trabalho e Previdência)",
+   "\"Lista suja\" - trabalho escravo",
+   "Comprovante de Conta Bancária (cópia de cartão ou folha do cheque ou extratos e atestado/declaração do banco)",
+   "CND Tributos Estaduais",
+   "CND Tributos Federal e à Dívida Ativa da União",
+   "Cadastro Ceis",
+   "Inscrição Estadual",
+   "Inscrição Municipal",
+   "Contrato Social",
+   "Relatório Assertiva",
+   "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+   "Autorização Agência Nacional de Petróleo - Registro ANP",
+   "Alvará de Funcionamento",
+   "Certificado de Regularidade - IBAMA (CTF)",
+   "Licença de Operação",
+   "Certificado da Polícia Federal",
+   "AVCB (Auto de Vistoria do Corpo de Bombeiros) ou CLCB Certificado de Licença do Corpo de Bombeiros",
+   "Balanço + DRE (com assinatura do contador)",
+   "ASO - Atestado de Saúde Ocupacional",
+   "Registro da Arma junto a Polícia Federal",
+   "Autorização de funcionamento concedida pelo Departamento de Polícia Federal ou pela Secretaria de Segurança Pública de Estado",
+   "Carteira Nacional de Vigilante (CNV)",
+   "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+   "PCMSO",
+   "PGR",
+   "Questionário de Compliance",
+   "Termo de Conduta",
+   "ACREDITAÇÃO CAP-FDT - (Acreditação forense para exames toxicológicos de larga janela de detecção do Colégio Americano de Patologia )- OU ACREDITAÇÃO INMETRO DE ACORDO COM A NORMA ABNT NBR ISO/IEC 17025 (com requisitos específicos que incluam integralmente as \"Diretrizes sobre o Exame de Drogas em Cabelos e Pelos: Coleta e Análise\" da Sociedade Brasileira de Toxicologia, além de requisitos adicionais de toxicologia forense reconhecidos internacionalmente.)",
+   "Alvará Sanitário Municipal ou documento equivalente",
+   "Registro no Conselho de Classe do Responsavel Técnico",
+   "Estar ligado a RBC OU possuir padrões rastreáveis à Organismos Nacionais e/ou Internacionais (INMETRO) com a Acreditação do fornecedor que realiza calibração dos padrões",
+   "Certificado de Calibração com cálculo de incerteza da medição",
+   "Rastreabilidade do certificado de calibração do esfigmomanometro",
+   "Certificado de regularidade de Inscrição de Pessoa Jurídica",
+   "Certificado Esfigmomanômetro",
+   "Rastreabilidade Esfigmomanômetro",
+   "Certificado da Cabine Audiométrica",
+   "Rastreabilidade Cabine Audiométrica",
+   "Certificado do Audiômetro",
+   "Rastreabilidade do Audiômetro",
+   "Declaração Fonoaudiólogo",
+   "Contrato social e última alteração contratual",
+   "Certidão negativa de dívida ativa federal",
+   "Certidão negativa de dívida ativa estadual",
+   "Certidão negativa de dívida ativa municipal",
+   "Proposta técnica",
+   "Carteira do conselho de fonoaudiologia do proffisional que realizar as audiometrias",
+   "Certificado de responsabilidade técnica do médico responsavel pela clinica",
+   "Alvará sanitário do laboratório"
+  ],
+  "cats": [
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "CALIBRAÇÃO (Esfigmomanometro e termometro)",
+    "docs": [
+     "Cartão CNPJ",
+     "Alvará de Funcionamento",
+     "Questionário de Compliance",
+     "Estar ligado a RBC OU possuir padrões rastreáveis à Organismos Nacionais e/ou Internacionais (INMETRO) com a Acreditação do fornecedor que realiza calibração dos padrões",
+     "Certificado de Calibração com cálculo de incerteza da medição",
+     "Rastreabilidade do certificado de calibração do esfigmomanometro"
+    ]
+   },
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "TOXICOLÓGICO",
+    "docs": [
+     "Cartão CNPJ",
+     "Alvará de Funcionamento",
+     "Questionário de Compliance",
+     "ACREDITAÇÃO CAP-FDT - (Acreditação forense para exames toxicológicos de larga janela de detecção do Colégio Americano de Patologia )- OU ACREDITAÇÃO INMETRO DE ACORDO COM A NORMA ABNT NBR ISO/IEC 17025 (com requisitos específicos que incluam integralmente as \"Diretrizes sobre o Exame de Drogas em Cabelos e Pelos: Coleta e Análise\" da Sociedade Brasileira de Toxicologia, além de requisitos adicionais de toxicologia forense reconhecidos internacionalmente.)",
+     "Alvará Sanitário Municipal ou documento equivalente",
+     "Registro no Conselho de Classe do Responsavel Técnico"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "CLÍNICA CREDENCIADA",
+    "docs": [
+     "Alvará Sanitário Municipal ou documento equivalente",
+     "Rastreabilidade do certificado de calibração do esfigmomanometro",
+     "Certificado de regularidade de Inscrição de Pessoa Jurídica",
+     "Certificado Esfigmomanômetro",
+     "Certificado da Cabine Audiométrica",
+     "Rastreabilidade Cabine Audiométrica",
+     "Certificado do Audiômetro",
+     "Rastreabilidade do Audiômetro",
+     "Declaração Fonoaudiólogo"
+    ]
+   },
+   {
+    "nivel": 2,
+    "grupo": "SERVIÇOS",
+    "nome": "CLÍNICA EM FASE DE CREDENCIAMENTO",
+    "docs": [
+     "Cartão CNPJ",
+     "Certidão de Regularidade do FGTS",
+     "CND Tributos Municipais ou Mobiliários",
+     "CNDT Certidão Negativa de Débitos Trabalhistas",
+     "Alvará de Funcionamento",
+     "Questionário de Compliance",
+     "Alvará Sanitário Municipal ou documento equivalente",
+     "Rastreabilidade do certificado de calibração do esfigmomanometro",
+     "Contrato social e última alteração contratual",
+     "Certidão negativa de dívida ativa federal",
+     "Certidão negativa de dívida ativa estadual",
+     "Certidão negativa de dívida ativa municipal",
+     "Proposta técnica",
+     "Carteira do conselho de fonoaudiologia do proffisional que realizar as audiometrias",
+     "Certificado de responsabilidade técnica do médico responsavel pela clinica",
+     "Alvará sanitário do laboratório"
+    ]
+   }
+  ]
+ },
+ "Qualidade": {
+  "headers": [
+   "Cartão CNPJ",
+   "Sintegra",
+   "Análise de Cnaes",
+   "Certidão de Regularidade do FGTS",
+   "CND Tributos Municipais ou Mobiliários",
+   "CNDT Certidão Negativa de Débitos Trabalhistas",
+   "Certidão de Ação Trabalhista em Tramitação – TRT",
+   "Certidão de Débitos Trabalhistas da Secretaria de Trabalho (Ministério do Trabalho e Previdência)",
+   "\"Lista suja\" - trabalho escravo",
+   "Comprovante de Conta Bancária (cópia de cartão ou folha do cheque ou extratos e atestado/declaração do banco)",
+   "CND Tributos Estaduais",
+   "CND Tributos Federal e à Dívida Ativa da União",
+   "Cadastro Ceis",
+   "Inscrição Estadual",
+   "Inscrição Municipal",
+   "Contrato Social",
+   "Relatório Assertiva",
+   "Certidão Negativa de Falência (concordata, recuperação judicial ou extra judicial)",
+   "Autorização Agência Nacional de Petróleo - Registro ANP",
+   "Alvará de Funcionamento",
+   "Certificado de Regularidade - IBAMA (CTF)",
+   "Licença de Operação",
+   "Certificado da Polícia Federal",
+   "AVCB (Auto de Vistoria do Corpo de Bombeiros) ou CLCB Certificado de Licença do Corpo de Bombeiros",
+   "Balanço + DRE (com assinatura do contador)",
+   "Relatório de Risco Financeiro",
+   "Cadastro no Sistema MTR do órgão correspondente (SINIR, FEAM, INEA, SIGOR, etc)",
+   "Certificado ou Declaração de destinação final do resíduo",
+   "Certificado de calibração do Instrumento utilizado para medição",
+   "Anotação de Responsabildiade Técnica (ART) ou Anotação de Função Técnica (AFT)",
+   "Laudo de Estanqueidade",
+   "Certificado de Conformidade Inmetro para Pneus Novos Rodoviários",
+   "Comprovação de experiência para desempenho da atividade contratada",
+   "Alvará Sanitário Municipal",
+   "Registro no Conselho de Classe do Responsável Técnico",
+   "Registro da empresa no Conselho de Classe e constatação do profissional no Quadro Técnico, quando tratar-se de contratação de PJ",
+   "Ficha com Dados de Segurança (FDS/FISPQ)",
+   "Comprovante detalhado da execução dos serviços (ordem de serviço)",
+   "PMOC - Plano de Manutenção, Operação e Controle do Arcondicionado assinado pelo responsável técnico",
+   "CNH (manobristas)",
+   "Hitórico de Manutenção ou Último Registro de Manutenção",
+   "Certificado de Calibração dos Instrumentos",
+   "Laudo Técnico da GETEC (Formulário interno VixPar) (pode ser inserido pela VIX)",
+   "ASO - Atestado de Saúde Ocupacional",
+   "Registro da Arma junto a Polícia Federal",
+   "Autorização de funcionamento concedida pelo Departamento de Polícia Federal ou pela Secretaria de Segurança Pública de Estado",
+   "Carteira Nacional de Vigilante (CNV)",
+   "Curso de formação técnica ou Comprovação de experiência para desempenho da atividade",
+   "PCMSO",
+   "PGR",
+   "Questionário de Compliance"
+  ],
+  "cats": [
+   {
+    "nivel": 1,
+    "grupo": "SERVIÇOS",
+    "nome": "ORGANISMO CERTIFICADOR CREDENCIADO",
+    "docs": [
+     "Comprovação de experiência para desempenho da atividade contratada",
+     "Questionário de Compliance"
+    ]
+   }
+  ]
+ }
+}
