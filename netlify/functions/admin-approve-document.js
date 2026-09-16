@@ -132,9 +132,20 @@ exports.handler = async (event) => {
   const clientName = invite?.clients?.razao_social || null
 
   if (outcome === 'approved') {
-    // Determina nível do selo
-    const sealLevel  = clientId ? 'Premium' : 'Simples'
-    const sealName   = clientId ? `Premium - ${clientName || clientId}` : 'Simples'
+    // Determina nível/nome do selo pelo FLUXO do processo (16/09): fluxo
+    // Verificado (ex.: 'ELOS Verificado' da EQPI) emite selo com o nome do
+    // fluxo e nível Simples — não é homologação plena e o certificado deve
+    // dizer isso. Demais fluxos mantêm a nomenclatura de homologação.
+    let flowName = null
+    const flowIdForName = procSeal?.flow_id || invite?.flow_id || null
+    if (flowIdForName) {
+      const { data: fl } = await supabaseAdmin
+        .from('client_flows').select('name').eq('id', flowIdForName).maybeSingle()
+      flowName = fl?.name || null
+    }
+    const isVerificadoFlow = (flowName || '').toLowerCase().includes('verificado')
+    const sealLevel  = isVerificadoFlow ? 'Simples' : (clientId ? 'Premium' : 'Simples')
+    const sealName   = isVerificadoFlow ? flowName : (clientId ? `Premium - ${clientName || clientId}` : 'Simples')
     const endsAt     = new Date(); endsAt.setFullYear(endsAt.getFullYear() + 1)
 
     // Calcula score final
@@ -156,10 +167,12 @@ exports.handler = async (event) => {
       issued_at:  new Date().toISOString(),
       expires_at: endsAt.toISOString(),
       issued_by:  user.id,
-      // preserva nome/tipo já definidos (ex.: 'ELOS Verificado' do plano);
-      // fallback para o padrão do processo
-      ...(sealRow?.seal_name ? {} : { seal_name: sealName }),
-      ...(sealRow?.seal_type ? {} : { level: sealLevel }),
+      // Fluxo Verificado: nome/nível vêm do fluxo SEMPRE (o selo criado no
+      // cadastro nasce 'Processo {cliente}' e enganava o certificado).
+      // Demais: preserva nome/tipo já definidos; fallback padrão do processo
+      ...(isVerificadoFlow ? { seal_name: sealName, level: sealLevel }
+        : { ...(sealRow?.seal_name ? {} : { seal_name: sealName }),
+            ...(sealRow?.seal_type ? {} : { level: sealLevel }) }),
       // fluxo do convite → selo (dá o preço da homologação nos relatórios)
       ...(!sealRow?.flow_id && invite?.flow_id ? { flow_id: invite.flow_id } : {}),
     }
