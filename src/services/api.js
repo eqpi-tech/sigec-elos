@@ -374,9 +374,28 @@ export const documentApi = {
 // (categorias com client_id, migradas do HOC). Cada selo tem seu denominador.
 
 // Retorna { requiredBySeal: Map<sealId, number[]>, seals, allDocs }
+// Matriz exigida pelo FLUXO de um selo (categorias do fluxo → docs required).
+// Vazio quando o selo não tem fluxo vinculado.
+async function flowRequiredDocIds(flowId) {
+  if (!flowId) return []
+  const { data: fcRows } = await supabase
+    .from('client_flow_categories').select('category_id').eq('flow_id', flowId)
+  const catIds = [...new Set((fcRows || []).map(r => r.category_id))]
+  const docSet = new Set()
+  for (let i = 0; i < catIds.length; i += 200) {
+    const { data: cdRows } = await supabase
+      .from('category_documents')
+      .select('document_id')
+      .eq('required', true)
+      .in('category_id', catIds.slice(i, i + 200))
+    for (const r of (cdRows || [])) docSet.add(r.document_id)
+  }
+  return [...docSet]
+}
+
 export async function getRequiredTypesBySeal(supplierId) {
   const [{ data: seals }, { data: allDocs }, { data: catRows }] = await Promise.all([
-    supabase.from('seals').select('id, client_id, status, seal_name, clients(razao_social)').eq('supplier_id', supplierId),
+    supabase.from('seals').select('id, client_id, flow_id, status, seal_name, clients(razao_social)').eq('supplier_id', supplierId),
     supabase.from('documents').select('type, status').eq('supplier_id', supplierId),
     supabase.from('supplier_categories')
       .select('category_id, categories(id, client_id)')
@@ -413,7 +432,11 @@ export async function getRequiredTypesBySeal(supplierId) {
   const requiredBySeal = new Map()
   for (const seal of (seals || [])) {
     const owner = seal.client_id || 'global'
-    let req = [...(reqByOwner[owner] || [])]
+    // Fluxo do selo PRIMEIRO (16/09): é o contrato do processo — ex.: ELOS
+    // Verificado da EQPI exige só 6 docs, mesmo que o cliente tenha outros
+    // fluxos mais pesados ativos. Sem fluxo, cai na lógica por categorias.
+    let req = await flowRequiredDocIds(seal.flow_id)
+    if (!req.length) req = [...(reqByOwner[owner] || [])]
     // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
     if (!req.length && seal.client_id) {
       const { data: fcRows } = await supabase
@@ -738,6 +761,42 @@ export const adminApi = {
         })
         fullDocList = fullDocList.map(d =>
           reqBy[String(d.type)] ? { ...d, required_by: [...reqBy[String(d.type)]] } : d)
+      }
+    }
+
+    // Exigências do FLUXO de cada processo (16/09): o contrato do fluxo
+    // (ex.: ELOS Verificado da EQPI = 6 docs) entra na ficha etiquetado pelo
+    // cliente do selo, mesmo quando o fornecedor não tem categorias daquele
+    // cliente — é o que o seletor de processo da ficha usa para filtrar
+    const sealsData = sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : []
+    for (const seal of sealsData) {
+      if (!seal.flow_id) continue
+      const req = await flowRequiredDocIds(seal.flow_id)
+      if (!req.length) continue
+      const key = seal.client_id || '__ELOS__'
+      const idxByType = {}
+      fullDocList.forEach((d, i) => { idxByType[String(d.type)] = i })
+      const missing = req.map(String).filter(t => idxByType[t] === undefined)
+      let names = {}
+      if (missing.length) {
+        const { data: cat } = await supabase
+          .from('documents_catalog').select('id, name').in('id', missing.map(Number))
+        names = Object.fromEntries((cat || []).map(r => [String(r.id), r.name]))
+      }
+      for (const idNum of req) {
+        const t = String(idNum)
+        if (idxByType[t] !== undefined) {
+          const d = fullDocList[idxByType[t]]
+          const rb = new Set(d.required_by || [])
+          rb.add(key)
+          fullDocList[idxByType[t]] = { ...d, required_by: [...rb] }
+        } else {
+          fullDocList.push({
+            id: `req-${t}`, supplier_id: supplierId, type: t,
+            label: names[t] || `Documento ${t}`, status: 'MISSING', source: 'REQUIRED',
+            storage_path: null, created_at: null, required_by: [key],
+          })
+        }
       }
     }
 

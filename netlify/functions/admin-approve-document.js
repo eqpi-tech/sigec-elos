@@ -74,28 +74,44 @@ exports.handler = async (event) => {
   await recalcSealScores(supabaseAdmin, supplierId).catch(e =>
     console.warn('[admin-approve-document] recalc scores:', e.message))
 
-  // ── Verificar se todos os documentos foram revisados ────────────
   const { data: allDocs } = await supabaseAdmin
     .from('documents')
     .select('id, type, label, status, source')
     .eq('supplier_id', supplierId)
 
-  const pending = (allDocs || []).filter(d =>
-    ['PENDING', 'MISSING', 'EXPIRING', 'EXPIRED'].includes(d.status)
-  )
+  // ── Verificar se o PROCESSO está completo (16/09) ───────────────
+  // O denominador é a matriz EXIGIDA do processo (fluxo do selo → matriz do
+  // cliente → 6 docs do Verificado), nunca só as linhas já existentes:
+  // documento exigido que nunca foi enviado não tem linha e ANTES não
+  // bloqueava — dois fornecedores viraram homologados com docs faltando.
+  const { data: procSeal } = await supabaseAdmin
+    .from('seals')
+    .select('id, client_id, flow_id')
+    .eq('supplier_id', supplierId)
+    .neq('status', 'ACTIVE')
+    .order('created_at', { ascending: false })
+    .limit(1).maybeSingle()
 
-  // Se ainda há pendências, apenas retorna o doc atualizado
-  if (pending.length > 0) {
+  const reqTypes = await requiredDocsForSeal(supabaseAdmin, supplierId, procSeal)
+  const byType = {}
+  for (const d of (allDocs || [])) byType[String(d.type)] = d
+
+  // exigido sem linha OU com linha ainda não revisada → processo aberto
+  const unreviewed = reqTypes.filter(t => {
+    const d = byType[String(t)]
+    return !d || ['PENDING', 'MISSING', 'EXPIRING', 'EXPIRED'].includes(d.status)
+  })
+  if (unreviewed.length > 0 || reqTypes.length === 0) {
     return {
       statusCode: 200,
       headers: HEADERS,
-      body: JSON.stringify({ updated: true, autoFinalized: false, pendingCount: pending.length }),
+      body: JSON.stringify({ updated: true, autoFinalized: false, pendingCount: unreviewed.length }),
     }
   }
 
-  // ── Auto-finalização: todos os docs foram revisados ──────────────
-  const rejected = (allDocs || []).filter(d => d.status === 'REJECTED')
-  const approved = (allDocs || []).filter(d => d.status === 'VALID')
+  // ── Auto-finalização: toda a matriz exigida foi revisada ─────────
+  const rejected = reqTypes.filter(t => byType[String(t)]?.status === 'REJECTED')
+  const approved = reqTypes.filter(t => ['VALID', 'NOT_APPLICABLE'].includes(byType[String(t)]?.status))
   const outcome  = rejected.length === 0 ? 'approved' : 'rejected'
 
   // Busca dados do fornecedor para o email
@@ -122,7 +138,7 @@ exports.handler = async (event) => {
     const endsAt     = new Date(); endsAt.setFullYear(endsAt.getFullYear() + 1)
 
     // Calcula score final
-    const total = (allDocs || []).length
+    const total = reqTypes.length
     const valid = approved.length
     const score = total > 0 ? Math.round((valid / total) * 100) : 0
 
@@ -213,7 +229,8 @@ exports.handler = async (event) => {
 
   } else {
     // Rejeição automática
-    const rejectedLabels = rejected.map(d => d.label || `Documento tipo ${d.type}`).join(', ')
+    const rejectedDocs   = rejected.map(t => byType[String(t)])
+    const rejectedLabels = rejectedDocs.map(d => d.label || `Documento tipo ${d.type}`).join(', ')
     const reason = `Homologação reprovada automaticamente. Documentos com pendências: ${rejectedLabels}. Corrija os documentos e solicite nova análise.`
 
     let rejQ = supabaseAdmin.from('seals')
@@ -226,7 +243,7 @@ exports.handler = async (event) => {
     await supabaseAdmin.from('audit_log').insert({
       user_id: user.id, action: 'SEAL_AUTO_REJECTED',
       entity_type: 'supplier', entity_id: supplierId,
-      metadata: { reason, rejectedDocs: rejected.map(d => d.type), auto: true },
+      metadata: { reason, rejectedDocs: rejectedDocs.map(d => d.type), auto: true },
     })
 
     // Email de rejeição
@@ -237,7 +254,7 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           userId:  supplier.user_id,
           subject: '❌ Atualização sobre sua homologação SIGEC-ELOS',
-          html: buildRejectionEmail(supplier, rejected),
+          html: buildRejectionEmail(supplier, rejectedDocs),
         }),
       }).catch(e => console.warn('Email rejeição:', e.message))
     }
@@ -254,9 +271,65 @@ exports.handler = async (event) => {
 // Cada selo usa o denominador do SEU fluxo: categorias do cliente
 // (client_id, migradas do HOC) para selos HOC; categorias globais
 // para o selo ELOS próprio. Fallbacks: client_document_flows → global.
+// Matriz de documentos que o fluxo de um selo exige (categorias do fluxo →
+// category_documents required). Vazio quando o selo não tem fluxo definido.
+async function flowRequiredDocs(sb, flowId) {
+  if (!flowId) return []
+  const { data: fcRows } = await sb
+    .from('client_flow_categories').select('category_id').eq('flow_id', flowId)
+  const catIds = [...new Set((fcRows || []).map(r => r.category_id))]
+  const docSet = new Set()
+  for (let i = 0; i < catIds.length; i += 200) {
+    const { data: cdRows } = await sb
+      .from('category_documents')
+      .select('document_id')
+      .eq('required', true)
+      .in('category_id', catIds.slice(i, i + 200))
+    for (const r of (cdRows || [])) docSet.add(r.document_id)
+  }
+  return [...docSet]
+}
+
+// Conjunto EXIGIDO do processo (denominador da auto-finalização, 16/09):
+// fluxo do selo → matriz das categorias do cliente → fluxos ativos do
+// cliente → 6 docs do ELOS Verificado (processo próprio/sem cliente)
+async function requiredDocsForSeal(sb, supplierId, seal) {
+  const ELOS_VERIFICADO = [37, 61, 62, 7, 42, 8]
+  if (!seal) return ELOS_VERIFICADO
+  const fromFlow = await flowRequiredDocs(sb, seal.flow_id)
+  if (fromFlow.length) return fromFlow
+  if (!seal.client_id) return ELOS_VERIFICADO
+  // categorias do fornecedor pertencentes ao cliente do processo
+  const { data: catRows } = await sb
+    .from('supplier_categories')
+    .select('category_id, categories!inner(client_id)')
+    .eq('supplier_id', supplierId)
+    .eq('categories.client_id', seal.client_id)
+  const catIds = [...new Set((catRows || []).map(r => r.category_id))]
+  const docSet = new Set()
+  for (let i = 0; i < catIds.length; i += 200) {
+    const { data: cdRows } = await sb
+      .from('category_documents')
+      .select('document_id')
+      .eq('required', true)
+      .in('category_id', catIds.slice(i, i + 200))
+    for (const r of (cdRows || [])) docSet.add(r.document_id)
+  }
+  if (docSet.size) return [...docSet]
+  // fallback: união dos fluxos ATIVOS do cliente
+  const { data: flows } = await sb
+    .from('client_flows').select('id')
+    .eq('client_id', seal.client_id).eq('active', true)
+  const union = new Set()
+  for (const f of (flows || [])) {
+    for (const d of await flowRequiredDocs(sb, f.id)) union.add(d)
+  }
+  return [...union]
+}
+
 async function recalcSealScores(sb, supplierId) {
   const [{ data: seals }, { data: allDocs }, { data: catRows }] = await Promise.all([
-    sb.from('seals').select('id, client_id').eq('supplier_id', supplierId),
+    sb.from('seals').select('id, client_id, flow_id').eq('supplier_id', supplierId),
     sb.from('documents').select('type, status').eq('supplier_id', supplierId),
     sb.from('supplier_categories').select('category_id, categories(id, client_id)').eq('supplier_id', supplierId),
   ])
@@ -287,7 +360,11 @@ async function recalcSealScores(sb, supplierId) {
 
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
-    let req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    // Fluxo do selo primeiro (16/09): é o CONTRATO do processo (ex.: ELOS
+    // Verificado da EQPI = 6 docs; níveis VIX), acima das categorias soltas
+    let req = await flowRequiredDocs(sb, seal.flow_id)
+    if (!req.length)
+      req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
     if (!req.length && seal.client_id) {
       // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
       const { data: fcRows } = await sb

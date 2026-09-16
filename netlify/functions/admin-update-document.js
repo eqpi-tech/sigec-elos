@@ -129,10 +129,27 @@ exports.handler = async (event) => {
 }
 
 // Mesmo cálculo do admin-approve-document: denominador por selo
-// (categorias do cliente → fluxos ativos do cliente → global)
+// (fluxo do selo → categorias do cliente → fluxos ativos do cliente → global)
+async function flowRequiredDocs(sb, flowId) {
+  if (!flowId) return []
+  const { data: fcRows } = await sb
+    .from('client_flow_categories').select('category_id').eq('flow_id', flowId)
+  const catIds = [...new Set((fcRows || []).map(r => r.category_id))]
+  const docSet = new Set()
+  for (let i = 0; i < catIds.length; i += 200) {
+    const { data: cdRows } = await sb
+      .from('category_documents')
+      .select('document_id')
+      .eq('required', true)
+      .in('category_id', catIds.slice(i, i + 200))
+    for (const r of (cdRows || [])) docSet.add(r.document_id)
+  }
+  return [...docSet]
+}
+
 async function recalcSealScores(sb, supplierId) {
   const [{ data: seals }, { data: allDocs }, { data: catRows }] = await Promise.all([
-    sb.from('seals').select('id, client_id').eq('supplier_id', supplierId),
+    sb.from('seals').select('id, client_id, flow_id').eq('supplier_id', supplierId),
     sb.from('documents').select('type, status').eq('supplier_id', supplierId),
     sb.from('supplier_categories').select('category_id, categories(id, client_id)').eq('supplier_id', supplierId),
   ])
@@ -162,7 +179,10 @@ async function recalcSealScores(sb, supplierId) {
 
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
-    let req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    // Fluxo do selo primeiro (16/09): é o contrato do processo
+    let req = await flowRequiredDocs(sb, seal.flow_id)
+    if (!req.length)
+      req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
     if (!req.length && seal.client_id) {
       // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
       const { data: fcRows } = await sb
