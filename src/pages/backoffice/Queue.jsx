@@ -223,6 +223,10 @@ export function BackofficeAnalysis() {
   const [revertModal, setRevertModal] = useState(false)
   const [revertReason, setRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
+  // Processo (cliente) selecionado na ficha — fornecedor multi-cliente tem as
+  // pendências separadas por matriz: null = automático (selo em análise),
+  // 'ALL' = união de todos, senão client_id ('__ELOS__' p/ processo próprio)
+  const [procSelKey, setProcSelKey] = useState(null)
   const [docAiModal, setDocAiModal] = useState(null)  // { doc, extractType: 'bank'|'dre' }
   const [docHistModal, setDocHistModal] = useState(null)  // { doc, entries|null }
   // Dados bancários
@@ -472,20 +476,29 @@ export function BackofficeAnalysis() {
     setAssertivaLoading(false)
   }
 
-  // Verifica documentos impeditivos antes de aprovar
-  const blockingMissing = data?.documents?.filter(d =>
+  // Selo do processo em análise (multi-selo: cada cliente tem o seu) e nome
+  // do cliente homologador — o selo Homologado leva o nome do cliente
+  const sealsList   = data?.seals || []
+  const autoSeal    = sealsList.find(s => s.status !== 'ACTIVE') || sealsList[0] || null
+  const processSeal = procSelKey && procSelKey !== 'ALL'
+    ? sealsList.find(s => (s.client_id || '__ELOS__') === procSelKey) || autoSeal
+    : autoSeal
+  const processClientName = processSeal?.clients?.razao_social || null
+
+  // Documentos do PROCESSO selecionado: com 2+ clientes as exigências vêm
+  // separadas por matriz (required_by); 'ALL' mostra a união de todos
+  const procKey  = procSelKey === 'ALL' ? null : (processSeal ? (processSeal.client_id || '__ELOS__') : null)
+  const docsView = (data?.documents || []).filter(d => !procKey || !d.required_by || d.required_by.includes(procKey))
+
+  // Verifica documentos impeditivos antes de aprovar (só do processo selecionado)
+  const blockingMissing = docsView.filter(d =>
     d.source === 'REQUIRED' && d.status === 'MISSING'
   ) || []
   // Considera impeditivo apenas documentos obrigatórios não-auto que ainda não foram enviados
   const hardBlocked = blockingMissing.filter(d => d.source !== 'AUTO' && !['37','61','62'].includes(String(d.type)))
 
-  // Selo do processo em análise (multi-selo: cada cliente tem o seu) e nome
-  // do cliente homologador — o selo Homologado leva o nome do cliente
-  const processSeal       = data?.seals?.find(s => s.status !== 'ACTIVE') || data?.seals?.[0] || null
-  const processClientName = processSeal?.clients?.razao_social || null
-
   // 📧 Solicitar Documentos: e-mail ao fornecedor com a lista de pendências
-  const pendingDocs = (data?.documents || []).filter(d =>
+  const pendingDocs = docsView.filter(d =>
     ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
   const handleRequestDocs = async () => {
     if (!pendingDocs.length) { alert('Nenhum documento pendente para solicitar.'); return }
@@ -795,7 +808,7 @@ export function BackofficeAnalysis() {
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
   if (!data) return null
 
-  const docs    = data.documents || []
+  const docs    = docsView
   const ok      = docs.filter(d=>d.status==='VALID').length
   const miss    = docs.filter(d=>['MISSING','EXPIRED','REJECTED'].includes(d.status)).length
   const cnpjC   = data.cnpj_consultation
@@ -809,14 +822,14 @@ export function BackofficeAnalysis() {
   const activeSancCnep = filterActiveSanctions(sanctions?.cnep || [], supplierCnpj)
   const hasActiveSanctions = activeSancCeis.length > 0 || activeSancCnep.length > 0
 
-  // Score dinâmico: docs VALID / total exigidos × 100
+  // Score dinâmico: docs VALID / total exigidos × 100 (do processo selecionado)
   const allDocs        = data?.documents || []
-  const totalRequired  = allDocs.length
-  const validCount     = allDocs.filter(d => d.status === 'VALID').length
+  const totalRequired  = docsView.length
+  const validCount     = docsView.filter(d => d.status === 'VALID').length
   const liveScore      = totalRequired > 0 ? Math.round((validCount / totalRequired) * 100) : 0
 
-  // Guard: selo já emitido?
-  const sealAlreadyActive = data?.seals?.[0]?.status === 'ACTIVE'
+  // Guard: o selo do PROCESSO selecionado já foi emitido?
+  const sealAlreadyActive = processSeal?.status === 'ACTIVE'
 
   if (done || autoFinalized) {
     const outcome = done || autoFinalized
@@ -1235,6 +1248,32 @@ export function BackofficeAnalysis() {
                 {miss>0 && <span style={{ color:'#ef4444' }}>✕ {miss} pendente</span>}
               </div>
             </div>
+            {/* Fornecedor com 2+ processos: seletor de cliente separa as pendências de cada matriz */}
+            {sealsList.length > 1 && (
+              <div style={{ display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:14 }}>
+                <span style={{ fontSize:11,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,textTransform:'uppercase',letterSpacing:.5 }}>Processo:</span>
+                {sealsList.map(s => {
+                  const k   = s.client_id || '__ELOS__'
+                  const sel = procKey === k
+                  return (
+                    <button key={s.id}
+                      onClick={() => { setProcSelKey(k); setLevel(s.client_id ? 'homologado' : (s.seal_type || 'homologado')) }}
+                      title={s.status==='ACTIVE' ? 'Selo já emitido' : 'Processo em análise'}
+                      style={{ display:'flex',alignItems:'center',gap:5,padding:'4px 12px',borderRadius:20,cursor:'pointer',
+                        border:`1px solid ${sel ? '#2E3192' : '#e2e4ef'}`,background: sel ? 'rgba(46,49,146,.1)' : '#fff',
+                        fontSize:12,fontFamily:'DM Sans,sans-serif',fontWeight: sel ? 700 : 600,color: sel ? '#2E3192' : '#64748b' }}>
+                      {s.status==='ACTIVE' ? '🏅' : '⏳'} {s.clients?.razao_social || 'ELOS'}
+                    </button>
+                  )
+                })}
+                <button onClick={() => setProcSelKey('ALL')}
+                  style={{ padding:'4px 12px',borderRadius:20,cursor:'pointer',
+                    border:`1px solid ${procSelKey==='ALL' ? '#2E3192' : '#e2e4ef'}`,background: procSelKey==='ALL' ? 'rgba(46,49,146,.1)' : '#fff',
+                    fontSize:12,fontFamily:'DM Sans,sans-serif',fontWeight: procSelKey==='ALL' ? 700 : 600,color: procSelKey==='ALL' ? '#2E3192' : '#64748b' }}>
+                  Todos
+                </button>
+              </div>
+            )}
             {docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
               const status = actn && actn!=='loading' ? actn : doc.status
@@ -1663,7 +1702,7 @@ export function BackofficeAnalysis() {
               {sealAlreadyActive ? (
                 <>
                   <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid #86efac', borderRadius:10, padding:'12px 16px', textAlign:'center', fontSize:13, color:'#15803d', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
-                    ✅ Selo {data?.seals?.[0]?.clients?.razao_social || `ELOS ${data?.seals?.[0]?.level || ''}`} já emitido em {data?.seals?.[0]?.issued_at?.slice(0,10)||'—'}
+                    ✅ Selo {processSeal?.clients?.razao_social || `ELOS ${processSeal?.level || ''}`} já emitido em {processSeal?.issued_at?.slice(0,10)||'—'}
                   </div>
                   <Button variant="danger" full size="sm" style={{ borderRadius:10 }} disabled={processing} onClick={() => setRevertModal(true)}>
                     ↩ Reverter Análise

@@ -67,8 +67,8 @@ export const ScoreBar = ({ score }) => {
 }
 
 export const StatusDot = ({ status }) => {
-  const C = { VALID:'#22c55e',EXPIRING:'#f59e0b',MISSING:'#ef4444',EXPIRED:'#ef4444',REJECTED:'#ef4444',ACTIVE:'#22c55e',PENDING:'#f59e0b',SUSPENDED:'#ef4444' }
-  const L = { VALID:'✓',EXPIRING:'⚠',MISSING:'✕',EXPIRED:'✕',REJECTED:'✕',ACTIVE:'✓',PENDING:'⏳',SUSPENDED:'✕' }
+  const C = { VALID:'#22c55e',EXPIRING:'#f59e0b',MISSING:'#ef4444',EXPIRED:'#ef4444',REJECTED:'#ef4444',ACTIVE:'#22c55e',PENDING:'#f59e0b',SUSPENDED:'#ef4444',NOT_APPLICABLE:'#64748b' }
+  const L = { VALID:'✓',EXPIRING:'⚠',MISSING:'✕',EXPIRED:'✕',REJECTED:'✕',ACTIVE:'✓',PENDING:'⏳',SUSPENDED:'✕',NOT_APPLICABLE:'◌' }
   return <span style={{ color:C[status]||'#9B9B9B',fontWeight:700,fontSize:14 }}>{L[status]||'?'}</span>
 }
 

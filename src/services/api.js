@@ -703,11 +703,21 @@ export const adminApi = {
       })
     } else if (catRes.status === 'fulfilled' && catRes.value.data?.length) {
       const catIds = catRes.value.data.map(r => r.category_id)
+      // categoria → cliente dono ('__ELOS__' quando global), p/ separar as
+      // exigências por processo na ficha (fornecedor multi-cliente)
+      const catClient = {}
+      catRes.value.data.forEach(r => { catClient[r.category_id] = r.categories?.client_id || '__ELOS__' })
       const { data: catDocRows } = await supabase
         .from('category_documents')
-        .select('document_id, documents_catalog(id, name)')
+        .select('category_id, document_id, documents_catalog(id, name)')
         .in('category_id', catIds)
       if (catDocRows) {
+        // doc → conjunto de clientes cujas matrizes o exigem
+        const reqBy = {}
+        catDocRows.forEach(row => {
+          const docId = String(row.document_id)
+          ;(reqBy[docId] = reqBy[docId] || new Set()).add(catClient[row.category_id] || '__ELOS__')
+        })
         const seen = new Set(uploadedDocs.map(d => String(d.type)))
         catDocRows.forEach(row => {
           const docId = String(row.document_id)
@@ -726,6 +736,8 @@ export const adminApi = {
             })
           }
         })
+        fullDocList = fullDocList.map(d =>
+          reqBy[String(d.type)] ? { ...d, required_by: [...reqBy[String(d.type)]] } : d)
       }
     }
 

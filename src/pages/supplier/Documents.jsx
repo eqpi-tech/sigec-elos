@@ -39,7 +39,11 @@ const STATUS_CONFIG = {
   PENDING:  { bg:'#fff7ed', bd:'#fed7aa', color:'#f59e0b', label:'Em análise' },
   EXPIRED:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Vencido' },
   REJECTED: { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Rejeitado' },
+  NOT_APPLICABLE: { bg:'#f8fafc', bd:'#e2e8f0', color:'#64748b', label:'Não se aplica' },
 }
+
+// Documento dispensado pelo backoffice conta como satisfeito (mesma regra do score)
+const isSatisfied = (up) => up?.status === 'VALID' || up?.status === 'NOT_APPLICABLE'
 
 export default function SupplierDocuments() {
   const mobile = useIsMobile()
@@ -325,7 +329,7 @@ export default function SupplierDocuments() {
     </div>
   )
 
-  const okCount  = reqDocs.filter(d => { const up = getDoc(d.id); return up?.status === 'VALID' }).length
+  const okCount  = reqDocs.filter(d => isSatisfied(getDoc(d.id))).length
   const totCount = reqDocs.length
 
   const renderDocRow = (doc) => {
@@ -449,6 +453,9 @@ export default function SupplierDocuments() {
               <span style={{ fontSize:10, color:'#f59e0b', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>Em análise</span>
             ) : status === 'VALID' ? (
               <span style={{ fontSize:10, color:'#22c55e', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>✓ Aprovado</span>
+            ) : status === 'NOT_APPLICABLE' ? (
+              <span style={{ fontSize:10, color:'#64748b', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}
+                title="O backoffice avaliou que este documento não é exigível para a sua empresa — nenhum envio é necessário">◌ Não exigido</span>
             ) : null}
           </div>
         )}
@@ -529,7 +536,7 @@ export default function SupplierDocuments() {
         <>
           {docGroups.map(g => {
             const groupDocs = reqDocs.filter(d => g.ids.has(d.id))
-            const groupOk   = groupDocs.filter(d => { const up = getDoc(d.id); return up?.status === 'VALID' }).length
+            const groupOk   = groupDocs.filter(d => isSatisfied(getDoc(d.id))).length
             return (
               <Card key={g.key} style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between', flexWrap:'wrap' }}>

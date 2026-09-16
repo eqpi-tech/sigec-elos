@@ -373,6 +373,12 @@ def sync_seals(my, sb, dry, wm):
             JOIN cliente c ON c.id = fl.id_cliente
             WHERE p.id_fornecedor = %s AND fl.id_cliente = %s
               AND p.ativo = 1 AND p.data_validade >= NOW()
+              -- data_validade é gravada NA CRIAÇÃO (início+1 ano) no HOC, não
+              -- na conclusão: pré-cadastro não pago com "validade" NÃO é
+              -- homologação nem análise (regra 16/09 — 461 selos fantasma)
+              AND NOT (COALESCE(p.pre_cadastro, 0) = 1
+                       AND COALESCE(p.boleto_pago, 0) = 0
+                       AND COALESCE(p.subsidiado, 0) = 0)
             ORDER BY p.id DESC LIMIT 1""", (f_id, c_id))
         row = cur.fetchone()
         supplier_id = None; client_id = client_map.get(c_id)
@@ -403,8 +409,12 @@ def sync_seals(my, sb, dry, wm):
             seal_status, seal_level = classify_seal(resultados)
             cliente_nome = safe_str(row["cliente_razao"]) or safe_str(row["cliente_sigla"]) or f"HOC-{c_id}"
             expiry = to_date_str(row["data_validade"])
+            # processo pago/subsidiado com "validade" pré-gravada mas categorias
+            # ainda sem resultado = análise em curso → nome honesto (16/09)
+            nome_selo = (f"Em análise – {cliente_nome}" if seal_status == "PENDING"
+                         else f"Homologado – {cliente_nome}")
             rec = {"status": seal_status, "level": seal_level, "seal_type": "homologado",
-                   "seal_name": f"Homologado – {cliente_nome}",
+                   "seal_name": nome_selo,
                    "hoc_process_id": row["proc_id"], "hoc_expiry_date": expiry,
                    # paridade HOC: resultado "Aprovado Com Carta" = homologação com exceção
                    "exception": any("carta" in (r or "").lower() for r in resultados)}
