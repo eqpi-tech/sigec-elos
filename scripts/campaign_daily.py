@@ -20,6 +20,12 @@ Uso: python campaign_daily.py [--dry-run] [--max N]
 import re, json, sys, time, secrets, urllib.request, urllib.error, os
 import mysql.connector
 
+# TRAVA (17/09): este arquivo só executa como SCRIPT. Importá-lo (ex.: p/
+# reusar email_html) NÃO pode disparar a campanha — em 17/09 um import
+# executou o corpo e enviou 55 e-mails sem aprovação final.
+if __name__ != '__main__':
+    raise ImportError('campaign_daily.py não é importável — execute como script')
+
 DRY = '--dry-run' in sys.argv
 MAX = int(sys.argv[sys.argv.index('--max') + 1]) if '--max' in sys.argv else 150
 
