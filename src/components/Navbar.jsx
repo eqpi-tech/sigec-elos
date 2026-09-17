@@ -42,6 +42,7 @@ const NAVS = {
       ],
     },
     { path:'/backoffice/metricas',    label:'Financeiro',  icon:'💰' },
+    { path:'/backoffice/relatorios',  label:'Relatórios',  icon:'📈' },
     { path:'/backoffice/comunicados', label:'Comunicados', icon:'📢' },
     {
       key:'clientes', label:'Clientes', icon:'🏢',

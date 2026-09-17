@@ -28,6 +28,7 @@ import BuyerPlan            from './pages/buyer/BuyerPlan.jsx'
 
 import BackofficeOverview from './pages/backoffice/Overview.jsx'
 import BackofficeMetrics  from './pages/backoffice/Metrics.jsx'
+import BackofficeReports  from './pages/backoffice/Reports.jsx'
 import BackofficeCreateUser   from './pages/backoffice/CreateUser.jsx'
 import BackofficeCreateClient from './pages/backoffice/CreateClient.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
@@ -134,6 +135,7 @@ function AppRoutes() {
       <Route path="/backoffice/fila"            element={<Protect roles={['ADMIN']}><BackofficeQueue/></Protect>} />
       <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
       <Route path="/backoffice/metricas"        element={<Protect roles={['ADMIN']}><BackofficeMetrics/></Protect>} />
+      <Route path="/backoffice/relatorios"      element={<Protect roles={['ADMIN']}><BackofficeReports/></Protect>} />
       <Route path="/backoffice/criar-usuario"   element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeCreateUser/></Protect>} />
       <Route path="/backoffice/criar-cliente"  element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeCreateClient/></Protect>} />
       <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />

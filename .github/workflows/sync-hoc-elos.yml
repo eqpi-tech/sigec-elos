@@ -33,6 +33,13 @@ jobs:
         working-directory: scripts
         run: |
           python sync_hoc_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+      # Campanha Primeiro Acesso recorrente (17/09): quem acabou de se
+      # homologar no HOC ganha conta ELOS + e-mail de primeiro acesso.
+      # Idempotente; teto de 150/dia; roda até a migração completa do HOC.
+      - name: Campanha Primeiro Acesso (novos homologados)
+        working-directory: scripts
+        run: |
+          python campaign_daily.py ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
 
   sync-details-semanal:
     name: Fase details (semanal)

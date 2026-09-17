@@ -1016,6 +1016,19 @@ export const adminApi = {
     return { vencidos, hoje, futuro, all: [...vencidos, ...hoje, ...futuro] }
   },
 
+  // Relatórios (patch_071): funil da Campanha Primeiro Acesso e dashboard
+  // executivo — agregados server-side (auth.users não é alcançável via RLS)
+  getCampaignFunnel: async () => {
+    const { data, error } = await supabase.rpc('admin_campaign_funnel')
+    if (error) throw new Error(error.message)
+    return data
+  },
+  getExecDashboard: async () => {
+    const { data, error } = await supabase.rpc('admin_exec_dashboard')
+    if (error) throw new Error(error.message)
+    return data
+  },
+
   getMetrics: async () => {
     // Contagens EXATAS via RPC admin_metrics (patch_057) — o count 'estimated'
     // do PostgREST usava estatísticas defasadas (37k vs 55,8k reais).
