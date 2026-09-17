@@ -27,6 +27,7 @@ const NAVS = {
     { path:'/cliente/convites',       label:'Convites',        icon:'🤝', module:'convites' },
     { path:'/cliente/rfq',            label:'Cotações (RFQ)',  icon:'💬', module:'rfq' },
     { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋', module:'questionarios' },
+    { path:'/cliente/relatorios',     label:'Relatórios',      icon:'📈', module:'relatorios' },
     { path:'/cliente/configuracoes',  label:'Configurações',   icon:'⚙️', module:'configuracoes' },
     { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
   ],

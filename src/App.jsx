@@ -59,6 +59,7 @@ import ClientInvitations       from './pages/client/Invitations.jsx'
 import ClientSupplierProcess   from './pages/client/SupplierProcess.jsx'
 import ClientSupplierDiscover  from './pages/client/SupplierDiscover.jsx'
 import ClientQuestionnaires    from './pages/client/Questionnaires.jsx'
+import ClientReports           from './pages/client/Reports.jsx'
 import ClientSettings          from './pages/client/Settings.jsx'
 import ClientRFQ               from './pages/client/RFQ.jsx'
 import ClientTeam              from './pages/client/Team.jsx'
@@ -159,6 +160,7 @@ function AppRoutes() {
       <Route path="/cliente/perfil-fornecedor/:id"      element={<Protect roles={['CLIENT']} module="fornecedores"><ClientSupplierDiscover/></Protect>} />
       <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']} module="convites"><ClientInvitations/></Protect>} />
       <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']} module="questionarios"><ClientQuestionnaires/></Protect>} />
+      <Route path="/cliente/relatorios"               element={<Protect roles={['CLIENT']} module="relatorios"><ClientReports/></Protect>} />
       <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']} module="configuracoes"><ClientSettings/></Protect>} />
       <Route path="/cliente/rfq"                      element={<Protect roles={['CLIENT']} module="rfq"><ClientRFQ/></Protect>} />
       <Route path="/cliente/equipe"                   element={<Protect roles={['CLIENT']} module="equipe"><ClientTeam/></Protect>} />
