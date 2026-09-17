@@ -90,8 +90,12 @@ while True:
     page += 1
 auth_emails = {u['email'].lower() for u in all_users if u.get('email')}
 # fornecedor com login ORGÂNICO (dono do vínculo fora da campanha) → pula;
-# contas criadas pela própria campanha não bloqueiam os colegas
-camp_users = {u['id'] for u in all_users if (u.get('user_metadata') or {}).get('campanha')}
+# contas criadas pela própria campanha não bloqueiam os colegas.
+# Fonte da marca de campanha: audit_log (CAMPAIGN_FIRST_ACCESS) — o
+# user_metadata da API admin se mostrou inconsistente entre execuções
+# (17/09: conjuntos de elegíveis oscilando a cada rodada)
+camp_users = {r['user_id'] for r in sb_get_all(
+    "/rest/v1/audit_log?select=user_id&action=eq.CAMPAIGN_FIRST_ACCESS&user_id=not.is.null")}
 organic_sup = {r['supplier_id'] for r in role_rows if r['user_id'] not in camp_users}
 
 ap = sb_req('GET', "/rest/v1/access_profiles?select=id&role_type=eq.SUPPLIER&is_system=eq.true&limit=1")
@@ -142,9 +146,14 @@ for email, nome, vincs in todo:
     try:
         if DRY:
             print(f"[DRY] {email} → {vincs[0][1][:40]}"); continue
-        u = sb_req('POST', '/auth/v1/admin/users', {
-            "email": email, "password": secrets.token_urlsafe(24), "email_confirm": True,
-            "user_metadata": {"name": nome, "campanha": "primeiro_acesso_homologados", "onda": "daily"}})
+        try:
+            u = sb_req('POST', '/auth/v1/admin/users', {
+                "email": email, "password": secrets.token_urlsafe(24), "email_confirm": True,
+                "user_metadata": {"name": nome, "campanha": "primeiro_acesso_homologados", "onda": "daily"}})
+        except urllib.error.HTTPError as he:
+            if he.code == 422:  # e-mail já existe (corrida/estado defasado) → pula sem erro
+                print(f"skip (já existe): {email}", flush=True); continue
+            raise
         uid = u['id']
         sid, rz, h = vincs[0]
         sb_req('POST', '/rest/v1/user_roles', {
