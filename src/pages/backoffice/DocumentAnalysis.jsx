@@ -5,20 +5,25 @@ import { supabase } from '../../lib/supabase.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
-// Fila do analista fiel ao HOC (patch_074): buckets pela DATA-LIMITE da
-// ANÁLISE (envio + 3 dias úteis), cores/nomenclatura do farol do HOC
+// Dois filtros INDEPENDENTES (patch_075):
+// · Limite de análise = a FILA do analista (regra HOC: envio + 3 dias úteis)
+// · Status = os status reais do documento
+const QUEUE_OPTIONS = [
+  { value: 'fila',     label: '📥 Fila de análise (todos)' },
+  { value: 'passados', label: '🔴 Data limite ultrapassada' },
+  { value: 'hoje',     label: '🟠 Data limite hoje' },
+  { value: 'futuros',  label: '🟢 Data limite futura' },
+  { value: 'todos',    label: '— Fora da fila também —' },
+]
 const STATUS_OPTIONS = [
-  { value: 'fila',          label: '📥 Fila de análise (todos)' },
-  { value: 'fila_passados', label: '🔴 Data limite ultrapassada' },
-  { value: 'fila_hoje',     label: '🟠 Data limite hoje' },
-  { value: 'fila_futuros',  label: '🟢 Data limite futura' },
-  { value: 'todos',    label: '— Todos os status —' },
-  { value: 'vencido',  label: 'Doc vencido (validade)' },
-  { value: 'hoje',     label: 'Doc vence hoje' },
-  { value: '5dias',    label: 'Doc vence em 5 dias' },
+  { value: 'todos',    label: 'Todos os status' },
+  { value: 'PENDING',  label: 'Aguardando análise' },
   { value: 'VALID',    label: 'Aprovado' },
   { value: 'REJECTED', label: 'Rejeitado' },
+  { value: 'EXPIRING', label: 'Vence em breve' },
+  { value: 'EXPIRED',  label: 'Vencido' },
   { value: 'NOT_APPLICABLE', label: 'Não se aplica' },
+  { value: 'MISSING',  label: 'Não enviado' },
 ]
 
 const SORT_OPTIONS = [
@@ -342,9 +347,14 @@ export default function DocumentAnalysis() {
   // Filtros
   const [docType,       setDocType]       = useState(saved.docType ?? '')
   const [supplierSearch,setSupplierSearch] = useState(saved.supplierSearch ?? '')
-  // 'analise'/'pendente' (legado em sessões antigas) → 'fila' (patch_074)
+  // migração de valores salvos em sessões antigas (patch_075: fila e status
+  // viraram filtros separados)
+  const LEGACY_QUEUE = { analise:'fila', pendente:'fila', fila:'fila', fila_passados:'passados', fila_hoje:'hoje', fila_futuros:'futuros' }
+  const [queueFilter,   setQueueFilter]   = useState(
+    saved.queueFilter ?? (LEGACY_QUEUE[saved.statusFilter] || 'fila'))
   const [statusFilter,  setStatusFilter]  = useState(
-    ['analise', 'pendente'].includes(saved.statusFilter) ? 'fila' : (saved.statusFilter ?? 'fila'))
+    ['VALID','REJECTED','EXPIRING','EXPIRED','NOT_APPLICABLE','MISSING','PENDING'].includes(saved.statusFilter)
+      ? saved.statusFilter : 'todos')
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
   const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'due_asc')
 
@@ -382,6 +392,7 @@ export default function DocumentAnalysis() {
         docType: docType || undefined,
         supplierSearch: supplierSearch || undefined,
         status: statusFilter !== 'todos' ? statusFilter : undefined,
+        queue: queueFilter,
         expiresUntil: expiresUntil || undefined,
         sortBy,
         page: pg,
@@ -390,13 +401,13 @@ export default function DocumentAnalysis() {
       setRows(result.rows)
       setTotal(result.total)
       setPage(pg)
-      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy, page: pg }))
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy, page: pg }))
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy])
 
   // Primeira carga restaura também a PÁGINA salva (voltar da visualização
   // de um documento mantém o analista onde estava)
@@ -409,8 +420,8 @@ export default function DocumentAnalysis() {
 
   // Salva os filtros a cada mudança
   useEffect(() => {
-    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, expiresUntil, sortBy, page }))
-  }, [docType, supplierSearch, statusFilter, expiresUntil, sortBy])
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy, page }))
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy])
 
   async function handleApprove(docId, expiry, status = 'VALID', note, inscriptionNumber) {
     setSaving(p => new Set([...p, docId]))
@@ -516,6 +527,7 @@ export default function DocumentAnalysis() {
           docType: docType || undefined,
           supplierSearch: supplierSearch || undefined,
           status: statusFilter !== 'todos' ? statusFilter : undefined,
+          queue: queueFilter,
           expiresUntil: expiresUntil || undefined,
           sortBy: 'expires_asc',
           page: 0,
@@ -603,6 +615,12 @@ export default function DocumentAnalysis() {
               placeholder="Buscar fornecedor..." style={inp}/>
           </div>
           <div>
+            <span style={lbl}>Limite de análise</span>
+            <select value={queueFilter} onChange={e => setQueueFilter(e.target.value)} style={inp}>
+              {QUEUE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
             <span style={lbl}>Status</span>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inp}>
               {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -619,7 +637,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setStatusFilter('fila'); setExpiresUntil(''); setSortBy('due_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>

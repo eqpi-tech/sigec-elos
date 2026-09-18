@@ -957,7 +957,7 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
-  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, expiresUntil, sortBy = 'expires_asc', page = 0, pageSize = 50 } = {}) => {
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
     // RPC admin_list_documents (patch_069): a fila só traz documentos de
     // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
     // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
@@ -965,6 +965,7 @@ export const adminApi = {
     const { data, error } = await supabase.rpc('admin_list_documents', {
       p_doc_type:      docType ? String(docType) : null,
       p_status:        statusFilter || 'todos',
+      p_queue:         queue || 'todos',
       p_expires_until: expiresUntil || null,
       p_search:        supplierSearch?.trim() || null,
       p_sort:          sortBy,
