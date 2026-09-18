@@ -55,7 +55,7 @@ exports.handler = async (event) => {
         const { data: lp } = await supabaseAdmin
           .from('client_landing_pages').select('slug')
           .eq('client_id', inv.client_id).eq('is_active', true).maybeSingle()
-        if (lp?.slug) cadastroLink = `${frontendUrl}/${lp.slug}?token=${inv.token}`
+        if (lp?.slug) cadastroLink = `${frontendUrl}/portal/${lp.slug}?token=${inv.token}`  // rota /portal/:slug (fix 18/09)
       } catch { /* segue com link padrão */ }
 
       const daysAgo = Math.round((now - new Date(inv.created_at).getTime()) / DAY)

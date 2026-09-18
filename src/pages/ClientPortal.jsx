@@ -81,6 +81,9 @@ export default function ClientPortal() {
   const { slug } = useParams()
   const navigate  = useNavigate()
   const mobile    = useIsMobile()
+  // Token de convite (link do e-mail cai na LP do cliente): precisa seguir
+  // até o /cadastro, senão o convite se perde e o fornecedor cai avulso
+  const inviteToken = new URLSearchParams(window.location.search).get('token')
 
   const [client, setClient]       = useState(null)
   const [loading, setLoading]     = useState(true)
@@ -133,7 +136,7 @@ export default function ClientPortal() {
   const handleRegister = () => {
     const raw = cnpj.replace(/\D/g, '')
     if (raw.length !== 14) { alert('Informe um CNPJ válido com 14 dígitos.'); return }
-    navigate(`/cadastro?cnpj=${raw}&ref=${slug}${chosenFlow ? `&flow=${chosenFlow}` : ''}`)
+    navigate(`/cadastro?cnpj=${raw}&ref=${slug}${chosenFlow ? `&flow=${chosenFlow}` : ''}${inviteToken ? `&token=${inviteToken}` : ''}`)
   }
 
   const handleLogin = () => navigate('/login')

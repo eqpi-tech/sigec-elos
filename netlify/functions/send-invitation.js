@@ -242,9 +242,11 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
         .eq('is_active', true)
         .maybeSingle()
       if (lp?.slug) {
+        // rota correta do portal white-label é /portal/:slug (18/09 — o link
+        // sem o prefixo caía no catch-all do SPA e abria a home)
         cadastroLink = invite.token
-          ? `${frontendUrl}/${lp.slug}?token=${invite.token}`
-          : `${frontendUrl}/${lp.slug}`
+          ? `${frontendUrl}/portal/${lp.slug}?token=${invite.token}`
+          : `${frontendUrl}/portal/${lp.slug}`
       }
     } catch (e) { console.warn('[send-invitation] landing page lookup failed:', e.message) }
   }
