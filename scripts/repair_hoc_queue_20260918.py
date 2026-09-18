@@ -14,7 +14,8 @@ Causas corrigidas neste reparo (as regras novas já estão no sync diário):
 
 Uso: ... repair_hoc_queue_20260918.py [--apply]
 """
-import re, sys, json, datetime, collections
+import re, sys, json, datetime, collections, functools
+print = functools.partial(print, flush=True)
 import pg8000.native, mysql.connector
 
 APPLY = '--apply' in sys.argv

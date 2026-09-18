@@ -494,6 +494,12 @@ def phase_supplier_categories(mysql_conn, sb: Client, dry_run: bool):
 # ── Fase 6: seals_plans ───────────────────────────────────────────────────────
 
 def classify_seal(resultados) -> tuple:
+    # Semântica HOC (corrigida 18/09): homologação é POR CATEGORIA —
+    # 'Não Aprovado' numa categoria com outras aprovadas = homologação
+    # PARCIAL (selo vale nas aprovadas), não suspensão. SUSPENDED só quando
+    # TODAS as categorias analisadas foram reprovadas.
+    # Valores reais no HOC: Aprovado · Aprovado Com Restrição · Aprovado Com
+    # Carta · Não Aprovado · Pré Cadastro · NULL/vazio.
     aprovados = em_analise = reprovados = 0
     for r in resultados:
         r = r or ""
@@ -506,11 +512,11 @@ def classify_seal(resultados) -> tuple:
     total = aprovados + em_analise + reprovados
     if total == 0:
         return ("PENDING", "Simples")
-    if aprovados == total:
-        return ("ACTIVE", "Premium")
     if em_analise > 0:
         return ("PENDING", "Simples")
-    return ("SUSPENDED", "Simples")
+    if aprovados > 0:
+        return ("ACTIVE", "Premium")   # total OU parcial (reprovadas ficam fora)
+    return ("SUSPENDED", "Simples")    # todas reprovadas
 
 
 def phase_seals_plans(mysql_conn, sb: Client, dry_run: bool):
