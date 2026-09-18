@@ -24,6 +24,7 @@ import json
 import re
 import time
 from datetime import datetime, timezone
+import datetime as _dt
 
 from migrate_hoc_v2 import (
     CAT_ID_OFFSET, RESP_MAP, chunks, clean_cnpj, classify_seal,
@@ -365,20 +366,23 @@ def sync_seals(my, sb, dry, wm):
     read = len(pairs); written = 0
 
     for f_id, c_id in pairs:
-        # processo mais recente VÁLIDO do par (mesma regra da v2)
+        # Processo mais recente REAL do par (18/09): a data_validade do HOC é
+        # gravada NA CRIAÇÃO (início+1 ano) e NÃO prova homologação — quem
+        # decide é o resultado das categorias (classify_seal). Processo pago/
+        # subsidiado ativo SEM aprovação = EM ANÁLISE, mesmo com "validade"
+        # preenchida ou vencida (o farol do HOC ignora validade).
         cur.execute("""SELECT p.id AS proc_id, p.data_validade, p.ativo,
                    f.cnpj, c.razao_social AS cliente_razao, c.sigla AS cliente_sigla
             FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo
             JOIN fornecedor f ON f.id = p.id_fornecedor
             JOIN cliente c ON c.id = fl.id_cliente
             WHERE p.id_fornecedor = %s AND fl.id_cliente = %s
-              AND p.ativo = 1 AND p.data_validade >= NOW()
-              -- data_validade é gravada NA CRIAÇÃO (início+1 ano) no HOC, não
-              -- na conclusão: pré-cadastro não pago com "validade" NÃO é
-              -- homologação nem análise (regra 16/09 — 461 selos fantasma)
+              AND p.ativo = 1
               AND NOT (COALESCE(p.pre_cadastro, 0) = 1
                        AND COALESCE(p.boleto_pago, 0) = 0
                        AND COALESCE(p.subsidiado, 0) = 0)
+              AND (COALESCE(p.boleto_pago, 0) = 1 OR COALESCE(p.subsidiado, 0) = 1
+                   OR (p.tipo = 'IT' AND p.forma_pagamento = 'WT'))
             ORDER BY p.id DESC LIMIT 1""", (f_id, c_id))
         row = cur.fetchone()
         supplier_id = None; client_id = client_map.get(c_id)
@@ -409,8 +413,10 @@ def sync_seals(my, sb, dry, wm):
             seal_status, seal_level = classify_seal(resultados)
             cliente_nome = safe_str(row["cliente_razao"]) or safe_str(row["cliente_sigla"]) or f"HOC-{c_id}"
             expiry = to_date_str(row["data_validade"])
-            # processo pago/subsidiado com "validade" pré-gravada mas categorias
-            # ainda sem resultado = análise em curso → nome honesto (16/09)
+            # homologado de verdade = categorias APROVADAS; a validade só
+            # define vigência (vencida → EXPIRED). Sem aprovação → EM ANÁLISE.
+            if seal_status == "ACTIVE" and expiry and expiry < _dt.date.today().isoformat():
+                seal_status = "EXPIRED"
             nome_selo = (f"Em análise – {cliente_nome}" if seal_status == "PENDING"
                          else f"Homologado – {cliente_nome}")
             rec = {"status": seal_status, "level": seal_level, "seal_type": "homologado",
@@ -468,6 +474,48 @@ def sync_documents(my, sb, dry, wm):
 
     written = 0
     for f_id, doc_id in keys:
+        # 1) PENDENTE DE ANÁLISE tem prioridade (18/09 — a fila do analista
+        #    do ELOS espelha o farol do HOC): situacao NULL, processo pago e
+        #    concluído pelo fornecedor (data_fim), interno OU com arquivo
+        cur.execute("""SELECT pd.data_vencimento, pd.data_limite_analise, a.id AS arquivo_id,
+                   d.descricao AS doc_descricao, d.responsabilidade, f.cnpj,
+                   COALESCE(pd.update_date, pd.create_date) AS enviado_em
+            FROM processo_documento pd
+            JOIN processo p ON p.id = pd.id_processo
+            JOIN documento d ON d.id = pd.id_documento
+            LEFT JOIN arquivo a ON a.id = pd.id_arquivo
+            JOIN fornecedor f ON f.id = p.id_fornecedor
+            JOIN fluxo fl ON fl.id = p.id_fluxo
+            JOIN cliente c ON c.id = fl.id_cliente
+            WHERE p.id_fornecedor = %s AND pd.id_documento = %s
+              AND p.ativo = 1 AND f.ativo = 1 AND c.ativo = 1
+              AND p.data_fim IS NOT NULL AND pd.situacao IS NULL
+              AND (p.boleto_pago = 1
+                   OR (p.boleto_pago = 0 AND d.tipo = 'TIPO_COMPROVANTE_PAGTO'
+                       AND p.tipo = 'IT' AND p.forma_pagamento = 'WT'))
+              AND (d.responsabilidade = 'I' OR (d.responsabilidade = 'F' AND pd.id_arquivo IS NOT NULL))
+            ORDER BY pd.id DESC LIMIT 1""", (f_id, doc_id))
+        pend = cur.fetchone()
+        if pend:
+            supplier_id = supplier_map.get(clean_cnpj(pend["cnpj"]))
+            if not supplier_id:
+                continue
+            rec = {
+                "supplier_id": supplier_id, "type": str(doc_id),
+                "label": safe_str(pend["doc_descricao"]),
+                "source": "MANUAL", "status": "PENDING",
+                "expires_at": to_date_str(pend.get("data_vencimento")),
+                "public_url": None,
+                "hoc_arquivo_id": pend["arquivo_id"],
+                "hoc_analysis_due": to_date_str(pend.get("data_limite_analise")),
+                "submitted_at": (pend["enviado_em"].isoformat() if pend.get("enviado_em") else None),
+            }
+            if dry: written += 1; continue
+            sb.table("documents").upsert(rec, on_conflict="supplier_id,type").execute()
+            written += 1
+            continue
+
+        # 2) versão APROVADA vigente (regra original)
         cur.execute("""SELECT pd.data_vencimento, pd.situacao, a.id AS arquivo_id,
                    d.descricao AS doc_descricao, f.cnpj
             FROM processo_documento pd
@@ -491,6 +539,7 @@ def sync_documents(my, sb, dry, wm):
             "expires_at": to_date_str(row.get("data_vencimento")),
             "public_url": None,
             "hoc_arquivo_id": row["arquivo_id"],
+            "hoc_analysis_due": None,
         }
         if dry: written += 1; continue
         sb.table("documents").upsert(rec, on_conflict="supplier_id,type").execute()
