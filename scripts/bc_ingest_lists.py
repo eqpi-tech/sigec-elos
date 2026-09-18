@@ -131,6 +131,11 @@ def ingest_ofac(pg):
                  "ofac", datetime.date.today().isoformat(), url)
 
 
+def dt10(v):
+    v = (v or "").strip()[:10]
+    return v if re.match(r"\d{4}-\d{2}-\d{2}$", v) else None
+
+
 def ingest_onu(pg):
     url, _ = cfg_url(pg, "ingest:onu")
     url = url or "https://scsanctions.un.org/resources/xml/en/consolidated.xml"
@@ -146,22 +151,22 @@ def ingest_onu(pg):
             (ind.findtext("FOURTH_NAME") or "").strip()])).strip()
         if nome:
             rows.append([ind.findtext("DATAID"), nome, None, "individual",
-                         (ind.findtext("LISTED_ON") or None), None])
+                         dt10(ind.findtext("LISTED_ON")), None])
         for aka in ind.iter("INDIVIDUAL_ALIAS"):
             a = (aka.findtext("ALIAS_NAME") or "").strip()
             if a:
                 rows.append([ind.findtext("DATAID"), a, None, "individual_aka",
-                             (ind.findtext("LISTED_ON") or None), None])
+                             dt10(ind.findtext("LISTED_ON")), None])
     for ent in root.iter("ENTITY"):
         nome = (ent.findtext("FIRST_NAME") or "").strip()
         if nome:
             rows.append([ent.findtext("DATAID"), nome, None, "entity",
-                         (ent.findtext("LISTED_ON") or None), None])
+                         dt10(ent.findtext("LISTED_ON")), None])
         for aka in ent.iter("ENTITY_ALIAS"):
             a = (aka.findtext("ALIAS_NAME") or "").strip()
             if a:
                 rows.append([ent.findtext("DATAID"), a, None, "entity_aka",
-                             (ent.findtext("LISTED_ON") or None), None])
+                             dt10(ent.findtext("LISTED_ON")), None])
     cols = ["uid", "nome", "nome_norm", "tipo", "listed_on", "meta"]
     replace_rows(pg, "ref_onu", cols, norm_placeholder(rows, cols), "onu", gen, url)
 
