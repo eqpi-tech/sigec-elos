@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { invitationsApi } from '../services/api.js'
 import { useIsMobile } from '../hooks/useIsMobile.js'
 
 const ELOS_PLANS = [
@@ -90,6 +91,7 @@ export default function ClientPortal() {
   const [notFound, setNotFound]   = useState(false)
 
   const [cnpj, setCnpj]           = useState('')
+  const [invite, setInvite]       = useState(null)   // convite resolvido pelo ?token=
   const [activeTab, setActiveTab] = useState('register')
   const [scrolled, setScrolled]   = useState(false)
   const [flows, setFlows]         = useState([])       // fluxos (pacotes) do cliente
@@ -123,6 +125,19 @@ export default function ClientPortal() {
     window.addEventListener('scroll', h)
     return () => window.removeEventListener('scroll', h)
   }, [])
+
+  // Chegou pelo link do convite → pré-preenche o CNPJ (o fornecedor não
+  // precisa digitar) e guarda os dados p/ exibir o aviso do convite
+  useEffect(() => {
+    if (!inviteToken) return
+    invitationsApi.getByToken(inviteToken)
+      .then(inv => {
+        setInvite(inv)
+        if (inv?.supplier_cnpj) setCnpj(formatCnpj(inv.supplier_cnpj))
+      })
+      .catch(() => {})  // token inválido/expirado: portal segue normal
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken])
 
   const formatCnpj = (v) => {
     const d = v.replace(/\D/g, '').slice(0, 14)
@@ -396,6 +411,13 @@ export default function ClientPortal() {
                     Informe o CNPJ da sua empresa para iniciar o processo de pré-homologação
                     como fornecedor da <strong style={{ color: '#fff' }}>{companyName}</strong>.
                   </p>
+                  {invite && (
+                    <div style={{ background: 'rgba(34,197,94,.12)', border: '1px solid rgba(34,197,94,.4)',
+                      borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#bbf7d0' }}>
+                      ✉️ Convite para <strong style={{ color: '#fff' }}>{invite.supplier_razao_social || 'sua empresa'}</strong>
+                      {invite.subsidiado ? ' — homologação sem custo (subsidiada)' : ''}. Confirme o CNPJ e avance.
+                    </div>
+                  )}
                   <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)',
                     letterSpacing: 0.8, display: 'block', marginBottom: 8 }}>
                     CNPJ DA EMPRESA
