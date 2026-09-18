@@ -23,7 +23,9 @@ import pg8000.native
 
 REPO = Path(__file__).resolve().parent.parent
 BATCH = 2000
-UA = {"User-Agent": "SIGEC-ELOS/1.0 (bc-report ingest)"}
+# gov.br devolve 403 para UA de robô/HEAD — usar UA de navegador (GET)
+UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"}
 
 
 def db():
@@ -189,13 +191,15 @@ def ingest_trabalho_escravo(pg):
             if "cnpj" in joined or "cpf" in joined:
                 header = [v.lower() for v in vals]
             continue
+        if len(vals) < len(header):        # linhas de rodapé/observação
+            vals += [""] * (len(header) - len(vals))
         try:
             i_doc = next(i for i, h in enumerate(header) if "cnpj" in h or "cpf" in h)
             i_nome = next(i for i, h in enumerate(header) if "empregador" in h or "nome" in h)
         except StopIteration:
             continue
         doc = re.sub(r"\D", "", vals[i_doc] or "")
-        nome = vals[i_nome]
+        nome = re.sub(r"^[\d./\- ]+", "", vals[i_nome] or "").strip()
         if not doc or not nome:
             continue
         i_uf = next((i for i, h in enumerate(header) if h in ("uf", "estado")), None)
@@ -209,24 +213,39 @@ def ingest_trabalho_escravo(pg):
 
 
 def ingest_leniencia(pg):
-    url, _ = cfg_url(pg, "ingest:leniencia")
+    url, val = cfg_url(pg, "ingest:leniencia")
+    tmpl = (val or {}).get("url_template")
+    raw = None
+    if not url and tmpl:
+        # snapshot datado do Portal (redireciona p/ zip da CGU); tenta D-0..D-7
+        for back in range(0, 8):
+            d = (datetime.date.today() - datetime.timedelta(days=back)).strftime("%Y%m%d")
+            try:
+                url = tmpl.format(date=d)
+                raw = fetch_bytes(url)
+                break
+            except Exception:
+                url = None
     if not url:
-        print("leniencia: sem URL em bc_config 'ingest:leniencia' — PULADO "
-              "(CSV do download-de-dados do Portal da Transparência)")
+        print("leniencia: sem URL/url_template válido em bc_config 'ingest:leniencia' — PULADO")
         return
     print("Leniência (CGU): baixando…")
-    raw = fetch_bytes(url)
-    if url.endswith(".zip"):
+    if raw is None:
+        raw = fetch_bytes(url)
+    if raw[:4] == b"PK\x03\x04":  # zip pelo magic byte (a URL datada nao tem extensao)
         import zipfile
         zf = zipfile.ZipFile(io.BytesIO(raw))
-        raw = zf.read(next(n for n in zf.namelist() if n.lower().endswith(".csv")))
-    text = raw.decode("latin-1", "replace")
+        nomes_zip = [n for n in zf.namelist() if n.lower().endswith(".csv")]
+        alvo = next((n for n in nomes_zip if "acordo" in n.lower() and "efeito" not in n.lower()), nomes_zip[0])
+        raw = zf.read(alvo)
+    text = raw.decode("latin-1", "replace").replace("\r\n", "\n").replace("\r", "\n")
     rdr = csv.DictReader(io.StringIO(text), delimiter=";")
     rows = []
     for rec in rdr:
         low = {k.lower(): (v or "").strip() for k, v in rec.items() if k}
         doc = re.sub(r"\D", "", next((v for k, v in low.items() if "cnpj" in k), ""))
-        nome = next((v for k, v in low.items() if "raz" in k or "nome" in k or "sancionado" in k), "")
+        nome = (next((v for k, v in low.items() if "raz" in k and "cnpj" not in k), "")
+                or next((v for k, v in low.items() if "nome" in k and "cnpj" not in k), ""))
         if not doc and not nome:
             continue
         def dt(frag):
@@ -235,7 +254,7 @@ def ingest_leniencia(pg):
             return f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}" if m2 else None
         rows.append([doc or None, doc[:8] if len(doc) == 14 else None, nome or None, None,
                      next((v for k, v in low.items() if "situa" in k), None),
-                     dt("início") or dt("inicio"), dt("fim"), json.dumps(low, ensure_ascii=False)])
+                     dt("data de in"), dt("data de fim"), json.dumps(low, ensure_ascii=False)])
     cols = ["cnpj_digits", "cnpj_root", "nome", "nome_norm", "situacao", "data_inicio", "data_fim", "meta"]
     replace_rows(pg, "ref_leniencia", cols, norm_placeholder(rows, cols),
                  "leniencia", datetime.date.today().isoformat(), url)

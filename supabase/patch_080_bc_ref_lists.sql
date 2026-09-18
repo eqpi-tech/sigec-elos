@@ -134,6 +134,6 @@ update bc_config
 insert into bc_config (key, value) values
   ('ingest:ofac', '{"url":"https://www.treasury.gov/ofac/downloads/sdn.csv","alt_url":"https://www.treasury.gov/ofac/downloads/alt.csv"}'),
   ('ingest:onu',  '{"url":"https://scsanctions.un.org/resources/xml/en/consolidated.xml"}'),
-  ('ingest:trabalho_escravo', '{"url":"","nota":"XLSX Cadastro de Empregadores (MTE) — URL muda a cada atualizacao; manter aqui"}'),
-  ('ingest:leniencia', '{"url":"","nota":"CSV Acordos de Leniencia — download-de-dados do Portal da Transparencia"}')
+  ('ingest:trabalho_escravo', '{"url":"https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/inspecao-do-trabalho/areas-de-atuacao/cadastro_de_empregadores.xlsx","nota":"XLSX oficial (URL estavel, atualizado no lugar); gov.br exige UA de navegador"}'),
+  ('ingest:leniencia', '{"url":"","url_template":"https://portaldatransparencia.gov.br/download-de-dados/acordos-leniencia/{date}","nota":"snapshot datado YYYYMMDD; redireciona p/ zip da CGU; o script tenta D-0..D-7"}')
 on conflict (key) do nothing;
