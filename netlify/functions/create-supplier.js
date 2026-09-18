@@ -222,9 +222,11 @@ exports.handler = async (event) => {
       // .catch para não bloquear o fluxo se falhar
     }
 
-    // 3. Cria Seal inicial apenas para fornecedores NOVOS
-    //    Para fornecedores já existentes (HOC ou cadastro anterior), mantém o seal existente
-    if (isNewSupplier) {
+    // 3. Cria Seal inicial (ELOS próprio) apenas para fornecedores NOVOS que
+    //    chegaram ESPONTANEAMENTE. Quem vem por convite ou portal de cliente
+    //    ganha o selo do CLIENTE (ensureClientSeal) — o selo ELOS genérico
+    //    duplicava o processo na ficha (caso Baterge/VIX, 18/09)
+    if (isNewSupplier && !invitation_token && !ref_slug) {
       const { error: sealError } = await supabaseAdmin
         .from('seals')
         .insert({ supplier_id: supplier.id, level: 'Simples', status: 'PENDING', score: 0 })

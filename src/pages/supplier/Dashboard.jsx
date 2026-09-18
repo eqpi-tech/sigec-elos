@@ -142,7 +142,9 @@ export default function SupplierDashboard() {
       </div>
 
       {/* ── Alertas ── */}
-      {!supplier.activePlan && (
+      {/* 'Nenhum plano ativo' NÃO vale p/ quem tem processo de CLIENTE
+          (convite/subsidiado — o custo é do cliente, não há plano a assinar) */}
+      {!supplier.activePlan && !seals.some(s => s.client_id) && (
         <div style={{ background:'linear-gradient(135deg,#F47E2F,#ff9a52)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
           <div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff' }}>Nenhum plano ativo</div>
@@ -167,7 +169,7 @@ export default function SupplierDashboard() {
         <KpiCard label="Processos Ativos" value={processes.filter(p=>p.effStatus==='ACTIVE').length} sub={`de ${processes.length} total`} subColor="#9B9B9B" icon="🔄" iconBg="rgba(46,49,146,.1)" />
         <KpiCard label="Docs Válidos"     value={`${docsOk}/${totalDocs}`} sub={docsWarn>0?`${docsWarn} vencendo`:docsMissing>0?`${docsMissing} pendente${docsMissing>1?'s':''}`:'Em dia'} subColor={docsWarn>0||docsMissing>0?'#f59e0b':'#22c55e'} icon="📋" iconBg="rgba(34,197,94,.1)" />
         <KpiCard label="Em Análise"       value={docsPending} sub="Aguardando backoffice" subColor="#8b5cf6" icon="⏳" iconBg="rgba(139,92,246,.1)" />
-        <KpiCard label="Plano"            value={planName(supplier.activePlan?.type)} sub={supplier.activePlan?`${planCycle(supplier.activePlan.type) ? planCycle(supplier.activePlan.type) + ' · ' : ''}Válido até ${supplier.activePlan.ends_at?.slice(0,10)||'—'}`:'Sem plano ativo'} subColor={supplier.activePlan?'#22c55e':'#ef4444'} icon="⭐" iconBg="rgba(244,126,47,.1)" />
+        <KpiCard label="Plano"            value={supplier.activePlan ? planName(supplier.activePlan?.type) : (seals.some(s => s.client_id) ? 'Homologação' : planName(undefined))} sub={supplier.activePlan?`${planCycle(supplier.activePlan.type) ? planCycle(supplier.activePlan.type) + ' · ' : ''}Válido até ${supplier.activePlan.ends_at?.slice(0,10)||'—'}`:(seals.some(s => s.client_id) ? 'Via convite do cliente' : 'Sem plano ativo')} subColor={supplier.activePlan?'#22c55e':(seals.some(s => s.client_id) ? '#2E3192' : '#ef4444')} icon="⭐" iconBg="rgba(244,126,47,.1)" />
       </div>
 
       {/* ── Carteira de Selos ── */}

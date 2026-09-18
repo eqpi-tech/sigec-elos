@@ -47,7 +47,9 @@ export function AuthProvider({ children }) {
       modules:           opt._modules ?? null,
       moduleProfileName: opt._profile_name ?? null,
     }))
-    localStorage.setItem('elos_active_role', role)
+    // chave POR USUÁRIO (18/09): o papel salvo de uma conta não pode vazar
+    // p/ outra no mesmo navegador (fornecedor de teste caía como comprador)
+    try { localStorage.setItem(`elos_active_role:${user?.id || ''}`, role) } catch { /* noop */ }
   }
 
   const fetchProfile = async (authUser) => {
@@ -82,8 +84,10 @@ export function AuthProvider({ children }) {
           _profile_name: r.access_profile_id ? (profileMap[r.access_profile_id]?.name ?? null) : null,
         }))
         setRoleOptions(withModules)
-        // Decide qual role ativar: salva preferência no localStorage
-        const saved = localStorage.getItem('elos_active_role')
+        // Decide qual role ativar: preferência salva POR USUÁRIO (18/09 — a
+        // chave global antiga vazava a escolha entre contas no mesmo browser)
+        let saved = null
+        try { saved = localStorage.getItem(`elos_active_role:${authUser.id}`) } catch { /* noop */ }
         const preferred = withModules.find(r => r.role === saved) || withModules.find(r => r.is_primary) || withModules[0]
         setActiveRole(preferred.role)
         // Busca profile base
