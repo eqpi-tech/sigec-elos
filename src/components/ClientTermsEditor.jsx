@@ -18,6 +18,75 @@ async function callTerms(payload) {
   return data
 }
 
+// Texto legado dos Termos de Homologação (clients.terms_content) — mesmo
+// editor no cliente e no backoffice (clientId só é enviado pelo ADMIN)
+function LegacyTermsCard({ clientId }) {
+  const [terms, setTerms]       = useState('')
+  const [original, setOriginal] = useState('')
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+  const [saved, setSaved]       = useState(false)
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const qs = clientId ? `?clientId=${clientId}` : ''
+        const res = await fetch(`/.netlify/functions/client-terms${qs}`, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+        })
+        const d = await res.json()
+        const v = d.isDefault ? '' : (d.terms || '')
+        setTerms(v); setOriginal(v)
+      } catch { /* mantém vazio */ }
+      setLoading(false)
+    })()
+  }, [clientId])
+
+  const save = async () => {
+    setSaving(true); setSaved(false)
+    try {
+      await callTerms({ terms, clientId })
+      setOriginal(terms); setSaved(true); setTimeout(() => setSaved(false), 3000)
+    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+    setSaving(false)
+  }
+
+  if (loading) return <Card style={{ borderRadius: 16, padding: 30, display: 'flex', justifyContent: 'center' }}><Spinner size={28} /></Card>
+
+  return (
+    <Card style={{ borderRadius: 16, padding: '24px 28px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 10 }}>
+        <div>
+          <SectionTitle>Termos de Homologação (texto de leitura)</SectionTitle>
+          <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 12, color: '#64748b', marginTop: 4, maxWidth: 520 }}>
+            Bloco de texto exibido no topo do passo de aceite do cadastro. Em branco, o fornecedor vê os termos padrão do SIGEC-ELOS.
+          </div>
+        </div>
+        {!terms
+          ? <span style={{ fontSize: 11, fontWeight: 700, color: '#9B9B9B', background: '#f0f0f0', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Usando termos padrão</span>
+          : <span style={{ fontSize: 11, fontWeight: 700, color: '#2E3192', background: 'rgba(46,49,146,.1)', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Personalizado</span>}
+      </div>
+      <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={12}
+        placeholder="Cole aqui o texto dos Termos de Homologação deste cliente..."
+        style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e4ef', fontFamily: 'DM Mono,monospace,DM Sans,sans-serif', fontSize: 13, color: '#1a1c5e', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box', outline: 'none' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+        <button onClick={() => { if (confirm('Restaurar os termos padrão SIGEC-ELOS? (salve para confirmar)')) setTerms('') }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: 13, fontFamily: 'DM Sans,sans-serif', textDecoration: 'underline', padding: 0 }}>
+          Restaurar termos padrão
+        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {saved && <span style={{ color: '#22c55e', fontFamily: 'Montserrat,sans-serif', fontWeight: 700, fontSize: 12 }}>✓ Salvo</span>}
+          <Button variant="primary" disabled={saving || terms === original} onClick={save}>
+            {saving ? '⏳ Salvando...' : 'Salvar Termos'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function ClientTermsEditor({ clientId }) {
   const [items, setItems]     = useState(null)
   const [err, setErr]         = useState('')
@@ -74,8 +143,8 @@ export default function ClientTermsEditor({ clientId }) {
 
   if (!items) return <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={32} /></div>
 
-  return (
-    <Card style={{ borderRadius: 16, padding: '22px 26px' }}>
+  return (<>
+    <Card style={{ borderRadius: 16, padding: '22px 26px', marginBottom: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
         <SectionTitle style={{ marginBottom: 0 }}>Documentos de aceite do fornecedor</SectionTitle>
       </div>
@@ -136,5 +205,6 @@ export default function ClientTermsEditor({ clientId }) {
         </div>
       )}
     </Card>
-  )
+    <LegacyTermsCard clientId={clientId} />
+  </>)
 }

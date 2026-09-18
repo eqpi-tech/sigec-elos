@@ -51,11 +51,15 @@ exports.handler = async (event) => {
     return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Seu perfil de acesso é somente leitura' }) }
 
   if (event.httpMethod === 'GET') {
-    if (!roleRow.client_id) {
+    // ADMIN pode consultar os termos de qualquer cliente (?clientId=...)
+    const qcid = roleRow.role === 'ADMIN'
+      ? (event.queryStringParameters?.clientId || roleRow.client_id)
+      : roleRow.client_id
+    if (!qcid) {
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ terms: DEFAULT_TERMS, isDefault: true }) }
     }
     const { data: client } = await supabase
-      .from('clients').select('terms_content').eq('id', roleRow.client_id).single()
+      .from('clients').select('terms_content').eq('id', qcid).single()
     return {
       statusCode: 200,
       headers: HEADERS,
@@ -163,15 +167,16 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Ação desconhecida' }) }
     }
 
-    // legado: texto único de termos
-    if (!roleRow.client_id) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Cliente não encontrado' }) }
+    // legado: texto único de termos (ADMIN pode editar de qualquer cliente)
+    const legacyCid = roleRow.role === 'ADMIN' ? (body.clientId || roleRow.client_id) : roleRow.client_id
+    if (!legacyCid) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Cliente não encontrado' }) }
     const { terms } = body
-    if (!terms || typeof terms !== 'string') return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Campo terms obrigatório' }) }
+    if (typeof terms !== 'string') return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Campo terms obrigatório' }) }
 
     const { error } = await supabase
       .from('clients')
-      .update({ terms_content: terms, terms_updated_at: new Date().toISOString() })
-      .eq('id', roleRow.client_id)
+      .update({ terms_content: terms || null, terms_updated_at: new Date().toISOString() })
+      .eq('id', legacyCid)
     if (error) return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: error.message }) }
 
     return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ saved: true }) }
