@@ -345,7 +345,11 @@ export default function DocumentAnalysis() {
   const saved = loadSavedFilters()
 
   // Filtros
-  const [docType,       setDocType]       = useState(saved.docType ?? '')
+  // Tipo de documento: MÚLTIPLA escolha (patch_076) — migra valor antigo (string)
+  const [docType,       setDocType]       = useState(
+    Array.isArray(saved.docType) ? saved.docType : (saved.docType ? [String(saved.docType)] : []))
+  const [docTypeOpen,   setDocTypeOpen]   = useState(false)
+  const [docTypeSearch, setDocTypeSearch] = useState('')
   const [supplierSearch,setSupplierSearch] = useState(saved.supplierSearch ?? '')
   // migração de valores salvos em sessões antigas (patch_075: fila e status
   // viraram filtros separados)
@@ -389,7 +393,7 @@ export default function DocumentAnalysis() {
     setLoading(true)
     try {
       const result = await adminApi.listDocumentsForAnalysis({
-        docType: docType || undefined,
+        docType: docType.length ? docType.join(',') : undefined,
         supplierSearch: supplierSearch || undefined,
         status: statusFilter !== 'todos' ? statusFilter : undefined,
         queue: queueFilter,
@@ -524,7 +528,7 @@ export default function DocumentAnalysis() {
       // Busca todos os registros sem paginação
       try {
         const result = await adminApi.listDocumentsForAnalysis({
-          docType: docType || undefined,
+          docType: docType.length ? docType.join(',') : undefined,
           supplierSearch: supplierSearch || undefined,
           status: statusFilter !== 'todos' ? statusFilter : undefined,
           queue: queueFilter,
@@ -602,12 +606,41 @@ export default function DocumentAnalysis() {
       {/* Filtros */}
       <Card style={{ borderRadius:14, padding:'16px 20px', marginBottom:16 }}>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:12 }}>
-          <div>
+          <div style={{ position:'relative' }}>
             <span style={lbl}>Tipo de documento</span>
-            <select value={docType} onChange={e => setDocType(e.target.value)} style={inp}>
-              <option value="">Todos os tipos</option>
-              {catalog.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <button onClick={() => setDocTypeOpen(o => !o)}
+              style={{ ...inp, textAlign:'left', background:'#fff', cursor:'pointer', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {docType.length === 0 ? 'Todos os tipos'
+                : docType.length === 1 ? (catalog.find(d => String(d.id) === docType[0])?.name || '1 tipo')
+                : `${docType.length} tipos selecionados`} ▾
+            </button>
+            {docTypeOpen && (
+              <div style={{ position:'absolute', zIndex:50, top:'100%', left:0, right:0, minWidth:280, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 12px 40px rgba(0,0,0,.15)', padding:10, marginTop:4 }}>
+                <input autoFocus value={docTypeSearch} onChange={e => setDocTypeSearch(e.target.value)}
+                  placeholder="🔍 Digite para filtrar..."
+                  style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:12, boxSizing:'border-box', marginBottom:8 }}/>
+                <div style={{ maxHeight:220, overflowY:'auto' }}>
+                  {catalog
+                    .filter(d => !docTypeSearch || d.name.toLowerCase().includes(docTypeSearch.toLowerCase()))
+                    .map(d => {
+                      const idS = String(d.id)
+                      const sel = docType.includes(idS)
+                      return (
+                        <label key={d.id} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'5px 6px', borderRadius:6, cursor:'pointer', background: sel ? 'rgba(46,49,146,.06)' : 'transparent' }}>
+                          <input type="checkbox" checked={sel}
+                            onChange={() => setDocType(p => sel ? p.filter(x => x !== idS) : [...p, idS])}
+                            style={{ marginTop:2, accentColor:'#2E3192' }}/>
+                          <span style={{ fontSize:12, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif', lineHeight:1.35 }}>{d.name}</span>
+                        </label>
+                      )
+                    })}
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginTop:8 }}>
+                  <button onClick={() => setDocType([])} style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:'#9B9B9B', textDecoration:'underline' }}>Limpar seleção</button>
+                  <button onClick={() => { setDocTypeOpen(false); setDocTypeSearch('') }} style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color:'#2E3192', fontWeight:700 }}>Fechar</button>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <span style={lbl}>Fornecedor (nome ou CNPJ)</span>
@@ -620,12 +653,16 @@ export default function DocumentAnalysis() {
               {QUEUE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <div>
-            <span style={lbl}>Status</span>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inp}>
-              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+          {/* Filtro STATUS omitido por ora (pedido 18/09) — a fila cobre o
+              dia a dia; reativar exibindo o select de STATUS_OPTIONS */}
+          {false && (
+            <div>
+              <span style={lbl}>Status</span>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inp}>
+                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <span style={lbl}>Vencimento até</span>
             <input type="date" value={expiresUntil} onChange={e => setExpiresUntil(e.target.value)} style={inp}/>
@@ -637,7 +674,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setExpiresUntil(''); setSortBy('due_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>
