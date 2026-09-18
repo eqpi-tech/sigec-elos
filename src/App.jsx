@@ -60,6 +60,9 @@ import ClientSupplierProcess   from './pages/client/SupplierProcess.jsx'
 import ClientSupplierDiscover  from './pages/client/SupplierDiscover.jsx'
 import ClientQuestionnaires    from './pages/client/Questionnaires.jsx'
 import ClientReports           from './pages/client/Reports.jsx'
+import ClientCompliance        from './pages/client/Compliance.jsx'
+import ClientTermsPage         from './pages/client/Terms.jsx'
+import BackofficeClientTerms   from './pages/backoffice/ClientTerms.jsx'
 import ClientSettings          from './pages/client/Settings.jsx'
 import ClientRFQ               from './pages/client/RFQ.jsx'
 import ClientTeam              from './pages/client/Team.jsx'
@@ -150,6 +153,7 @@ function AppRoutes() {
       <Route path="/backoffice/analise-documentos"  element={<Protect roles={['ADMIN']}><BackofficeDocumentAnalysis/></Protect>} />
       <Route path="/backoffice/clientes"            element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientSettings/></Protect>} />
       <Route path="/backoffice/landing-pages"   element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeLandingPages/></Protect>} />
+      <Route path="/backoffice/termos-clientes" element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeClientTerms/></Protect>} />
       <Route path="/backoffice/comunicados"     element={<Protect roles={['ADMIN']} perm="manage_comunicados"><BackofficeComunicados/></Protect>} />
       <Route path="/backoffice/feriados"        element={<Protect roles={['ADMIN']}><BackofficeFeriados/></Protect>} />
 
@@ -161,6 +165,8 @@ function AppRoutes() {
       <Route path="/cliente/convites"                 element={<Protect roles={['CLIENT']} module="convites"><ClientInvitations/></Protect>} />
       <Route path="/cliente/questionarios"            element={<Protect roles={['CLIENT']} module="questionarios"><ClientQuestionnaires/></Protect>} />
       <Route path="/cliente/relatorios"               element={<Protect roles={['CLIENT']} module="relatorios"><ClientReports/></Protect>} />
+      <Route path="/cliente/compliance"               element={<Protect roles={['CLIENT']} module="compliance"><ClientCompliance/></Protect>} />
+      <Route path="/cliente/termos"                   element={<Protect roles={['CLIENT']} module="configuracoes"><ClientTermsPage/></Protect>} />
       <Route path="/cliente/configuracoes"            element={<Protect roles={['CLIENT']} module="configuracoes"><ClientSettings/></Protect>} />
       <Route path="/cliente/rfq"                      element={<Protect roles={['CLIENT']} module="rfq"><ClientRFQ/></Protect>} />
       <Route path="/cliente/equipe"                   element={<Protect roles={['CLIENT']} module="equipe"><ClientTeam/></Protect>} />

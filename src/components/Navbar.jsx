@@ -28,7 +28,14 @@ const NAVS = {
     { path:'/cliente/rfq',            label:'Cotações (RFQ)',  icon:'💬', module:'rfq' },
     { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋', module:'questionarios' },
     { path:'/cliente/relatorios',     label:'Relatórios',      icon:'📈', module:'relatorios' },
-    { path:'/cliente/configuracoes',  label:'Configurações',   icon:'⚙️', module:'configuracoes' },
+    { path:'/cliente/compliance',     label:'Compliance',      icon:'🛡️', module:'compliance' },
+    {
+      key:'config', label:'Configurações', icon:'⚙️', module:'configuracoes',
+      children: [
+        { path:'/cliente/configuracoes', label:'Portal de Fornecedores', icon:'🌐', desc:'Página pública de cadastro (white-label)' },
+        { path:'/cliente/termos',        label:'Termos e Aceites',       icon:'📜', desc:'Textos e documentos que o fornecedor aceita' },
+      ],
+    },
     { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
   ],
   ADMIN: [
@@ -52,6 +59,7 @@ const NAVS = {
         { path:'/backoffice/criar-cliente',     label:'Novo Cliente',         icon:'➕',  desc:'Wizard completo de cadastro' },
         { path:'/backoffice/fluxo-documentos',  label:'Fluxo de Homologação', icon:'📂', desc:'Documentos exigidos por categoria/cliente' },
         { path:'/backoffice/landing-pages',     label:'Portais White-label',  icon:'🌐', desc:'Páginas de convite personalizadas' },
+        { path:'/backoffice/termos-clientes',   label:'Termos de Aceite',     icon:'📜', desc:'Textos e documentos de aceite por cliente' },
       ],
     },
     {

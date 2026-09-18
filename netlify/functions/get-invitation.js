@@ -48,6 +48,28 @@ exports.handler = async (event) => {
     flowCategoryIds = (fc || []).map(r => r.category_id)
   }
 
+  // Itens de aceite do cliente (patch_073): coleção de textos/documentos que
+  // o fornecedor marca um a um no onboarding. DOCUMENT vira URL assinada (2h).
+  let termsItems = []
+  if (inv.client_id) {
+    const { data: items } = await supabaseAdmin
+      .from('client_terms_items')
+      .select('id, title, kind, content, storage_path, file_name, version, required')
+      .eq('client_id', inv.client_id).eq('active', true)
+      .order('sort').order('created_at')
+    termsItems = await Promise.all((items || []).map(async it => {
+      let url = null
+      if (it.kind === 'DOCUMENT' && it.storage_path) {
+        const { data: signed } = await supabaseAdmin.storage
+          .from('client-terms').createSignedUrl(it.storage_path, 7200)
+        url = signed?.signedUrl || null
+      }
+      return { id: it.id, title: it.title, kind: it.kind, version: it.version,
+               required: it.required, content: it.kind === 'TEXT' ? it.content : null,
+               file_name: it.file_name, url }
+    }))
+  }
+
   return {
     statusCode: 200,
     headers: h,
@@ -68,6 +90,7 @@ exports.handler = async (event) => {
       // fluxo do convite > preço legado do cliente (o checkout revalida server-side)
       client_price:          inv.client_flows?.price ?? inv.clients?.homologation_price ?? null,
       client_terms:          clientTerms,  // termos personalizados do cliente (pode ser null)
+      terms_items:           termsItems,   // coleção de aceites do cliente (patch_073)
     }),
   }
 }

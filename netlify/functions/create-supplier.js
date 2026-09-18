@@ -43,6 +43,7 @@ exports.handler = async (event) => {
       ref_slug,
       ref_flow_id,
       is_existing_active,
+      term_acceptances,   // [{ item_id, version }] — aceites da coleção (patch_073)
     } = body
 
     if (!cnpj || !razao_social) {
@@ -358,8 +359,30 @@ exports.handler = async (event) => {
           .update({ status: 'REGISTERED', supplier_id: supplier.id })
           .eq('token', invitation_token)
           .neq('status', 'REGISTERED')
-          .select('client_id, flow_id')
+          .select('id, client_id, flow_id')
         if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id)
+
+        // Trilha de aceite da coleção de termos (patch_073): grava quem
+        // aceitou o quê, em qual versão, quando e de qual IP
+        if (linkedInv?.[0]?.client_id && Array.isArray(term_acceptances) && term_acceptances.length) {
+          try {
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.id)
+            const ip = event.headers['x-nf-client-connection-ip'] || event.headers['x-forwarded-for'] || null
+            const { data: validItems } = await supabaseAdmin
+              .from('client_terms_items').select('id, version')
+              .eq('client_id', linkedInv[0].client_id)
+              .in('id', term_acceptances.map(t => t.item_id))
+            const rows = (validItems || []).map(it => ({
+              item_id: it.id, item_version: it.version,
+              client_id: linkedInv[0].client_id, supplier_id: supplier.id,
+              invitation_id: linkedInv[0].id,
+              accepted_name: authUser?.user?.user_metadata?.name || razao_social,
+              accepted_email: authUser?.user?.email || null,
+              accepted_ip: ip,
+            }))
+            if (rows.length) await supabaseAdmin.from('client_term_acceptances').insert(rows)
+          } catch (e) { console.warn('term acceptances (não crítico):', e.message) }
+        }
       } else {
         // Fallback: tenta pelo e-mail E pelo CNPJ (convites antigos sem token)
         const { data: { user: currentUser } } = await supabaseAdmin.auth.admin.getUserById(user.id)

@@ -86,6 +86,8 @@ export default function SupplierOnboarding() {
   const [sanctionsConfirm, setSanctionsConfirm] = useState(false)
   const [termsAccepted, setTermsAccepted]       = useState(false)
   const [dataSharingAccepted, setDataSharingAccepted] = useState(false)
+  // Coleção de aceites do cliente (patch_073): { item_id: true }
+  const [itemsAccepted, setItemsAccepted]       = useState({})
 
   // ── Buyer state ───────────────────────────────────────────────────
   const [buyerStep, setBuyerStep] = useState(0)
@@ -219,6 +221,9 @@ export default function SupplierOnboarding() {
         employee_range: cnpjData?.porte ? cnpjData.porte : null,
         sanctions_checked: true, sanctions_result: sanctions,
         terms_accepted: true, data_sharing_accepted: true,
+        term_acceptances: (invitation?.terms_items || [])
+          .filter(it => itemsAccepted[it.id])
+          .map(it => ({ item_id: it.id, version: it.version })),
         cnpj_full_data: cnpjData || null, category_ids: [...selectedCategories],
         invitation_token: inviteToken || undefined, ref_slug: refSlug || undefined,
         ref_flow_id: refFlowId || undefined,
@@ -502,6 +507,29 @@ export default function SupplierOnboarding() {
                       </>
                     )}
                   </div>
+                  {/* Coleção de aceites do cliente (patch_073): um checkbox por item */}
+                  {(invitation?.terms_items || []).map(it => (
+                    <label key={it.id} style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:10, padding:'12px', background: itemsAccepted[it.id] ? 'rgba(34,197,94,.05)' : 'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${itemsAccepted[it.id]?'#22c55e':'#e2e4ef'}` }}>
+                      <input type="checkbox" checked={!!itemsAccepted[it.id]}
+                        onChange={e => setItemsAccepted(p => ({ ...p, [it.id]: e.target.checked }))}
+                        style={{ marginTop:2, accentColor:'#2E3192' }}/>
+                      <span style={{ fontSize:13, color:'#374151', flex:1 }}>
+                        Li e aceito o documento <strong>{it.title}</strong>
+                        {it.required === false && <span style={{ color:'#9B9B9B' }}> (opcional)</span>}
+                        {it.kind === 'DOCUMENT' && it.url && (
+                          <> — <a href={it.url} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ color:'#2E3192', fontWeight:700 }}>📄 visualizar PDF</a></>
+                        )}
+                        {it.kind === 'TEXT' && it.content && (
+                          <details style={{ marginTop:6 }} onClick={e => e.stopPropagation()}>
+                            <summary style={{ fontSize:12, color:'#2E3192', fontWeight:700, cursor:'pointer' }}>ler o texto completo</summary>
+                            <pre style={{ fontSize:12, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap', fontFamily:'DM Sans,sans-serif', maxHeight:180, overflowY:'auto', background:'#fff', border:'1px solid #eef0f6', borderRadius:8, padding:10, marginTop:6 }}>{it.content}</pre>
+                          </details>
+                        )}
+                      </span>
+                    </label>
+                  ))}
                   <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:12, padding:'12px', background:'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${termsAccepted?'#2E3192':'#e2e4ef'}` }}>
                     <input type="checkbox" checked={termsAccepted} onChange={e=>setTermsAccepted(e.target.checked)} style={{ marginTop:2, accentColor:'#2E3192' }}/>
                     <span style={{ fontSize:13, color:'#374151' }}>Li e concordo com os <strong>Termos de Uso</strong> da plataforma SIGEC-ELOS e com a <strong>Política de Privacidade</strong> da EQPI Tech.</span>
@@ -514,7 +542,9 @@ export default function SupplierOnboarding() {
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="neutral" full onClick={() => { setStep(2); setError('') }}>← Voltar</Button>
                     <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
-                      disabled={!termsAccepted || !dataSharingAccepted || loading} onClick={handleAcceptTerms}>
+                      disabled={!termsAccepted || !dataSharingAccepted || loading
+                        || (invitation?.terms_items || []).some(it => it.required !== false && !itemsAccepted[it.id])}
+                      onClick={handleAcceptTerms}>
                       {loading ? <><Spinner size={16}/> Cadastrando...</> : isSubsidiado ? 'Finalizar Cadastro →' : 'Aceitar e Continuar →'}
                     </Button>
                   </div>

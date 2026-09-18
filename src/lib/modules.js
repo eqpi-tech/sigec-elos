@@ -21,7 +21,8 @@ export const MODULES = {
     { key: 'rfq',           label: 'Cotações (RFQ)', icon: '💬', desc: 'Solicitações de cotação' },
     { key: 'questionarios', label: 'Questionários',  icon: '📋', desc: 'Questionários personalizados' },
     { key: 'relatorios',    label: 'Relatórios',     icon: '📈', desc: 'Dashboard executivo da homologação' },
-    { key: 'configuracoes', label: 'Configurações',  icon: '⚙️', desc: 'Termos e portal white-label' },
+    { key: 'compliance',    label: 'Compliance',     icon: '🛡️', desc: 'Fornecedores com respostas que exigem revisão de compliance' },
+    { key: 'configuracoes', label: 'Configurações',  icon: '⚙️', desc: 'Portal white-label e termos de aceite' },
     { key: 'equipe',        label: 'Equipe',         icon: '👥', desc: 'Gestão de usuários da empresa' },
   ],
 }
