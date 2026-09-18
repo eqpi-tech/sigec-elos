@@ -1,0 +1,35 @@
+# .github/workflows/bc-lists.yml
+# BC Report — ingestão semanal das listas restritivas (rota A local_db):
+# OFAC SDN, ONU Consolidated, Lista Suja MTE e Acordos de Leniência (CGU).
+# As URLs das fontes ficam em bc_config ('ingest:*'), editáveis sem deploy.
+# Segredos necessários: SUPABASE_DB_URL (o mesmo do backup diário).
+
+name: BC Report — Listas Restritivas
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # segundas 06:00 UTC = 03:00 BRT (após o sync HOC)
+  workflow_dispatch:        # disparo manual p/ validação e recarga imediata
+
+jobs:
+  ingest:
+    name: Ingerir listas no Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Dependências
+        run: pip install pg8000 openpyxl
+
+      - name: Ingerir listas
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python3 scripts/bc_ingest_lists.py
