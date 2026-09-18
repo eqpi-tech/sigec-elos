@@ -20,12 +20,17 @@ export default function BackofficeQuestionnaires() {
   const [formTitle,  setFormTitle]  = useState('')
   const [formDesc,   setFormDesc]   = useState('')
 
-  // Formulário nova pergunta
+  // Formulário de pergunta (inclusão E edição — 18/09)
   const [showQForm,  setShowQForm]  = useState(false)
+  const [editingQ,   setEditingQ]   = useState(null)  // pergunta em edição (null = nova)
   const [qText,      setQText]      = useState('')
   const [qType,      setQType]      = useState('boolean')
   const [qRequired,  setQRequired]  = useState(true)
   const [qOptions,   setQOptions]   = useState('') // CSV para type=select
+  // Alerta de compliance (patch_073): resposta(s) que disparam a revisão
+  const [qAlertBool, setQAlertBool] = useState('')   // '' | 'SIM' | 'NÃO'
+  const [qAlertOpts, setQAlertOpts] = useState([])   // opções sinalizadas (select)
+  const [qAlertText, setQAlertText] = useState('')   // CSV de expressões (text)
 
   useEffect(() => {
     Promise.all([
@@ -58,16 +63,35 @@ export default function BackofficeQuestionnaires() {
     setSaving(false)
   }
 
-  const handleAddQuestion = async () => {
+  const resetQForm = () => {
+    setShowQForm(false); setEditingQ(null); setQText(''); setQType('boolean')
+    setQRequired(true); setQOptions(''); setQAlertBool(''); setQAlertOpts([]); setQAlertText('')
+  }
+
+  const openEditQuestion = (q) => {
+    setEditingQ(q); setQText(q.text); setQType(q.type); setQRequired(q.required !== false)
+    setQOptions((q.options || []).join(', '))
+    const fl = q.compliance_alert || []
+    setQAlertBool(q.type === 'boolean' ? (fl[0] || '') : '')
+    setQAlertOpts(q.type === 'select' ? fl : [])
+    setQAlertText(q.type === 'text' ? fl.join(', ') : '')
+    setShowQForm(true)
+  }
+
+  const handleSaveQuestion = async () => {
     if (!qText.trim()) { alert('Informe o texto da pergunta'); return }
     setSaving(true)
     try {
       const opts = qType === 'select' ? qOptions.split(',').map(s => s.trim()).filter(Boolean) : null
-      await questionnaireApi.addQuestion(selected.id, {
-        text: qText.trim(), type: qType, options: opts, required: qRequired,
-        orderIndex: (selected.questionnaire_questions?.length || 0),
-      })
-      setShowQForm(false); setQText(''); setQType('boolean'); setQRequired(true); setQOptions('')
+      const complianceAlert =
+        qType === 'boolean' ? (qAlertBool ? [qAlertBool] : [])
+        : qType === 'select' ? qAlertOpts.filter(o => (opts || []).includes(o))
+        : qAlertText.split(',').map(s => s.trim()).filter(Boolean)
+      const payload = { text: qText.trim(), type: qType, options: opts, required: qRequired, complianceAlert }
+      if (editingQ) await questionnaireApi.updateQuestion(editingQ.id, payload)
+      else await questionnaireApi.addQuestion(selected.id, {
+        ...payload, orderIndex: (selected.questionnaire_questions?.length || 0) })
+      resetQForm()
       await reload()
     } catch(e) { alert(e.message) }
     setSaving(false)
@@ -215,23 +239,33 @@ export default function BackofficeQuestionnaires() {
                         {TYPE_LABEL[q.type]}{q.required?' · Obrigatória':''}
                         {q.options?.length ? ` · Opções: ${q.options.join(', ')}` : ''}
                       </div>
+                      {q.compliance_alert?.length > 0 && (
+                        <div style={{ fontSize:11,fontWeight:700,color:'#b45309',background:'rgba(245,158,11,.12)',border:'1px solid #fde68a',borderRadius:20,padding:'2px 10px',marginTop:5,display:'inline-block',fontFamily:'Montserrat,sans-serif' }}
+                          title="Resposta que envia o fornecedor para o relatório de Compliance do cliente (não trava a homologação)">
+                          🛡️ Dispara compliance: {q.compliance_alert.join(', ')}
+                        </div>
+                      )}
                     </div>
-                    <button onClick={()=>handleRemoveQuestion(q.id)}
+                    <button onClick={()=>openEditQuestion(q)} title="Editar pergunta"
+                      style={{ background:'none',border:'none',cursor:'pointer',color:'#2E3192',fontSize:14,flexShrink:0,padding:'2px 4px' }}>✏️</button>
+                    <button onClick={()=>handleRemoveQuestion(q.id)} title="Excluir pergunta"
                       style={{ background:'none',border:'none',cursor:'pointer',color:'#dc2626',fontSize:16,flexShrink:0,padding:'2px 4px' }}>✕</button>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Formulário adicionar pergunta */}
+            {/* Formulário de pergunta (nova ou edição) */}
             {showQForm ? (
               <div style={{ background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.15)',borderRadius:12,padding:16,marginTop:8 }}>
-                <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e',marginBottom:12 }}>Nova Pergunta</div>
+                <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#1a1c5e',marginBottom:12 }}>
+                  {editingQ ? '✏️ Editar Pergunta' : 'Nova Pergunta'}
+                </div>
                 <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
                   <textarea value={qText} onChange={e=>setQText(e.target.value)} placeholder="Texto da pergunta..." rows={2}
                     style={{ padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,resize:'vertical' }}/>
                   <div style={{ display:'flex',gap:10 }}>
-                    <select value={qType} onChange={e=>setQType(e.target.value)}
+                    <select value={qType} onChange={e=>{ setQType(e.target.value); setQAlertBool(''); setQAlertOpts([]); setQAlertText('') }}
                       style={{ flex:1,padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13,background:'#fff' }}>
                       {Object.entries(TYPE_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}
                     </select>
@@ -245,16 +279,53 @@ export default function BackofficeQuestionnaires() {
                       placeholder="Opções separadas por vírgula: Sim, Não, Parcialmente"
                       style={{ padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:13 }}/>
                   )}
+
+                  {/* Alerta de compliance (patch_073) */}
+                  <div style={{ background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,padding:'12px 14px' }}>
+                    <div style={{ fontSize:12,fontWeight:700,color:'#b45309',fontFamily:'Montserrat,sans-serif',marginBottom:6 }}>
+                      🛡️ Alerta de Compliance
+                    </div>
+                    <div style={{ fontSize:11,color:'#92400e',fontFamily:'DM Sans,sans-serif',marginBottom:8 }}>
+                      A resposta sinalizada envia o fornecedor para o relatório de Compliance do cliente. Não trava a homologação.
+                    </div>
+                    {qType === 'boolean' && (
+                      <select value={qAlertBool} onChange={e=>setQAlertBool(e.target.value)}
+                        style={{ width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #fde68a',fontFamily:'DM Sans,sans-serif',fontSize:12,background:'#fff' }}>
+                        <option value="">Sem alerta</option>
+                        <option value="SIM">Dispara quando responder SIM</option>
+                        <option value="NÃO">Dispara quando responder NÃO</option>
+                      </select>
+                    )}
+                    {qType === 'select' && (
+                      qOptions.split(',').map(s=>s.trim()).filter(Boolean).length === 0
+                        ? <div style={{ fontSize:11,color:'#92400e',fontStyle:'italic' }}>Defina as opções acima para escolher quais disparam o alerta.</div>
+                        : <div style={{ display:'flex',flexDirection:'column',gap:4 }}>
+                            {qOptions.split(',').map(s=>s.trim()).filter(Boolean).map(opt => (
+                              <label key={opt} style={{ display:'flex',alignItems:'center',gap:6,fontSize:12,color:'#374151',fontFamily:'DM Sans,sans-serif',cursor:'pointer' }}>
+                                <input type="checkbox" checked={qAlertOpts.includes(opt)}
+                                  onChange={e=>setQAlertOpts(p => e.target.checked ? [...p,opt] : p.filter(o=>o!==opt))}
+                                  style={{ accentColor:'#b45309' }}/>
+                                dispara com “{opt}”
+                              </label>
+                            ))}
+                          </div>
+                    )}
+                    {qType === 'text' && (
+                      <input value={qAlertText} onChange={e=>setQAlertText(e.target.value)}
+                        placeholder="Expressões que disparam (separadas por vírgula) — em branco: sem alerta"
+                        style={{ width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid #fde68a',fontFamily:'DM Sans,sans-serif',fontSize:12,boxSizing:'border-box' }}/>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display:'flex',gap:8,marginTop:12 }}>
-                  <Button variant="neutral" size="sm" onClick={()=>setShowQForm(false)}>Cancelar</Button>
-                  <Button variant="primary" size="sm" disabled={saving} onClick={handleAddQuestion}>
-                    {saving?'⏳...':'Adicionar Pergunta'}
+                  <Button variant="neutral" size="sm" onClick={resetQForm}>Cancelar</Button>
+                  <Button variant="primary" size="sm" disabled={saving} onClick={handleSaveQuestion}>
+                    {saving?'⏳...':editingQ?'Salvar Alterações':'Adicionar Pergunta'}
                   </Button>
                 </div>
               </div>
             ) : (
-              <Button variant="neutral" full onClick={()=>setShowQForm(true)}>+ Adicionar Pergunta</Button>
+              <Button variant="neutral" full onClick={()=>{ setEditingQ(null); setShowQForm(true) }}>+ Adicionar Pergunta</Button>
             )}
           </Card>
         )}

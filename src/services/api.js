@@ -1532,7 +1532,7 @@ export const questionnaireApi = {
   listAll: async () => {
     const { data, error } = await supabase
       .from('questionnaires')
-      .select('*, clients(razao_social), questionnaire_questions(id, text, type, options, required, order_index)')
+      .select('*, clients(razao_social), questionnaire_questions(id, text, type, options, required, order_index, compliance_alert)')
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
     return data || []
@@ -1557,13 +1557,25 @@ export const questionnaireApi = {
     if (error) throw new Error(error.message)
   },
 
-  addQuestion: async (questionnaireId, { text, type, options, required, orderIndex }) => {
+  addQuestion: async (questionnaireId, { text, type, options, required, orderIndex, complianceAlert }) => {
     const { data, error } = await supabase
       .from('questionnaire_questions')
-      .insert({ questionnaire_id: questionnaireId, text, type, options: options || null, required: required ?? true, order_index: orderIndex || 0 })
+      .insert({ questionnaire_id: questionnaireId, text, type, options: options || null,
+                required: required ?? true, order_index: orderIndex || 0,
+                compliance_alert: complianceAlert?.length ? complianceAlert : null })
       .select().single()
     if (error) throw new Error(error.message)
     return data
+  },
+
+  // Edição de pergunta (18/09) — inclui a regra de alerta de compliance
+  updateQuestion: async (id, { text, type, options, required, complianceAlert }) => {
+    const { error } = await supabase
+      .from('questionnaire_questions')
+      .update({ text, type, options: options || null, required: required ?? true,
+                compliance_alert: complianceAlert?.length ? complianceAlert : null })
+      .eq('id', id)
+    if (error) throw new Error(error.message)
   },
 
   removeQuestion: async (id) => {
