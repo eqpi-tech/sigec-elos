@@ -432,11 +432,12 @@ export async function getRequiredTypesBySeal(supplierId) {
   const requiredBySeal = new Map()
   for (const seal of (seals || [])) {
     const owner = seal.client_id || 'global'
-    // Fluxo do selo PRIMEIRO (16/09): é o contrato do processo — ex.: ELOS
-    // Verificado da EQPI exige só 6 docs, mesmo que o cliente tenha outros
-    // fluxos mais pesados ativos. Sem fluxo, cai na lógica por categorias.
-    let req = await flowRequiredDocIds(seal.flow_id)
-    if (!req.length) req = [...(reqByOwner[owner] || [])]
+    // Precedência (18/09): 1º as categorias que o FORNECEDOR escolheu dentro
+    // do cliente (ex.: VIX Nível 2 — só a matriz de 'Aquisição de Baterias',
+    // não do nível inteiro); 2º o fluxo do selo (EQPI Verificado: fornecedor
+    // não tem categorias do cliente, o contrato do fluxo define os 6 docs).
+    let req = [...(reqByOwner[owner] || [])]
+    if (!req.length) req = await flowRequiredDocIds(seal.flow_id)
     // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
     if (!req.length && seal.client_id) {
       const { data: fcRows } = await supabase
@@ -769,8 +770,14 @@ export const adminApi = {
     // cliente do selo, mesmo quando o fornecedor não tem categorias daquele
     // cliente — é o que o seletor de processo da ficha usa para filtrar
     const sealsData = sealsRes.status === 'fulfilled' ? (sealsRes.value.data || []) : []
+    // clientes p/ os quais o fornecedor JÁ tem categorias próprias — nesses,
+    // a exigência vem das categorias (acima), não do fluxo inteiro (18/09)
+    const ownerKeys = new Set(
+      (catRes.status === 'fulfilled' ? (catRes.value.data || []) : [])
+        .map(r => r.categories?.client_id || '__ELOS__'))
     for (const seal of sealsData) {
       if (!seal.flow_id) continue
+      if (ownerKeys.has(seal.client_id || '__ELOS__')) continue
       const req = await flowRequiredDocIds(seal.flow_id)
       if (!req.length) continue
       const key = seal.client_id || '__ELOS__'

@@ -40,15 +40,16 @@ function iconFor(cat) {
 
 // clientIds: inclui as categorias custom desses clientes além da árvore global
 // (fornecedor convidado por cliente HOC vê o fluxo do cliente — patch_032)
-// allowedIds: restringe as categorias DO CLIENTE às do fluxo do convite
-// (globais/marketplace não são afetadas); null/undefined = sem restrição
+// allowedIds: convite com FLUXO — a seleção fica restrita SOMENTE às
+// categorias do fluxo (18/09: a versão anterior deixava as globais passarem
+// e o convidado escolhia categoria fora do contrato do cliente)
 export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined, allowedIds = undefined }) {
   const allowSet = allowedIds?.length ? new Set(allowedIds.map(Number)) : null
   const filterTree = (tree) => {
     if (!allowSet || !tree) return tree
-    const gcs = (tree.grandchildren || []).filter(g => !g.client_id || allowSet.has(Number(g.id)))
+    const gcs = (tree.grandchildren || []).filter(g => allowSet.has(Number(g.id)))
     const withGc = new Set(gcs.map(g => g.parent_id))
-    const children = (tree.children || []).filter(c => !c.client_id || allowSet.has(Number(c.id)) || withGc.has(c.id))
+    const children = (tree.children || []).filter(c => allowSet.has(Number(c.id)) || withGc.has(c.id))
     return { children, grandchildren: gcs }
   }
   const [parents,      setParents]      = useState([])
@@ -80,14 +81,52 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
 
   // Carrega categorias pai
   useEffect(() => {
-    categoriesApi.getParents(clientIds)
-      .then(data => {
-        setParents(data)
-        if (!data.length) setLoadError('Nenhuma categoria encontrada.')
-      })
-      .catch(err => setLoadError('Erro ao carregar categorias: ' + err.message))
-      .finally(() => setLoading(false))
+    (async () => {
+      try {
+        let data = await categoriesApi.getParents(clientIds)
+        if (allowSet) {
+          // convite com fluxo: só as raízes que contêm categorias do fluxo
+          const { data: rows } = await supabase
+            .from('categories').select('id, parent_id').in('id', [...allowSet])
+          const keep = new Set((rows || []).map(r => r.parent_id).filter(Boolean))
+          const mids = [...keep]
+          if (mids.length) {
+            const { data: prows } = await supabase
+              .from('categories').select('id, parent_id').in('id', mids)
+            for (const p of (prows || [])) if (p.parent_id) keep.add(p.parent_id)
+          }
+          data = data.filter(p => keep.has(p.id) || allowSet.has(Number(p.id)))
+        }
+        // Funde raízes com o MESMO nome (a árvore global tem raízes duplicadas
+        // de importações antigas — 'Materiais' 2x — e clientes repetem a raiz
+        // global: 'SERVIÇOS' da VIX vs 'Serviços' global). A árvore do grupo
+        // fundido carrega os filhos de todas as raízes de mesmo nome.
+        const byName = new Map()
+        for (const p of data) {
+          const k = norm(p.name)
+          if (!byName.has(k)) byName.set(k, { ...p, ids: [p.id] })
+          else byName.get(k).ids.push(p.id)
+        }
+        const merged = [...byName.values()]
+        setParents(merged)
+        if (!merged.length) setLoadError('Nenhuma categoria encontrada.')
+      } catch (err) { setLoadError('Erro ao carregar categorias: ' + err.message) }
+      setLoading(false)
+    })()
   }, [])
+
+  // Busca e funde as árvores de todas as raízes de um grupo (mesmo nome)
+  const fetchMergedTree = async (parent) => {
+    const ids = parent.ids || [parent.id]
+    const parts = await Promise.all(ids.map(id => categoriesApi.getTree(id, clientIds)))
+    const seenC = new Set(), seenG = new Set()
+    const mergedTree = { children: [], grandchildren: [] }
+    for (const t of parts) {
+      for (const c of (t?.children || [])) if (!seenC.has(c.id)) { seenC.add(c.id); mergedTree.children.push(c) }
+      for (const g of (t?.grandchildren || [])) if (!seenG.has(g.id)) { seenG.add(g.id); mergedTree.grandchildren.push(g) }
+    }
+    return filterTree(mergedTree)
+  }
 
   // Sincroniza ref com state
   useEffect(() => { treesRef.current = trees }, [trees])
@@ -101,9 +140,9 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       autoExpandMatching()
       return
     }
-    Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds))).then(results => {
+    Promise.allSettled(unloaded.map(p => fetchMergedTree(p))).then(results => {
       const patch = {}
-      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = filterTree(r.value) })
+      results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
       if (Object.keys(patch).length) {
         setTrees(prev => {
           const updated = { ...prev, ...patch }
@@ -138,22 +177,22 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       .then(setRequiredDocs).finally(() => setLoadingDocs(false))
   }, [selectedIds.size, showDocuments])
 
-  const loadTree = async (parentId) => {
-    if (treesRef.current[parentId]) return
-    setLoadingTree(prev => new Set([...prev, parentId]))
+  const loadTree = async (parent) => {
+    if (treesRef.current[parent.id]) return
+    setLoadingTree(prev => new Set([...prev, parent.id]))
     try {
-      const tree = filterTree(await categoriesApi.getTree(parentId, clientIds))
-      setTrees(prev => ({ ...prev, [parentId]: tree }))
+      const tree = await fetchMergedTree(parent)
+      setTrees(prev => ({ ...prev, [parent.id]: tree }))
     } finally {
-      setLoadingTree(prev => { const n = new Set(prev); n.delete(parentId); return n })
+      setLoadingTree(prev => { const n = new Set(prev); n.delete(parent.id); return n })
     }
   }
 
-  const toggleParent = async (parentId) => {
-    const isOpen = expanded.has(parentId)
-    if (isOpen) { setExpanded(prev => { const n = new Set(prev); n.delete(parentId); return n }); return }
-    setExpanded(prev => new Set([...prev, parentId]))
-    await loadTree(parentId)
+  const toggleParent = async (parent) => {
+    const isOpen = expanded.has(parent.id)
+    if (isOpen) { setExpanded(prev => { const n = new Set(prev); n.delete(parent.id); return n }); return }
+    setExpanded(prev => new Set([...prev, parent.id]))
+    await loadTree(parent)
   }
 
   const toggleLeaf = (leafId) => {
@@ -205,9 +244,9 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
       // Garante que todas as árvores estão carregadas
       const unloaded = parents.filter(p => !treesRef.current[p.id])
       if (unloaded.length) {
-        const results = await Promise.allSettled(unloaded.map(p => categoriesApi.getTree(p.id, clientIds)))
+        const results = await Promise.allSettled(unloaded.map(p => fetchMergedTree(p)))
         const patch = {}
-        results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = filterTree(r.value) })
+        results.forEach((r, i) => { if (r.status === 'fulfilled' && r.value) patch[unloaded[i].id] = r.value })
         if (Object.keys(patch).length) {
           const updated = { ...treesRef.current, ...patch }
           treesRef.current = updated
@@ -324,7 +363,7 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           const allSel    = totalLeafs > 0 && selCount === totalLeafs
           return (
             <div key={parent.id} style={{ border:`2px solid ${isOpen?'#2E3192':'#e2e4ef'}`, borderRadius:14, overflow:'hidden', transition:'border .15s' }}>
-              <div onClick={() => toggleParent(parent.id)}
+              <div onClick={() => toggleParent(parent)}
                 style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:isOpen?'rgba(46,49,146,.05)':'#fff', cursor:'pointer', userSelect:'none' }}>
                 <span style={{ fontSize:22 }}>{iconFor(parent)}</span>
                 <div style={{ flex:1 }}>
@@ -433,8 +472,9 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
         )
       )}
 
-      {/* Categoria customizada */}
-      <div style={{ marginTop:12 }}>
+      {/* Categoria customizada — não vale em convite com fluxo (a seleção
+          está restrita ao contrato do cliente) */}
+      <div style={{ marginTop:12, display: allowSet ? 'none' : undefined }}>
         {showCustom ? (
           <div style={{ background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.15)', borderRadius:10, padding:14 }}>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#2E3192', marginBottom:10 }}>Nova categoria — em qual grupo ela se encaixa?</div>

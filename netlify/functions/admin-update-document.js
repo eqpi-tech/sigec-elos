@@ -179,10 +179,10 @@ async function recalcSealScores(sb, supplierId) {
 
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
-    // Fluxo do selo primeiro (16/09): é o contrato do processo
-    let req = await flowRequiredDocs(sb, seal.flow_id)
-    if (!req.length)
-      req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    // Precedência (18/09): categorias do fornecedor DENTRO do cliente
+    // primeiro; fluxo do selo como fallback (EQPI Verificado sem categorias)
+    let req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    if (!req.length) req = await flowRequiredDocs(sb, seal.flow_id)
     if (!req.length && seal.client_id) {
       // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
       const { data: fcRows } = await sb

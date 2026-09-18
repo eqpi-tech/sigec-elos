@@ -309,10 +309,10 @@ async function flowRequiredDocs(sb, flowId) {
 async function requiredDocsForSeal(sb, supplierId, seal) {
   const ELOS_VERIFICADO = [37, 61, 62, 7, 42, 8]
   if (!seal) return ELOS_VERIFICADO
-  const fromFlow = await flowRequiredDocs(sb, seal.flow_id)
-  if (fromFlow.length) return fromFlow
   if (!seal.client_id) return ELOS_VERIFICADO
-  // categorias do fornecedor pertencentes ao cliente do processo
+  // 1º: categorias que o fornecedor escolheu DENTRO do cliente (o contrato
+  // real dele — VIX Nível N cobra só a matriz das categorias escolhidas);
+  // 2º: matriz do fluxo do selo; 3º: fluxos ativos do cliente (18/09)
   const { data: catRows } = await sb
     .from('supplier_categories')
     .select('category_id, categories!inner(client_id)')
@@ -329,6 +329,8 @@ async function requiredDocsForSeal(sb, supplierId, seal) {
     for (const r of (cdRows || [])) docSet.add(r.document_id)
   }
   if (docSet.size) return [...docSet]
+  const fromFlow = await flowRequiredDocs(sb, seal.flow_id)
+  if (fromFlow.length) return fromFlow
   // fallback: união dos fluxos ATIVOS do cliente
   const { data: flows } = await sb
     .from('client_flows').select('id')
@@ -373,11 +375,10 @@ async function recalcSealScores(sb, supplierId) {
 
   for (const seal of seals) {
     const owner = seal.client_id || 'global'
-    // Fluxo do selo primeiro (16/09): é o CONTRATO do processo (ex.: ELOS
-    // Verificado da EQPI = 6 docs; níveis VIX), acima das categorias soltas
-    let req = await flowRequiredDocs(sb, seal.flow_id)
-    if (!req.length)
-      req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    // Precedência (18/09): categorias do fornecedor DENTRO do cliente
+    // primeiro; fluxo do selo como fallback (EQPI Verificado sem categorias)
+    let req = seal.client_id ? [...(reqByOwner[owner] || [])] : ELOS_VERIFICADO_DOCS
+    if (!req.length) req = await flowRequiredDocs(sb, seal.flow_id)
     if (!req.length && seal.client_id) {
       // Fallback 1: categorias dos fluxos ATIVOS do cliente (patch_043)
       const { data: fcRows } = await sb
