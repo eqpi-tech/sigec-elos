@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { planName, planCycle } from '../../lib/planLabels.js'
 import { ELOS_VERIFICADO_DOCS } from '../../lib/score.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi } from '../../services/api.js'
+import { supplierApi, documentApi, getRequiredTypesBySeal } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
@@ -27,6 +27,8 @@ export default function SupplierDashboard() {
   const [showAlertModal, setShowAlertModal] = useState(false)
   const [alertDocs,      setAlertDocs]      = useState([])
   const [questPending,   setQuestPending]   = useState(0)  // perguntas obrigatórias sem resposta
+  const [ready,          setReady]          = useState(null)  // regra do servidor: processo pronto p/ análise?
+  const [reqBySeal,      setReqBySeal]      = useState({})    // seal.id → tipos exigidos DAQUELE processo
 
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
@@ -57,6 +59,21 @@ export default function SupplierDashboard() {
           setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
         }
       }
+
+      // Prontidão pela MESMA regra do servidor (patch_074/077) + exigências
+      // POR PROCESSO (cada card conta só os docs do próprio fluxo/categorias)
+      try {
+        const [{ data: rdy }, reqRes] = await Promise.all([
+          supabase.rpc('supplier_ready_for_analysis', { p_supplier: user.supplierId }),
+          getRequiredTypesBySeal(user.supplierId).catch(() => null),
+        ])
+        setReady(rdy === true)
+        if (reqRes?.requiredBySeal) {
+          const obj = {}
+          reqRes.requiredBySeal.forEach((list, sealId) => { obj[sealId] = (list || []).map(String) })
+          setReqBySeal(obj)
+        }
+      } catch { /* não crítico */ }
 
       // Questionário faz parte da homologação (18/09): o processo só entra
       // em análise depois de TODOS os docs + questionário respondido
@@ -126,13 +143,26 @@ export default function SupplierDashboard() {
   const primarySeal = sigecSeal || seals[0]
   const globalScore = primarySeal?.score || 0
 
-  // Processos de homologação = cada seal é um processo
+  // Processos de homologação = cada seal é um processo. Contadores POR
+  // PROCESSO (exigências do próprio fluxo) e status honesto: PENDING só é
+  // "Em análise" quando o fornecedor completou docs + questionário (18/09)
+  const docByType = {}
+  for (const d of docs) docByType[String(d.type)] = d
   const processes = seals.map(seal => {
     const isSusp   = !!(seal.client_suspended_at || seal.status === 'SUSPENDED')
     const effStatus = isSusp ? 'SUSPENDED' : (seal.status || 'PENDING')
     const clientName = seal.clients?.razao_social || (seal.client_id ? 'Cliente' : 'SIGEC-ELOS')
     const name       = seal.seal_name || (seal.client_id ? `Processo ${clientName}` : 'SIGEC Simples')
-    return { ...seal, effStatus, clientName, name }
+    const req = reqBySeal[seal.id] || []
+    const cnt = { ok: 0, pend: 0, miss: 0 }
+    for (const t of req) {
+      const d = docByType[t]
+      if (d && (d.status === 'VALID' || d.status === 'NOT_APPLICABLE')) cnt.ok++
+      else if (d && d.status === 'PENDING') cnt.pend++
+      else cnt.miss++
+    }
+    const awaiting = effStatus === 'PENDING' && ready === false
+    return { ...seal, effStatus, clientName, name, cnt, req, awaiting }
   })
 
   return (
@@ -283,8 +313,8 @@ export default function SupplierDashboard() {
         ) : (
           <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
             {processes.map((proc, i) => {
-              const statusColor  = STATUS_COLORS[proc.effStatus] || '#9B9B9B'
-              const statusLabel  = STATUS_LABELS[proc.effStatus] || proc.effStatus
+              const statusColor  = proc.awaiting ? '#2E3192' : (STATUS_COLORS[proc.effStatus] || '#9B9B9B')
+              const statusLabel  = proc.awaiting ? 'Aguardando seus dados' : (STATUS_LABELS[proc.effStatus] || proc.effStatus)
               const scoreVal     = proc.score || 0
               return (
                 <Card key={proc.id || i} style={{ borderRadius:14, padding:'20px 22px', display:'flex', flexDirection:'column', gap:12, border:`1px solid ${proc.effStatus==='ACTIVE'?'rgba(34,197,94,.2)':proc.effStatus==='SUSPENDED'?'rgba(245,158,11,.2)':'rgba(46,49,146,.1)'}` }}>
@@ -312,9 +342,11 @@ export default function SupplierDashboard() {
                     <ScoreBar score={scoreVal} />
                   </div>
 
-                  {/* Docs resumo */}
+                  {/* Docs resumo — exigências DESTE processo (18/09) */}
                   <div style={{ display:'flex', gap:8 }}>
-                    {[['✓',docsOk,'#22c55e'],['⏳',docsPending,'#f59e0b'],['✗',docsMissing,'#ef4444']].map(([icon,val,color],j) => (
+                    {[['✓', proc.req.length ? proc.cnt.ok : docsOk, '#22c55e'],
+                      ['⏳', proc.req.length ? proc.cnt.pend : docsPending, '#f59e0b'],
+                      ['✗', proc.req.length ? proc.cnt.miss : docsMissing, '#ef4444']].map(([icon,val,color],j) => (
                       <div key={j} style={{ flex:1, textAlign:'center', padding:'5px', borderRadius:8, background:`${color}10`, border:`1px solid ${color}22` }}>
                         <div style={{ fontSize:13 }}>{icon}</div>
                         <div style={{ fontSize:11, fontWeight:700, color, fontFamily:'Montserrat,sans-serif' }}>{val}</div>
@@ -325,7 +357,10 @@ export default function SupplierDashboard() {
                   {/* Datas e CTA */}
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                      {proc.issued_at ? `Emitido ${proc.issued_at.slice(0,10)}` : proc.expires_at ? `Válido até ${proc.expires_at.slice(0,10)}` : 'Aguardando análise'}
+                      {proc.issued_at ? `Emitido ${proc.issued_at.slice(0,10)}`
+                        : proc.expires_at ? `Válido até ${proc.expires_at.slice(0,10)}`
+                        : proc.awaiting ? 'Complete docs + questionário'
+                        : 'Aguardando análise'}
                     </div>
                     <Button variant="primary" size="sm" onClick={() => navigate(`/fornecedor/processo/${proc.id}`)}>
                       Ver Processo →

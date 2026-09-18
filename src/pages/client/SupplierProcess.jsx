@@ -307,6 +307,13 @@ export default function ClientSupplierProcess() {
   const [bankUrl, setBankUrl]   = useState(null)
   const [bankLoading, setBankLoading] = useState(false)
   const [cnaeMap, setCnaeMap] = useState({})
+  const [supReady, setSupReady] = useState(null)  // fornecedor completou docs+questionário? (patch_074)
+
+  useEffect(() => {
+    if (!supplierId) return
+    supabase.rpc('supplier_ready_for_analysis', { p_supplier: supplierId })
+      .then(({ data: r }) => setSupReady(r === true)).catch(() => {})
+  }, [supplierId])
 
   useEffect(() => {
     if (!user?.clientId || !supplierId) return
@@ -401,6 +408,13 @@ export default function ClientSupplierProcess() {
               <SealBadge seal={seal} size="sm" showClient={false} showScore />
             ) : (
               <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Aguardando análise</div>
+            )}
+            {/* 18/09: PENDING sem docs/questionário completos = a bola está com o FORNECEDOR */}
+            {mySeal?.status === 'PENDING' && supReady === false && (
+              <div style={{ fontSize:10, background:'rgba(46,49,146,.1)', color:'#2E3192', borderRadius:20, padding:'2px 10px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}
+                title="A análise da EQPI só começa quando o fornecedor enviar todos os documentos e responder o questionário">
+                ⏸ AGUARDANDO FORNECEDOR
+              </div>
             )}
             {inv?.subsidiado && (
               <div style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>

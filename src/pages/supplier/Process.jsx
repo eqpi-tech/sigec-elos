@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi } from '../../services/api.js'
+import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, ScoreBar, StatusDot, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
 
@@ -22,6 +23,13 @@ export default function SupplierProcess() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [tab, setTab]         = useState('Visão Geral')
+  const [ready, setReady]     = useState(null)   // regra do servidor (patch_074)
+
+  useEffect(() => {
+    if (!user?.supplierId) return
+    supabase.rpc('supplier_ready_for_analysis', { p_supplier: user.supplierId })
+      .then(({ data: r }) => setReady(r === true)).catch(() => {})
+  }, [user?.supplierId])
 
   useEffect(() => {
     if (!sealId || !user?.supplierId) return
@@ -38,6 +46,8 @@ export default function SupplierProcess() {
   const { seal, documents, invitation, isSigec } = data
   const isSusp    = !!(seal.client_suspended_at || seal.status === 'SUSPENDED')
   const effStatus = isSusp ? 'SUSPENDED' : seal.status
+  // 18/09: PENDING só é "Em análise" quando docs + questionário estão completos
+  const awaiting  = effStatus === 'PENDING' && ready === false
   const clientName = seal.clients?.razao_social || (isSigec ? 'SIGEC-ELOS' : 'Cliente')
   const sealName   = seal.seal_name || (isSigec ? 'SIGEC Simples' : `Processo ${clientName}`)
 
@@ -86,9 +96,14 @@ export default function SupplierProcess() {
               </div>
               <div>
                 <span style={lbl}>Status</span>
-                <span style={{ ...val, color: effStatus==='ACTIVE'?'#22c55e':effStatus==='PENDING'?'#f59e0b':'#ef4444' }}>
-                  {effStatus==='ACTIVE'?'Ativo':effStatus==='PENDING'?'Em análise':effStatus==='SUSPENDED'?'Suspenso':'Expirado'}
+                <span style={{ ...val, color: effStatus==='ACTIVE'?'#22c55e':awaiting?'#2E3192':effStatus==='PENDING'?'#f59e0b':'#ef4444' }}>
+                  {effStatus==='ACTIVE'?'Ativo':awaiting?'Aguardando seus dados':effStatus==='PENDING'?'Em análise':effStatus==='SUSPENDED'?'Suspenso':'Expirado'}
                 </span>
+                {awaiting && (
+                  <div style={{ fontSize:11, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:3, lineHeight:1.4 }}>
+                    A análise começa quando todos os documentos forem enviados e o questionário respondido.
+                  </div>
+                )}
               </div>
               {seal.issued_at && (
                 <div>
