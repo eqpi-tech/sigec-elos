@@ -46,20 +46,21 @@ function exportCsv(docs) {
   const todayE = new Date(); todayE.setHours(23, 59, 59, 999)
 
   const label = (d) => {
-    const dt = new Date(d.expires_at)
-    if (dt < today)  return 'Vencido'
-    if (dt <= todayE) return 'Vence Hoje'
-    return 'No Prazo'
+    const due = d.analysis_due
+    if (!due) return '—'
+    const todayS = new Date().toISOString().slice(0, 10)
+    if (due < todayS)  return 'Data limite ultrapassada'
+    if (due === todayS) return 'Data limite hoje'
+    return 'Data limite futura'
   }
 
   const rows = [
-    ['Fornecedor', 'CNPJ', 'Documento', 'Status', 'Vencimento', 'Situação'],
+    ['Fornecedor', 'CNPJ', 'Documento', 'Data limite da análise', 'Situação'],
     ...docs.map(d => [
       d.suppliers?.razao_social || '—',
       d.suppliers?.cnpj || '—',
       d.label || '—',
-      d.status || '—',
-      d.expires_at?.slice(0, 10) || '—',
+      d.analysis_due || '—',
       label(d),
     ]),
   ]
@@ -99,13 +100,14 @@ export default function BackofficeOverview() {
 
   const riskColor = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
+  // Farol de ANÁLISE (fila do analista) — nomes e cores do HOC
   const farolSegments = farol ? [
-    { label:'Vencidos',          count: farol.vencidos.length, color:'#ef4444' },
-    { label:'Vencem hoje',       count: farol.hoje.length,     color:'#f59e0b' },
-    { label:'Próximos 5 dias',   count: farol.futuro.length,   color:'#22c55e' },
+    { label:'Data limite ultrapassada', count: farol.passados.length, color:'#FC4970' },
+    { label:'Data limite hoje',         count: farol.hoje.length,     color:'#F2A516' },
+    { label:'Data limite futura',       count: farol.futuros.length,  color:'#00CC00' },
   ] : []
 
-  const atRisk = farol ? [...farol.vencidos, ...farol.hoje] : []
+  const atRisk = farol ? [...farol.passados, ...farol.hoje] : []
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1200, margin:'0 auto' }}>
@@ -128,10 +130,10 @@ export default function BackofficeOverview() {
         <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <SectionTitle style={{ marginBottom:0 }}>Farol de Documentos</SectionTitle>
-              {(farol.vencidos.length > 0 || farol.hoje.length > 0) && (
+              <SectionTitle style={{ marginBottom:0 }}>Farol de Análise — fila do analista</SectionTitle>
+              {(farol.passados.length > 0 || farol.hoje.length > 0) && (
                 <span style={{ fontSize:11, fontWeight:700, color:'#dc2626', background:'rgba(239,68,68,.1)', padding:'2px 8px', borderRadius:20 }}>
-                  ⚠ {farol.vencidos.length + farol.hoje.length} requerem atenção
+                  ⚠ {farol.passados.length + farol.hoje.length} no limite ou atrasados
                 </span>
               )}
             </div>
@@ -140,7 +142,7 @@ export default function BackofficeOverview() {
             </Button>
           </div>
           <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:8, padding:'6px 10px' }}>
-            ℹ️ Exibindo documentos vencidos, que vencem hoje e nos <strong>próximos 5 dias</strong>. Documentos com vencimento além desse prazo não são listados aqui.
+            ℹ️ Documentos <strong>aguardando análise</strong> de fornecedores que já completaram a parte deles (todos os docs enviados + questionário respondido), classificados pela <strong>data-limite da análise</strong> (envio + 3 dias úteis) — mesma regra do HOC.
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:24, alignItems:'center' }}>
@@ -165,8 +167,8 @@ export default function BackofficeOverview() {
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'16px', background:'rgba(34,197,94,.06)', border:'1px solid rgba(34,197,94,.2)', borderRadius:12 }}>
                   <span style={{ fontSize:24 }}>✅</span>
                   <div>
-                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#15803d' }}>Nenhum documento vencido ou vencendo hoje</div>
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>{farol.futuro.length} documento{farol.futuro.length !== 1 ? 's' : ''} com vencimento futuro</div>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#15803d' }}>Fila em dia — nenhum documento no limite</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>{farol.futuros.length} documento{farol.futuros.length !== 1 ? 's' : ''} com data-limite futura</div>
                   </div>
                 </div>
               ) : (
@@ -176,18 +178,18 @@ export default function BackofficeOverview() {
                   </div>
                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                     {atRisk.slice(0, 6).map((d, i) => {
-                      const isVencido = new Date(d.expires_at) < new Date().setHours(0,0,0,0)
+                      const isAtrasado = d.analysis_due < new Date().toISOString().slice(0, 10)
                       return (
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, background: isVencido ? 'rgba(239,68,68,.05)' : 'rgba(245,158,11,.05)', border:`1px solid ${isVencido?'rgba(239,68,68,.2)':'rgba(245,158,11,.2)'}` }}>
-                          <div style={{ width:8, height:8, borderRadius:4, background: isVencido?'#ef4444':'#f59e0b', flexShrink:0 }}/>
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, background: isAtrasado ? 'rgba(252,73,112,.06)' : 'rgba(242,165,22,.06)', border:`1px solid ${isAtrasado?'rgba(252,73,112,.25)':'rgba(242,165,22,.25)'}` }}>
+                          <div style={{ width:8, height:8, borderRadius:4, background: isAtrasado?'#FC4970':'#F2A516', flexShrink:0 }}/>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                               {d.suppliers?.razao_social || '—'}
                             </div>
                             <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{d.label}</div>
                           </div>
-                          <span style={{ fontSize:11, fontWeight:700, color: isVencido?'#dc2626':'#d97706', whiteSpace:'nowrap', fontFamily:'Montserrat,sans-serif' }}>
-                            {isVencido ? 'Vencido' : 'Hoje'} · {d.expires_at?.slice(0,10)}
+                          <span style={{ fontSize:11, fontWeight:700, color: isAtrasado?'#dc2626':'#d97706', whiteSpace:'nowrap', fontFamily:'Montserrat,sans-serif' }}>
+                            {isAtrasado ? 'Limite ultrapassado' : 'Limite hoje'} · {d.analysis_due}
                           </span>
                         </div>
                       )

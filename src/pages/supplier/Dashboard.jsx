@@ -26,6 +26,7 @@ export default function SupplierDashboard() {
   const [loading,  setLoading]              = useState(true)
   const [showAlertModal, setShowAlertModal] = useState(false)
   const [alertDocs,      setAlertDocs]      = useState([])
+  const [questPending,   setQuestPending]   = useState(0)  // perguntas obrigatórias sem resposta
 
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
@@ -56,6 +57,25 @@ export default function SupplierDashboard() {
           setRequired(new Set((catDocs||[]).map(r => r.document_id)).size)
         }
       }
+
+      // Questionário faz parte da homologação (18/09): o processo só entra
+      // em análise depois de TODOS os docs + questionário respondido
+      try {
+        const clientIds = [...new Set((s.seals || []).filter(x => x.client_id && x.status === 'PENDING').map(x => x.client_id))]
+        if (clientIds.length) {
+          const { data: qs } = await supabase
+            .from('questionnaires').select('id, questionnaire_questions(id, required)')
+            .in('client_id', clientIds).neq('active', false)
+          const reqQ = (qs || []).flatMap(q => (q.questionnaire_questions || []).filter(x => x.required).map(x => x.id))
+          if (reqQ.length) {
+            const { data: ans } = await supabase
+              .from('questionnaire_answers').select('question_id')
+              .eq('supplier_id', user.supplierId).in('question_id', reqQ)
+            const answered = new Set((ans || []).map(a => a.question_id))
+            setQuestPending(reqQ.filter(qid => !answered.has(qid)).length)
+          } else setQuestPending(0)
+        } else setQuestPending(0)
+      } catch { /* não crítico */ }
 
       // Modal de alerta: mostra uma vez por sessão se há docs EXPIRED ou REJECTED
       const sessionKey = `alert_shown_${user.supplierId}`
@@ -142,6 +162,27 @@ export default function SupplierDashboard() {
       </div>
 
       {/* ── Alertas ── */}
+      {/* Processo do cliente só entra EM ANÁLISE quando o fornecedor completa
+          a parte dele: TODOS os documentos + questionário (18/09) */}
+      {(docsMissing > 0 || questPending > 0) && seals.some(s => s.client_id && s.status === 'PENDING') && (
+        <div style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:14, padding:'14px 20px', marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e' }}>
+              Falta pouco para sua homologação entrar em análise
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:2 }}>
+              {docsMissing > 0 && <>📎 <strong>{docsMissing}</strong> documento{docsMissing>1?'s':''} pendente{docsMissing>1?'s':''}</>}
+              {docsMissing > 0 && questPending > 0 && ' · '}
+              {questPending > 0 && <>📋 questionário com <strong>{questPending}</strong> pergunta{questPending>1?'s':''} sem resposta</>}
+              {' — a análise só começa quando tudo estiver completo.'}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+            {docsMissing > 0 && <Button variant="orange" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Enviar documentos</Button>}
+            {questPending > 0 && <Button variant="primary" size="sm" onClick={() => navigate('/fornecedor/questionario')}>Responder questionário</Button>}
+          </div>
+        </div>
+      )}
       {/* 'Nenhum plano ativo' NÃO vale p/ quem tem processo de CLIENTE
           (convite/subsidiado — o custo é do cliente, não há plano a assinar) */}
       {!supplier.activePlan && !seals.some(s => s.client_id) && (

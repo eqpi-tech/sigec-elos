@@ -149,6 +149,7 @@ export default function SupplierProfile() {
   const { user } = useAuth()
   const mobile = useIsMobile()
   const [data,    setData]    = useState(null)
+  const [cnaeDescMap, setCnaeDescMap] = useState({})  // codigo(dígitos) → descrição (tabela cnaes)
   const [loading, setLoading] = useState(true)
   const [inviteSent, setInviteSent] = useState(false)
   const [inviting,   setInviting]   = useState(false)
@@ -165,6 +166,21 @@ export default function SupplierProfile() {
       .then(({ data: b }) => { if (b?.razao_social) setBuyerOrg(b.razao_social) })
   }, [user?.buyerId])
   const [catsExpanded,    setCatsExpanded]    = useState(false)
+
+  // Descrições dos CNAEs secundários (tabela cnaes) — migrados guardam só o código
+  useEffect(() => {
+    const cd = data?.cnpj_data || data?.cnpj_consultation?.cnpj_data || {}
+    const codes = [...new Set([
+      ...((cd.cnaes_secundarios || []).filter(c => !c.descricao).map(c => String(c.codigo))),
+      ...((data?.cnae_list || []).map(String)),
+    ].map(c => c.replace(/\D/g, '')).filter(Boolean))]
+    if (!codes.length) return
+    supabase.from('cnaes').select('codigo, descricao').in('codigo', codes)
+      .then(({ data: rows }) => {
+        if (!rows?.length) return
+        setCnaeDescMap(Object.fromEntries(rows.map(r => [r.codigo, r.descricao])))
+      })
+  }, [data])
 
   const SESSION_KEY = 'marketplace_state'
   const hasMarketState = !!sessionStorage.getItem(SESSION_KEY)
@@ -503,7 +519,7 @@ export default function SupplierProfile() {
                     {secundarios.map((c,i) => (
                       <div key={i} style={{display:'flex',gap:14,padding:'8px 10px',borderRadius:8,background:'#f8f9ff',marginBottom:6,alignItems:'flex-start'}}>
                         <span style={{fontWeight:700,color:'#2E3192',flexShrink:0,fontFamily:'Montserrat,sans-serif',fontSize:12,minWidth:64}}>{c.codigo}</span>
-                        {c.descricao && <span style={{fontSize:13,color:'#555'}}>{ss(c.descricao)}</span>}
+                        <span style={{fontSize:13,color:'#555'}}>{c.descricao ? ss(c.descricao) : (cnaeDescMap[String(c.codigo).replace(/\D/g,'')] || '')}</span>
                       </div>
                     ))}
                   </Section>

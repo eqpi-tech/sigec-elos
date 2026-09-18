@@ -5,18 +5,24 @@ import { supabase } from '../../lib/supabase.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
+// Fila do analista fiel ao HOC (patch_074): buckets pela DATA-LIMITE da
+// ANÁLISE (envio + 3 dias úteis), cores/nomenclatura do farol do HOC
 const STATUS_OPTIONS = [
-  { value: 'todos',    label: 'Todos os status' },
-  { value: 'pendente', label: 'Aguardando análise' },
-  { value: 'vencido',  label: 'Vencido' },
-  { value: 'hoje',     label: 'Vence hoje' },
-  { value: '5dias',    label: 'Próximos 5 dias' },
+  { value: 'fila',          label: '📥 Fila de análise (todos)' },
+  { value: 'fila_passados', label: '🔴 Data limite ultrapassada' },
+  { value: 'fila_hoje',     label: '🟠 Data limite hoje' },
+  { value: 'fila_futuros',  label: '🟢 Data limite futura' },
+  { value: 'todos',    label: '— Todos os status —' },
+  { value: 'vencido',  label: 'Doc vencido (validade)' },
+  { value: 'hoje',     label: 'Doc vence hoje' },
+  { value: '5dias',    label: 'Doc vence em 5 dias' },
   { value: 'VALID',    label: 'Aprovado' },
   { value: 'REJECTED', label: 'Rejeitado' },
   { value: 'NOT_APPLICABLE', label: 'Não se aplica' },
 ]
 
 const SORT_OPTIONS = [
+  { value: 'due_asc',      label: 'Data limite da análise ↑' },
   { value: 'expires_asc',  label: 'Vencimento ↑' },
   { value: 'expires_desc', label: 'Vencimento ↓' },
   { value: 'status',       label: 'Status' },
@@ -204,16 +210,13 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
   const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
   const [status, setStatus]       = useState('')       // '' = manter atual
   const [inscription, setInscription] = useState(doc.inscription_number || '')
-  const [reasonCode, setReasonCode] = useState('')
+  const [reasonText, setReasonText] = useState('')   // motivo (datalist com busca por digitação)
   const [customNote, setCustomNote] = useState('')
   const [saving, setSaving]       = useState(false)
 
-  const selectedReason = reasons.find(r => r.code === reasonCode)
-  const note = status === 'REJECTED'
-    ? (reasonCode === 'OUTRO' ? customNote.trim() : (selectedReason?.label || ''))
-    : customNote.trim()
+  const note = status === 'REJECTED' ? reasonText.trim() : customNote.trim()
 
-  const rejectSemMotivo = status === 'REJECTED' && (!reasonCode || (reasonCode === 'OUTRO' && !customNote.trim()))
+  const rejectSemMotivo = status === 'REJECTED' && !reasonText.trim()
   const nadaMudou       = !file && !status && expiry === (doc.expires_at ? doc.expires_at.slice(0, 10) : '')
 
   async function confirm() {
@@ -287,17 +290,16 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
 
         {status === 'REJECTED' ? (
           <>
-            <span style={lbl}>Motivo da reprovação *</span>
-            <select value={reasonCode} onChange={e => setReasonCode(e.target.value)} style={{ ...inp, marginBottom:10 }}>
-              <option value="">Selecione um motivo...</option>
+            <span style={lbl}>Motivo da reprovação * <span style={{ fontWeight:400, color:'#9B9B9B' }}>(digite para buscar — motivos do HOC)</span></span>
+            <input list="motivos-reprovacao-doc" value={reasonText}
+              onChange={e => setReasonText(e.target.value)}
+              placeholder="Digite para buscar ou escreva um motivo..."
+              style={{ ...inp, marginBottom:10 }}/>
+            <datalist id="motivos-reprovacao-doc">
               {reasons.filter(r => r.applies_to !== 'seal').map(r => (
-                <option key={r.code} value={r.code}>{r.label}</option>
+                <option key={r.code} value={r.label}/>
               ))}
-            </select>
-            {reasonCode === 'OUTRO' && (
-              <textarea value={customNote} onChange={e => setCustomNote(e.target.value)} rows={2}
-                placeholder="Descreva o motivo..." style={{ ...inp, resize:'vertical', marginBottom:10 }}/>
-            )}
+            </datalist>
           </>
         ) : (
           <>
@@ -340,11 +342,11 @@ export default function DocumentAnalysis() {
   // Filtros
   const [docType,       setDocType]       = useState(saved.docType ?? '')
   const [supplierSearch,setSupplierSearch] = useState(saved.supplierSearch ?? '')
-  // 'analise' (legado, salvo em sessões antigas) equivale a 'pendente'
+  // 'analise'/'pendente' (legado em sessões antigas) → 'fila' (patch_074)
   const [statusFilter,  setStatusFilter]  = useState(
-    saved.statusFilter === 'analise' ? 'pendente' : (saved.statusFilter ?? 'pendente'))
+    ['analise', 'pendente'].includes(saved.statusFilter) ? 'fila' : (saved.statusFilter ?? 'fila'))
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
-  const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'expires_asc')
+  const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'due_asc')
 
   // Dados
   const [rows,        setRows]        = useState([])
@@ -533,6 +535,8 @@ export default function DocumentAnalysis() {
     const holidaySet = await getHolidaySet()
     const slaByType = Object.fromEntries(catalog.map(c => [String(c.id), c.analysis_sla_days]))
     const analysisDeadline = (d) => {
+      // patch_074: a data-limite oficial vem do servidor (envio + 3 dias úteis)
+      if (d.analysis_due) return d.analysis_due.split('-').reverse().join('/')
       if (!d.created_at || d.status === 'VALID' || d.status === 'REJECTED') return ''
       const dt = new Date(d.created_at)
       dt.setDate(dt.getDate() + (slaByType[String(d.type)] || ANALYSIS_SLA_DAYS))
@@ -615,7 +619,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setStatusFilter('pendente'); setExpiresUntil(''); setSortBy('expires_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType(''); setSupplierSearch(''); setStatusFilter('fila'); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>
@@ -650,10 +654,11 @@ export default function DocumentAnalysis() {
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
           {/* Cabeçalho da lista */}
-          <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.3fr 100px 100px 120px', gap:8, padding:'6px 16px', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.2fr 95px 95px 95px 120px', gap:8, padding:'6px 16px', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase' }}>
             <span>Fornecedor</span>
             <span>Documento</span>
             <span>Status</span>
+            <span>Limite análise</span>
             <span>Vencimento</span>
             <span style={{ textAlign:'right' }}>Ações</span>
           </div>
@@ -670,7 +675,7 @@ export default function DocumentAnalysis() {
                 borderLeft: `3px solid ${STATUS_COLOR[status] || '#e2e4ef'}`,
                 opacity: status === 'VALID' || status === 'REJECTED' ? 0.75 : 1,
               }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.3fr 100px 100px 120px', gap:8, alignItems:'start' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.2fr 95px 95px 95px 120px', gap:8, alignItems:'start' }}>
                   {/* Fornecedor */}
                   <div>
                     <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e', wordBreak:'break-word', lineHeight:1.3 }}>
@@ -705,6 +710,21 @@ export default function DocumentAnalysis() {
                       {STATUS_LABEL[status] || status}
                     </span>
                   </div>
+
+                  {/* Data limite da análise (farol HOC) */}
+                  {(() => {
+                    const due = doc.analysis_due
+                    const todayS = new Date().toISOString().slice(0, 10)
+                    const cor = !due || status !== 'PENDING' ? '#9B9B9B'
+                      : due < todayS ? '#FC4970' : due === todayS ? '#F2A516' : '#00A000'
+                    return (
+                      <div style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color: cor, fontWeight: status === 'PENDING' ? 700 : 400 }}>
+                        {due ? due.split('-').reverse().join('/') : '—'}
+                        {status === 'PENDING' && due && due < todayS && <div style={{ fontSize:10 }}>Ultrapassada</div>}
+                        {status === 'PENDING' && due === todayS && <div style={{ fontSize:10 }}>Hoje</div>}
+                      </div>
+                    )
+                  })()}
 
                   {/* Vencimento */}
                   <div style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', color: isExpired ? '#dc2626' : isToday ? '#d97706' : '#64748b', fontWeight: (isExpired || isToday) ? 700 : 400 }}>

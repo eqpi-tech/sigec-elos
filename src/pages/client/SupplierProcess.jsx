@@ -731,12 +731,16 @@ export default function ClientSupplierProcess() {
                       <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>
                         Secundários ({cnpjDat.cnaes_secundarios.length})
                       </div>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                        {cnpjDat.cnaes_secundarios.map((c,i) => (
-                          <span key={i} title={cnaeMap[String(c.codigo)] || safeStr(c.descricao)} style={{ fontSize:11, background:'rgba(46,49,146,.07)', color:'#2E3192', padding:'3px 8px', borderRadius:20, fontFamily:'DM Sans,sans-serif', cursor:'default' }}>
-                            {safeStr(c.codigo)}
-                          </span>
-                        ))}
+                      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                        {cnpjDat.cnaes_secundarios.map((c,i) => {
+                          const desc = safeStr(c.descricao) !== '—' && c.descricao ? safeStr(c.descricao) : (cnaeMap[String(c.codigo)] || '')
+                          return (
+                            <div key={i} style={{ fontSize:11.5, background:'rgba(46,49,146,.05)', border:'1px solid rgba(46,49,146,.08)', color:'#1a1c5e', padding:'5px 10px', borderRadius:8, fontFamily:'DM Sans,sans-serif' }}>
+                              <strong style={{ color:'#2E3192' }}>{String(c.codigo).replace(/^(\d{4})(\d)(\d{2})$/, '$1-$2/$3')}</strong>
+                              {desc ? ` — ${desc}` : ''}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}

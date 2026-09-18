@@ -501,11 +501,30 @@ export function BackofficeAnalysis() {
   const pendingDocs = docsView.filter(d =>
     ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
   const handleRequestDocs = async () => {
-    if (!pendingDocs.length) { alert('Nenhum documento pendente para solicitar.'); return }
-    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s) pendente(s)?`)) return
+    // Questionário faz parte da homologação (18/09): entra na cobrança
+    let questPend = 0
+    if (processSeal?.client_id) {
+      try {
+        const { data: qs } = await supabase
+          .from('questionnaires').select('id, questionnaire_questions(id, required)')
+          .eq('client_id', processSeal.client_id).neq('active', false)
+        const reqQ = (qs || []).flatMap(q => (q.questionnaire_questions || []).filter(x => x.required).map(x => x.id))
+        if (reqQ.length) {
+          const { data: ans } = await supabase
+            .from('questionnaire_answers').select('question_id')
+            .eq('supplier_id', id).in('question_id', reqQ)
+          const answered = new Set((ans || []).map(a => a.question_id))
+          questPend = reqQ.filter(qid => !answered.has(qid)).length
+        }
+      } catch { /* não crítico */ }
+    }
+    if (!pendingDocs.length && !questPend) { alert('Nenhuma pendência para solicitar.'); return }
+    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${questPend ? ' + questionário' : ''} pendente(s)?`)) return
     setProcessing(true)
     try {
-      const rows = pendingDocs.map(d =>
+      const questRow = questPend ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">📋 Questionário de homologação</td>
+         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${questPend} pergunta(s) obrigatória(s) sem resposta</td></tr>` : ''
+      const rows = questRow + pendingDocs.map(d =>
         `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">${d.label}</td>
          <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${d.status==='REJECTED'?'#dc2626':'#b45309'}">${
            d.status==='REJECTED' ? `Rejeitado${d.review_note ? ` — ${d.review_note}` : ''}`
@@ -638,10 +657,65 @@ export function BackofficeAnalysis() {
     setProcessing(false)
   }
   const openApproveModal = (doc) => {
+    // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE (18/09)
+    if (String(doc.type) === '61') { openCnaeModal(doc); return }
     setApproveModal({ docId: doc.id, docLabel: doc.label, docLabelLower: (doc.label || '').toLowerCase() })
     setApproveNote('')
     setApproveInscription('')
-    // mantém a sugestão de expiração já definida no load
+    // validade: sugestão do load (fim do plano) ou análise + 1 ano (18/09 —
+    // o campo vinha vazio p/ fornecedor sem plano, ex.: subsidiado)
+    if (!approveExpiry) {
+      const d = new Date(); d.setFullYear(d.getFullYear() + 1)
+      setApproveExpiry(d.toISOString().slice(0, 10))
+    }
+  }
+
+  // ── Validação do CNAE = vínculo categoria×CNAE (18/09) ──────────────────
+  const [cnaeModal, setCnaeModal] = useState(null)     // { doc, cats:[{id,name,cnae}], saving }
+  const openCnaeModal = async (doc) => {
+    // categorias do PROCESSO (cliente do selo em análise; sem cliente → todas)
+    const cats = (data?.categories || []).filter(c =>
+      !processSeal?.client_id || c.client_id === processSeal.client_id)
+    const list = cats.length ? cats : (data?.categories || [])
+    const { data: scRows } = await supabase
+      .from('supplier_categories').select('category_id, cnae')
+      .eq('supplier_id', id)
+    const cur = Object.fromEntries((scRows || []).map(r => [r.category_id, r.cnae]))
+    setCnaeModal({
+      doc,
+      cats: list.map(c => ({ id: c.id, name: c.name, cnae: cur[c.id] || '' })),
+    })
+  }
+  const getCnaeOptions = () => {
+    const cd = data?.cnpj_consultation?.cnpj_data
+    const list = []
+    if (cd?.cnae_fiscal) list.push({ code: String(cd.cnae_fiscal), desc: cd.cnae_fiscal_descricao || cnaeMap[String(cd.cnae_fiscal)] || '', main: true })
+    for (const c of (cd?.cnaes_secundarios || []))
+      list.push({ code: String(c.codigo), desc: c.descricao || cnaeMap[String(c.codigo)] || '', main: false })
+    return list
+  }
+  const confirmCnaeValidation = async () => {
+    const faltam = cnaeModal.cats.filter(c => !c.cnae)
+    if (faltam.length) { alert(`Vincule um CNAE a todas as categorias (faltam ${faltam.length}).`); return }
+    setCnaeModal(m => ({ ...m, saving: true }))
+    try {
+      const { data: { user: adminUser } } = await supabase.auth.getUser()
+      for (const c of cnaeModal.cats) {
+        const { error } = await supabase.from('supplier_categories')
+          .update({ cnae: c.cnae, cnae_validated_at: new Date().toISOString(), cnae_validated_by: adminUser?.id })
+          .eq('supplier_id', id).eq('category_id', c.id)
+        if (error) throw new Error(error.message)
+      }
+      const doc = cnaeModal.doc
+      setCnaeModal(null)
+      // segue para a aprovação normal do doc 61 (validade pré-preenchida)
+      setApproveModal({ docId: doc.id, docLabel: doc.label, docLabelLower: (doc.label || '').toLowerCase() })
+      setApproveNote(''); setApproveInscription('')
+      if (!approveExpiry) {
+        const d = new Date(); d.setFullYear(d.getFullYear() + 1)
+        setApproveExpiry(d.toISOString().slice(0, 10))
+      }
+    } catch (e) { alert('Erro ao salvar vínculos: ' + e.message); setCnaeModal(m => ({ ...m, saving: false })) }
   }
 
   const fetchLog = async () => {
@@ -691,10 +765,10 @@ export function BackofficeAnalysis() {
   }
 
   const confirmDocReject = async () => {
-    if (!rejectDocModal || !rejectCode) return
+    // rejectCode agora carrega o TEXTO do motivo (datalist com busca — 18/09)
+    if (!rejectDocModal || !rejectCode.trim()) return
     const { docId } = rejectDocModal
-    const selectedReason = rejectReasons.find(r => r.code === rejectCode)
-    const motivo = rejectCode === 'OUTRO' ? rejectCustom : (selectedReason?.label || 'Rejeitado pelo backoffice')
+    const motivo = rejectCode.trim()
     setRejectDocModal(null)
     setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
     try {
@@ -942,10 +1016,16 @@ export function BackofficeAnalysis() {
                   <div style={{ fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:6 }}>
                     CNAEs Secundários ({cnpjDat.cnaes_secundarios.length})
                   </div>
-                  <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                    {cnpjDat.cnaes_secundarios.map((c,i)=>(
-                      <span key={i} title={cnaeMap[String(c.codigo)] || safeStr(c.descricao)} style={{ fontSize:11,background:'rgba(46,49,146,.07)',color:'#2E3192',padding:'3px 8px',borderRadius:20,cursor:'default' }}>{safeStr(c.codigo)}</span>
-                    ))}
+                  <div style={{ display:'flex',flexDirection:'column',gap:4 }}>
+                    {cnpjDat.cnaes_secundarios.map((c,i)=>{
+                      const desc = safeStr(c.descricao) || cnaeMap[String(c.codigo)] || ''
+                      return (
+                        <div key={i} style={{ fontSize:11.5,background:'rgba(46,49,146,.05)',border:'1px solid rgba(46,49,146,.08)',color:'#1a1c5e',padding:'5px 10px',borderRadius:8 }}>
+                          <strong style={{ color:'#2E3192' }}>{String(c.codigo).replace(/^(\d{4})(\d)(\d{2})$/, '$1-$2/$3')}</strong>
+                          {desc ? ` — ${desc}` : ''}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -1721,9 +1801,9 @@ export function BackofficeAnalysis() {
                 ❌ Rejeitar
               </Button>
               <Button variant="neutral" full size="sm" style={{ borderRadius:10 }}
-                disabled={processing || pendingDocs.length === 0}
+                disabled={processing}
                 onClick={handleRequestDocs}
-                title={pendingDocs.length === 0 ? 'Nenhum documento pendente' : `Solicitar ${pendingDocs.length} documento(s) por e-mail`}>
+                title={`Solicitar pendências por e-mail (documentos e questionário)`}>
                 📧 Solicitar Documentos{pendingDocs.length > 0 ? ` (${pendingDocs.length})` : ''}
               </Button>
             </div>
@@ -1815,6 +1895,45 @@ export function BackofficeAnalysis() {
       })()}
 
       {/* Modal Aprovar Documento com Data de Expiração */}
+      {/* Modal Validação do CNAE — de/para categoria × CNAE (18/09) */}
+      {cnaeModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:640, width:'94%', maxHeight:'86vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:4 }}>🧩 Validação do CNAE</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:16 }}>
+              Vincule cada categoria da homologação a um CNAE do fornecedor (principal ou secundário).
+              O vínculo garante que a atividade da empresa cobre a categoria contratada.
+            </div>
+            {cnaeModal.cats.length === 0 ? (
+              <div style={{ padding:16, background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, fontSize:13, color:'#92400e', marginBottom:16 }}>
+                ⚠️ O fornecedor ainda não tem categorias neste processo.
+              </div>
+            ) : cnaeModal.cats.map((c, i) => (
+              <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, border:'1px solid #eef0f6', marginBottom:8, background: c.cnae ? 'rgba(34,197,94,.04)' : '#fff' }}>
+                <div style={{ flex:1, minWidth:0, fontSize:13, fontFamily:'DM Sans,sans-serif', fontWeight:600, color:'#1a1c5e' }} title={c.name}>{c.name}</div>
+                <span style={{ color:'#9B9B9B' }}>→</span>
+                <select value={c.cnae}
+                  onChange={e => setCnaeModal(m => ({ ...m, cats: m.cats.map((x, xi) => xi === i ? { ...x, cnae: e.target.value } : x) }))}
+                  style={{ flex:1.4, padding:'8px 10px', borderRadius:8, border:`1px solid ${c.cnae ? '#86efac' : '#e2e4ef'}`, fontFamily:'DM Sans,sans-serif', fontSize:12, background:'#fff' }}>
+                  <option value="">Selecionar CNAE...</option>
+                  {getCnaeOptions().map(o => (
+                    <option key={o.code} value={o.code}>
+                      {o.main ? '★ ' : ''}{o.code.replace(/^(\d{4})(\d)(\d{2})$/, '$1-$2/$3')} — {(o.desc || '').slice(0, 60)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:8, marginTop:16 }}>
+              <Button variant="neutral" full onClick={() => setCnaeModal(null)}>Cancelar</Button>
+              <Button variant="success" full disabled={cnaeModal.saving || cnaeModal.cats.length === 0} onClick={confirmCnaeValidation}>
+                {cnaeModal.saving ? '⏳ Salvando...' : '✓ Validar vínculos e aprovar CNAE'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {approveModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:'#fff', borderRadius:16, padding:32, maxWidth:440, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
@@ -1950,31 +2069,22 @@ export function BackofficeAnalysis() {
 
             <div style={{ marginBottom:16 }}>
               <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>
-                Motivo da rejeição <span style={{ color:'#dc2626' }}>*</span>
+                Motivo da rejeição <span style={{ color:'#dc2626' }}>*</span> <span style={{ fontWeight:400, color:'#9B9B9B' }}>(digite para buscar — motivos do HOC)</span>
               </label>
-              <select value={rejectCode} onChange={e => setRejectCode(e.target.value)}
-                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}>
-                <option value="">Selecione um motivo...</option>
+              <input list="motivos-reprovacao-ficha" value={rejectCode} onChange={e => setRejectCode(e.target.value)}
+                placeholder="Digite para buscar ou escreva um motivo..."
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}/>
+              <datalist id="motivos-reprovacao-ficha">
                 {rejectReasons.filter(r => r.applies_to !== 'seal').map(r => (
-                  <option key={r.code} value={r.code}>{r.label}</option>
+                  <option key={r.code} value={r.label}/>
                 ))}
-              </select>
+              </datalist>
             </div>
-
-            {rejectCode === 'OUTRO' && (
-              <div style={{ marginBottom:16 }}>
-                <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>Descreva o motivo</label>
-                <textarea value={rejectCustom} onChange={e => setRejectCustom(e.target.value)}
-                  rows={3} placeholder="Informe o motivo detalhado..."
-                  style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, resize:'vertical', boxSizing:'border-box' }}
-                />
-              </div>
-            )}
 
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={() => setRejectDocModal(null)}>Cancelar</Button>
               <Button variant="danger" full
-                disabled={!rejectCode || (rejectCode === 'OUTRO' && !rejectCustom.trim())}
+                disabled={!rejectCode.trim()}
                 onClick={confirmDocReject}>
                 ✕ Confirmar Rejeição
               </Button>

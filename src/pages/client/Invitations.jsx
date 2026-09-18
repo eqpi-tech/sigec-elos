@@ -310,7 +310,9 @@ export default function ClientInvitations() {
                     <select value={form.flow_id || flows.find(f => f.is_default)?.id || ''}
                       onChange={e=>setForm(f=>({...f, flow_id:e.target.value}))} style={inp}>
                       {flows.map(fl => {
-                        const price = form.subsidiado ? (fl.price_subsidized ?? fl.price) : (fl.price ?? fl.price_subsidized)
+                        // preço fora do label (18/09): nem todo usuário do
+                        // cliente deve ver o custo da homologação
+                        const price = null
                         return (
                           <option key={fl.id} value={fl.id}>
                             {fl.name}{fl.is_default ? ' (padrão)' : ''}{price != null ? ` — R$ ${Number(price).toFixed(2).replace('.', ',')}` : ''}

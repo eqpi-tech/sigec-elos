@@ -1015,12 +1015,13 @@ export const adminApi = {
   },
 
   getDocumentFarol: async () => {
-    // RPC admin_document_farol (patch_069): só processos operáveis —
-    // suspenso/cliente inativo não entra no farol (regra 09/09)
+    // RPC admin_document_farol (patch_074): FILA DO ANALISTA fiel ao HOC —
+    // docs AGUARDANDO ANÁLISE de fornecedor que completou a parte dele,
+    // em buckets pela DATA-LIMITE de análise (envio + 3 dias úteis)
     const { data, error } = await supabase.rpc('admin_document_farol')
     if (error) throw new Error(error.message)
-    const vencidos = data?.vencidos || [], hoje = data?.hoje || [], futuro = data?.futuro || []
-    return { vencidos, hoje, futuro, all: [...vencidos, ...hoje, ...futuro] }
+    const passados = data?.passados || [], hoje = data?.hoje || [], futuros = data?.futuros || []
+    return { passados, hoje, futuros, all: [...passados, ...hoje, ...futuros] }
   },
 
   // Relatórios (patch_071): funil da Campanha Primeiro Acesso e dashboard
