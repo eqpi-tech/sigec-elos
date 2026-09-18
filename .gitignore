@@ -45,3 +45,7 @@ scripts/migration_*.log
 
 # Relatório local de achados de segurança (remediação separada — não versionar)
 SECURITY-FINDINGS.local.md
+
+# Supabase CLI (Branching)
+supabase/.branches/
+supabase/.temp/

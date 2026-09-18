@@ -1,0 +1,8 @@
+# Supabase CLI / Branching — SIGEC-ELOS
+# O Branching aplica supabase/migrations/ em cada branch de preview.
+# Os patch_NNN_*.sql na raiz de supabase/ são o HISTÓRICO aplicado à
+# produção manualmente; o baseline em migrations/ consolida esse estado.
+project_id = "omodfayxxucuxnozsxak"
+
+[db]
+major_version = 15
