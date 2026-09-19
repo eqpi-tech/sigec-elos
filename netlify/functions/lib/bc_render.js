@@ -40,6 +40,18 @@ async function dropBrowser() {
   const b = _browser
   _browser = null
   if (b) { try { await b.close() } catch { /* já morto */ } }
+  // /tmp do lambda tem 512MB e o binário extraído ocupa ~250MB; cada launch
+  // do playwright cria um diretório de perfil que fica órfão — acumulando,
+  // o /tmp lota e o chromium morre no launch (visto no Full 19/09).
+  // Limpa perfis/crashdumps SEM tocar no binário (/tmp/chromium, libs).
+  try {
+    const fs = require('fs')
+    for (const entry of fs.readdirSync('/tmp')) {
+      if (/^(playwright|\.org\.chromium|snap-|\.config)/.test(entry)) {
+        fs.rmSync(`/tmp/${entry}`, { recursive: true, force: true })
+      }
+    }
+  } catch { /* melhor-esforço */ }
 }
 
 // Nossos HTMLs são autocontidos (fontes/imagens em data:) → 'load' basta.
