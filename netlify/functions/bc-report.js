@@ -29,7 +29,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'GET') {
     const cnpj = (event.queryStringParameters?.cnpj || '').replace(/\D/g, '')
     let q = sb.from('report_requests')
-      .select('id, cnpj, tipo, status, score_eqpi, risk_band, cost_brl, price_brl, pdf_path, error, created_at, finished_at, supplier_id')
+      .select('id, cnpj, tipo, status, score_eqpi, risk_band, parecer, cost_brl, price_brl, pdf_path, error, created_at, finished_at, supplier_id')
       .order('created_at', { ascending: false }).limit(30)
     if (cnpj) q = q.eq('cnpj', cnpj)
     const { data, error } = await q
