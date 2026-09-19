@@ -86,7 +86,7 @@ export default function BcReport() {
       if (tick++ % 3 === 0) { // worker a cada ~30s; refresh a cada 10s
         try {
           const { data: { session } } = await supabase.auth.getSession()
-          fetch('/.netlify/functions/bc-report-worker', {
+          fetch('/.netlify/functions/bc-report-worker-background', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
             body: '{}',
