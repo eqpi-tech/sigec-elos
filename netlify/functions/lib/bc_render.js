@@ -112,14 +112,11 @@ async function buildEvidenceAppendix(sb, requestId) {
       const buf = Buffer.from(await blob.arrayBuffer())
       if (buf.length > MAX_EVIDENCE_BYTES) continue
       const ext = ev.storage_path.split('.').pop().toLowerCase()
-      let pdf
-      if (ext === 'pdf') pdf = buf
-      else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
-        pdf = await htmlToPdf(`<html><body style="margin:0"><img style="width:100%" src="data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${buf.toString('base64')}"></body></html>`)
-      } else { // html/site_receipt: sem <script>, render offline
-        const semScript = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, '')
-        pdf = await htmlToPdf(semScript, { offline: true })
-      }
+      // SÓ PDFs nativos entram no anexo (plano C, 19/09): converter HTML no
+      // chromium do lambda derrubava o render; receipts HTML ficam no bucket
+      // com sha256 e são citados no Índice de Evidências
+      if (ext !== 'pdf') continue
+      const pdf = buf
       out.push({ slug: ev.source_results.connector, pdf })
       converted++
     } catch (e) { console.warn(`[bc-render] evidência ${ev.storage_path}: ${e.message}`) }
@@ -194,23 +191,21 @@ async function renderOpenReports({ budgetMs = 120000 } = {}) {
             solicitante = u?.user?.email || null
           } catch { /* segue sem */ }
         }
-        const { buildFullHtml } = require('./render/full.js')
+        const { buildFullHtml, buildEvidenceIndexHtml } = require('./render/full.js')
         const appendix = await buildEvidenceAppendix(sb, req.id)
-        // 1ª passada com placeholder (mesmo footprint) só p/ contar páginas
-        const index0 = Object.fromEntries(appendix.map((i) => [i.slug, '···']))
-        let draft = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex: index0 }))
-        const bodyPages = await countPages(draft)
-        draft = null // libera o buffer antes da 2ª passada (memória do lambda)
-        await dropBrowser() // 2ª passada com chromium zerado
-        // numeração das evidências: começam após o corpo, na ordem do apêndice
-        const evidenceIndex = {}
-        let pageNo = bodyPages + 1
+        // corpo em UMA passada (referência genérica ao índice) + página de
+        // índice renderizada à parte com a numeração real → 2 impressões
+        const marcado = Object.fromEntries(appendix.map((i) => [i.slug, true]))
+        const body = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex: marcado }))
+        const bodyPages = await countPages(body)
+        const entries = []
+        let pageNo = bodyPages + 2 // corpo + página do índice
         for (const item of appendix) {
-          if (!evidenceIndex[item.slug]) evidenceIndex[item.slug] = pageNo
+          entries.push({ slug: item.slug, protocol: sources[item.slug]?.parsed?.protocol || null, page: pageNo })
           pageNo += await countPages(item.pdf)
         }
-        const finalBody = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex }))
-        pdf = await mergePdfs(finalBody, appendix)
+        const indexPdf = entries.length ? await htmlToPdf(buildEvidenceIndexHtml(entries)) : null
+        pdf = await mergePdfs(body, [...(indexPdf ? [{ slug: '_indice', pdf: indexPdf }] : []), ...appendix])
       } else {
         const html = buildLightHtml({ req, sources, elos: await elosDocStats(sb, req.supplier_id) })
         pdf = await htmlToPdf(html)

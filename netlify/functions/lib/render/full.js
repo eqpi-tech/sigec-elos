@@ -118,7 +118,7 @@ function buildFullHtml({ req, sources, solicitante = null, evidenceIndex = {} })
           <span class="badge" style="background:${b.bg};color:${b.fg}">${b.label}</span>
         </div>
         <table class="kv">${kv(s.parsed?.details)}</table>
-        ${ev ? `<div class="ev">🧾 Evidência oficial anexa (página ${ev})</div>` : ''}
+        ${ev ? `<div class="ev">🧾 Evidência oficial anexa — ver Índice de Evidências</div>` : ''}
       </div>`
     }).join('\n')
     if (!blocos) return ''
@@ -210,4 +210,26 @@ ${secoes}
 </body></html>`
 }
 
-module.exports = { buildFullHtml, ASPECTOS, NOME_FONTE }
+// página de índice das evidências (renderizada à parte e mesclada entre o
+// corpo e os anexos — assim o corpo sai em UMA passada de impressão)
+function buildEvidenceIndexHtml(entries) {
+  const linhas = entries.map((e) => `<tr><td>${esc(NOME_FONTE[e.slug] || e.slug)}</td><td>${esc(e.protocol || '—')}</td><td style="text-align:right">página ${e.page}</td></tr>`).join('')
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+    @font-face { font-family: Montserrat; font-weight: 100 900; src: url(data:font/woff2;base64,${montserrat}) format('woff2'); }
+    @page { size: A4; margin: 14mm 12mm; }
+    body { font-family: Montserrat, sans-serif; color: ${INK}; font-size: 9pt; }
+    h2 { color: ${NAVY}; font-size: 13pt; border-bottom: 2px solid ${ORANGE}; padding-bottom: 2mm; margin-bottom: 5mm; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: ${MUTED}; font-size: 7pt; text-transform: uppercase; letter-spacing: 1px; padding: 1.5mm 2mm; border-bottom: 1.5px solid ${NAVY}; }
+    td { padding: 1.6mm 2mm; border-bottom: 1px solid #F3F4F6; }
+    .nota { color: ${MUTED}; font-size: 7.4pt; margin-top: 6mm; }
+  </style></head><body>
+  <h2>Índice de Evidências</h2>
+  <table><thead><tr><th>Fonte</th><th>Protocolo</th><th style="text-align:right">Localização</th></tr></thead>
+  <tbody>${linhas}</tbody></table>
+  <div class="nota">Certidões oficiais em PDF anexadas na íntegra. Comprovantes de consulta em HTML ficam arquivados
+  com hash SHA-256 no dossiê digital da emissão e podem ser disponibilizados sob demanda.</div>
+  </body></html>`
+}
+
+module.exports = { buildFullHtml, buildEvidenceIndexHtml, ASPECTOS, NOME_FONTE }
