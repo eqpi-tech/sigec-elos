@@ -7,9 +7,11 @@
   directory  = "netlify/functions"
   node_bundler = "esbuild"
 
-# BC Report: worker da fila roda 1/min EM PRODUÇÃO (branch deploys não
-# executam schedules — no preview a tela dispara o worker via POST)
-[functions."bc-report-worker"]
+# BC Report: fila processada 1/min EM PRODUÇÃO pelo wrapper agendado
+# (function com schedule não aceita POST externo — 403 — por isso o gatilho
+# da tela usa bc-report-worker.js, HTTP, e o cron usa bc-report-cron.js;
+# branch deploys não executam schedules)
+[functions."bc-report-cron"]
   schedule = "* * * * *"
 [[redirects]]
   from = "/pesquisa.html"

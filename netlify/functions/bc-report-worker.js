@@ -1,8 +1,8 @@
-// netlify/functions/bc-report-worker.js — worker da fila do BC Report.
+// netlify/functions/bc-report-worker.js — worker da fila do BC Report (HTTP).
 //
 // Gatilhos:
-//  - produção: scheduled function 1/min (netlify.toml) — branch deploys NÃO
-//    executam schedules, por isso o preview usa o gatilho HTTP abaixo
+//  - produção: o cron fica em bc-report-cron.js (function com schedule não
+//    aceita POST externo); este endpoint atende a tela e diagnósticos
 //  - HTTP POST: ADMIN autenticado (a tela chama junto com o polling) ou
 //    Authorization: Bearer CRON_SECRET (GitHub Actions/diagnóstico)
 //
@@ -22,12 +22,10 @@ exports.handler = async (event) => {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' }
 
-  // invocação agendada (Netlify) não traz Authorization
   const auth = event.headers?.authorization || ''
-  const isCron = !auth && !event.httpMethod // scheduled invoke
   const bearer = auth.replace('Bearer ', '')
 
-  let authorized = isCron || (process.env.CRON_SECRET && bearer === process.env.CRON_SECRET)
+  let authorized = !!(process.env.CRON_SECRET && bearer === process.env.CRON_SECRET)
   if (!authorized && bearer) {
     const { data: { user } } = await supabaseAdmin.auth.getUser(bearer)
     if (user) {
