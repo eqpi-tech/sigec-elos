@@ -6,6 +6,11 @@
 [functions]
   directory  = "netlify/functions"
   node_bundler = "esbuild"
+
+# BC Report: worker da fila roda 1/min EM PRODUÇÃO (branch deploys não
+# executam schedules — no preview a tela dispara o worker via POST)
+[functions."bc-report-worker"]
+  schedule = "* * * * *"
 [[redirects]]
   from = "/pesquisa.html"
   to   = "/pesquisa.html"

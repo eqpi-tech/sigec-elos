@@ -76,10 +76,27 @@ export default function BcReport() {
   }, [])
   useEffect(() => { load(filterCnpj) }, [load, filterCnpj])
 
-  // enquanto houver request em andamento, atualiza a cada 10s
+  // enquanto houver request em andamento, cutuca o worker e atualiza a cada
+  // 10s (no branch deploy não há scheduled function — o gatilho é a tela;
+  // em produção o cron 1/min cobre mesmo com a tela fechada)
   useEffect(() => {
     if (!rows?.some(r => ['pending', 'collecting', 'rendering'].includes(r.status))) return
-    const t = setInterval(() => load(filterCnpj), 10000)
+    let tick = 0
+    const kick = async () => {
+      if (tick++ % 3 === 0) { // worker a cada ~30s; refresh a cada 10s
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          fetch('/.netlify/functions/bc-report-worker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+            body: '{}',
+          }).catch(() => {})
+        } catch { /* melhor-esforço */ }
+      }
+      load(filterCnpj)
+    }
+    kick()
+    const t = setInterval(kick, 10000)
     return () => clearInterval(t)
   }, [rows, load, filterCnpj])
 
