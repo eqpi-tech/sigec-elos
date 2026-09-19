@@ -9,16 +9,14 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+// OAuth + chamada da Análise Restritiva PJ extraídos p/ o conector do
+// BC Report (handoff §6 — refactor sem mudança de comportamento)
+const { consultaRestritivaPJ, formatCnpj } = require('./lib/connectors/assertiva_pj.js')
+
 const ASSERTIVA_DOC_TYPE = '578'
 const ASSERTIVA_BUCKET   = 'documents'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatCnpj(raw) {
-  const d = raw.replace(/\D/g, '')
-  if (d.length !== 14) return raw
-  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`
-}
 
 function fmtMoney(n) {
   if (n == null) return '-'
@@ -33,28 +31,6 @@ function fmtDate(d) {
 // Remove caracteres fora do Latin-1 (WinAnsi) para compatibilidade com pdf-lib
 function safe(s) {
   return String(s ?? '-').replace(/[^\x00-\xFF]/g, '-')
-}
-
-// ── OAuth2 para Assertiva ─────────────────────────────────────────────────────
-
-async function getAssertivaToken() {
-  const clientId = process.env.ASSERTIVA_CLIENT_ID
-  const secret   = process.env.ASSERTIVA_CLIENT_SECRET
-  if (!clientId || !secret) throw new Error('Credenciais Assertiva não configuradas (ASSERTIVA_CLIENT_ID, ASSERTIVA_CLIENT_SECRET)')
-
-  const credentials = Buffer.from(`${clientId}:${secret}`).toString('base64')
-  const res = await fetch('https://api.assertivasolucoes.com.br/oauth2/v3/token', {
-    method: 'POST',
-    headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'grant_type=client_credentials',
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Assertiva auth falhou (${res.status}): ${text}`)
-  }
-  const data = await res.json()
-  if (!data.access_token) throw new Error('Assertiva não retornou access_token')
-  return data.access_token
 }
 
 // ── Geração de PDF com pdf-lib ────────────────────────────────────────────────
@@ -334,25 +310,11 @@ exports.handler = async (event) => {
   if (supErr || !supplier?.cnpj) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Fornecedor ou CNPJ não encontrado' }) }
 
   try {
-    // 1. Obtém token Assertiva
-    const assertivaToken = await getAssertivaToken()
+    // 1-2. OAuth + Análise Restritiva PJ (módulo compartilhado c/ o BC Report)
+    const { httpStatus, reportData } = await consultaRestritivaPJ(supplier.cnpj)
 
-    // 2. Chama Análise Restritiva PJ
-    const cnpjFormatado = formatCnpj(supplier.cnpj)
-    const cnpjEncoded   = encodeURIComponent(cnpjFormatado)
-    const apiRes = await fetch(
-      `https://api.assertivasolucoes.com.br/score/v3/pj/credito/${cnpjEncoded}?idFinalidade=2`,
-      { headers: { 'Authorization': `Bearer ${assertivaToken}`, 'Accept': 'application/json' } }
-    )
-
-    if (apiRes.status === 429) return { statusCode: 429, headers, body: JSON.stringify({ error: 'Consulta duplicada. Aguarde 2 minutos antes de gerar novamente.' }) }
-    if (apiRes.status === 202) return { statusCode: 202, headers, body: JSON.stringify({ error: 'CNPJ não encontrado ou restrição LGPD.' }) }
-    if (!apiRes.ok) {
-      const errText = await apiRes.text()
-      throw new Error(`Assertiva API error ${apiRes.status}: ${errText.slice(0, 200)}`)
-    }
-
-    const reportData = await apiRes.json()
+    if (httpStatus === 429) return { statusCode: 429, headers, body: JSON.stringify({ error: 'Consulta duplicada. Aguarde 2 minutos antes de gerar novamente.' }) }
+    if (httpStatus === 202) return { statusCode: 202, headers, body: JSON.stringify({ error: 'CNPJ não encontrado ou restrição LGPD.' }) }
     const scoreClasse = reportData?.resposta?.score?.classe || null
     const scorePontos = reportData?.resposta?.score?.pontos ?? null
     const protocol    = reportData?.cabecalho?.protocolo    || null
