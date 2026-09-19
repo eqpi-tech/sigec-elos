@@ -230,7 +230,10 @@ async function processRequest(sb, req, deadline, log) {
   for (const r of after || []) (byConn[r.connector] = byConn[r.connector] || []).push(r)
   const allTerminal = plan.every((slug) => isTerminal(byConn[slug] || []))
   const cost = (after || []).reduce((s, r) => s + Number(r.cost_brl || 0), 0)
-  const upd = { cost_brl: Math.round(cost * 100) / 100 }
+  // libera o claim ao sair — worker que entra e não tem nada a rodar
+  // (backoff vigente) deixava o lock de 4 min pendurado e bloqueava as
+  // passadas seguintes (inanição observada no teste Full de 19/09)
+  const upd = { cost_brl: Math.round(cost * 100) / 100, worker_lock_until: null }
   if (allTerminal) {
     // Score EQPI + parecer (§8) na virada p/ rendering (PDF = estágio 7)
     const sources = {}
