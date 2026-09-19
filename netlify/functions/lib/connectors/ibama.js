@@ -14,6 +14,10 @@ module.exports = {
       regularidade: reg.status === 'fulfilled' ? reg.value : { code: 0, codeMessage: reg.reason?.message },
     }
   },
+  // duas consultas independentes: embargos (0,20+0,06) e regularidade (0,20)
+  costOf(raw) {
+    return (raw?.embargos?.code === 200 ? 0.26 : 0) + (raw?.regularidade?.code === 200 ? 0.20 : 0)
+  },
   parse(raw) {
     const se = mapCode(raw.embargos.code, raw.embargos.codeMessage)
     const sr = mapCode(raw.regularidade.code, raw.regularidade.codeMessage)

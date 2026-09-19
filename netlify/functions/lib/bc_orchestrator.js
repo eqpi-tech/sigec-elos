@@ -126,7 +126,12 @@ async function runConnector(sb, req, slug, ctx, remainingMs) {
       }),
       new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout ${timeoutMs}ms`)), timeoutMs)),
     ])
-    if (c.route === 'infosimples') status = mapCode(raw.code, raw.codeMessage)
+    if (c.route === 'infosimples') {
+      status = mapCode(raw.code, raw.codeMessage)
+      // 602 (rota/praça inexistente) e 620 (erro permanente da fonte, ex.
+      // Sefaz-RJ exige e-CNPJ) não mudam com retry → terminais já na 1ª vez
+      if (raw?.code === 602 || raw?.code === 620) status = 'not_found'
+    }
     else if (raw?.notFound) status = 'not_found'
     else if (raw?.duplicated) status = 'failed_soft' // Assertiva 429: retry depois
     else status = 'ok'
@@ -137,9 +142,12 @@ async function runConnector(sb, req, slug, ctx, remainingMs) {
     parsed = { result_flag: 'indisponivel', headline: `${slug}: fonte indisponível — ${raw.error.slice(0, 120)}`, details: {}, evidence: [], protocol: null }
   }
 
+  // Infosimples fatura SÓ código 200 — not_found/6xx não geram custo
   const cost = typeof c.costOf === 'function'
     ? c.costOf(raw)
-    : (status === 'ok' || status === 'not_found' ? (c.costBase || 0) + (c.costExtra || 0) : 0)
+    : c.route === 'infosimples'
+      ? (raw?.code === 200 ? (c.costBase || 0) + (c.costExtra || 0) : 0)
+      : (status === 'ok' || status === 'not_found' ? (c.costBase || 0) + (c.costExtra || 0) : 0)
   const validUntil = new Date(Date.now() + c.ttlDays * 24 * 3600 * 1000).toISOString()
 
   const { data: sr, error: srErr } = await sb.from('source_results').insert({
@@ -166,6 +174,15 @@ async function runConnector(sb, req, slug, ctx, remainingMs) {
 }
 
 async function processRequest(sb, req, deadline, log) {
+  // claim: um worker por request (patch_082) — a guarda de 90s não cobre
+  // chamadas em voo e dois workers chegaram a pagar a mesma fonte em dobro
+  const { data: claimed } = await sb
+    .from('report_requests')
+    .update({ worker_lock_until: new Date(Date.now() + 4 * 60 * 1000).toISOString() })
+    .eq('id', req.id)
+    .or(`worker_lock_until.is.null,worker_lock_until.lt.${new Date().toISOString()}`)
+    .select('id')
+  if (!claimed?.length) { log.push(`${req.cnpj}: lock de outro worker — pulando`); return false }
   if (req.status === 'pending') {
     await sb.from('report_requests').update({ status: 'collecting' }).eq('id', req.id).eq('status', 'pending')
   }
@@ -194,6 +211,10 @@ async function processRequest(sb, req, deadline, log) {
     const remaining = deadline - Date.now()
     if (remaining < 4000) break
     const batch = runnable.slice(i, i + BATCH_SIZE)
+    // renova o claim a cada lote (lotes com fontes lentas passam de 4 min)
+    await sb.from('report_requests')
+      .update({ worker_lock_until: new Date(Date.now() + 4 * 60 * 1000).toISOString() })
+      .eq('id', req.id)
     const results = await Promise.allSettled(batch.map((slug) => runConnector(sb, req, slug, ctx, remaining - 1500)))
     results.forEach((r, j) => log.push(r.status === 'fulfilled'
       ? `${req.cnpj}:${r.value.slug}=${r.value.outcome}(${r.value.ms}ms)`

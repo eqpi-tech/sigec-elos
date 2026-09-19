@@ -26,6 +26,10 @@ module.exports = {
     }
     return { consultas: out }
   },
+  // 2 buscas no Full (empresa + sócio adm): fatura cada consulta 200
+  costOf(raw) {
+    return (raw?.consultas || []).filter((c) => c.code === 200).length * 0.20
+  },
   parse(raw) {
     if (raw?.unsupported) return { result_flag: 'indisponivel', headline: 'Mídia negativa: sem razão social para pesquisar', details: {}, evidence: [], protocol: null }
     let hits = 0
