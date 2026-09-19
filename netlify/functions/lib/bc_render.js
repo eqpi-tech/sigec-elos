@@ -45,13 +45,17 @@ async function dropBrowser() {
 // Nossos HTMLs são autocontidos (fontes/imagens em data:) → 'load' basta.
 // O chromium pode MORRER no meio (OOM no lambda — visto no Full 19/09):
 // nessa hipótese derruba a instância e relança UMA vez antes de desistir.
-async function htmlToPdf(html) {
+async function htmlToPdf(html, { offline = false } = {}) {
   for (let tentativa = 0; ; tentativa++) {
     try {
       const browser = await getBrowser()
       const page = await browser.newPage()
       try {
-        await page.setContent(html, { waitUntil: 'load', timeout: 45000 })
+        // receipts de terceiros (ex.: página de resultados do Google) puxam
+        // dezenas de recursos remotos e derrubavam o chromium — offline
+        // bloqueia qualquer request externa; o snapshot local basta
+        if (offline) await page.route('**/*', (r) => r.abort().catch(() => {}))
+        await page.setContent(html, { waitUntil: offline ? 'domcontentloaded' : 'load', timeout: 45000 })
         return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })
       } finally { await page.close().catch(() => {}) }
     } catch (e) {
@@ -71,15 +75,22 @@ const MAX_EVIDENCES = 20
 const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024 // por arquivo; maiores ficam só citados
 
 async function buildEvidenceAppendix(sb, requestId) {
+  // só evidências de tentativas TERMINAIS (retries antigos deixam receipts
+  // duplicados — o Full da Techocean tinha 3 conjuntos da mídia negativa)
   const { data: evs, error } = await sb
     .from('report_evidences')
-    .select('kind, storage_path, sha256, source_results!inner(connector, request_id)')
+    .select('kind, storage_path, sha256, source_results!inner(connector, request_id, status)')
     .eq('source_results.request_id', requestId)
+    .in('source_results.status', ['ok', 'not_found'])
     .order('created_at', { ascending: true })
   if (error) { console.warn('[bc-render] evidências:', error.message); return [] }
   const out = []
   let converted = 0
+  const porConector = {}
   for (const ev of (evs || []).slice(0, MAX_EVIDENCES)) {
+    const conn = ev.source_results.connector
+    porConector[conn] = (porConector[conn] || 0) + 1
+    if (porConector[conn] > 2) continue // máx. 2 evidências por fonte
     try {
       // reinício preventivo do chromium: conversões seguidas acumulam
       // memória e derrubavam o browser no lambda (OOM, 19/09)
@@ -93,8 +104,9 @@ async function buildEvidenceAppendix(sb, requestId) {
       if (ext === 'pdf') pdf = buf
       else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
         pdf = await htmlToPdf(`<html><body style="margin:0"><img style="width:100%" src="data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${buf.toString('base64')}"></body></html>`)
-      } else { // html/site_receipt
-        pdf = await htmlToPdf(buf.toString('utf8'))
+      } else { // html/site_receipt: sem <script>, render offline
+        const semScript = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, '')
+        pdf = await htmlToPdf(semScript, { offline: true })
       }
       out.push({ slug: ev.source_results.connector, pdf })
       converted++
