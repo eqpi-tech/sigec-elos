@@ -35,9 +35,12 @@ exports.handler = async (event) => {
   try { requestId = JSON.parse(event.body || '{}').requestId || null } catch { /* vazio */ }
 
   try {
-    // orçamento longo: 12 min (o Netlify corta background functions em 15)
-    const out = await processOpenRequests({ budgetMs: 12 * 60 * 1000, requestId })
+    // orçamento longo: 10 min de coleta + 3 de render (Netlify corta em 15)
+    const out = await processOpenRequests({ budgetMs: 10 * 60 * 1000, requestId })
     if (out.log.length) console.log('[bc-worker-bg]', out.log.join(' · '))
+    const { renderOpenReports } = require('./lib/bc_render.js')
+    const r = await renderOpenReports({ budgetMs: 3 * 60 * 1000 })
+    if (r.log.length) console.log('[bc-worker-bg render]', r.log.join(' · '))
     return { statusCode: 200 }
   } catch (e) {
     console.error('[bc-worker-bg]', e)

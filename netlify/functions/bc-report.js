@@ -34,7 +34,15 @@ exports.handler = async (event) => {
     if (cnpj) q = q.eq('cnpj', cnpj)
     const { data, error } = await q
     if (error) return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: error.message }) }
-    return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ rows: data || [] }) }
+    // URL assinada gerada aqui (service_role) — o bucket bc-reports é privado
+    // e sem policy de storage p/ o client; 1h de validade
+    const rows = data || []
+    for (const r of rows) {
+      if (!r.pdf_path) continue
+      const { data: signed } = await sb.storage.from('bc-reports').createSignedUrl(r.pdf_path, 3600)
+      r.pdf_url = signed?.signedUrl || null
+    }
+    return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ rows }) }
   }
 
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) }

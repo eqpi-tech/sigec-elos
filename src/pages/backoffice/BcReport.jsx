@@ -116,6 +116,8 @@ export default function BcReport() {
   }
 
   const abrirPdf = async (r) => {
+    // pdf_url vem assinada do servidor (bucket privado, sem policy client-side)
+    if (r.pdf_url) { window.open(r.pdf_url, '_blank'); return }
     const { data } = await supabase.storage.from('bc-reports').createSignedUrl(r.pdf_path, 3600)
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }

@@ -13,6 +13,12 @@
 # branch deploys não executam schedules)
 [functions."bc-report-cron"]
   schedule = "* * * * *"
+
+# O worker background gera o PDF (Playwright): o binário do chromium lambda
+# não pode ser bundlado pelo esbuild — vai como módulo externo + arquivos
+[functions."bc-report-worker-background"]
+  external_node_modules = ["@sparticuz/chromium", "playwright-core"]
+  included_files = ["node_modules/@sparticuz/chromium/bin/**"]
 [[redirects]]
   from = "/pesquisa.html"
   to   = "/pesquisa.html"

@@ -12,10 +12,12 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1108.0",
     "@aws-sdk/s3-request-presigner": "^3.1108.0",
+    "@sparticuz/chromium": "^131.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.383.0",
     "pdf-lib": "^1.17.1",
+    "playwright-core": "^1.49.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
