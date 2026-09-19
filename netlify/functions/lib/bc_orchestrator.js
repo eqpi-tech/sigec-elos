@@ -120,6 +120,7 @@ async function runConnector(sb, req, slug, ctx, remainingMs) {
     raw = await Promise.race([
       c.fetch({
         cnpj: req.cnpj, company: ctx.company, socios: ctx.socios,
+        tipo: req.tipo, prefOverrides: ctx.prefOverrides || {},
         supplierId: req.supplier_id, forceRefresh: req.force_refresh_bureau,
         requestedBy: req.requested_by,
       }),
@@ -185,6 +186,10 @@ async function processRequest(sb, req, deadline, log) {
   })
 
   const ctx = contextFrom(existing)
+  if (runnable.includes('pref_cnd')) {
+    const { data: ov } = await sb.from('bc_config').select('value').eq('key', 'pref_slug_overrides').maybeSingle()
+    ctx.prefOverrides = ov?.value || {}
+  }
   for (let i = 0; i < runnable.length; i += BATCH_SIZE) {
     const remaining = deadline - Date.now()
     if (remaining < 4000) break

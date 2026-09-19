@@ -267,6 +267,119 @@ INGESTS = {
     "leniencia": ingest_leniencia,
 }
 
+
+
+def ingest_pep(pg):
+    """PEP — Portal da Transparência (snapshot datado; publicação mensal)."""
+    url, val = cfg_url(pg, "ingest:pep")
+    tmpl = (val or {}).get("url_template")
+    raw = None
+    if not url and tmpl:
+        # snapshot MENSAL (YYYYMM): tenta o mês corrente e volta até 3
+        hoje = datetime.date.today()
+        for back in range(0, 4):
+            m2 = hoje.month - back
+            y2, m2 = (hoje.year + (m2 - 1) // 12, (m2 - 1) % 12 + 1)
+            try:
+                url = tmpl.format(date=f"{y2}{m2:02d}")
+                raw = fetch_bytes(url)
+                break
+            except Exception:
+                url = None
+    if not url:
+        print("pep: sem URL/url_template válido em bc_config 'ingest:pep' — PULADO")
+        return
+    print("PEP: baixando…")
+    if raw is None:
+        raw = fetch_bytes(url)
+    if raw[:4] == b"PK\x03\x04":
+        import zipfile
+        zf = zipfile.ZipFile(io.BytesIO(raw))
+        nomes_zip = [n for n in zf.namelist() if n.lower().endswith(".csv")]
+        raw = zf.read(nomes_zip[0])
+    text = raw.decode("latin-1", "replace").replace("\r\n", "\n").replace("\r", "\n")
+    rows = []
+    for rec in csv.DictReader(io.StringIO(text), delimiter=";"):
+        low = {k.lower().strip('"'): (v or "").strip() for k, v in rec.items() if k}
+        nome = next((v for k, v in low.items() if "nome_pep" in k or k == "nome"), "")
+        if not nome:
+            continue
+        rows.append([
+            next((v for k, v in low.items() if "cpf" in k), None) or None,
+            nome, None,
+            next((v for k, v in low.items() if "sigla" in k and "fun" in k), None),
+            next((v for k, v in low.items() if "descri" in k and "fun" in k), None),
+            next((v for k, v in low.items() if "rg" in k and "o" in k and "nome" in k), None)
+            or next((v for k, v in low.items() if "orgao" in k or "órgão" in k), None),
+            next((v for k, v in low.items() if k in ("uf", "sg_uf")), None),
+            None,
+        ])
+    cols = ["cpf_masked", "nome", "nome_norm", "sigla_funcao", "descricao_funcao", "orgao", "uf", "meta"]
+    replace_rows(pg, "ref_pep", cols, norm_placeholder(rows, cols),
+                 "pep", datetime.date.today().isoformat(), url)
+
+
+def ingest_tse(pg):
+    """TSE consulta_cand (opt-in: URL do zip do ano em bc_config 'ingest:tse')."""
+    url, _ = cfg_url(pg, "ingest:tse")
+    if not url:
+        print("tse: sem URL em bc_config 'ingest:tse' — PULADO (opt-in)")
+        return
+    print("TSE: baixando…")
+    raw = fetch_bytes(url)
+    import zipfile
+    zf = zipfile.ZipFile(io.BytesIO(raw))
+    rows = []
+    for name in zf.namelist():
+        if not name.lower().endswith(".csv"):
+            continue
+        text = zf.read(name).decode("latin-1", "replace")
+        for rec in csv.DictReader(io.StringIO(text), delimiter=";"):
+            low = {k.lower(): (v or "").strip('" ') for k, v in rec.items() if k}
+            nome = low.get("nm_candidato", "")
+            if not nome:
+                continue
+            rows.append([re.sub(r"\D", "", low.get("nr_cpf_candidato", "")) or None,
+                         nome, None, low.get("ano_eleicao"), low.get("ds_cargo"),
+                         low.get("sg_partido"), low.get("sg_uf"),
+                         low.get("ds_sit_tot_turno") or low.get("ds_situacao_candidatura"), None])
+    cols = ["cpf_digits", "nome", "nome_norm", "ano", "cargo", "partido", "uf", "situacao", "meta"]
+    replace_rows(pg, "ref_tse", cols, norm_placeholder(rows, cols),
+                 "tse", datetime.date.today().isoformat(), url)
+
+
+def ingest_icij(pg):
+    """ICIJ Offshore Leaks nodes (opt-in: URL do zip em bc_config 'ingest:icij')."""
+    url, _ = cfg_url(pg, "ingest:icij")
+    if not url:
+        print("icij: sem URL em bc_config 'ingest:icij' — PULADO (opt-in)")
+        return
+    print("ICIJ: baixando…")
+    raw = fetch_bytes(url)
+    import zipfile
+    zf = zipfile.ZipFile(io.BytesIO(raw))
+    rows = []
+    for name in zf.namelist():
+        base = name.lower()
+        tipo = "entity" if "entities" in base else "officer" if "officers" in base else None
+        if not tipo or not base.endswith(".csv"):
+            continue
+        text = zf.read(name).decode("utf-8", "replace")
+        for rec in csv.DictReader(io.StringIO(text)):
+            low = {k.lower(): (v or "").strip() for k, v in rec.items() if k}
+            nome = low.get("name", "")
+            if not nome:
+                continue
+            rows.append([low.get("node_id") or low.get("_id"), nome, None, tipo,
+                         low.get("sourceid") or low.get("source_id"),
+                         low.get("countries") or low.get("country_codes"), None])
+    cols = ["uid", "nome", "nome_norm", "tipo", "fonte", "pais", "meta"]
+    replace_rows(pg, "ref_icij", cols, norm_placeholder(rows, cols),
+                 "icij", datetime.date.today().isoformat(), url)
+
+
+INGESTS.update({"pep": ingest_pep, "tse": ingest_tse, "icij": ingest_icij})
+
 if __name__ == "__main__":
     wanted = sys.argv[1:] or list(INGESTS)
     pg = db()

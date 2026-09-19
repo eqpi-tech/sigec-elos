@@ -17,7 +17,26 @@ module.exports = {
   fgts_crf:         require('./fgts_crf.js'),
   cndt:             require('./cndt.js'),
   assertiva_pj:     require('./assertiva_pj.js'),
+  // Estágio 8 — Full
+  cartao_cnpj:      require('./cartao_cnpj.js'),
+  cgu_correcional:  require('./cgu_correcional.js'),
+  cnj_improbidade:  require('./cnj_improbidade.js'),
+  mpf_cn:           require('./mpf_cn.js'),
+  mpt_cnf:          require('./mpt_cnf.js'),
+  ibama:            require('./ibama.js'),
+  simples:          require('./simples.js'),
+  sefaz_cnd:        require('./sefaz_cnd.js'),
+  sintegra:         require('./sintegra.js'),
+  pref_cnd:         require('./pref_cnd.js'),
+  midia_negativa:   require('./midia_negativa.js'),
+  pep:              require('./pep.js'),
+  tse_candidaturas: require('./tse_candidaturas.js'),
+  icij:             require('./icij.js'),
+  datajud:          require('./datajud.js'),
 }
 
-// dependem do QSA (company/socios do cnpj_base resolvido antes)
-module.exports.QSA_DEPS = ['ceaf', 'ofac', 'onu']
+// dependem do cnpj_base resolvido antes (QSA p/ nomes, UF/município p/ rota)
+module.exports.QSA_DEPS = [
+  'ceaf', 'ofac', 'onu', 'pep', 'tse_candidaturas', 'icij',
+  'mpt_cnf', 'sefaz_cnd', 'sintegra', 'pref_cnd', 'midia_negativa',
+]
