@@ -24,7 +24,9 @@ module.exports = {
       const raw = await consulta('buscador/google', { query: `"${alvo}" ${TERMOS}` })
       out.push({ alvo, code: raw.code, codeMessage: raw.codeMessage, data: raw.data, receipts: raw.receipts })
     }
-    return { consultas: out }
+    // code no topo p/ o orquestrador (composto)
+    const codes = out.map((c) => c.code)
+    return { consultas: out, code: codes.some((c) => c === 200) ? 200 : codes[0], codeMessage: out[0]?.codeMessage }
   },
   // 2 buscas no Full (empresa + sócio adm): fatura cada consulta 200
   costOf(raw) {

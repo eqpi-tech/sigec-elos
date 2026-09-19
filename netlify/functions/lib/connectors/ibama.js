@@ -9,10 +9,14 @@ module.exports = {
       consulta('ibama/certidao-embargos', { cnpj }),
       consulta('ibama/certificado-regularidade', { cnpj }),
     ])
-    return {
+    const out = {
       embargos: emb.status === 'fulfilled' ? emb.value : { code: 0, codeMessage: emb.reason?.message },
       regularidade: reg.status === 'fulfilled' ? reg.value : { code: 0, codeMessage: reg.reason?.message },
     }
+    // code no topo p/ o orquestrador (composto): ok se qualquer sub deu 200
+    out.code = out.embargos.code === 200 || out.regularidade.code === 200 ? 200 : (out.embargos.code || out.regularidade.code)
+    out.codeMessage = out.embargos.codeMessage || out.regularidade.codeMessage
+    return out
   },
   // duas consultas independentes: embargos (0,20+0,06) e regularidade (0,20)
   costOf(raw) {
