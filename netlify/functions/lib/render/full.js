@@ -75,6 +75,8 @@ function kv(details, max = 14) {
   const walk = (obj, prefix) => {
     for (const [k, v] of Object.entries(obj || {})) {
       if (k.startsWith('_') || v == null || v === '') continue
+      if (/receipt|storage|url/i.test(k)) continue          // links internos/expiráveis
+      if (typeof v === 'string' && /^https?:\/\//.test(v)) continue
       const label = (prefix ? prefix + ' · ' : '') + k.replace(/_/g, ' ')
       if (Array.isArray(v)) {
         if (!v.length) continue
@@ -154,7 +156,9 @@ function buildFullHtml({ req, sources, solicitante = null, evidenceIndex = {} })
   .resumo li.ok::before { color: #15803D; }
   .resumo li.atencao::before { color: ${ORANGE}; }
   .resumo li.atencao b { color: ${ORANGE}; }
-  section.aspecto { page-break-inside: avoid; margin-bottom: 7mm; }
+  section.aspecto { margin-bottom: 7mm; }
+  section.aspecto h2 { page-break-after: avoid; }
+  h2.titulo { page-break-after: avoid; }
   section.aspecto h2 { color: ${NAVY}; font-size: 11.5pt; border-bottom: 1.5px solid ${NAVY}; padding-bottom: 1.5mm; margin-bottom: 3.5mm; }
   .fonte { border: 1px solid #E5E7EB; border-radius: 2mm; padding: 3mm; margin-bottom: 3mm; page-break-inside: avoid; }
   .fonte-hdr { display: flex; justify-content: space-between; gap: 4mm; align-items: flex-start; }
