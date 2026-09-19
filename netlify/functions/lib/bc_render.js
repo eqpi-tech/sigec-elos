@@ -44,6 +44,60 @@ async function htmlToPdf(html) {
   } finally { await page.close() }
 }
 
+// ── Apêndice de evidências (Full, §9) ────────────────────────────────────
+// Baixa os receipts/certidões do bucket e converte cada um em páginas PDF:
+// .pdf entra como está; .html renderiza no Playwright; .png embrulha em img.
+// O merge final (pdf-lib) anexa tudo após o relatório, e as seções apontam
+// "evidência anexa (página N)" — por isso o Full renderiza em 2 passadas.
+const MAX_EVIDENCES = 20
+const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024 // por arquivo; maiores ficam só citados
+
+async function buildEvidenceAppendix(sb, requestId) {
+  const { data: evs, error } = await sb
+    .from('report_evidences')
+    .select('kind, storage_path, sha256, source_results!inner(connector, request_id)')
+    .eq('source_results.request_id', requestId)
+    .order('created_at', { ascending: true })
+  if (error) { console.warn('[bc-render] evidências:', error.message); return [] }
+  const out = []
+  for (const ev of (evs || []).slice(0, MAX_EVIDENCES)) {
+    try {
+      const { data: blob, error: dErr } = await sb.storage.from(BUCKET).download(ev.storage_path)
+      if (dErr) throw new Error(dErr.message)
+      const buf = Buffer.from(await blob.arrayBuffer())
+      if (buf.length > MAX_EVIDENCE_BYTES) continue
+      const ext = ev.storage_path.split('.').pop().toLowerCase()
+      let pdf
+      if (ext === 'pdf') pdf = buf
+      else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+        pdf = await htmlToPdf(`<html><body style="margin:0"><img style="width:100%" src="data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${buf.toString('base64')}"></body></html>`)
+      } else { // html/site_receipt
+        pdf = await htmlToPdf(buf.toString('utf8'))
+      }
+      out.push({ slug: ev.source_results.connector, pdf })
+    } catch (e) { console.warn(`[bc-render] evidência ${ev.storage_path}: ${e.message}`) }
+  }
+  return out
+}
+
+async function mergePdfs(mainPdf, appendix) {
+  const { PDFDocument } = require('pdf-lib')
+  const doc = await PDFDocument.load(mainPdf)
+  for (const item of appendix) {
+    try {
+      const src = await PDFDocument.load(item.pdf, { ignoreEncryption: true })
+      const pages = await doc.copyPages(src, src.getPageIndices())
+      for (const p of pages) doc.addPage(p)
+    } catch (e) { console.warn(`[bc-render] merge evidência ${item.slug}: ${e.message}`) }
+  }
+  return Buffer.from(await doc.save())
+}
+
+async function countPages(pdf) {
+  const { PDFDocument } = require('pdf-lib')
+  return (await PDFDocument.load(pdf)).getPageCount()
+}
+
 // situação documental na base ELOS (§9) — só quando o CNPJ é fornecedor
 async function elosDocStats(sb, supplierId) {
   if (!supplierId) return null
@@ -83,9 +137,35 @@ async function renderOpenReports({ budgetMs = 120000 } = {}) {
         if (!terminalOk) partial = true
       }
 
-      // v1: template Light também para o Full (o multi-página é o Estágio 9)
-      const html = buildLightHtml({ req, sources, elos: await elosDocStats(sb, req.supplier_id) })
-      const pdf = await htmlToPdf(html)
+      let pdf
+      if (req.tipo === 'full') {
+        // solicitante na capa (e-mail via admin API; falha não bloqueia)
+        let solicitante = null
+        if (req.requested_by) {
+          try {
+            const { data: u } = await sb.auth.admin.getUserById(req.requested_by)
+            solicitante = u?.user?.email || null
+          } catch { /* segue sem */ }
+        }
+        const { buildFullHtml } = require('./render/full.js')
+        const appendix = await buildEvidenceAppendix(sb, req.id)
+        // 1ª passada com placeholder (mesmo footprint) só p/ contar páginas
+        const index0 = Object.fromEntries(appendix.map((i) => [i.slug, '···']))
+        const draft = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex: index0 }))
+        const bodyPages = await countPages(draft)
+        // numeração das evidências: começam após o corpo, na ordem do apêndice
+        const evidenceIndex = {}
+        let pageNo = bodyPages + 1
+        for (const item of appendix) {
+          if (!evidenceIndex[item.slug]) evidenceIndex[item.slug] = pageNo
+          pageNo += await countPages(item.pdf)
+        }
+        const finalBody = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex }))
+        pdf = await mergePdfs(finalBody, appendix)
+      } else {
+        const html = buildLightHtml({ req, sources, elos: await elosDocStats(sb, req.supplier_id) })
+        pdf = await htmlToPdf(html)
+      }
 
       const path = `reports/${req.cnpj}/${req.tipo}-${req.id}.pdf`
       const { error: upErr } = await sb.storage.from(BUCKET)
