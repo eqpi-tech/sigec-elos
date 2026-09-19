@@ -78,8 +78,12 @@ async function buildEvidenceAppendix(sb, requestId) {
     .order('created_at', { ascending: true })
   if (error) { console.warn('[bc-render] evidências:', error.message); return [] }
   const out = []
+  let converted = 0
   for (const ev of (evs || []).slice(0, MAX_EVIDENCES)) {
     try {
+      // reinício preventivo do chromium: conversões seguidas acumulam
+      // memória e derrubavam o browser no lambda (OOM, 19/09)
+      if (converted > 0 && converted % 4 === 0) await dropBrowser()
       const { data: blob, error: dErr } = await sb.storage.from(BUCKET).download(ev.storage_path)
       if (dErr) throw new Error(dErr.message)
       const buf = Buffer.from(await blob.arrayBuffer())
@@ -93,6 +97,7 @@ async function buildEvidenceAppendix(sb, requestId) {
         pdf = await htmlToPdf(buf.toString('utf8'))
       }
       out.push({ slug: ev.source_results.connector, pdf })
+      converted++
     } catch (e) { console.warn(`[bc-render] evidência ${ev.storage_path}: ${e.message}`) }
   }
   return out
@@ -169,8 +174,10 @@ async function renderOpenReports({ budgetMs = 120000 } = {}) {
         const appendix = await buildEvidenceAppendix(sb, req.id)
         // 1ª passada com placeholder (mesmo footprint) só p/ contar páginas
         const index0 = Object.fromEntries(appendix.map((i) => [i.slug, '···']))
-        const draft = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex: index0 }))
+        let draft = await htmlToPdf(buildFullHtml({ req, sources, solicitante, evidenceIndex: index0 }))
         const bodyPages = await countPages(draft)
+        draft = null // libera o buffer antes da 2ª passada (memória do lambda)
+        await dropBrowser() // 2ª passada com chromium zerado
         // numeração das evidências: começam após o corpo, na ordem do apêndice
         const evidenceIndex = {}
         let pageNo = bodyPages + 1
