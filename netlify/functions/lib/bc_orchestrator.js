@@ -198,14 +198,28 @@ async function processRequest(sb, req, deadline, log) {
 
   // recompleta o estado e fecha a coleta se tudo terminal
   const { data: after } = await sb
-    .from('source_results').select('connector, status, cost_brl, created_at')
+    .from('source_results').select('connector, status, result_flag, parsed, cost_brl, created_at')
     .eq('request_id', req.id)
   const byConn = {}
   for (const r of after || []) (byConn[r.connector] = byConn[r.connector] || []).push(r)
   const allTerminal = plan.every((slug) => isTerminal(byConn[slug] || []))
   const cost = (after || []).reduce((s, r) => s + Number(r.cost_brl || 0), 0)
   const upd = { cost_brl: Math.round(cost * 100) / 100 }
-  if (allTerminal) upd.status = 'rendering' // score+PDF = estágios 6-7
+  if (allTerminal) {
+    // Score EQPI + parecer (§8) na virada p/ rendering (PDF = estágio 7)
+    const sources = {}
+    for (const slug of plan) {
+      const rows = (byConn[slug] || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      sources[slug] = rows.find((r) => r.status === 'ok' || r.status === 'not_found') || rows[0] || null
+    }
+    const { data: wRow } = await sb.from('bc_config').select('value').eq('key', 'score_weights').maybeSingle()
+    const { computeScore } = require('./score.js')
+    const { score, band, parecer } = computeScore(sources, wRow?.value || {})
+    upd.status = 'rendering'
+    upd.score_eqpi = score
+    upd.risk_band = band
+    upd.parecer = parecer
+  }
   await sb.from('report_requests').update(upd).eq('id', req.id).in('status', ['collecting'])
   return allTerminal
 }
