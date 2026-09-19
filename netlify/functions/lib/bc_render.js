@@ -26,6 +26,7 @@ async function getBrowser() {
     _browser = await pw.launch({ executablePath: process.env.BC_CHROME_PATH, headless: true })
   } else {
     const chromium = require('@sparticuz/chromium')
+    chromium.setGraphicsMode = false // menos memória no lambda (recomendação sparticuz)
     _browser = await pw.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),
@@ -35,13 +36,30 @@ async function getBrowser() {
   return _browser
 }
 
+async function dropBrowser() {
+  const b = _browser
+  _browser = null
+  if (b) { try { await b.close() } catch { /* já morto */ } }
+}
+
+// Nossos HTMLs são autocontidos (fontes/imagens em data:) → 'load' basta.
+// O chromium pode MORRER no meio (OOM no lambda — visto no Full 19/09):
+// nessa hipótese derruba a instância e relança UMA vez antes de desistir.
 async function htmlToPdf(html) {
-  const browser = await getBrowser()
-  const page = await browser.newPage()
-  try {
-    await page.setContent(html, { waitUntil: 'networkidle', timeout: 60000 })
-    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })
-  } finally { await page.close() }
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      const browser = await getBrowser()
+      const page = await browser.newPage()
+      try {
+        await page.setContent(html, { waitUntil: 'load', timeout: 45000 })
+        return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true })
+      } finally { await page.close().catch(() => {}) }
+    } catch (e) {
+      await dropBrowser()
+      if (tentativa >= 1) throw e
+      console.warn('[bc-render] chromium caiu — relançando:', String(e.message).slice(0, 80))
+    }
+  }
 }
 
 // ── Apêndice de evidências (Full, §9) ────────────────────────────────────
@@ -184,7 +202,7 @@ async function renderOpenReports({ budgetMs = 120000 } = {}) {
       await sb.from('report_requests').update({ error: `render: ${String(e.message).slice(0, 300)}` }).eq('id', req.id)
     }
   }
-  if (_browser) { try { await _browser.close() } catch { /* já fechado */ } _browser = null }
+  await dropBrowser()
   return { rendered: (reqs || []).length, log }
 }
 
