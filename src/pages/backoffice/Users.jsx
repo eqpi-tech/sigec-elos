@@ -91,6 +91,7 @@ export default function BackofficeUsers() {
     }
     return true
   })
+  const excedente = filtered.length - 500
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
 
@@ -147,9 +148,10 @@ export default function BackofficeUsers() {
         <>
           <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>
             {filtered.length} usuário{filtered.length!==1?'s':''} encontrado{filtered.length!==1?'s':''}
+            {excedente > 0 && <span style={{ color:'#F2A516', fontWeight:600 }}> · exibindo os primeiros 500 — refine a busca ou os filtros</span>}
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {filtered.map(u => {
+            {filtered.slice(0, 500).map(u => {
               const isActing  = !!acting[u.id]
               const roleColor = ROLE_COLOR[u.primaryRole] || '#9B9B9B'
               return (
