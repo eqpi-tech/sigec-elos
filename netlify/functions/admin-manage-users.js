@@ -62,7 +62,7 @@ exports.handler = async (event) => {
         return out
       }
       const [rolesAll, profilesAll] = await Promise.all([
-        pageAll('user_roles', 'user_id, role, is_primary, client_id, supplier_id, buyer_id, access_profile'),
+        pageAll('user_roles', 'user_id, role, is_primary, client_id, supplier_id, buyer_id, access_profile, access_profile_id'),
         pageAll('profiles', 'id, name'),
       ])
 
@@ -103,6 +103,10 @@ exports.handler = async (event) => {
         if (r.role === 'BUYER' && r.buyer_id) buyerIdMap[r.user_id] = r.buyer_id
         if (r.access_profile && r.access_profile !== 'full') profileMap[r.user_id] = r.access_profile
       })
+      const accessProfileIdMap = {}
+      ;(rolesAll || []).forEach(r => {
+        if (r.access_profile_id && (r.is_primary || !accessProfileIdMap[r.user_id])) accessProfileIdMap[r.user_id] = r.access_profile_id
+      })
 
       const nameMap     = {}
       ;(profilesRes.data || []).forEach(p => { nameMap[p.id] = p.name })
@@ -138,6 +142,7 @@ exports.handler = async (event) => {
           supplierRazao:  supplier?.razao || '',
           orgs,
           accessProfile:  profileMap[u.id] || 'full',
+          accessProfileId: accessProfileIdMap[u.id] || null,
           banned:         u.banned_until ? new Date(u.banned_until) > new Date() : false,
           bannedUntil:    u.banned_until || null,
           createdAt:      u.created_at,
@@ -248,12 +253,32 @@ exports.handler = async (event) => {
 
     // ── UPDATE NAME ───────────────────────────────────────────────────────────
     if (action === 'update') {
+      // 20/09: além do nome (resquício do mockup), edita o PERFIL DE ACESSO
+      // do usuário (access_profiles — agora também p/ ADMIN e BUYER).
+      // accessProfileId: uuid → vincula · null → remove (volta ao acesso
+      // total, fallback permissivo) · undefined → não mexe.
+      const { accessProfileId } = body
       if (!userId || !name) return { statusCode:400, headers, body: JSON.stringify({ error:'userId e name obrigatórios' }) }
 
-      await Promise.all([
+      const ops = [
         supabaseAdmin.auth.admin.updateUserById(userId, { user_metadata: { name } }),
         supabaseAdmin.from('profiles').update({ name }).eq('id', userId),
-      ])
+      ]
+      if (accessProfileId !== undefined) {
+        if (accessProfileId) {
+          const { data: prof } = await supabaseAdmin
+            .from('access_profiles').select('id, role_type').eq('id', accessProfileId).maybeSingle()
+          if (!prof) return { statusCode:400, headers, body: JSON.stringify({ error:'Perfil de acesso não encontrado' }) }
+          // vincula ao(s) papel(is) do usuário compatível(is) com o perfil
+          ops.push(supabaseAdmin.from('user_roles')
+            .update({ access_profile_id: prof.id })
+            .eq('user_id', userId).eq('role', prof.role_type))
+        } else {
+          ops.push(supabaseAdmin.from('user_roles')
+            .update({ access_profile_id: null }).eq('user_id', userId))
+        }
+      }
+      await Promise.all(ops)
 
       return { statusCode:200, headers, body: JSON.stringify({ success:true }) }
     }

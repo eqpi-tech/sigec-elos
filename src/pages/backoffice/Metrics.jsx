@@ -9,6 +9,9 @@ import { supabase } from '../../lib/supabase.js'
 import { Card, KpiCard, Spinner, PageHeader, SectionTitle, Button } from '../../components/ui.jsx'
 import { planLabel, planName } from '../../lib/planLabels.js'
 import { getHolidaySet, addBusinessDays } from '../../lib/businessDays.js'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { hasAction } from '../../lib/modules.js'
+import BcCostsTab from './BcCosts.jsx'
 
 const font   = { fontFamily:'DM Sans,sans-serif' }
 const titleF = { fontFamily:'Montserrat,sans-serif' }
@@ -250,6 +253,9 @@ function SubsidizedTab({ data, period, setPeriod }) {
 
 // ── Página ─────────────────────────────────────────────────────────────────
 export default function BackofficeMetrics() {
+  const { user } = useAuth()
+  // aba Custos: gated pela ação 'acao:custos' (perfis de backoffice, 20/09)
+  const podeCustos = hasAction(user, 'acao:custos')
   const [tab, setTab]       = useState('geral')
   const [data, setData]     = useState(null)
   const [error, setError]   = useState('')
@@ -348,10 +354,12 @@ export default function BackofficeMetrics() {
         <TabBtn active={tab==='geral'} onClick={() => setTab('geral')}>📊 Visão Geral</TabBtn>
         <TabBtn active={tab==='assinaturas'} onClick={() => setTab('assinaturas')}>💳 Assinaturas</TabBtn>
         <TabBtn active={tab==='subsidiados'} onClick={() => setTab('subsidiados')}>🤝 Subsidiados</TabBtn>
+        {podeCustos && <TabBtn active={tab==='custos'} onClick={() => setTab('custos')}>🕵️ Custos BC</TabBtn>}
       </div>
       {tab === 'geral'        && <OverviewTab data={data}/>}
       {tab === 'assinaturas'  && <SubscriptionsTab data={data}/>}
       {tab === 'subsidiados'  && <SubsidizedTab data={data} period={period} setPeriod={setPeriod}/>}
+      {tab === 'custos' && podeCustos && <BcCostsTab/>}
     </div>
   )
 }

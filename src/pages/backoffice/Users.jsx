@@ -26,7 +26,9 @@ export default function BackofficeUsers() {
   const [search,      setSearch]      = useState('')
   const [cnpjSearch,  setCnpjSearch]  = useState('')
   const [acting,      setActing]      = useState({})         // { [userId]: string }
-  const [editModal,      setEditModal]      = useState(null)   // { userId, currentName }
+  const [editModal,      setEditModal]      = useState(null)   // { userId, currentName, primaryRole, accessProfileId }
+  const [accessProfiles, setAccessProfiles] = useState([])     // perfis p/ o select de edição
+  const [editProfileId,  setEditProfileId]  = useState('')
   const [editName,       setEditName]       = useState('')
   const [clientPriceModal, setClientPriceModal] = useState(null) // { clientId, price, payer }
   const [clientPriceSaving, setClientPriceSaving] = useState(false)
@@ -41,6 +43,10 @@ export default function BackofficeUsers() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    supabase.from('access_profiles').select('id, name, role_type').order('name')
+      .then(({ data }) => setAccessProfiles(data || []))
+  }, [])
 
   const act = async (userId, action, params = {}) => {
     setActing(prev => ({ ...prev, [userId]: action }))
@@ -53,7 +59,7 @@ export default function BackofficeUsers() {
 
   const handleEditSave = async () => {
     if (!editName.trim()) return
-    await act(editModal.userId, 'update', { name: editName.trim() })
+    await act(editModal.userId, 'update', { name: editName.trim(), accessProfileId: editProfileId || null })
     setEditModal(null)
     setEditName('')
   }
@@ -199,7 +205,7 @@ export default function BackofficeUsers() {
                     <div style={{ display:'flex', gap:6, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
                       <Button variant="neutral" size="sm"
                         disabled={isActing}
-                        onClick={() => { setEditModal({ userId: u.id, currentName: u.name }); setEditName(u.name || '') }}>
+                        onClick={() => { setEditModal({ userId: u.id, currentName: u.name, primaryRole: u.primaryRole, accessProfileId: u.accessProfileId }); setEditName(u.name || ''); setEditProfileId(u.accessProfileId || '') }}>
                         ✏ Editar
                       </Button>
                       {(u.roles?.includes('ADMIN') || u.roles?.includes('CLIENT')) && (
@@ -296,14 +302,23 @@ export default function BackofficeUsers() {
         </div>
       )}
 
-      {/* Modal editar nome */}
+      {/* Modal editar usuário — nome + perfil de acesso (20/09) */}
       {editModal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:'#fff',borderRadius:16,padding:32,maxWidth:400,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
-            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:18,color:'#1a1c5e',marginBottom:16 }}>✏ Editar Nome</div>
+          <div style={{ background:'#fff',borderRadius:16,padding:32,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:18,color:'#1a1c5e',marginBottom:16 }}>✏ Editar Usuário</div>
+            <label style={{ fontSize:12, color:'#9B9B9B', fontWeight:600 }}>Nome</label>
             <input value={editName} onChange={e=>setEditName(e.target.value)}
               placeholder="Nome do usuário"
-              style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:14,boxSizing:'border-box',marginBottom:16 }}/>
+              style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:14,boxSizing:'border-box',marginBottom:12,marginTop:4 }}/>
+            <label style={{ fontSize:12, color:'#9B9B9B', fontWeight:600 }}>Perfil de acesso ({editModal.primaryRole})</label>
+            <select value={editProfileId} onChange={e=>setEditProfileId(e.target.value)}
+              style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:14,boxSizing:'border-box',marginBottom:16,marginTop:4,background:'#fff' }}>
+              <option value="">Acesso total (sem perfil)</option>
+              {accessProfiles.filter(pf => pf.role_type === editModal.primaryRole).map(pf => (
+                <option key={pf.id} value={pf.id}>{pf.name}</option>
+              ))}
+            </select>
             <div style={{ display:'flex',gap:8 }}>
               <Button variant="neutral" full onClick={()=>setEditModal(null)}>Cancelar</Button>
               <Button variant="primary" full disabled={!editName.trim()} onClick={handleEditSave}>Salvar</Button>

@@ -25,6 +25,25 @@ export const MODULES = {
     { key: 'configuracoes', label: 'Configurações',  icon: '⚙️', desc: 'Portal white-label e termos de aceite' },
     { key: 'equipe',        label: 'Equipe',         icon: '👥', desc: 'Gestão de usuários da empresa' },
   ],
+  // Backoffice (20/09): granularidade = itens do menu ADMIN do Navbar.
+  // O motivo de existir perfil no backoffice é separar Custos/BC Report —
+  // mas o perfil considera TODOS os itens, como nos demais papéis.
+  ADMIN: [
+    { key: 'inicio',        label: 'Início',                icon: '⊞',  desc: 'Farol de análise e visão geral' },
+    { key: 'analise',       label: 'Análise',               icon: '📋', desc: 'Análise de docs, processos, homologados e questionários' },
+    { key: 'financeiro',    label: 'Financeiro',            icon: '💰', desc: 'Métricas, assinaturas, subsidiados' },
+    { key: 'relatorios',    label: 'Relatórios',            icon: '📈', desc: 'Funil da campanha e dashboard executivo' },
+    { key: 'bc_report',     label: 'BC Report',             icon: '🕵️', desc: 'Emissão de background checks' },
+    { key: 'comunicados',   label: 'Comunicados',           icon: '📢', desc: 'Mensagens para a base' },
+    { key: 'clientes',      label: 'Clientes',              icon: '🏢', desc: 'Cadastro, fluxos, portais e termos de clientes' },
+    { key: 'usuarios',      label: 'Usuários',              icon: '👥', desc: 'Gestão de usuários e perfis de acesso' },
+    { key: 'config_gerais', label: 'Configurações Gerais',  icon: '⚙️', desc: 'Preços ELOS, feriados e catálogo de documentos' },
+  ],
+  BUYER: [
+    { key: 'marketplace',   label: 'Marketplace',           icon: '🔍', desc: 'Busca de fornecedores homologados' },
+    { key: 'convites',      label: 'Convites',              icon: '🤝', desc: 'Convites recebidos/enviados' },
+    { key: 'plano',         label: 'Meu Plano',             icon: '⭐', desc: 'Assinatura Comprador Pro' },
+  ],
 }
 
 // AÇÕES dentro dos módulos (nível abaixo do menu — 09/09/2026).
@@ -43,6 +62,10 @@ export const ACTIONS = {
     { key: 'acao:enviar_documentos', module: 'documentos',   label: 'Enviar documentos',            icon: '📤', desc: 'Upload e substituição de documentos' },
     { key: 'acao:mudar_categorias',  module: 'categorias',   label: 'Mudar categorias',             icon: '📦', desc: 'Alterar as categorias de atuação' },
   ],
+  ADMIN: [
+    { key: 'acao:custos',            module: 'financeiro',   label: 'Custos e COGS (BC Report)',    icon: '💰', desc: 'Aba de custos por rota/CNPJ no Financeiro' },
+    { key: 'acao:emitir_bc',         module: 'bc_report',    label: 'Emitir BC Report',             icon: '🕵️', desc: 'Disparar emissões Light/Full (consome créditos)' },
+  ],
 }
 
 // Módulo liberado para o usuário?
@@ -50,7 +73,7 @@ export const ACTIONS = {
 // nunca tranca um usuário fora por falta de vínculo)
 export function hasModule(user, key) {
   if (!user) return false
-  if (!['SUPPLIER', 'CLIENT'].includes(user.role)) return true
+  if (!MODULES[user.role]) return true
   if (!user.modules) return true
   return user.modules.includes(key)
 }
@@ -60,7 +83,7 @@ export function hasModule(user, key) {
 // configuraram ações explicitamente.
 export function hasAction(user, key) {
   if (!user) return false
-  if (!['SUPPLIER', 'CLIENT'].includes(user.role)) return true
+  if (!MODULES[user.role]) return true
   if (!user.modules) return true
   if (!user.modules.some(k => String(k).startsWith('acao:'))) return true
   return user.modules.includes(key)

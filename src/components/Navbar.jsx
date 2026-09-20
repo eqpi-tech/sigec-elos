@@ -17,9 +17,9 @@ const NAVS = {
     { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥', module:'equipe' },
   ],
   BUYER: [
-    { path:'/comprador',             label:'Marketplace',     icon:'🔍' },
-    { path:'/comprador/convites',    label:'Convites',        icon:'🤝' },
-    { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐' },
+    { path:'/comprador',             label:'Marketplace',     icon:'🔍', module:'marketplace' },
+    { path:'/comprador/convites',    label:'Convites',        icon:'🤝', module:'convites' },
+    { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐', module:'plano' },
   ],
   CLIENT: [
     { path:'/cliente',                label:'Dashboard',       icon:'⊞',  module:'dashboard' },
@@ -39,9 +39,9 @@ const NAVS = {
     { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
   ],
   ADMIN: [
-    { path:'/backoffice', label:'Início', icon:'⊞' },
+    { path:'/backoffice', label:'Início', icon:'⊞', module:'inicio' },
     {
-      key:'analise', label:'Análise', icon:'📋',
+      key:'analise', label:'Análise', icon:'📋', module:'analise',
       children: [
         { path:'/backoffice/analise-documentos', label:'Análise de Docs', icon:'📄', desc:'Revisar documentos em lote' },
         { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', desc:'Buscar e abrir fichas de fornecedores' },
@@ -49,12 +49,12 @@ const NAVS = {
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
       ],
     },
-    { path:'/backoffice/metricas',    label:'Financeiro',  icon:'💰' },
-    { path:'/backoffice/relatorios',  label:'Relatórios',  icon:'📈' },
-    { path:'/backoffice/bc-report',   label:'BC Report',   icon:'🕵️' },
-    { path:'/backoffice/comunicados', label:'Comunicados', icon:'📢' },
+    { path:'/backoffice/metricas',    label:'Financeiro',  icon:'💰', module:'financeiro' },
+    { path:'/backoffice/relatorios',  label:'Relatórios',  icon:'📈', module:'relatorios' },
+    { path:'/backoffice/bc-report',   label:'BC Report',   icon:'🕵️', module:'bc_report' },
+    { path:'/backoffice/comunicados', label:'Comunicados', icon:'📢', module:'comunicados' },
     {
-      key:'clientes', label:'Clientes', icon:'🏢',
+      key:'clientes', label:'Clientes', icon:'🏢', module:'clientes',
       children: [
         { path:'/backoffice/clientes',          label:'Lista de Clientes',    icon:'🏛️', desc:'Ver e gerenciar todos os clientes' },
         { path:'/backoffice/criar-cliente',     label:'Novo Cliente',         icon:'➕',  desc:'Wizard completo de cadastro' },
@@ -64,7 +64,7 @@ const NAVS = {
       ],
     },
     {
-      key:'usuarios', label:'Usuários', icon:'👥',
+      key:'usuarios', label:'Usuários', icon:'👥', module:'usuarios',
       children: [
         { path:'/backoffice/usuarios',      label:'Lista de Usuários', icon:'👤', desc:'Bloquear, redefinir senha, editar' },
         { path:'/backoffice/criar-usuario', label:'Novo Usuário',      icon:'➕', desc:'Criar comprador, cliente ou analista' },
@@ -72,7 +72,7 @@ const NAVS = {
       ],
     },
     {
-      key:'config', label:'Configurações Gerais', icon:'⚙️',
+      key:'config', label:'Configurações Gerais', icon:'⚙️', module:'config_gerais',
       children: [
         { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', desc:'Valores dos planos da plataforma' },
         { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', desc:'Datas que ajustam os prazos do farol' },

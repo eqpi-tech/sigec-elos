@@ -5,6 +5,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { hasAction } from '../../lib/modules.js'
 
 const fmtCnpj = (v) => {
   const d = String(v || '').replace(/\D/g, '').slice(0, 14)
@@ -54,6 +56,8 @@ const MODELS = [
 ]
 
 export default function BcReport() {
+  const { user } = useAuth()
+  const podeEmitir = hasAction(user, 'acao:emitir_bc') // emissão consome créditos
   const [cnpj, setCnpj]     = useState('')
   const [tipo, setTipo]     = useState('light')
   const [prices, setPrices] = useState({})
@@ -126,8 +130,8 @@ export default function BcReport() {
     <div style={{ padding: '28px 32px', maxWidth: 1000, margin: '0 auto' }}>
       <PageHeader title="BC Report" subtitle="Background check automatizado — emita o relatório digitando o CNPJ" />
 
-      {/* ── Starter de emissão ── */}
-      <Card style={{ borderRadius: 16, padding: '24px 28px', marginBottom: 20 }}>
+      {/* ── Starter de emissão (gated: acao:emitir_bc consome créditos) ── */}
+      {podeEmitir && <Card style={{ borderRadius: 16, padding: '24px 28px', marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 16 }}>
           {MODELS.map(mdl => {
             const sel = tipo === mdl.tipo
@@ -178,11 +182,10 @@ export default function BcReport() {
           </div>
         )}
         <div style={{ marginTop: 12, fontSize: 11, color: '#9B9B9B', fontFamily: 'DM Sans,sans-serif' }}>
-          🔧 Pipeline de coleta em desenvolvimento (estágios 2–7 do handoff): as emissões entram na fila e serão
-          processadas automaticamente quando o orquestrador estiver no ar. Assertiva reaproveita consultas com
-          menos de 30 dias; Full emitido até 30 dias após um Light do mesmo CNPJ sai pelo preço de conversão.
+          Consultas reaproveitam o cache por fonte (Assertiva ≤ 30 dias sai a custo zero); Full emitido até 30
+          dias após um Light do mesmo CNPJ usa o preço de conversão. O processamento é automático (fila 1/min).
         </div>
-      </Card>
+      </Card>}
 
       {/* ── Histórico ── */}
       <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
@@ -249,98 +252,8 @@ export default function BcReport() {
           </table>
         )}
       </Card>
-
-      <CostsPanel />
     </div>
   )
 }
+// Custos e COGS moveram para o Financeiro (aba 'Custos BC') em 20/09.
 
-// ── Admin → Custos (Estágio 10, handoff §10) ────────────────────────────────
-// RPC bc_admin_costs (SECURITY DEFINER + is_admin): custo mensal por rota,
-// custo médio por relatório, COGS por CNPJ e certidões vencendo.
-const money = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
-
-function CostsPanel() {
-  const [data, setData] = useState(null)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open || data) return
-    supabase.rpc('bc_admin_costs', { p_meses: 6 }).then(({ data: d, error }) => {
-      if (!error && d && !d.error) setData(d)
-      else setData({ vazio: true })
-    })
-  }, [open, data])
-
-  const th = { textAlign: 'left', fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5, padding: '6px 4px', borderBottom: '2px solid #232360' }
-  const td = { padding: '7px 4px', fontSize: 13, borderBottom: '1px solid #F0F0F5' }
-  const mesAtual = new Date().toISOString().slice(0, 7)
-  const rotaMes = (data?.por_mes_rota || []).filter((r) => r.mes === mesAtual)
-  const custoMes = rotaMes.reduce((s, r) => s + Number(r.custo || 0), 0)
-  const tipoMes = (data?.por_mes_tipo || []).filter((r) => r.mes === mesAtual)
-  const receitaMes = tipoMes.reduce((s, r) => s + Number(r.preco_medio || 0) * Number(r.concluidos || 0), 0)
-
-  return (
-    <Card style={{ marginTop: 20, borderRadius: 14, padding: '20px 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setOpen(!open)}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: '#232360' }}>💰 Custos e COGS</div>
-        <span style={{ color: '#9B9B9B', fontSize: 13 }}>{open ? '▲ recolher' : '▼ expandir'}</span>
-      </div>
-      {open && !data && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={24} /></div>}
-      {open && data && !data.vazio && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18 }}>
-            {[['Custo no mês (COGS)', money(custoMes), '#DC2626'],
-              ['Receita no mês (tabela)', money(receitaMes), '#15803D'],
-              ['Relatórios no mês', tipoMes.reduce((s, r) => s + Number(r.relatorios || 0), 0), '#232360']].map(([l, v, c]) => (
-              <div key={l} style={{ background: `${c}08`, border: `1px solid ${c}22`, borderRadius: 12, padding: '12px 16px' }}>
-                <div style={{ fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{l}</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: c }}>{v}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#232360', marginBottom: 6 }}>Custo mensal por rota</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><th style={th}>Mês</th><th style={th}>Rota</th><th style={{ ...th, textAlign: 'right' }}>Consultas</th><th style={{ ...th, textAlign: 'right' }}>Reusos</th><th style={{ ...th, textAlign: 'right' }}>Custo</th></tr></thead>
-                <tbody>{(data.por_mes_rota || []).map((r, i) => (
-                  <tr key={i}><td style={td}>{r.mes}</td><td style={td}>{r.rota}</td><td style={{ ...td, textAlign: 'right' }}>{r.consultas}</td><td style={{ ...td, textAlign: 'right' }}>{r.reusos}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{money(r.custo)}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: '#232360', marginBottom: 6 }}>Relatórios por mês/tipo</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><th style={th}>Mês</th><th style={th}>Tipo</th><th style={{ ...th, textAlign: 'right' }}>Qtd</th><th style={{ ...th, textAlign: 'right' }}>Custo médio</th><th style={{ ...th, textAlign: 'right' }}>Custo total</th></tr></thead>
-                <tbody>{(data.por_mes_tipo || []).map((r, i) => (
-                  <tr key={i}><td style={td}>{r.mes}</td><td style={td}>{r.tipo === 'full' ? 'Full' : 'Light'}</td><td style={{ ...td, textAlign: 'right' }}>{r.relatorios}</td><td style={{ ...td, textAlign: 'right' }}>{money(r.custo_medio)}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{money(r.custo_total)}</td></tr>
-                ))}</tbody>
-              </table>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 18 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#232360', marginBottom: 6 }}>COGS por CNPJ consultado (6 meses · top 20)</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={th}>CNPJ</th><th style={th}>Razão social</th><th style={{ ...th, textAlign: 'right' }}>Relatórios</th><th style={{ ...th, textAlign: 'right' }}>Custo</th><th style={{ ...th, textAlign: 'right' }}>Receita</th></tr></thead>
-              <tbody>{(data.top_cnpjs || []).map((r, i) => (
-                <tr key={i}><td style={{ ...td, fontFamily: 'monospace' }}>{r.cnpj}</td><td style={td}>{r.razao_social || '—'}</td><td style={{ ...td, textAlign: 'right' }}>{r.relatorios}</td><td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{money(r.custo)}</td><td style={{ ...td, textAlign: 'right' }}>{money(r.receita)}</td></tr>
-              ))}</tbody>
-            </table>
-          </div>
-
-          {(data.certidoes_vencendo || []).length > 0 && (
-            <div style={{ marginTop: 18, background: '#FEF3C7', border: '1px solid #F2A516', borderRadius: 10, padding: '10px 14px', fontSize: 13 }}>
-              ⚠️ <b>{data.certidoes_vencendo.length} certidão(ões)</b> com validade nos próximos 15 dias:{' '}
-              {data.certidoes_vencendo.slice(0, 6).map((c) => `${c.cnpj} (${c.connector} até ${c.valido_ate})`).join(' · ')}
-              {data.certidoes_vencendo.length > 6 ? ' …' : ''}
-            </div>
-          )}
-        </div>
-      )}
-      {open && data?.vazio && <div style={{ fontSize: 13, color: '#9B9B9B', fontStyle: 'italic', padding: '12px 0' }}>Sem dados de custo ainda.</div>}
-    </Card>
-  )
-}

@@ -7,8 +7,8 @@ import { supabase } from '../../lib/supabase.js'
 import { MODULES, ACTIONS } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
-const TYPE_LABEL = { SUPPLIER: 'Fornecedor', CLIENT: 'Cliente' }
-const TYPE_COLOR = { SUPPLIER: '#2563eb',    CLIENT: '#059669' }
+const TYPE_LABEL = { SUPPLIER: 'Fornecedor', CLIENT: 'Cliente', ADMIN: 'Backoffice', BUYER: 'Comprador' }
+const TYPE_COLOR = { SUPPLIER: '#2563eb',    CLIENT: '#059669', ADMIN: '#7c3aed', BUYER: '#ea580c' }
 
 export default function BackofficeUserProfiles() {
   const [profiles, setProfiles] = useState([])
@@ -87,10 +87,10 @@ export default function BackofficeUserProfiles() {
     <div style={{ padding:'28px 32px', maxWidth:960, margin:'0 auto' }}>
       <PageHeader
         title="Perfis de Usuário"
-        subtitle="Conjuntos de módulos para usuários de Clientes e Fornecedores — o menu de cada usuário monta conforme o perfil"
+        subtitle="Conjuntos de módulos por papel (cliente, fornecedor, backoffice e comprador) — o menu de cada usuário monta conforme o perfil"
       />
 
-      {['CLIENT', 'SUPPLIER'].map(roleType => (
+      {['CLIENT', 'SUPPLIER', 'ADMIN', 'BUYER'].map(roleType => (
         <div key={roleType} style={{ marginBottom:28 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
             <SectionTitle style={{ marginBottom:0 }}>
