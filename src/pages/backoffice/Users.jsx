@@ -1,5 +1,6 @@
 // Gestão de Usuários — lista, bloqueia, desbloqueia, redefine senha, edita nome, preço CLIENT
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
@@ -19,6 +20,7 @@ async function callManage(body) {
 }
 
 export default function BackofficeUsers() {
+  const navigate = useNavigate()
   const [users,       setUsers]       = useState([])
   const [loading,     setLoading]     = useState(true)
   const [filterRole,  setFilterRole]  = useState('Todos')
@@ -106,6 +108,7 @@ export default function BackofficeUsers() {
       <PageHeader
         title="Gestão de Usuários"
         subtitle={`${users.length} usuário${users.length!==1?'s':''} cadastrado${users.length!==1?'s':''} na plataforma`}
+        action={{ label: '+ Novo Usuário', onClick: () => navigate('/backoffice/criar-usuario') }}
       />
 
       {/* KPIs rápidos */}
