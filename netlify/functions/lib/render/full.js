@@ -89,8 +89,12 @@ function kv(details, max = 14) {
         // só valores primitivos dos itens (objetos aninhados viravam [object Object])
         rows.push([label, v.slice(0, 5).map((i) => {
           if (i && typeof i === 'object') {
-            return Object.values(i).filter((x) => x != null && typeof x !== 'object' && x !== '')
-              .slice(0, 4).map(fmtVal).join(' · ')
+            // primitivos do item + listas de texto aninhadas (ex.: amostra
+            // de títulos da mídia negativa) — nunca objetos crus
+            return Object.values(i).flatMap((x) => {
+              if (Array.isArray(x)) return x.filter((y) => y != null && typeof y !== 'object' && y !== '').slice(0, 3)
+              return x != null && typeof x !== 'object' && x !== '' ? [x] : []
+            }).slice(0, 6).map(fmtVal).join(' · ')
           }
           return fmtVal(i)
         }).filter(Boolean).join('<br>')])
