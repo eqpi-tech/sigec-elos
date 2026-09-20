@@ -41,7 +41,9 @@ module.exports = {
       const resultados = st === 'ok' ? (c.data?.[0]?.resultados || c.data || []) : []
       const n = Array.isArray(resultados) ? resultados.length : 0
       hits += n
-      porAlvo.push({ alvo: c.alvo, resultados: n, amostra: (Array.isArray(resultados) ? resultados : []).slice(0, 5) })
+      const top = (Array.isArray(resultados) ? resultados : []).slice(0, 3)
+        .map((r) => r?.titulo || r?.title || r?.descricao || r?.link || null).filter(Boolean)
+      porAlvo.push({ alvo: c.alvo, resultados: n, amostra: top })
     }
     return {
       result_flag: hits > 0 ? 'verificar' : 'nada_consta',

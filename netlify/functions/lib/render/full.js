@@ -54,20 +54,26 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 const fmtCnpj = (d) => d?.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
-// gauge SVG semicircular do Score EQPI
+// gauge SVG semicircular do Score EQPI — o preenchimento usa o MESMO path
+// da trilha com stroke-dasharray (alinhamento perfeito por construção; a
+// versão com endpoint calculado desalinhava e cortava o topo)
 function gauge(score, band) {
   const color = BAND[band]?.fg || MUTED
   const pct = Math.max(0, Math.min(100, score ?? 0)) / 100
-  const ang = Math.PI * (1 - pct)
-  const x = 100 + 80 * Math.cos(ang)
-  const y = 95 - 80 * Math.sin(ang)
-  const largeArc = pct > 0.5 ? 1 : 0
-  return `<svg viewBox="0 0 200 110" style="width:70mm">
+  const len = Math.PI * 80 // comprimento do semicírculo r=80
+  return `<svg viewBox="0 -2 200 116" style="width:70mm">
     <path d="M 20 95 A 80 80 0 0 1 180 95" fill="none" stroke="#E5E7EB" stroke-width="14" stroke-linecap="round"/>
-    <path d="M 20 95 A 80 80 0 ${largeArc} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"/>
-    <text x="100" y="82" text-anchor="middle" font-size="34" font-weight="700" fill="${color}" font-family="Montserrat">${score ?? '—'}</text>
-    <text x="100" y="102" text-anchor="middle" font-size="11" fill="${MUTED}" font-family="Montserrat">de 100 · ${BAND[band]?.label || ''}</text>
+    <path d="M 20 95 A 80 80 0 0 1 180 95" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+      stroke-dasharray="${(pct * len).toFixed(1)} ${len.toFixed(1)}"/>
+    <text x="100" y="78" text-anchor="middle" font-size="32" font-weight="700" fill="${color}" font-family="Montserrat">${score ?? '—'}</text>
+    <text x="100" y="104" text-anchor="middle" font-size="11" fill="${MUTED}" font-family="Montserrat">de 100 · ${BAND[band]?.label || ''}</text>
   </svg>`
+}
+
+const fmtVal = (v) => {
+  if (v === true) return 'Sim'
+  if (v === false) return 'Não'
+  return esc(v)
 }
 
 function kv(details, max = 14) {
@@ -80,10 +86,17 @@ function kv(details, max = 14) {
       const label = (prefix ? prefix + ' · ' : '') + k.replace(/_/g, ' ')
       if (Array.isArray(v)) {
         if (!v.length) continue
-        rows.push([label, v.slice(0, 5).map((i) => typeof i === 'object' ? Object.values(i).filter(Boolean).slice(0, 4).join(' · ') : String(i)).join('<br>')])
+        // só valores primitivos dos itens (objetos aninhados viravam [object Object])
+        rows.push([label, v.slice(0, 5).map((i) => {
+          if (i && typeof i === 'object') {
+            return Object.values(i).filter((x) => x != null && typeof x !== 'object' && x !== '')
+              .slice(0, 4).map(fmtVal).join(' · ')
+          }
+          return fmtVal(i)
+        }).filter(Boolean).join('<br>')])
       } else if (typeof v === 'object') {
         if (!prefix) walk(v, k.replace(/_/g, ' '))
-      } else rows.push([label, esc(v)])
+      } else rows.push([label, fmtVal(v)])
       if (rows.length >= max) return
     }
   }
@@ -91,10 +104,14 @@ function kv(details, max = 14) {
   return rows.map(([k2, v2]) => `<tr><th>${esc(k2)}</th><td>${v2}</td></tr>`).join('')
 }
 
+// bases locais opcionais ainda não carregadas (ICIJ/TSE): não são fonte
+// consultada — ficam fora do relatório até a ingestão ser feita
+const naoIngerida = (s2) => /ainda não ingerida/.test(s2?.parsed?.headline || '')
+
 function buildFullHtml({ req, sources, solicitante = null, evidenceIndex = {} }) {
   const base = sources.cnpj_base?.parsed?.details || {}
   const findingsPorAspecto = ASPECTOS.map(([titulo, slugs]) => {
-    const presentes = slugs.filter((s) => sources[s])
+    const presentes = slugs.filter((s) => sources[s] && !naoIngerida(sources[s]))
     const problemas = presentes.filter((s) => ['apontamento', 'verificar'].includes(sources[s]?.result_flag))
     return { titulo, presentes, problemas }
   })
@@ -110,7 +127,7 @@ function buildFullHtml({ req, sources, solicitante = null, evidenceIndex = {} })
   }).join('\n')
 
   const secoes = ASPECTOS.map(([titulo, slugs]) => {
-    const blocos = slugs.filter((s) => sources[s]).map((slug) => {
+    const blocos = slugs.filter((s) => sources[s] && !naoIngerida(sources[s])).map((slug) => {
       const s = sources[slug]
       const b = FLAG_BADGE[s.result_flag] || FLAG_BADGE.indisponivel
       const ev = evidenceIndex[slug]
