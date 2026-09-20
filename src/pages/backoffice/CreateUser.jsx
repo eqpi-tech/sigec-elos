@@ -81,6 +81,11 @@ export default function BackofficeCreateUser() {
     supabase.from('access_profiles').select('id, name, role_type, is_system').order('role_type').order('name')
       .then(({ data }) => setModuleProfiles(data || []))
   }, [])
+  // ao trocar o papel, pré-seleciona o Acesso Total (sistema) — a escolha
+  // fica explícita no formulário, mas nunca começa vazia
+  useEffect(() => {
+    setModuleProfileId(moduleProfiles.find(p => p.role_type === role && p.is_system)?.id || '')
+  }, [role, moduleProfiles])
   const [loading, setLoading] = useState(false)
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState('')
