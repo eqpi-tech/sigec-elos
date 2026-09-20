@@ -185,30 +185,20 @@ export default function BackofficeCreateUser() {
             </div>
           )}
 
-          {(role === 'CLIENT' || role === 'SUPPLIER') && (
-            <div style={{ marginBottom:16 }}>
-              <label style={lbl}>Perfil de módulos e ações</label>
-              <select value={moduleProfileId} onChange={e=>setModuleProfileId(e.target.value)} style={inp}>
-                <option value="">Acesso Total (padrão)</option>
-                {moduleProfiles.filter(p => p.role_type === role && !p.is_system).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-                Perfis criados em Usuários → Perfis de Usuário (módulos do menu + ações permitidas)
-              </div>
+          {/* Perfil OBRIGATÓRIO na criação manual (20/09) — para os 4 papéis;
+              integrações/jobs entram com Acesso Total via trigger (patch_085) */}
+          <div style={{ marginBottom:16 }}>
+            <label style={lbl}>Perfil de acesso *</label>
+            <select value={moduleProfileId} onChange={e=>setModuleProfileId(e.target.value)} required style={inp}>
+              <option value="" disabled>Selecione o perfil…</option>
+              {moduleProfiles.filter(p => p.role_type === role).map(p => (
+                <option key={p.id} value={p.id}>{p.is_system ? '🔒 ' : ''}{p.name}</option>
+              ))}
+            </select>
+            <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+              Perfis criados em Usuários → Perfis de Usuário (módulos do menu + ações permitidas)
             </div>
-          )}
-
-          {role === 'ADMIN' && (
-            <div style={{ marginBottom:16 }}>
-              <label style={lbl}>Perfil de acesso</label>
-              <select value={accessProfile} onChange={e=>setAccessProfile(e.target.value)} style={inp}>
-                <option value="full">Completo — todas as funções do papel</option>
-                <option value="analyst">Analista — análises apenas, sem gestão de usuários/clientes</option>
-              </select>
-            </div>
-          )}
+          </div>
 
           <div style={{ marginBottom:16, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:10, padding:'10px 14px' }}>
             <div style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>

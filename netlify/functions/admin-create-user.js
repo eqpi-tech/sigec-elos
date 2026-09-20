@@ -67,21 +67,22 @@ exports.handler = async (event) => {
 
     // 3. Perfil de módulos: o ESCOLHIDO na tela (validado) ou "Acesso Total"
     //    (fix 09/09: antes ignorava os perfis criados — sempre Acesso Total)
+    // perfil de módulos p/ TODOS os papéis (patch_084/085): criação manual
+    // envia o escolhido; sem escolha cai no Acesso Total de sistema (mesmo
+    // default do trigger p/ integrações e jobs)
     let moduleProfileId = null
-    if (role === 'CLIENT' || role === 'SUPPLIER') {
-      try {
-        if (body.moduleProfileId) {
-          const { data: chosen } = await supabaseAdmin.from('access_profiles')
-            .select('id').eq('id', body.moduleProfileId).eq('role_type', role).maybeSingle()
-          moduleProfileId = chosen?.id || null
-        }
-        if (!moduleProfileId) {
-          const { data: total } = await supabaseAdmin.from('access_profiles')
-            .select('id').eq('role_type', role).eq('is_system', true).maybeSingle()
-          moduleProfileId = total?.id || null
-        }
-      } catch { /* pré-patch_038 */ }
-    }
+    try {
+      if (body.moduleProfileId) {
+        const { data: chosen } = await supabaseAdmin.from('access_profiles')
+          .select('id').eq('id', body.moduleProfileId).eq('role_type', role).maybeSingle()
+        moduleProfileId = chosen?.id || null
+      }
+      if (!moduleProfileId) {
+        const { data: total } = await supabaseAdmin.from('access_profiles')
+          .select('id').eq('role_type', role).eq('is_system', true).limit(1).maybeSingle()
+        moduleProfileId = total?.id || null
+      }
+    } catch { /* pré-patch_038 */ }
     await supabaseAdmin.from('user_roles').insert({
       user_id: newUser.user.id, role, is_primary: true, access_profile: finalProfile,
       access_profile_id: moduleProfileId,
