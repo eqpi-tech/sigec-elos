@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
-import { hasModule } from '../lib/modules.js'
+import { hasModule, hasAction } from '../lib/modules.js'
 import { supabase } from '../lib/supabase.js'
 
 const NAVS = {
@@ -43,10 +43,10 @@ const NAVS = {
     {
       key:'analise', label:'Análise', icon:'📋', module:'analise',
       children: [
-        { path:'/backoffice/analise-documentos', label:'Análise de Docs', icon:'📄', desc:'Revisar documentos em lote' },
-        { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', desc:'Buscar e abrir fichas de fornecedores' },
-        { path:'/backoffice/homologados',        label:'Homologados',     icon:'✅', desc:'Fornecedores com selo ativo' },
-        { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', desc:'Gerenciar questionários dos clientes' },
+        { path:'/backoffice/analise-documentos', label:'Análise de Docs', icon:'📄', action:'acao:analise_docs', desc:'Revisar documentos em lote' },
+        { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', action:'acao:processos', desc:'Buscar e abrir fichas de fornecedores' },
+        { path:'/backoffice/homologados',        label:'Homologados',     icon:'✅', action:'acao:homologados', desc:'Fornecedores com selo ativo' },
+        { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', action:'acao:questionarios', desc:'Gerenciar questionários dos clientes' },
       ],
     },
     { path:'/backoffice/metricas',    label:'Financeiro',  icon:'💰', module:'financeiro' },
@@ -56,27 +56,27 @@ const NAVS = {
     {
       key:'clientes', label:'Clientes', icon:'🏢', module:'clientes',
       children: [
-        { path:'/backoffice/clientes',          label:'Lista de Clientes',    icon:'🏛️', desc:'Ver e gerenciar todos os clientes' },
-        { path:'/backoffice/criar-cliente',     label:'Novo Cliente',         icon:'➕',  desc:'Wizard completo de cadastro' },
-        { path:'/backoffice/fluxo-documentos',  label:'Fluxo de Homologação', icon:'📂', desc:'Documentos exigidos por categoria/cliente' },
-        { path:'/backoffice/landing-pages',     label:'Portais White-label',  icon:'🌐', desc:'Páginas de convite personalizadas' },
-        { path:'/backoffice/termos-clientes',   label:'Termos de Aceite',     icon:'📜', desc:'Textos e documentos de aceite por cliente' },
+        { path:'/backoffice/clientes',          label:'Lista de Clientes',    icon:'🏛️', action:'acao:lista_clientes', desc:'Ver e gerenciar todos os clientes' },
+        { path:'/backoffice/criar-cliente',     label:'Novo Cliente',         icon:'➕',  action:'acao:novo_cliente',  desc:'Wizard completo de cadastro' },
+        { path:'/backoffice/fluxo-documentos',  label:'Fluxo de Homologação', icon:'📂', action:'acao:fluxo_homologacao', desc:'Documentos exigidos por categoria/cliente' },
+        { path:'/backoffice/landing-pages',     label:'Portais White-label',  icon:'🌐', action:'acao:portais_whitelabel', desc:'Páginas de convite personalizadas' },
+        { path:'/backoffice/termos-clientes',   label:'Termos de Aceite',     icon:'📜', action:'acao:termos_clientes', desc:'Textos e documentos de aceite por cliente' },
       ],
     },
     {
       key:'usuarios', label:'Usuários', icon:'👥', module:'usuarios',
       children: [
-        { path:'/backoffice/usuarios',      label:'Lista de Usuários', icon:'👤', desc:'Bloquear, redefinir senha, editar' },
-        { path:'/backoffice/criar-usuario', label:'Novo Usuário',      icon:'➕', desc:'Criar comprador, cliente ou analista' },
-        { path:'/backoffice/perfis',        label:'Perfis de Usuário', icon:'🎛️', desc:'Módulos por perfil para clientes e fornecedores' },
+        { path:'/backoffice/usuarios',      label:'Lista de Usuários', icon:'👤', action:'acao:lista_usuarios', desc:'Bloquear, redefinir senha, editar' },
+        { path:'/backoffice/criar-usuario', label:'Novo Usuário',      icon:'➕', action:'acao:novo_usuario', desc:'Criar comprador, cliente ou analista' },
+        { path:'/backoffice/perfis',        label:'Perfis de Usuário', icon:'🎛️', action:'acao:perfis_usuario', desc:'Módulos por perfil para clientes e fornecedores' },
       ],
     },
     {
       key:'config', label:'Configurações Gerais', icon:'⚙️', module:'config_gerais',
       children: [
-        { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', desc:'Valores dos planos da plataforma' },
-        { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', desc:'Datas que ajustam os prazos do farol' },
-        { path:'/backoffice/catalogo-documentos', label:'Catálogo de Docs', icon:'🗂️', desc:'Tipos de documento e regras de validação' },
+        { path:'/backoffice/precos',              label:'Preços ELOS',      icon:'💰', action:'acao:precos_elos', desc:'Valores dos planos da plataforma' },
+        { path:'/backoffice/feriados',            label:'Feriados',         icon:'📅', action:'acao:feriados', desc:'Datas que ajustam os prazos do farol' },
+        { path:'/backoffice/catalogo-documentos', label:'Catálogo de Docs', icon:'🗂️', action:'acao:catalogo_docs', desc:'Tipos de documento e regras de validação' },
       ],
     },
   ],
@@ -112,7 +112,13 @@ export default function Navbar() {
     }
     if (item.module && !hasModule(user, item.module)) return false
     return true
-  })
+  }).map(item => {
+    // submenus (20/09): filhos com chave de ação respeitam o perfil; grupo
+    // sem nenhum filho visível some do menu
+    if (!item.children) return item
+    const children = item.children.filter(c => !c.action || hasAction(user, c.action))
+    return children.length ? { ...item, children } : null
+  }).filter(Boolean)
   const handleLogout = async () => { await logout(); navigate('/login') }
   const go           = (path) => { navigate(path); setOpen(false); setOpenGroup(null) }
 

@@ -62,9 +62,26 @@ export const ACTIONS = {
     { key: 'acao:enviar_documentos', module: 'documentos',   label: 'Enviar documentos',            icon: '📤', desc: 'Upload e substituição de documentos' },
     { key: 'acao:mudar_categorias',  module: 'categorias',   label: 'Mudar categorias',             icon: '📦', desc: 'Alterar as categorias de atuação' },
   ],
+  // Backoffice: os SUBMENUS do menu são o segundo nível do perfil (20/09),
+  // mesmo mecanismo do cliente/fornecedor. As chaves espelham o Navbar.
   ADMIN: [
+    { key: 'acao:analise_docs',      module: 'analise',      label: 'Análise de Docs',              icon: '📄', desc: 'Revisar documentos em lote' },
+    { key: 'acao:processos',         module: 'analise',      label: 'Processos',                    icon: '🔍', desc: 'Buscar e abrir fichas de fornecedores' },
+    { key: 'acao:homologados',       module: 'analise',      label: 'Homologados',                  icon: '✅', desc: 'Fornecedores com selo ativo' },
+    { key: 'acao:questionarios',     module: 'analise',      label: 'Questionários',                icon: '❓', desc: 'Gerenciar questionários dos clientes' },
     { key: 'acao:custos',            module: 'financeiro',   label: 'Custos e COGS (BC Report)',    icon: '💰', desc: 'Aba de custos por rota/CNPJ no Financeiro' },
     { key: 'acao:emitir_bc',         module: 'bc_report',    label: 'Emitir BC Report',             icon: '🕵️', desc: 'Disparar emissões Light/Full (consome créditos)' },
+    { key: 'acao:lista_clientes',    module: 'clientes',     label: 'Lista de Clientes',            icon: '🏛️', desc: 'Ver e gerenciar todos os clientes' },
+    { key: 'acao:novo_cliente',      module: 'clientes',     label: 'Novo Cliente',                 icon: '➕', desc: 'Wizard completo de cadastro' },
+    { key: 'acao:fluxo_homologacao', module: 'clientes',     label: 'Fluxo de Homologação',         icon: '📂', desc: 'Documentos exigidos por categoria/cliente' },
+    { key: 'acao:portais_whitelabel',module: 'clientes',     label: 'Portais White-label',          icon: '🌐', desc: 'Páginas de convite personalizadas' },
+    { key: 'acao:termos_clientes',   module: 'clientes',     label: 'Termos de Aceite',             icon: '📜', desc: 'Textos e documentos de aceite por cliente' },
+    { key: 'acao:lista_usuarios',    module: 'usuarios',     label: 'Lista de Usuários',            icon: '👤', desc: 'Bloquear, redefinir senha, editar' },
+    { key: 'acao:novo_usuario',      module: 'usuarios',     label: 'Novo Usuário',                 icon: '➕', desc: 'Criar comprador, cliente ou analista' },
+    { key: 'acao:perfis_usuario',    module: 'usuarios',     label: 'Perfis de Usuário',            icon: '🎛️', desc: 'Módulos e ações por perfil' },
+    { key: 'acao:precos_elos',       module: 'config_gerais',label: 'Preços ELOS',                  icon: '💰', desc: 'Valores dos planos da plataforma' },
+    { key: 'acao:feriados',          module: 'config_gerais',label: 'Feriados',                     icon: '📅', desc: 'Datas que ajustam os prazos do farol' },
+    { key: 'acao:catalogo_docs',     module: 'config_gerais',label: 'Catálogo de Docs',             icon: '🗂️', desc: 'Tipos de documento e regras de validação' },
   ],
 }
 
