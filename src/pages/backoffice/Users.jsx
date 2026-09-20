@@ -208,22 +208,9 @@ export default function BackofficeUsers() {
                         onClick={() => { setEditModal({ userId: u.id, currentName: u.name, primaryRole: u.primaryRole, accessProfileId: u.accessProfileId }); setEditName(u.name || ''); setEditProfileId(u.accessProfileId || '') }}>
                         ✏ Editar
                       </Button>
-                      {(u.roles?.includes('ADMIN') || u.roles?.includes('CLIENT')) && (
-                        <Button variant="neutral" size="sm" disabled={isActing}
-                          onClick={() => {
-                            const isAdmin = u.roles.includes('ADMIN')
-                            const options = isAdmin
-                              ? 'full (acesso completo) ou analyst (só análises)'
-                              : 'full (acesso completo) ou readonly (somente leitura)'
-                            const p = prompt(`Perfil de acesso para ${u.name || u.email}:\n${options}`, u.accessProfile || 'full')
-                            if (!p) return
-                            const valid = isAdmin ? ['full','analyst'] : ['full','readonly']
-                            if (!valid.includes(p.trim())) { alert(`Perfil inválido. Use: ${valid.join(' ou ')}`); return }
-                            act(u.id, 'set-profile', { profile: p.trim() })
-                          }}>
-                          🔐 Perfil
-                        </Button>
-                      )}
+                      {/* botão "🔐 Perfil" (prompt do sistema legado full/analyst/readonly)
+                          removido em 20/09 — o perfil de acesso agora é editado no
+                          modal "Editar Usuário", com os perfis reais de access_profiles */}
                       {u.primaryRole === 'CLIENT' && u.clientId && (
                         <Button variant="neutral" size="sm" disabled={isActing}
                           onClick={async () => {
