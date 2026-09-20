@@ -44,7 +44,7 @@ export default function BackofficeUsers() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    supabase.from('access_profiles').select('id, name, role_type').order('name')
+    supabase.from('access_profiles').select('id, name, role_type, is_system').order('name')
       .then(({ data }) => setAccessProfiles(data || []))
   }, [])
 
@@ -59,7 +59,7 @@ export default function BackofficeUsers() {
 
   const handleEditSave = async () => {
     if (!editName.trim()) return
-    await act(editModal.userId, 'update', { name: editName.trim(), accessProfileId: editProfileId || null })
+    await act(editModal.userId, 'update', { name: editName.trim(), accessProfileId: editProfileId || undefined })
     setEditModal(null)
     setEditName('')
   }
@@ -205,7 +205,7 @@ export default function BackofficeUsers() {
                     <div style={{ display:'flex', gap:6, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
                       <Button variant="neutral" size="sm"
                         disabled={isActing}
-                        onClick={() => { setEditModal({ userId: u.id, currentName: u.name, primaryRole: u.primaryRole, accessProfileId: u.accessProfileId }); setEditName(u.name || ''); setEditProfileId(u.accessProfileId || '') }}>
+                        onClick={() => { setEditModal({ userId: u.id, currentName: u.name, primaryRole: u.primaryRole, accessProfileId: u.accessProfileId }); setEditName(u.name || ''); setEditProfileId(u.accessProfileId || (accessProfiles.find(pf => pf.role_type === u.primaryRole && pf.is_system)?.id ?? '')) }}>
                         ✏ Editar
                       </Button>
                       {/* botão "🔐 Perfil" (prompt do sistema legado full/analyst/readonly)
@@ -301,9 +301,10 @@ export default function BackofficeUsers() {
             <label style={{ fontSize:12, color:'#9B9B9B', fontWeight:600 }}>Perfil de acesso ({editModal.primaryRole})</label>
             <select value={editProfileId} onChange={e=>setEditProfileId(e.target.value)}
               style={{ width:'100%',padding:'10px 12px',borderRadius:10,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:14,boxSizing:'border-box',marginBottom:16,marginTop:4,background:'#fff' }}>
-              <option value="">Acesso total (sem perfil)</option>
+              {/* todo usuário fica vinculado a um perfil (20/09) — o 'Acesso
+                  Total' de sistema é o default; não existe mais 'sem perfil' */}
               {accessProfiles.filter(pf => pf.role_type === editModal.primaryRole).map(pf => (
-                <option key={pf.id} value={pf.id}>{pf.name}</option>
+                <option key={pf.id} value={pf.id}>{pf.is_system ? '🔒 ' : ''}{pf.name}</option>
               ))}
             </select>
             <div style={{ display:'flex',gap:8 }}>

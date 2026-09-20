@@ -79,6 +79,7 @@ export default function BackofficeUserProfiles() {
   if (loading) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
 
   const moduleLabel = (roleType, key) =>
+    key === '*' ? '✦ Todos os módulos e ações' :
     MODULES[roleType]?.find(m => m.key === key)?.label
     || ACTIONS[roleType]?.find(a => a.key === key)?.label
     || key

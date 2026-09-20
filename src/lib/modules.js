@@ -75,6 +75,7 @@ export function hasModule(user, key) {
   if (!user) return false
   if (!MODULES[user.role]) return true
   if (!user.modules) return true
+  if (user.modules.includes('*')) return true // perfis de sistema 'Acesso Total'
   return user.modules.includes(key)
 }
 
@@ -85,6 +86,7 @@ export function hasAction(user, key) {
   if (!user) return false
   if (!MODULES[user.role]) return true
   if (!user.modules) return true
+  if (user.modules.includes('*')) return true // perfis de sistema 'Acesso Total'
   if (!user.modules.some(k => String(k).startsWith('acao:'))) return true
   return user.modules.includes(key)
 }
