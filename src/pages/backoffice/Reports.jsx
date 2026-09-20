@@ -10,7 +10,7 @@ import { adminApi } from '../../services/api.js'
 import { Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 import { Tile, HBars, LineChart, BRAND } from '../../components/charts.jsx'
 const SEAL_STATUS = {
-  ACTIVE:    { label: 'Homologados vigentes', icon: '🏅', color: '#22c55e' },
+  ACTIVE:    { label: 'Selos vigentes', icon: '🏅', color: '#22c55e' },
   PENDING:   { label: 'Em análise',           icon: '⏳', color: '#f59e0b' },
   SUSPENDED: { label: 'Suspensos',            icon: '⛔', color: '#ef4444' },
   EXPIRED:   { label: 'Expirados',            icon: '💤', color: '#64748b' },
@@ -26,21 +26,24 @@ function ExecTab({ d }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
         <Tile label="Fornecedores" value={fmt(f.total)} sub={`${fmt(f.migrados)} migrados do HOC · ${fmt(f.espontaneos)} ELOS`} />
         <Tile label="Com conta ELOS" value={fmt(f.com_conta)} sub={`${pct(f.com_conta, f.total)}% da base`} />
-        <Tile label="Homologados vigentes" value={fmt(selos.ACTIVE)} accent="#15803d" />
-        <Tile label="Em análise" value={fmt(selos.PENDING)} accent="#b45309" />
+        {/* definições padronizadas (patch_087): tudo conta só processos
+            OPERÁVEIS (cliente ativo ou ELOS). Fornecedores = distintos;
+            selos = 1 por par fornecedor×cliente */}
+        <Tile label="Fornecedores homologados" value={fmt(d.homologados_fornecedores)} accent="#15803d" sub={`${fmt(selos.ACTIVE)} selos vigentes (1 por cliente)`} />
+        <Tile label="Em análise (selos)" value={fmt(selos.PENDING)} accent="#b45309" />
         <Tile label="Usuários ativos (30d)" value={fmt(u.ativos_30d)} sub={`${fmt(u.total)} contas no total`} />
         <Tile label="Docs aprovados" value={fmt(doc.aprovados)} sub={`${fmt(doc.aguardando_analise)} aguardando análise`} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
         <Card style={{ borderRadius: 14, padding: '18px 22px' }}>
-          <SectionTitle>Selos por situação</SectionTitle>
+          <SectionTitle>Selos por situação (clientes ativos)</SectionTitle>
           <HBars rows={Object.entries(SEAL_STATUS).map(([k, cfg]) => ({
             label: `${cfg.icon} ${cfg.label}`, n: selos[k] || 0, color: cfg.color,
           }))} />
         </Card>
         <Card style={{ borderRadius: 14, padding: '18px 22px' }}>
-          <SectionTitle>Homologados vigentes por cliente</SectionTitle>
+          <SectionTitle>Selos vigentes por cliente</SectionTitle>
           <HBars rows={(d.homologados_por_cliente || []).map(r => ({ label: r.cliente, n: r.n }))} />
         </Card>
         <Card style={{ borderRadius: 14, padding: '18px 22px' }}>
