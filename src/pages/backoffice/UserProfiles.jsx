@@ -20,13 +20,15 @@ export default function BackofficeUserProfiles() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // contagem via RPC admin_profile_user_counts (patch_086): as policies de
+    // user_roles são "cada um vê o seu" — client-side o admin contava 0/1
     const [{ data: aps }, { data: links }] = await Promise.all([
       supabase.from('access_profiles').select('*').order('role_type').order('is_system', { ascending: false }).order('name'),
-      supabase.from('user_roles').select('access_profile_id').not('access_profile_id', 'is', null),
+      supabase.rpc('admin_profile_user_counts'),
     ])
     setProfiles(aps || [])
     const c = {}
-    ;(links || []).forEach(l => { c[l.access_profile_id] = (c[l.access_profile_id] || 0) + 1 })
+    ;(links || []).forEach(l => { c[l.access_profile_id] = Number(l.users) || 0 })
     setCounts(c)
     setLoading(false)
   }, [])
