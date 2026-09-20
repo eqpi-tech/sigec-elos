@@ -40,14 +40,53 @@ exports.handler = async (event) => {
   try {
     // ── LIST ──────────────────────────────────────────────────────────────────
     if (action === 'list') {
-      const [{ data: authUsers }, rolesRes, profilesRes, suppliersRes, clientsRes, buyersRes] = await Promise.all([
-        supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
-        supabaseAdmin.from('user_roles').select('user_id, role, is_primary, client_id, supplier_id, buyer_id, access_profile'),
-        supabaseAdmin.from('profiles').select('id, name'),
-        supabaseAdmin.from('suppliers').select('id, cnpj, razao_social'),
-        supabaseAdmin.from('clients').select('id, cnpj, razao_social'),
-        supabaseAdmin.from('buyers').select('id, cnpj, razao_social'),
+      // PAGINAÇÃO COMPLETA (fix 20/09): perPage:1000 trazia só a 1ª página do
+      // Auth e os selects batiam no teto de 1000 linhas do PostgREST — com a
+      // base migrada do HOC, backoffice/cliente ficavam fora da lista.
+      const authUsersAll = []
+      for (let page = 1; page <= 30; page++) {
+        const { data: pg, error: pgErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 })
+        if (pgErr) throw new Error(`listUsers p${page}: ${pgErr.message}`)
+        authUsersAll.push(...(pg?.users || []))
+        if (!pg?.users || pg.users.length < 1000) break
+      }
+
+      const pageAll = async (table, cols) => {
+        const out = []
+        for (let i = 0; ; i += 1000) {
+          const { data, error } = await supabaseAdmin.from(table).select(cols).range(i, i + 999)
+          if (error) throw new Error(`${table}: ${error.message}`)
+          out.push(...(data || []))
+          if (!data || data.length < 1000) break
+        }
+        return out
+      }
+      const [rolesAll, profilesAll] = await Promise.all([
+        pageAll('user_roles', 'user_id, role, is_primary, client_id, supplier_id, buyer_id, access_profile'),
+        pageAll('profiles', 'id, name'),
       ])
+
+      // entidades: só as efetivamente vinculadas a algum usuário (a tabela
+      // suppliers tem dezenas de milhares de linhas — não carregar inteira)
+      const fetchByIds = async (table, ids) => {
+        const uniq = [...new Set(ids.filter(Boolean))]
+        const out = []
+        for (let i = 0; i < uniq.length; i += 200) {
+          const { data, error } = await supabaseAdmin.from(table)
+            .select('id, cnpj, razao_social').in('id', uniq.slice(i, i + 200))
+          if (error) throw new Error(`${table}: ${error.message}`)
+          out.push(...(data || []))
+        }
+        return out
+      }
+      const [suppliersRows, clientsRows, buyersRows] = await Promise.all([
+        fetchByIds('suppliers', rolesAll.map(r => r.supplier_id)),
+        fetchByIds('clients',   rolesAll.map(r => r.client_id)),
+        fetchByIds('buyers',    rolesAll.map(r => r.buyer_id)),
+      ])
+      const authUsers = { users: authUsersAll }
+      const rolesRes = { data: rolesAll }, profilesRes = { data: profilesAll }
+      const suppliersRes = { data: suppliersRows }, clientsRes = { data: clientsRows }, buyersRes = { data: buyersRows }
 
       const roleMap     = {}
       const primaryMap  = {}
