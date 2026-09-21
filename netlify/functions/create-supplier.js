@@ -449,6 +449,37 @@ exports.handler = async (event) => {
 
     console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
 
+    // 🎉 Bem-vindo pós-cadastro (21/09, pedido pós-demo VIX) — melhor
+    // esforço, nunca bloqueia o cadastro. Se veio por convite/portal de
+    // cliente, o e-mail cita o cliente e os próximos passos.
+    try {
+      const { data: sealRow } = await supabase
+        .from('seals').select('clients(nome_fantasia, razao_social)')
+        .eq('supplier_id', supplier.id).not('client_id', 'is', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      const clientName = sealRow?.clients?.nome_fantasia || sealRow?.clients?.razao_social || null
+      const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
+    <p><strong>Bem-vindo!</strong> O cadastro da <strong>${razao_social}</strong> foi concluído com sucesso${clientName ? ` no processo de homologação da <strong>${clientName}</strong>` : ''}.</p>
+    <p><strong>Próximos passos:</strong></p>
+    <ul style="padding-left:18px;line-height:1.9">
+      <li>📄 Enviar os documentos exigidos na aba <strong>Documentos</strong></li>
+      <li>❓ Responder o questionário do cliente, quando houver</li>
+    </ul>
+    <p>Com tudo enviado, seu processo entra automaticamente na fila de análise (prazo padrão: 3 dias úteis).</p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Acessar meu painel</a></p>
+  </div>
+  <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+        body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
+          to: [user.email], subject: `🎉 Bem-vindo ao SIGEC-ELOS — cadastro da ${razao_social} concluído`, html }),
+      })
+    } catch (e) { console.warn('welcome email (não crítico):', e.message) }
+
     return {
       statusCode: 201,
       headers,
