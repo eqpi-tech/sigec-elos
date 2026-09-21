@@ -23,33 +23,49 @@ async function callTerms(payload) {
 function LegacyTermsCard({ clientId }) {
   const [terms, setTerms]       = useState('')
   const [original, setOriginal] = useState('')
+  const [isDefault, setIsDefault] = useState(true) // seguindo o padrão SIGEC
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [saved, setSaved]       = useState(false)
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true)
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const qs = clientId ? `?clientId=${clientId}` : ''
-        const res = await fetch(`/.netlify/functions/client-terms${qs}`, {
-          headers: { 'Authorization': `Bearer ${session?.access_token}` },
-        })
-        const d = await res.json()
-        const v = d.isDefault ? '' : (d.terms || '')
-        setTerms(v); setOriginal(v)
-      } catch { /* mantém vazio */ }
-      setLoading(false)
-    })()
-  }, [clientId])
+  // 21/09: a caixa mostra SEMPRE o texto vigente — inclusive o padrão
+  // (antes ficava vazia quando o cliente seguia o padrão, e o cliente não
+  // tinha como ler o que os fornecedores aceitam). Enquanto não editar,
+  // o banco fica NULL e o cliente segue as atualizações do padrão.
+  const fetchTerms = async () => {
+    setLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const qs = clientId ? `?clientId=${clientId}` : ''
+      const res = await fetch(`/.netlify/functions/client-terms${qs}`, {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      })
+      const d = await res.json()
+      const v = d.terms || ''
+      setTerms(v); setOriginal(v); setIsDefault(!!d.isDefault)
+    } catch { /* mantém estado */ }
+    setLoading(false)
+  }
+  useEffect(() => { fetchTerms() }, [clientId])
 
   const save = async () => {
     setSaving(true); setSaved(false)
     try {
       await callTerms({ terms, clientId })
-      setOriginal(terms); setSaved(true); setTimeout(() => setSaved(false), 3000)
+      setOriginal(terms); setIsDefault(false)
+      setSaved(true); setTimeout(() => setSaved(false), 3000)
     } catch (e) { alert('Erro ao salvar: ' + e.message) }
+    setSaving(false)
+  }
+
+  const restoreDefault = async () => {
+    if (!confirm('Restaurar os termos padrão SIGEC-ELOS? O texto personalizado deste cliente será removido.')) return
+    setSaving(true)
+    try {
+      await callTerms({ terms: '', clientId })
+      await fetchTerms()
+      setSaved(true); setTimeout(() => setSaved(false), 3000)
+    } catch (e) { alert('Erro: ' + e.message) }
     setSaving(false)
   }
 
@@ -64,16 +80,16 @@ function LegacyTermsCard({ clientId }) {
             Bloco de texto exibido no topo do passo de aceite do cadastro. Em branco, o fornecedor vê os termos padrão do SIGEC-ELOS.
           </div>
         </div>
-        {!terms
-          ? <span style={{ fontSize: 11, fontWeight: 700, color: '#9B9B9B', background: '#f0f0f0', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Usando termos padrão</span>
+        {isDefault && terms === original
+          ? <span style={{ fontSize: 11, fontWeight: 700, color: '#9B9B9B', background: '#f0f0f0', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Usando termos padrão — edite para personalizar</span>
           : <span style={{ fontSize: 11, fontWeight: 700, color: '#2E3192', background: 'rgba(46,49,146,.1)', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Personalizado</span>}
       </div>
       <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={12}
         placeholder="Cole aqui o texto dos Termos de Homologação deste cliente..."
         style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e4ef', fontFamily: 'DM Mono,monospace,DM Sans,sans-serif', fontSize: 13, color: '#1a1c5e', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box', outline: 'none' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-        <button onClick={() => { if (confirm('Restaurar os termos padrão SIGEC-ELOS? (salve para confirmar)')) setTerms('') }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9B9B9B', fontSize: 13, fontFamily: 'DM Sans,sans-serif', textDecoration: 'underline', padding: 0 }}>
+        <button onClick={restoreDefault} disabled={saving || isDefault}
+          style={{ background: 'none', border: 'none', cursor: isDefault ? 'default' : 'pointer', color: '#9B9B9B', fontSize: 13, fontFamily: 'DM Sans,sans-serif', textDecoration: isDefault ? 'none' : 'underline', padding: 0, opacity: isDefault ? 0.5 : 1 }}>
           Restaurar termos padrão
         </button>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
