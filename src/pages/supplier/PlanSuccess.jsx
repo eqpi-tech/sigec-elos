@@ -47,17 +47,22 @@ export default function PlanSuccess() {
           setStatus('timeout'); return
         }
 
-        // Verifica plano ativo — inserido pelo webhook do Stripe
+        // Verifica o plano inserido pelo webhook do Stripe: ACTIVE = pago
+        // (cartão) · PENDING = boleto emitido aguardando compensação (21/09)
         const { data: plan } = await supabase
           .from('plans')
           .select('id, type, status')
           .eq('supplier_id', supplierId)
-          .eq('status', 'ACTIVE')
+          .in('status', ['ACTIVE', 'PENDING'])
           .maybeSingle()  // maybeSingle não lança erro se não encontrar
 
-        if (plan) {
+        if (plan?.status === 'ACTIVE') {
           clearInterval(dotsTimer); clearInterval(elapsedTimer)
           setStatus('confirmed')
+        } else if (plan?.status === 'PENDING' && attempts >= 3) {
+          // 3 tentativas sem virar ACTIVE + registro PENDING → é boleto
+          clearInterval(dotsTimer); clearInterval(elapsedTimer)
+          setStatus('boleto')
         } else if (attempts < MAX) {
           setTimeout(poll, 2000)
         } else {
@@ -126,6 +131,27 @@ export default function PlanSuccess() {
       </Button>
       <Button variant="neutral" full onClick={() => navigate('/fornecedor')}>
         Ver Dashboard
+      </Button>
+    </div>
+  )
+
+  if (status === 'boleto') return wrapper(
+    <div style={cardStyle}>
+      <div style={{ fontSize:64, marginBottom:12 }}>🧾</div>
+      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:24, color:'#1a1c5e', marginBottom:8 }}>
+        Boleto emitido!
+      </div>
+      <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', lineHeight:1.6, marginBottom:28 }}>
+        Estamos aguardando a <strong>compensação do pagamento</strong> (até 3 dias úteis após pagar).
+        Seu plano será ativado <strong>automaticamente</strong> — avisaremos por e-mail. Enquanto isso, você já pode
+        adiantar o envio dos seus documentos.
+      </div>
+      <Button variant="orange" full size="lg" style={{ borderRadius:12, marginBottom:10 }}
+        onClick={() => navigate('/fornecedor/documentos')}>
+        📋 Adiantar Documentos →
+      </Button>
+      <Button variant="neutral" full onClick={() => navigate('/fornecedor')}>
+        Ir para o meu painel
       </Button>
     </div>
   )

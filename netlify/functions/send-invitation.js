@@ -215,6 +215,17 @@ async function handleClientInvitation(body, callerUser, h) {
   if (contato)          invitePayload.contato          = contato
   if (escopo)           invitePayload.escopo           = escopo
 
+  // Reconvite (21/09, pós-demo VIX): convites ABERTOS do mesmo CNPJ+cliente
+  // viram SUPERSEDED — a lista do cliente mostra só o vigente e os lembretes
+  // automáticos (SENT/VIEWED) param de cobrar o convite antigo
+  if (invitePayload.client_id && invitePayload.supplier_cnpj) {
+    await supabaseAdmin.from('invitations')
+      .update({ status: 'SUPERSEDED' })
+      .eq('client_id', invitePayload.client_id)
+      .eq('supplier_cnpj', invitePayload.supplier_cnpj)
+      .in('status', ['SENT', 'VIEWED'])
+  }
+
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 

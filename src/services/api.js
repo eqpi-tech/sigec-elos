@@ -1663,6 +1663,7 @@ export const invitationsApi = {
       .from('invitations')
       .select('*')
       .eq('client_id', clientId)
+      .neq('status', 'SUPERSEDED')   // reconvite substitui o anterior (21/09)
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
     return data || []

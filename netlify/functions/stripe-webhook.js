@@ -33,9 +33,41 @@ exports.handler = async (event) => {
 
   try {
     // ── Pagamento efetuado com sucesso ──────────────────────────────
-    if (type === 'checkout.session.completed') {
+    // boleto expirou sem pagamento: encerra o plano provisório
+    if (type === 'checkout.session.async_payment_failed') {
+      const session = data.object
+      await supabase.from('plans').update({ status: 'CANCELED' })
+        .eq('stripe_session_id', session.id).eq('status', 'PENDING')
+      console.log(`❌ Pagamento assíncrono falhou/expirou (${session.id})`)
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
+    // async_payment_succeeded = boleto COMPENSOU: mesma ativação do completed
+    if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
       const session = data.object
       const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId } = session.metadata
+
+      // BOLETO (21/09): completed dispara na EMISSÃO do voucher com
+      // payment_status='unpaid' — sem esta guarda o plano ativava sem
+      // pagamento. Registra o plano como PENDING e espera a compensação
+      // (async_payment_succeeded) para ativar de verdade.
+      if (type === 'checkout.session.completed' && session.payment_status && session.payment_status !== 'paid') {
+        if (supplierId && planFor !== 'buyer') {
+          await supabase.from('plans').upsert({
+            supplier_id: supplierId,
+            type: planType || 'homologado',
+            cnae_count: Number(cnaeCount || 1),
+            price_yearly: Number(priceYearly || 0),
+            stripe_session_id: session.id,
+            stripe_customer_id: session.customer || null,
+            status: 'PENDING',
+            starts_at: new Date().toISOString(),
+          }, { onConflict: 'supplier_id' })
+            .then(({ error: e }) => e && console.error('[boleto-pending]', e.message))
+        }
+        console.log(`⏳ Pagamento assíncrono aguardando compensação (${session.id}) — nada liberado`)
+        return { statusCode: 200, body: JSON.stringify({ received: true }) }
+      }
 
       // ── CASO: Comprador Pro ──────────────────────────────────────
       if (planFor === 'buyer' && buyerUserId) {

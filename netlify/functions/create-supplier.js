@@ -226,7 +226,18 @@ exports.handler = async (event) => {
     //    chegaram ESPONTANEAMENTE. Quem vem por convite ou portal de cliente
     //    ganha o selo do CLIENTE (ensureClientSeal) — o selo ELOS genérico
     //    duplicava o processo na ficha (caso Baterge/VIX, 18/09)
+    // 21/09: mesmo sem token (perdido no navegador), convite ABERTO para o
+    // CNPJ significa fornecedor convidado — selo ELOS é só para espontâneo
+    let hasOpenInvite = false
     if (isNewSupplier && !invitation_token && !ref_slug) {
+      const { data: openInv } = await supabase
+        .from('invitations').select('id')
+        .eq('supplier_cnpj', cnpj).in('status', ['SENT', 'VIEWED'])
+        .limit(1)
+      hasOpenInvite = !!openInv?.length
+      if (hasOpenInvite) console.log(`convite aberto p/ ${cnpj} — selo ELOS suprimido`)
+    }
+    if (isNewSupplier && !invitation_token && !ref_slug && !hasOpenInvite) {
       const { error: sealError } = await supabaseAdmin
         .from('seals')
         .insert({ supplier_id: supplier.id, level: 'Simples', status: 'PENDING', score: 0 })

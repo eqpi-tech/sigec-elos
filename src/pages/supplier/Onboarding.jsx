@@ -29,9 +29,18 @@ export default function SupplierOnboarding() {
   const { signup, reloadProfile } = useAuth()
 
   const _params     = new URLSearchParams(window.location.search)
-  const inviteToken = _params.get('token')
-  const refSlug     = _params.get('ref')
-  const refFlowId   = _params.get('flow')   // pacote escolhido no portal do cliente
+  // 21/09: token/ref sobrevivem a RELOAD no meio do wizard (sessionStorage) —
+  // um refresh perdia o vínculo do convite e o cadastro concluía 'sem convite'
+  // (criava selo ELOS indevido; caso Terralumen na demo VIX)
+  const _keep = (key, val) => {
+    try {
+      if (val) { sessionStorage.setItem(`elos_onb_${key}`, val); return val }
+      return sessionStorage.getItem(`elos_onb_${key}`) || null
+    } catch { return val }
+  }
+  const inviteToken = _keep('token', _params.get('token'))
+  const refSlug     = _keep('ref',   _params.get('ref'))
+  const refFlowId   = _keep('flow',  _params.get('flow'))   // pacote escolhido no portal do cliente
   const cnpjParam   = _params.get('cnpj')
 
   // Toggle: 'supplier' | 'buyer'
