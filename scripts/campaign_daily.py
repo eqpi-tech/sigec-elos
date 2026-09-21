@@ -43,8 +43,17 @@ def sb_req(method, path, data=None, prefer=None):
     if prefer: h['Prefer'] = prefer
     req = urllib.request.Request(f"{SB}{path}", data=json.dumps(data).encode() if data is not None else None,
                                  headers=h, method=method)
-    body = urllib.request.urlopen(req).read()
-    return json.loads(body) if body else None
+    # 5xx transitório do PostgREST derrubou o job de 21/09 — 3 tentativas
+    # com backoff antes de desistir (422 e demais 4xx continuam estourando
+    # na hora: são erro de dados, não de infraestrutura)
+    for tentativa in range(3):
+        try:
+            body = urllib.request.urlopen(req).read()
+            return json.loads(body) if body else None
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or tentativa == 2:
+                raise
+            time.sleep(5 * (tentativa + 1))
 
 
 def sb_get_all(path_base, page=1000):
