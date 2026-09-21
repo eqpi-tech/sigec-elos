@@ -129,8 +129,10 @@ export default function Navbar() {
     item.children?.some(c => isPathActive(c.path))
 
   // Right-side user area (shared between desktop and mobile)
+  // clique no avatar/nome abre a Minha Conta (21/09)
   const UserChip = () => (
-    <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0, cursor:'pointer' }}
+      title="Minha Conta" onClick={() => go('/conta')}>
       <div style={{ textAlign:'right' }}>
         <div style={{ fontSize:12, fontWeight:700, color:'#fff', fontFamily:'Montserrat,sans-serif', lineHeight:1.2 }}>{user.name}</div>
         <div style={{ fontSize:10, color:ROLE_COLOR[user.role], background:`${ROLE_COLOR[user.role]}22`, padding:'1px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif', fontWeight:700, display:'inline-block' }}>
@@ -354,6 +356,12 @@ export default function Navbar() {
             </div>
           )}
 
+          <button onClick={() => go('/conta')}
+            style={{ width:'100%', marginTop:8, padding:'12px', borderRadius:10,
+              background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.15)',
+              color:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:14, cursor:'pointer' }}>
+            👤 Minha Conta
+          </button>
           <button onClick={handleLogout}
             style={{ width:'100%', marginTop:8, padding:'12px', borderRadius:10,
               background:'rgba(239,68,68,.15)', border:'1px solid rgba(239,68,68,.3)',

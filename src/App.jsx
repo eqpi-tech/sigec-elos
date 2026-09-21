@@ -68,6 +68,7 @@ import ClientSettings          from './pages/client/Settings.jsx'
 import ClientRFQ               from './pages/client/RFQ.jsx'
 import ClientTeam              from './pages/client/Team.jsx'
 import BackofficeUserProfiles  from './pages/backoffice/UserProfiles.jsx'
+import Account                 from './pages/Account.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -136,6 +137,9 @@ function AppRoutes() {
       <Route path="/comprador/plano"            element={<Protect roles={['BUYER']}><BuyerPlan/></Protect>} />
 
       {/* Backoffice */}
+      {/* Minha Conta — todos os papéis (aberta pelo avatar do Navbar) */}
+      <Route path="/conta" element={<Protect roles={['SUPPLIER','BUYER','CLIENT','ADMIN']}><Account/></Protect>} />
+
       <Route path="/backoffice"                 element={<Protect roles={['ADMIN']}><BackofficeOverview/></Protect>} />
       <Route path="/backoffice/fila"            element={<Protect roles={['ADMIN']}><BackofficeQueue/></Protect>} />
       <Route path="/backoffice/analise/:id"     element={<Protect roles={['ADMIN']}><BackofficeAnalysis/></Protect>} />
