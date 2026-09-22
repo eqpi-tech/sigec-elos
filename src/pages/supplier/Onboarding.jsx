@@ -235,6 +235,7 @@ export default function SupplierOnboarding() {
           .map(it => ({ item_id: it.id, version: it.version })),
         cnpj_full_data: cnpjData || null, category_ids: [...selectedCategories],
         invitation_token: inviteToken || undefined, ref_slug: refSlug || undefined,
+        marketplace_optin: dataSharingAccepted,   // opcional (22/09): negou → fora das buscas
         ref_flow_id: refFlowId || undefined,
         is_existing_active: isExAct || undefined,
       }),
@@ -545,13 +546,13 @@ export default function SupplierOnboarding() {
                   </label>
                   <label style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:16, padding:'12px', background:'rgba(244,126,47,.04)', borderRadius:10, border:`1px solid ${dataSharingAccepted?'#F47E2F':'#e2e4ef'}` }}>
                     <input type="checkbox" checked={dataSharingAccepted} onChange={e=>setDataSharingAccepted(e.target.checked)} style={{ marginTop:2, accentColor:'#F47E2F' }}/>
-                    <span style={{ fontSize:13, color:'#374151' }}>Autorizo a <strong>publicação dos dados da minha empresa</strong> (razão social, CNPJ, categorias de atuação e selos conquistados) no marketplace SIGEC-ELOS, tornando-os visíveis para Compradores cadastrados na plataforma.</span>
+                    <span style={{ fontSize:13, color:'#374151' }}><strong>(Opcional)</strong> Autorizo a <strong>publicação dos dados da minha empresa</strong> (razão social, CNPJ, categorias de atuação e selos conquistados) no marketplace SIGEC-ELOS, tornando-os visíveis para Compradores cadastrados na plataforma. Sem o aceite, sua empresa não aparece nas buscas do marketplace.</span>
                   </label>
                   {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626' }}>{error}</div>}
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="neutral" full onClick={() => { setStep(2); setError('') }}>← Voltar</Button>
                     <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
-                      disabled={!termsAccepted || !dataSharingAccepted || loading
+                      disabled={!termsAccepted || loading
                         || (invitation?.terms_items || []).some(it => it.required !== false && !itemsAccepted[it.id])}
                       onClick={handleAcceptTerms}>
                       {loading ? <><Spinner size={16}/> Cadastrando...</> : isSubsidiado ? 'Finalizar Cadastro →' : 'Aceitar e Continuar →'}

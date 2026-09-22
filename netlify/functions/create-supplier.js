@@ -36,7 +36,7 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body)
     const {
-      cnpj, razao_social, nome_fantasia, cnae_main, cnae_list,
+      cnpj, razao_social, nome_fantasia, cnae_main, cnae_list, marketplace_optin,
       state, city, phone, services, certifications,
       sanctions_checked, sanctions_result,
       invitation_token,
@@ -64,6 +64,7 @@ exports.handler = async (event) => {
       // Atualiza dados com informações frescas da Receita Federal
       const updatePayload = {
         razao_social,
+        marketplace_optin: marketplace_optin !== false,  // só o NÃO explícito oculta (integrações → true)
         nome_fantasia:   nome_fantasia   || existingSupplier.nome_fantasia,
         cnae_main:       cnae_main       || existingSupplier.cnae_main,
         cnae_list:       cnae_list?.length ? cnae_list : existingSupplier.cnae_list,

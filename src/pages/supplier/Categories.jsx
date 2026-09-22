@@ -38,6 +38,8 @@ export default function SupplierCategories() {
   const { user } = useAuth()
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [clientIds, setClientIds]     = useState(undefined)  // clientes vinculados → categorias custom visíveis
+  const [allowedIds, setAllowedIds]   = useState(undefined)  // 22/09: mesma regra do cadastro (fluxos dos selos)
+  const [cnpjData, setCnpjData]       = useState(null)       // CNAE p/ as sugestões (paridade c/ cadastro)
   const [loading, setLoading]         = useState(true)
   const [saving, setSaving]           = useState(false)
   const [toast, setToast]             = useState(null)
@@ -48,12 +50,35 @@ export default function SupplierCategories() {
     Promise.all([
       categoriesApi.getSupplierCategories(user.supplierId),
       // Clientes com selo para este fornecedor → árvore inclui as categorias deles
-      supabase.from('seals').select('client_id').eq('supplier_id', user.supplierId).not('client_id', 'is', null),
+      supabase.from('seals').select('client_id, flow_id').eq('supplier_id', user.supplierId),
+      supabase.from('suppliers').select('cnae_main, cnae_list').eq('id', user.supplierId).maybeSingle(),
     ])
-      .then(([cats, sealsRes]) => {
-        setSelectedIds(new Set(cats.map(c => c.id)))
-        const ids = [...new Set((sealsRes.data || []).map(s => s.client_id))]
+      .then(async ([cats, sealsRes, supRes]) => {
+        const selected = new Set(cats.map(c => c.id))
+        setSelectedIds(selected)
+        const ids = [...new Set((sealsRes.data || []).map(s => s.client_id).filter(Boolean))]
         setClientIds(ids.length ? ids : undefined)
+        // 22/09: MESMA REGRA DO CADASTRO — convidado fica restrito à matriz
+        // dos fluxos dos seus processos (+ o que já tem selecionado);
+        // espontâneo (sem fluxo) segue a árvore aberta com sugestão por CNAE
+        const flowIds = [...new Set((sealsRes.data || []).map(s => s.flow_id).filter(Boolean))]
+        if (flowIds.length) {
+          const { data: fc } = await supabase
+            .from('client_flow_categories').select('category_id').in('flow_id', flowIds)
+          const allow = new Set((fc || []).map(r => r.category_id))
+          for (const id of selected) allow.add(id)
+          if (allow.size) setAllowedIds([...allow])
+        }
+        // CNAE do cadastro p/ o painel de sugestões (o campo cnae_main pode
+        // guardar código ou descrição, conforme a origem do dado)
+        const sup = supRes.data
+        if (sup?.cnae_main || sup?.cnae_list?.length) {
+          const isCode = /^\d+$/.test(String(sup.cnae_main || ''))
+          setCnpjData({
+            cnae_fiscal: isCode ? sup.cnae_main : (sup.cnae_list?.[0] || null),
+            cnae_fiscal_descricao: isCode ? '' : (sup.cnae_main || ''),
+          })
+        }
       })
       .finally(() => setLoading(false))
   }, [user?.supplierId])
@@ -113,6 +138,8 @@ export default function SupplierCategories() {
           onChange={handleChange}
           showDocuments={true}
           clientIds={clientIds}
+          allowedIds={allowedIds}
+          cnpjData={cnpjData}
         />
       </Card>
 

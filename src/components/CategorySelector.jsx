@@ -15,7 +15,7 @@ const ICONS = {
 }
 
 // Normaliza string para comparação sem acento e case-insensitive
-const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+const norm = s => String(s||'').trim().toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
 
 // Ícone por nome (fallback p/ categorias da árvore HOC, que não têm id mapeado)
 const ICON_KEYWORDS = [

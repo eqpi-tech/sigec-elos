@@ -91,6 +91,8 @@ exports.handler = async (event) => {
 
     // ── Passo 2: query principal (service_role, sem RLS) ───────────────
     const applyFilters = (query) => {
+      // opt-out do marketplace (22/09): quem negou a publicação não aparece
+      query = query.or('marketplace_optin.is.null,marketplace_optin.eq.true')
       if (states.length > 0)  query = query.in('state', states)
       if (city)               query = query.ilike('city', `%${city}%`)
       if (cnae) {
