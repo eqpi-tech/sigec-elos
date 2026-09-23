@@ -30,8 +30,8 @@ const ASPECTOS = [
   ['Identidade e Situação Cadastral', ['cnpj_base', 'cartao_cnpj', 'sintegra', 'simples']],
   ['Integridade e Reputação', ['cgu_correcional', 'cnj_improbidade', 'leniencia', 'pep', 'ceaf', 'midia_negativa']],
   ['Listas Restritivas e Sanções', ['ceis', 'cnep', 'cepim', 'trabalho_escravo', 'ofac', 'onu', 'icij']],
-  ['Jurídico e Trabalhista', ['cndt', 'mpt_cnf', 'mpf_cn', 'datajud', 'ibama']],
-  ['Fiscal e Financeiro', ['pgfn_cnd', 'fgts_crf', 'sefaz_cnd', 'pref_cnd', 'renuncias', 'assertiva_pj']],
+  ['Jurídico e Trabalhista', ['cndt', 'mpt_cnf', 'mpf_cn', 'falencia_rj', 'datajud', 'ibama']],
+  ['Fiscal e Financeiro', ['pgfn_cnd', 'pgfn_devedores', 'fgts_crf', 'sefaz_cnd', 'pref_cnd', 'renuncias', 'gov_contratos', 'assertiva_pj']],
 ]
 
 const NOME_FONTE = {
@@ -45,9 +45,11 @@ const NOME_FONTE = {
   ofac: 'OFAC — SDN List (EUA)', onu: 'ONU — Consolidated Sanctions', icij: 'ICIJ Offshore Leaks',
   cndt: 'CNDT — Débitos Trabalhistas (TST)', mpt_cnf: 'MPT — Certidão de Feitos',
   mpf_cn: 'MPF — Certidão Negativa', datajud: 'DataJud (CNJ)', ibama: 'IBAMA — Embargos e Regularidade',
-  pgfn_cnd: 'CND Federal (PGFN/RFB)', fgts_crf: 'CRF FGTS (Caixa)',
+  pgfn_cnd: 'CND Federal (PGFN/RFB) — tributos e dívida ativa', fgts_crf: 'CRF FGTS (Caixa)',
   sefaz_cnd: 'CND Estadual (Sefaz)', pref_cnd: 'CND Municipal', renuncias: 'Renúncias Fiscais (Gov. Federal)',
-  assertiva_pj: 'Assertiva — Análise Restritiva PJ',
+  assertiva_pj: 'Assertiva — Análise Restritiva PJ (score, protestos, CCF, pendências)',
+  gov_contratos: 'Contratos com o Governo Federal', pgfn_devedores: 'Dívida Ativa da União (PGFN)',
+  falencia_rj: 'Falência / Recuperação Judicial (Banco Nacional)',
 }
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

@@ -320,32 +320,35 @@ def ingest_pep(pg):
 
 
 def ingest_tse(pg):
-    """TSE consulta_cand (opt-in: URL do zip do ano em bc_config 'ingest:tse')."""
-    url, _ = cfg_url(pg, "ingest:tse")
-    if not url:
-        print("tse: sem URL em bc_config 'ingest:tse' — PULADO (opt-in)")
+    """TSE consulta_cand — aceita VÁRIOS zips ('urls' em bc_config 'ingest:tse',
+    ex.: 2022 + 2024) somados numa única carga."""
+    url, val = cfg_url(pg, "ingest:tse")
+    urls = (val or {}).get("urls") or ([url] if url else [])
+    if not urls:
+        print("tse: sem URL(s) em bc_config 'ingest:tse' — PULADO (opt-in)")
         return
-    print("TSE: baixando…")
-    raw = fetch_bytes(url)
     import zipfile
-    zf = zipfile.ZipFile(io.BytesIO(raw))
     rows = []
-    for name in zf.namelist():
-        if not name.lower().endswith(".csv"):
-            continue
-        text = zf.read(name).decode("latin-1", "replace")
-        for rec in csv.DictReader(io.StringIO(text), delimiter=";"):
-            low = {k.lower(): (v or "").strip('" ') for k, v in rec.items() if k}
-            nome = low.get("nm_candidato", "")
-            if not nome:
+    for u in urls:
+        print(f"TSE: baixando {u.rsplit('/', 1)[-1]}…")
+        zf = zipfile.ZipFile(io.BytesIO(fetch_bytes(u)))
+        for name in zf.namelist():
+            if not name.lower().endswith(".csv"):
                 continue
-            rows.append([re.sub(r"\D", "", low.get("nr_cpf_candidato", "")) or None,
-                         nome, None, low.get("ano_eleicao"), low.get("ds_cargo"),
-                         low.get("sg_partido"), low.get("sg_uf"),
-                         low.get("ds_sit_tot_turno") or low.get("ds_situacao_candidatura"), None])
+            text = zf.read(name).decode("latin-1", "replace")
+            for rec in csv.DictReader(io.StringIO(text), delimiter=";"):
+                low = {k.lower(): (v or "").strip('" ') for k, v in rec.items() if k}
+                nome = low.get("nm_candidato", "")
+                if not nome:
+                    continue
+                rows.append([re.sub(r"\D", "", low.get("nr_cpf_candidato", "")) or None,
+                             nome, None, low.get("ano_eleicao"), low.get("ds_cargo"),
+                             low.get("sg_partido"), low.get("sg_uf"),
+                             low.get("ds_sit_tot_turno") or low.get("ds_situacao_candidatura"), None])
+        print(f"  acumulado: {len(rows)} candidaturas")
     cols = ["cpf_digits", "nome", "nome_norm", "ano", "cargo", "partido", "uf", "situacao", "meta"]
     replace_rows(pg, "ref_tse", cols, norm_placeholder(rows, cols),
-                 "tse", datetime.date.today().isoformat(), url)
+                 "tse", datetime.date.today().isoformat(), "; ".join(urls))
 
 
 def ingest_icij(pg):

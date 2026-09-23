@@ -41,9 +41,16 @@ module.exports = {
       const resultados = st === 'ok' ? (c.data?.[0]?.resultados || c.data || []) : []
       const n = Array.isArray(resultados) ? resultados.length : 0
       hits += n
-      const top = (Array.isArray(resultados) ? resultados : []).slice(0, 3)
-        .map((r) => r?.titulo || r?.title || r?.descricao || r?.link || null).filter(Boolean)
-      porAlvo.push({ alvo: c.alvo, resultados: n, amostra: top })
+      // feedback 23/09: o relatório citava 'achados' sem mostrar O QUE —
+      // agora 5 itens com título + domínio da fonte
+      const dom = (u) => { try { return new URL(u).hostname.replace('www.', '') } catch { return '' } }
+      const top = (Array.isArray(resultados) ? resultados : []).slice(0, 5)
+        .map((r) => {
+          const titulo = r?.titulo || r?.title || r?.descricao || null
+          const fonte = dom(r?.link || r?.url || '')
+          return titulo ? (fonte ? `${titulo} [${fonte}]` : titulo) : null
+        }).filter(Boolean)
+      porAlvo.push({ alvo: c.alvo, resultados: n, achados: top })
     }
     return {
       result_flag: hits > 0 ? 'verificar' : 'nada_consta',
