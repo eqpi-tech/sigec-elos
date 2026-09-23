@@ -332,9 +332,12 @@ def ingest_tse(pg):
     for u in urls:
         print(f"TSE: baixando {u.rsplit('/', 1)[-1]}…")
         zf = zipfile.ZipFile(io.BytesIO(fetch_bytes(u)))
-        for name in zf.namelist():
-            if not name.lower().endswith(".csv"):
-                continue
+        # o zip traz o consolidado *_BRASIL.csv E um CSV por UF (união =
+        # tudo em dobro — carga de 23/09 saiu 2x); com o consolidado
+        # presente, lê SÓ ele
+        csvs = [n for n in zf.namelist() if n.lower().endswith(".csv")]
+        brasil = [n for n in csvs if n.lower().endswith("_brasil.csv")]
+        for name in (brasil or csvs):
             text = zf.read(name).decode("latin-1", "replace")
             for rec in csv.DictReader(io.StringIO(text), delimiter=";"):
                 low = {k.lower(): (v or "").strip('" ') for k, v in rec.items() if k}

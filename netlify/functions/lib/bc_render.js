@@ -88,14 +88,27 @@ const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024 // por arquivo; maiores ficam só cit
 
 async function buildEvidenceAppendix(sb, requestId) {
   // só evidências de tentativas TERMINAIS (retries antigos deixam receipts
-  // duplicados — o Full da Techocean tinha 3 conjuntos da mídia negativa)
-  const { data: evs, error } = await sb
+  // duplicados — o Full da Techocean tinha 3 conjuntos da mídia negativa).
+  // Resultado clonado do cache (reused_from) não tem evidência própria —
+  // busca as do resultado ORIGINAL, senão um request 100% cacheado sai com
+  // o apêndice vazio (visto no re-emit da Alianza, 23/09).
+  const { data: terms, error: tErr } = await sb
+    .from('source_results')
+    .select('id, connector, reused_from')
+    .eq('request_id', requestId)
+    .in('status', ['ok', 'not_found'])
+  if (tErr) { console.warn('[bc-render] evidências:', tErr.message); return [] }
+  const connBySource = {}
+  for (const t of terms || []) connBySource[t.reused_from || t.id] = t.connector
+  const ids = Object.keys(connBySource)
+  if (!ids.length) return []
+  const { data: rawEvs, error } = await sb
     .from('report_evidences')
-    .select('kind, storage_path, sha256, source_results!inner(connector, request_id, status)')
-    .eq('source_results.request_id', requestId)
-    .in('source_results.status', ['ok', 'not_found'])
+    .select('kind, storage_path, sha256, source_result_id')
+    .in('source_result_id', ids)
     .order('created_at', { ascending: true })
   if (error) { console.warn('[bc-render] evidências:', error.message); return [] }
+  const evs = (rawEvs || []).map((e) => ({ ...e, source_results: { connector: connBySource[e.source_result_id] } }))
   const out = []
   let converted = 0
   const porConector = {}
