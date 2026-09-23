@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '0 6 * * 1'   # segundas 06:00 UTC = 03:00 BRT (após o sync HOC)
   workflow_dispatch:        # disparo manual p/ validação e recarga imediata
+    inputs:
+      listas:
+        description: 'Listas específicas (ex.: "tse" ou "ofac onu"); vazio = todas'
+        required: false
+        default: ''
 
 jobs:
   ingest:
@@ -32,4 +37,4 @@ jobs:
       - name: Ingerir listas
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: python3 scripts/bc_ingest_lists.py
+        run: python3 scripts/bc_ingest_lists.py ${{ inputs.listas }}
