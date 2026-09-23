@@ -534,126 +534,10 @@ export default function SupplierDocuments() {
     )
   }
 
-  return (
-    <div style={{ padding: mobile ? '16px' : '28px 32px', maxWidth:960, margin:'0 auto' }}>
-      {toast && (
-        <div style={{ position:'fixed',top:80,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',padding:'12px 20px',borderRadius:12,zIndex:9999,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,boxShadow:'0 8px 24px rgba(0,0,0,.2)',maxWidth:340 }}>
-          {toast.msg}
-        </div>
-      )}
-
-      <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
-
-      {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap:16, marginBottom:24 }}>
-        {[
-          ['Válidos', okCount, '#22c55e', '✅'],
-          ['Pendentes', totCount - okCount, totCount - okCount > 0 ? '#f59e0b' : '#22c55e', '⏳'],
-          ['Score ELOS', `${supplier?.score||0}/100`, supplier?.score >= 70 ? '#22c55e' : '#f59e0b', '📊'],
-        ].map(([l,v,c,i]) => (
-          <Card key={l}><div style={{ display:'flex',alignItems:'center',gap:12 }}><div style={{ fontSize:28 }}>{i}</div><div><div style={{ fontSize:22,fontWeight:800,color:c,fontFamily:'Montserrat,sans-serif' }}>{v}</div><div style={{ fontSize:11,color:'#9B9B9B' }}>{l}</div></div></div></Card>
-        ))}
-      </div>
-
-      {/* ── Apresentação da Empresa ── */}
-      {(() => {
-        const presentation = uploaded.find(d => d.type === 'presentation')
-        return (
-          <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <div style={{ width:44, height:44, borderRadius:12, background:'rgba(46,49,146,.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>📊</div>
-                <div>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>Apresentação da Empresa</div>
-                  <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
-                    {presentation
-                      ? `Enviada · ${(presentation.updated_at || presentation.created_at || '').slice(0,10)}`
-                      : 'PDF, PPTX ou PPT · Máx 50 MB · Aprovado automaticamente'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                {presentation?.storage_path && (
-                  <Button variant="neutral" size="sm" onClick={() => handleViewDoc(presentation)}>👁 Ver</Button>
-                )}
-                <input type="file" accept=".pdf,.pptx,.ppt" ref={presentationRef} style={{ display:'none' }}
-                  onChange={e => handlePresentationUpload(e.target.files[0])}/>
-                {uploadingPresentation
-                  ? <Spinner size={20}/>
-                  : <Button variant={presentation ? 'neutral' : 'orange'} size="sm" onClick={() => presentationRef.current?.click()}>
-                      {presentation ? '↑ Atualizar' : '↑ Enviar apresentação'}
-                    </Button>
-                }
-              </div>
-            </div>
-          </Card>
-        )
-      })()}
-
-      {/* Lista de documentos exigidos pelas categorias */}
-      {reqDocs.length === 0 ? (
-        <Card style={{ borderRadius:16, padding:'32px', textAlign:'center' }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>📦</div>
-          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:16, color:'#1a1c5e', marginBottom:8 }}>Nenhuma categoria selecionada</div>
-          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16 }}>
-            Selecione as categorias de atuação para ver quais documentos são necessários.
-          </div>
-          <Button variant="orange" onClick={()=>window.location.href='/fornecedor/categorias'}>
-            📦 Selecionar Categorias →
-          </Button>
-        </Card>
-      ) : docGroups.length > 1 ? (
-        /* Multi-processo: um card por fluxo (cliente ou padrão) */
-        <>
-          {docGroups.map(g => {
-            const groupDocs = reqDocs.filter(d => g.ids.has(d.id))
-            const groupOk   = groupDocs.filter(d => isSatisfied(getDoc(d.id))).length
-            return (
-              <Card key={g.key} style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between', flexWrap:'wrap' }}>
-                  <SectionTitle style={{ marginBottom:0 }}>
-                    {g.key === 'global' ? '🌐 ' : '🏢 '}{g.title}
-                  </SectionTitle>
-                  <span style={{ fontSize:12, color: groupOk === groupDocs.length ? '#22c55e' : '#9B9B9B', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
-                    {groupOk}/{groupDocs.length} válidos
-                  </span>
-                </div>
-                {groupDocs.map(renderDocRow)}
-              </Card>
-            )
-          })}
-          <div style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            Documentos compartilhados entre processos são enviados uma única vez.
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · Máx 10MB
-          </div>
-        </>
-      ) : (
-        <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between' }}>
-            <SectionTitle style={{ marginBottom:0 }}>
-              {docGroups[0]?.title ? `Documentos — ${docGroups[0].title}` : 'Documentos Exigidos para Homologação'}
-            </SectionTitle>
-            <a href="/fornecedor/categorias" style={{ fontSize:12, color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:600 }}>
-              Editar categorias →
-            </a>
-          </div>
-          {reqDocs.map(renderDocRow)}
-          <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
-          </div>
-        </Card>
-      )}
-
-      {/* ── Documentos de Mobilidade: postos → pessoas → docs PF ── */}
-      {mobPosts.length > 0 && (
-        <Card style={{ borderRadius:16, padding:'20px 24px', marginTop:16 }}>
-          <SectionTitle>👷 Documentos de Mobilidade</SectionTitle>
-          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', margin:'4px 0 16px' }}>
-            Sua empresa tem postos de trabalho com mão de obra alocada. Cadastre cada colaborador
-            (nome e CPF) e envie os documentos <b>da pessoa</b> para <b>aquele posto</b> — certidões e
-            certificados podem variar conforme a cidade.
-          </div>
-          {mobPosts.map(post => {
+  // ── Mobilidade: renderizadores — a seção é ancorada DENTRO do card do
+  // processo do cliente dono dos postos (feedback 23/09: precisa ficar claro
+  // a qual processo master os docs de mobilidade pertencem) ──
+  const renderMobPost = (post) => {
             const people     = mobPeople.filter(p => p.post_id === post.id)
             const matrix     = mobMatrix.filter(m => m.category_id === post.category_id)
             // Registro da Arma (10017) só é exigido em posto armado
@@ -803,9 +687,156 @@ export default function SupplierDocuments() {
                 )}
               </div>
             )
+  }
+
+  const renderMobilitySection = (clientKey) => {
+    const posts = mobPosts.filter(p => p.client_id === clientKey)
+    if (!posts.length) return null
+    return (
+      <div style={{ marginTop:18, paddingTop:16, borderTop:'1.5px dashed #c7c9e2' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#1a1c5e' }}>👷 Documentos de Mobilidade</span>
+          <span style={{ fontSize:9.5, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>parte deste processo</span>
+        </div>
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', margin:'2px 0 12px' }}>
+          Postos com mão de obra alocada deste cliente. Cadastre cada colaborador (nome e CPF)
+          e envie os documentos <b>da pessoa</b> para <b>aquele posto</b> — certidões e certificados
+          podem variar conforme a cidade.
+        </div>
+        {posts.map(renderMobPost)}
+      </div>
+    )
+  }
+
+  // postos de cliente sem card de processo nesta tela (ex.: convite aceito,
+  // processo ainda sem matriz) — ganham card próprio nomeando o processo
+  const mobOrphanClientIds = [...new Set(mobPosts
+    .filter(p => !docGroups.some(g => g.key === p.client_id))
+    .map(p => p.client_id))]
+
+  return (
+    <div style={{ padding: mobile ? '16px' : '28px 32px', maxWidth:960, margin:'0 auto' }}>
+      {toast && (
+        <div style={{ position:'fixed',top:80,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',padding:'12px 20px',borderRadius:12,zIndex:9999,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,boxShadow:'0 8px 24px rgba(0,0,0,.2)',maxWidth:340 }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
+
+      {/* KPIs */}
+      <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap:16, marginBottom:24 }}>
+        {[
+          ['Válidos', okCount, '#22c55e', '✅'],
+          ['Pendentes', totCount - okCount, totCount - okCount > 0 ? '#f59e0b' : '#22c55e', '⏳'],
+          ['Score ELOS', `${supplier?.score||0}/100`, supplier?.score >= 70 ? '#22c55e' : '#f59e0b', '📊'],
+        ].map(([l,v,c,i]) => (
+          <Card key={l}><div style={{ display:'flex',alignItems:'center',gap:12 }}><div style={{ fontSize:28 }}>{i}</div><div><div style={{ fontSize:22,fontWeight:800,color:c,fontFamily:'Montserrat,sans-serif' }}>{v}</div><div style={{ fontSize:11,color:'#9B9B9B' }}>{l}</div></div></div></Card>
+        ))}
+      </div>
+
+      {/* ── Apresentação da Empresa ── */}
+      {(() => {
+        const presentation = uploaded.find(d => d.type === 'presentation')
+        return (
+          <Card style={{ borderRadius:16, padding:'20px 24px', marginBottom:20 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:44, height:44, borderRadius:12, background:'rgba(46,49,146,.08)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>📊</div>
+                <div>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>Apresentação da Empresa</div>
+                  <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
+                    {presentation
+                      ? `Enviada · ${(presentation.updated_at || presentation.created_at || '').slice(0,10)}`
+                      : 'PDF, PPTX ou PPT · Máx 50 MB · Aprovado automaticamente'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                {presentation?.storage_path && (
+                  <Button variant="neutral" size="sm" onClick={() => handleViewDoc(presentation)}>👁 Ver</Button>
+                )}
+                <input type="file" accept=".pdf,.pptx,.ppt" ref={presentationRef} style={{ display:'none' }}
+                  onChange={e => handlePresentationUpload(e.target.files[0])}/>
+                {uploadingPresentation
+                  ? <Spinner size={20}/>
+                  : <Button variant={presentation ? 'neutral' : 'orange'} size="sm" onClick={() => presentationRef.current?.click()}>
+                      {presentation ? '↑ Atualizar' : '↑ Enviar apresentação'}
+                    </Button>
+                }
+              </div>
+            </div>
+          </Card>
+        )
+      })()}
+
+      {/* Lista de documentos exigidos pelas categorias */}
+      {reqDocs.length === 0 ? (
+        <Card style={{ borderRadius:16, padding:'32px', textAlign:'center' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>📦</div>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:16, color:'#1a1c5e', marginBottom:8 }}>Nenhuma categoria selecionada</div>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16 }}>
+            Selecione as categorias de atuação para ver quais documentos são necessários.
+          </div>
+          <Button variant="orange" onClick={()=>window.location.href='/fornecedor/categorias'}>
+            📦 Selecionar Categorias →
+          </Button>
+        </Card>
+      ) : docGroups.length > 1 ? (
+        /* Multi-processo: um card por fluxo (cliente ou padrão) */
+        <>
+          {docGroups.map(g => {
+            const groupDocs = reqDocs.filter(d => g.ids.has(d.id))
+            const groupOk   = groupDocs.filter(d => isSatisfied(getDoc(d.id))).length
+            return (
+              <Card key={g.key} style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between', flexWrap:'wrap' }}>
+                  <SectionTitle style={{ marginBottom:0 }}>
+                    {g.key === 'global' ? '🌐 ' : '🏢 '}{g.title}
+                  </SectionTitle>
+                  <span style={{ fontSize:12, color: groupOk === groupDocs.length ? '#22c55e' : '#9B9B9B', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                    {groupOk}/{groupDocs.length} válidos
+                  </span>
+                </div>
+                {groupDocs.map(renderDocRow)}
+                {renderMobilitySection(g.key)}
+              </Card>
+            )
           })}
+          <div style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+            Documentos compartilhados entre processos são enviados uma única vez.
+            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · Máx 10MB
+          </div>
+        </>
+      ) : (
+        <Card style={{ borderRadius:16, padding:'20px 24px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between' }}>
+            <SectionTitle style={{ marginBottom:0 }}>
+              {docGroups[0]?.title ? `Documentos — ${docGroups[0].title}` : 'Documentos Exigidos para Homologação'}
+            </SectionTitle>
+            <a href="/fornecedor/categorias" style={{ fontSize:12, color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:600 }}>
+              Editar categorias →
+            </a>
+          </div>
+          {reqDocs.map(renderDocRow)}
+          <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
+          </div>
+          {renderMobilitySection(docGroups[0]?.key)}
         </Card>
       )}
+
+      {/* Mobilidade de processos sem card acima — nomeia o processo master */}
+      {mobOrphanClientIds.map(cid => {
+        const posts = mobPosts.filter(p => p.client_id === cid)
+        const cname = posts[0]?.clients?.nome_fantasia || posts[0]?.clients?.razao_social || 'Cliente'
+        return (
+          <Card key={cid} style={{ borderRadius:16, padding:'20px 24px', marginTop:16 }}>
+            <SectionTitle>🏢 Processo — {cname}</SectionTitle>
+            {renderMobilitySection(cid)}
+          </Card>
+        )
+      })}
     </div>
   )
 }
