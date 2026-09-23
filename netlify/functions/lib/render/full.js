@@ -28,7 +28,7 @@ const BAND = {
 // 5 aspectos do BC manual → conectores (ordem de impressão)
 const ASPECTOS = [
   ['Identidade e Situação Cadastral', ['cnpj_base', 'cartao_cnpj', 'sintegra', 'simples']],
-  ['Integridade e Reputação', ['cgu_correcional', 'cnj_improbidade', 'leniencia', 'pep', 'ceaf', 'midia_negativa']],
+  ['Integridade e Reputação', ['cgu_correcional', 'cnj_improbidade', 'leniencia', 'pep', 'tse_candidaturas', 'ceaf', 'midia_negativa']],
   ['Listas Restritivas e Sanções', ['ceis', 'cnep', 'cepim', 'trabalho_escravo', 'ofac', 'onu', 'icij']],
   ['Jurídico e Trabalhista', ['cndt', 'mpt_cnf', 'mpf_cn', 'falencia_rj', 'datajud', 'ibama']],
   ['Fiscal e Financeiro', ['pgfn_cnd', 'pgfn_devedores', 'fgts_crf', 'sefaz_cnd', 'pref_cnd', 'renuncias', 'gov_contratos', 'assertiva_pj']],
@@ -40,6 +40,7 @@ const NOME_FONTE = {
   cgu_correcional: 'CGU — Certidão Correcional (CNC)', cnj_improbidade: 'CNJ — Improbidade Administrativa',
   leniencia: 'Acordos de Leniência (CGU)', pep: 'PEP — Pessoas Politicamente Expostas',
   ceaf: 'CEAF — Expulsões da Adm. Federal', midia_negativa: 'Mídia negativa (busca padrão EQP)',
+  tse_candidaturas: 'TSE — Candidaturas de Sócios (últimas eleições)',
   ceis: 'CEIS — Empresas Inidôneas e Suspensas', cnep: 'CNEP — Lei Anticorrupção',
   cepim: 'CEPIM — Entidades Impedidas', trabalho_escravo: 'Lista Suja — Trabalho Escravo (MTE)',
   ofac: 'OFAC — SDN List (EUA)', onu: 'ONU — Consolidated Sanctions', icij: 'ICIJ Offshore Leaks',
