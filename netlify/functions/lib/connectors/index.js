@@ -33,6 +33,10 @@ module.exports = {
   tse_candidaturas: require('./tse_candidaturas.js'),
   icij:             require('./icij.js'),
   datajud:          require('./datajud.js'),
+  // feedback de cliente 23/09
+  gov_contratos:    require('./gov_contratos.js'),
+  pgfn_devedores:   require('./pgfn_devedores.js'),
+  falencia_rj:      require('./falencia_rj.js'),
 }
 
 // dependem do cnpj_base resolvido antes (QSA p/ nomes, UF/município p/ rota)

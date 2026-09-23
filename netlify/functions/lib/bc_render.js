@@ -112,11 +112,18 @@ async function buildEvidenceAppendix(sb, requestId) {
       const buf = Buffer.from(await blob.arrayBuffer())
       if (buf.length > MAX_EVIDENCE_BYTES) continue
       const ext = ev.storage_path.split('.').pop().toLowerCase()
-      // SÓ PDFs nativos entram no anexo (plano C, 19/09): converter HTML no
-      // chromium do lambda derrubava o render; receipts HTML ficam no bucket
-      // com sha256 e são citados no Índice de Evidências
-      if (ext !== 'pdf') continue
-      const pdf = buf
+      // 23/09 (feedback: 'tudo que puder printar a evidência, printe'):
+      // HTML volta ao anexo via render OFFLINE sanitizado (sem <script>,
+      // toda request externa abortada) — com as blindagens de /tmp e
+      // reinício do chromium que estabilizaram o pipeline
+      let pdf
+      if (ext === 'pdf') pdf = buf
+      else if (ext === 'html' || ext === 'htm') {
+        const semScript = buf.toString('utf8').replace(/<script[\s\S]*?<\/script>/gi, '')
+        pdf = await htmlToPdf(semScript, { offline: true })
+      } else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+        pdf = await htmlToPdf(`<html><body style="margin:0"><img style="width:100%" src="data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${buf.toString('base64')}"></body></html>`, { offline: true })
+      } else continue
       out.push({ slug: ev.source_results.connector, pdf })
       converted++
     } catch (e) { console.warn(`[bc-render] evidência ${ev.storage_path}: ${e.message}`) }

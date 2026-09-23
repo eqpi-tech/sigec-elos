@@ -122,11 +122,14 @@ module.exports = {
     const cab = raw?.reportData?.cabecalho || {}
     const score = resp.score || {}
     const protestos = resp.protestosPublicos || {}
+    // chaves REAIS do payload (verificado 23/09): registrosDebitos,
+    // ultimasConsultas, faturamentoEstimado; o produto contratado NÃO traz
+    // ações judiciais (cobertas pelo DataJud/certidões no relatório)
     const acoes = resp.acoesJudiciais || resp.acaoJudicial || {}
     const cheques = resp.cheques || {}
-    const debitos = resp.registroDebitos || resp.debitosVencidos || {}
-    const consultas = resp.registroConsultas || resp.consultas || {}
-    const faturamento = resp.faturamentoPJ || {}
+    const debitos = resp.registrosDebitos || resp.registroDebitos || resp.debitosVencidos || {}
+    const consultas = resp.ultimasConsultas || resp.registroConsultas || resp.consultas || {}
+    const faturamento = resp.faturamentoEstimado || resp.faturamentoPJ || {}
 
     const qtdProt = protestos.qtdProtestos ?? protestos.quantidade ?? 0
     const qtdAcoes = acoes.qtd ?? acoes.quantidade ?? acoes.qtdAcoes ?? 0
@@ -152,8 +155,16 @@ module.exports = {
       headline: `Assertiva: ${partes.join(' · ')}${raw?.emitted === false && raw?.reusedReportId ? ' (reuso ≤30d)' : ''}`,
       details: {
         score: { classe, pontos: score.pontos ?? null, faixa: score.faixa?.descricao || score.faixa?.titulo || null },
-        protestos: { qtd: qtdProt, valor_total: protestos.valorTotal ?? null },
-        acoes_judiciais: { qtd: qtdAcoes, valor: acoes.valor ?? null },
+        // consultas do bureau EXPLÍCITAS (feedback 23/09: 'não ficou claro
+        // se houve consulta a protestos') — cada bloco afirma o resultado
+        consultas_do_bureau: {
+          protestos_cartorios: qtdProt > 0
+            ? `${qtdProt} protesto(s)` + (protestos.valorTotal ? ` · R$ ${protestos.valorTotal}` : '')
+            : 'Consulta realizada — nada consta' + (protestos.protestoCompleto ? ' (cobertura completa de cartórios)' : ''),
+          cheques_sem_fundo: qtdCheq > 0 ? `${qtdCheq} ocorrência(s) CCF` : 'Consulta realizada — nada consta',
+          debitos_e_pendencias: qtdDeb > 0 ? `${qtdDeb} registro(s)` : 'Consulta realizada — nada consta',
+        },
+        protestos: { qtd: qtdProt, valor_total: protestos.valorTotal || null },
         cheques_sem_fundo: { qtd: qtdCheq, valor: cheques.valor ?? null },
         debitos: { qtd: qtdDeb, valor: debitos.valor ?? null },
         consultas: {

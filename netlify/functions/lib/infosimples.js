@@ -40,9 +40,10 @@ async function consulta(path, params = {}, { token } = {}) {
 // encontrado, validação). Não-encontrado NÃO é erro de infraestrutura.
 function mapCode(code, codeMessage = '') {
   if (code === 200) return 'ok'
+  if (code === 612) return 'not_found' // 'a consulta não retornou dados' = sem registros (23/09)
   const msg = String(codeMessage).toLowerCase()
   if (code >= 600 && code < 700) {
-    if (/n[aã]o (foi )?encontrad|n[aã]o consta|sem resultado|inexistente/.test(msg)) return 'not_found'
+    if (/n[aã]o (foi )?encontrad|n[aã]o consta|sem resultado|n[aã]o retornou dados|inexistente/.test(msg)) return 'not_found'
     return 'failed_soft'   // site fora do ar / instável → retry do orquestrador
   }
   return 'failed_soft'

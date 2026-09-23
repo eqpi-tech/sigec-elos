@@ -27,7 +27,7 @@ const BAND = {
 // nome/escopo da linha do quadro por conector (ordem fixa do relatório)
 const SOURCE_META = [
   ['cnpj_base',        'Receita Federal — Base CNPJ',        'Situação cadastral, QSA, CNAE'],
-  ['pgfn_cnd',         'CND Federal (PGFN/RFB)',             'Débitos tributários federais'],
+  ['pgfn_cnd',         'CND Federal (PGFN/RFB)',             'Tributos federais e dívida ativa'],
   ['fgts_crf',         'CRF FGTS (Caixa)',                   'Regularidade FGTS'],
   ['cndt',             'CNDT (TST)',                         'Débitos trabalhistas'],
   ['ceis',             'CEIS (Portal da Transparência)',     'Empresas inidôneas e suspensas'],
