@@ -1239,6 +1239,86 @@ export const categoriesApi = {
   },
 }
 
+// ── Mobilidade (SPEC_MOBILIDADE.md) ──────────────────────────────────────────
+// Documentos de PF por posto/pessoa. O upload é um `documents` comum com
+// type composto: 'mob:<docId>:p:<personId>' (escopo pessoa) ou
+// 'mob:<docId>:s:<postId>' (escopo posto) — respeita o UNIQUE(supplier,type).
+export const mobilityApi = {
+  docTypeKey: (docId, escopo, targetId) =>
+    `mob:${docId}:${escopo === 'pessoa' ? 'p' : 's'}:${targetId}`,
+
+  maskCpf: (digits) => {
+    const d = String(digits || '').replace(/\D/g, '')
+    return d.length === 11 ? `***.***.*${d.slice(8, 9)}-${d.slice(9)}` : '***'
+  },
+
+  validCpf: (value) => {
+    const d = String(value || '').replace(/\D/g, '')
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+    for (const len of [9, 10]) {
+      let sum = 0
+      for (let i = 0; i < len; i++) sum += Number(d[i]) * (len + 1 - i)
+      const dv = ((sum * 10) % 11) % 10
+      if (dv !== Number(d[len])) return false
+    }
+    return true
+  },
+
+  // Postos abertos para o fornecedor (RLS: match por supplier_id ou CNPJ)
+  myPosts: async (supplierCnpj) => {
+    const { data, error } = await supabase
+      .from('mobility_posts')
+      .select('id, client_id, category_id, site_city, site_uf, armado, qty_posts, qty_people, funcao_label, clients(razao_social, nome_fantasia), categories(id, name)')
+      .eq('supplier_cnpj', supplierCnpj)
+      .eq('active', true)
+      .order('site_city')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // Matriz de mobilidade das categorias dos postos
+  matrixFor: async (categoryIds) => {
+    if (!categoryIds.length) return []
+    const { data, error } = await supabase
+      .from('category_mobility_documents')
+      .select('category_id, document_id, escopo, required, blocking, documents_catalog(id, name)')
+      .in('category_id', categoryIds)
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  listPeople: async (postIds) => {
+    if (!postIds.length) return []
+    const { data, error } = await supabase
+      .from('mobility_people')
+      .select('id, post_id, nome, cpf_digits, active')
+      .in('post_id', postIds)
+      .eq('active', true)
+      .order('nome')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  addPerson: async ({ postId, supplierId, nome, cpf }) => {
+    const cpfDigits = String(cpf || '').replace(/\D/g, '')
+    if (!mobilityApi.validCpf(cpfDigits)) throw new Error('CPF inválido — confira os dígitos.')
+    const { data, error } = await supabase
+      .from('mobility_people')
+      .insert({ post_id: postId, supplier_id: supplierId, nome: nome.trim(), cpf_digits: cpfDigits })
+      .select('id, post_id, nome, cpf_digits, active').single()
+    if (error) throw new Error(error.code === '23505'
+      ? 'Este CPF já está cadastrado neste posto.' : error.message)
+    return data
+  },
+
+  removePerson: async (personId) => {
+    // inativa (substituição de colaborador) — docs ficam no histórico
+    const { error } = await supabase
+      .from('mobility_people').update({ active: false }).eq('id', personId)
+    if (error) throw new Error(error.message)
+  },
+}
+
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
 export const clientApi = {
   // Dashboard KPIs: fornecedores convidados por este cliente

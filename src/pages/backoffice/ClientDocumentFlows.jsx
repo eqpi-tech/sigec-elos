@@ -499,6 +499,387 @@ function MatrixTab({ clientId, categories, setError }) {
   )
 }
 
+// ── ABA 3: Mobilidade (matriz de docs PF + postos por CNPJ) ───────────────
+// SPEC_MOBILIDADE.md: docs de pessoa/posto por categoria + slots de postos
+// abertos por CNPJ (o fornecedor vê a árvore ao se cadastrar).
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+
+function validCnpj(value) {
+  const d = String(value || '').replace(/\D/g, '')
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false
+  const calc = (len) => {
+    const w = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
+    const sum = w.reduce((a, p, i) => a + p * Number(d[i]), 0)
+    const r = sum % 11
+    return r < 2 ? 0 : 11 - r
+  }
+  return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
+}
+const fmtCnpj = (c) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+
+function PostFormModal({ post, categories, onSave, onClose, busy }) {
+  const [f, setF] = useState({
+    supplier_cnpj: post?.supplier_cnpj || '', category_id: post?.category_id || '',
+    site_city: post?.site_city || '', site_uf: post?.site_uf || '',
+    armado: !!post?.armado, qty_posts: post?.qty_posts ?? 1, qty_people: post?.qty_people ?? 1,
+    funcao_label: post?.funcao_label || '',
+  })
+  const set = (k, v) => setF(p => ({ ...p, [k]: v }))
+  const cnpjDigits = f.supplier_cnpj.replace(/\D/g, '')
+  const cnpjOk = validCnpj(cnpjDigits)
+  const ok = cnpjOk && f.category_id && f.site_city.trim() && f.site_uf && Number(f.qty_people) > 0 && Number(f.qty_posts) > 0
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(15,17,60,.45)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:'24px 28px', width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+          <h3 style={{ ...titleF, fontWeight:800, fontSize:16, color:'#1a1c5e', margin:0 }}>
+            {post ? 'Editar Posto' : 'Novo Posto de Mobilidade'}
+          </h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:18, lineHeight:1 }}>✕</button>
+        </div>
+        <span style={lbl}>CNPJ do fornecedor *</span>
+        <input value={f.supplier_cnpj} onChange={e => set('supplier_cnpj', e.target.value)}
+          placeholder="00.000.000/0000-00"
+          style={{ ...inputCss, marginBottom:4, borderColor: f.supplier_cnpj && !cnpjOk ? '#ef4444' : '#e2e4ef' }}/>
+        <div style={{ ...font, fontSize:11, color: f.supplier_cnpj ? (cnpjOk ? '#22c55e' : '#ef4444') : '#9B9B9B', marginBottom:12 }}>
+          {f.supplier_cnpj ? (cnpjOk ? '✓ CNPJ válido' : 'CNPJ inválido — confira os dígitos') : 'O slot abre para este CNPJ mesmo antes do cadastro'}
+        </div>
+        <span style={lbl}>Categoria (função) *</span>
+        <select value={f.category_id} onChange={e => set('category_id', Number(e.target.value))}
+          style={{ ...inputCss, marginBottom:12 }}>
+          <option value="">Selecione...</option>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 90px', gap:12, marginBottom:12 }}>
+          <div>
+            <span style={lbl}>Cidade *</span>
+            <input value={f.site_city} onChange={e => set('site_city', e.target.value)} style={inputCss}/>
+          </div>
+          <div>
+            <span style={lbl}>UF *</span>
+            <select value={f.site_uf} onChange={e => set('site_uf', e.target.value)} style={inputCss}>
+              <option value="">—</option>
+              {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:12 }}>
+          <div>
+            <span style={lbl}>Qtde postos *</span>
+            <input type="number" min="1" value={f.qty_posts} onChange={e => set('qty_posts', e.target.value)} style={inputCss}/>
+          </div>
+          <div>
+            <span style={lbl}>Qtde pessoas *</span>
+            <input type="number" min="1" value={f.qty_people} onChange={e => set('qty_people', e.target.value)} style={inputCss}/>
+          </div>
+          <div>
+            <span style={lbl}>Armado</span>
+            <label style={{ ...font, fontSize:13, color:'#1a1c5e', display:'flex', alignItems:'center', gap:8, paddingTop:9, cursor:'pointer' }}>
+              <input type="checkbox" checked={f.armado} onChange={e => set('armado', e.target.checked)} style={{ accentColor:'#2E3192' }}/>
+              🔫 Sim
+            </label>
+          </div>
+        </div>
+        <span style={lbl}>Rótulo da função (opcional)</span>
+        <input value={f.funcao_label} onChange={e => set('funcao_label', e.target.value)}
+          placeholder='Ex.: "ASG DIURNO 40%"' style={{ ...inputCss, marginBottom:20 }}/>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <button onClick={onClose} disabled={busy}
+            style={{ padding:'10px 20px', borderRadius:10, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', ...font, fontSize:13, fontWeight:600, color:'#64748b' }}>
+            Cancelar
+          </button>
+          <button disabled={busy || !ok}
+            onClick={() => onSave({
+              supplier_cnpj: cnpjDigits, category_id: f.category_id,
+              site_city: f.site_city.trim(), site_uf: f.site_uf, armado: f.armado,
+              qty_posts: Number(f.qty_posts), qty_people: Number(f.qty_people),
+              funcao_label: f.funcao_label.trim() || null,
+            })}
+            style={{ padding:'10px 20px', borderRadius:10, border:'none', background: ok ? '#2E3192' : '#c7c9e2', cursor: ok ? 'pointer' : 'not-allowed', ...font, fontSize:13, fontWeight:700, color:'#fff' }}>
+            {busy ? '...' : post ? 'Salvar' : 'Criar Posto'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MobilidadeTab({ clientId, categories, setError }) {
+  const [panel, setPanel]       = useState('postos')     // 'postos' | 'matriz'
+  const [posts, setPosts]       = useState([])
+  const [peopleCount, setPeopleCount] = useState({})     // post_id → nº pessoas ativas
+  const [loading, setLoading]   = useState(true)
+  const [modal, setModal]       = useState(null)         // { post } | null
+  const [modalBusy, setModalBusy] = useState(false)
+  const [filter, setFilter]     = useState('')
+  // matriz
+  const [catalog, setCatalog]   = useState([])
+  const [expanded, setExpanded] = useState(null)
+  const [catDocs, setCatDocs]   = useState({})
+  const [addSearch, setAddSearch] = useState('')
+  const [busy, setBusy]         = useState(false)
+
+  const catMap = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories])
+  // categorias com matriz de mobilidade OU com postos — as relevantes para a aba
+  const mobCatIds = useMemo(() => new Set(posts.map(p => p.category_id)), [posts])
+
+  const loadPosts = useCallback(async () => {
+    setLoading(true)
+    try {
+      const rows = await fetchAll(supabase.from('mobility_posts')
+        .select('*').eq('client_id', clientId).order('created_at'))
+      setPosts(rows)
+      if (rows.length) {
+        const { data: ppl } = await supabase.from('mobility_people')
+          .select('post_id').in('post_id', rows.map(r => r.id)).eq('active', true)
+        const cnt = {}
+        for (const p of (ppl || [])) cnt[p.post_id] = (cnt[p.post_id] || 0) + 1
+        setPeopleCount(cnt)
+      }
+    } catch (e) { setError(e.message) }
+    setLoading(false)
+  }, [clientId, setError])
+
+  useEffect(() => { loadPosts() }, [loadPosts])
+  useEffect(() => {
+    supabase.from('documents_catalog').select('id, name').order('name')
+      .then(({ data }) => setCatalog(data || []))
+  }, [])
+  const catalogMap = useMemo(() => Object.fromEntries(catalog.map(d => [d.id, d])), [catalog])
+
+  async function savePost(values) {
+    setModalBusy(true)
+    try {
+      if (modal.post) {
+        const { error } = await supabase.from('mobility_posts').update(values).eq('id', modal.post.id)
+        if (error) throw error
+      } else {
+        // resolve supplier_id se o CNPJ já existir na base
+        const { data: sup } = await supabase.from('suppliers')
+          .select('id').eq('cnpj', values.supplier_cnpj).maybeSingle()
+        const { error } = await supabase.from('mobility_posts')
+          .insert({ client_id: clientId, supplier_id: sup?.id || null, source: 'manual', ...values })
+        if (error) throw error
+      }
+      await loadPosts()
+      setModal(null)
+    } catch (e) {
+      setError(e.code === '23505' ? 'Já existe um posto idêntico (mesmo CNPJ, categoria, cidade e função).' : e.message)
+    } finally { setModalBusy(false) }
+  }
+
+  async function togglePost(post) {
+    const { error } = await supabase.from('mobility_posts').update({ active: !post.active }).eq('id', post.id)
+    if (error) { setError(error.message); return }
+    setPosts(p => p.map(x => x.id === post.id ? { ...x, active: !x.active } : x))
+  }
+
+  // ── matriz de mobilidade ──
+  async function toggleExpand(catId) {
+    if (expanded === catId) { setExpanded(null); return }
+    setExpanded(catId); setAddSearch('')
+    if (!catDocs[catId]) {
+      const { data, error } = await supabase.from('category_mobility_documents')
+        .select('id, document_id, escopo, required, blocking').eq('category_id', catId)
+      if (error) { setError(error.message); return }
+      setCatDocs(p => ({ ...p, [catId]: data || [] }))
+    }
+  }
+  const docs = catDocs[expanded] || []
+  const inCat = useMemo(() => new Set(docs.map(d => d.document_id)), [docs])
+  const addable = useMemo(() => {
+    const q = addSearch.trim().toLowerCase()
+    if (!q) return []
+    return catalog.filter(d => !inCat.has(d.id) && d.name.toLowerCase().includes(q)).slice(0, 12)
+  }, [catalog, inCat, addSearch])
+
+  async function addDoc(doc) {
+    setBusy(true)
+    const { data, error } = await supabase.from('category_mobility_documents')
+      .insert({ category_id: expanded, document_id: doc.id, escopo: 'pessoa', required: true, blocking: true })
+      .select('id, document_id, escopo, required, blocking').single()
+    if (error) setError(error.message)
+    else setCatDocs(p => ({ ...p, [expanded]: [...(p[expanded] || []), data] }))
+    setBusy(false)
+  }
+  async function removeDoc(row) {
+    setBusy(true)
+    const { error } = await supabase.from('category_mobility_documents').delete().eq('id', row.id)
+    if (error) setError(error.message)
+    else setCatDocs(p => ({ ...p, [expanded]: (p[expanded] || []).filter(d => d.id !== row.id) }))
+    setBusy(false)
+  }
+  async function updateDoc(row, patch) {
+    setBusy(true)
+    const { error } = await supabase.from('category_mobility_documents').update(patch).eq('id', row.id)
+    if (error) setError(error.message)
+    else setCatDocs(p => ({ ...p, [expanded]: (p[expanded] || []).map(d => d.id === row.id ? { ...d, ...patch } : d) }))
+    setBusy(false)
+  }
+
+  const filteredPosts = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return posts
+    return posts.filter(p => p.supplier_cnpj.includes(q.replace(/\D/g, '') || '\u0000')
+      || (catMap[p.category_id]?.name || '').toLowerCase().includes(q)
+      || p.site_city.toLowerCase().includes(q))
+  }, [posts, filter, catMap])
+
+  const matrizCats = useMemo(() => {
+    const withMatrix = new Set(Object.keys(catDocs).filter(k => (catDocs[k] || []).length).map(Number))
+    return categories.filter(c => mobCatIds.has(c.id) || withMatrix.has(c.id))
+  }, [categories, mobCatIds, catDocs])
+
+  if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+        {[['postos','📍 Postos'],['matriz','🧩 Matriz de Mobilidade']].map(([k, l]) => (
+          <button key={k} onClick={() => setPanel(k)}
+            style={{ padding:'8px 16px', borderRadius:20, border: panel===k ? 'none' : '1px solid #e2e4ef', background: panel===k ? '#2E3192' : '#fff', cursor:'pointer', ...titleF, fontWeight:700, fontSize:12, color: panel===k ? '#fff' : '#9B9B9B' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {panel === 'postos' ? (
+        <Card style={{ borderRadius:14, padding:20 }}>
+          <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:14 }}>
+            <input value={filter} onChange={e => setFilter(e.target.value)}
+              placeholder="🔍 Filtrar por CNPJ, categoria ou cidade..." style={{ ...inputCss, maxWidth:380 }}/>
+            <span style={{ ...font, fontSize:12, color:'#9B9B9B', flex:1 }}>
+              {posts.length} posto{posts.length === 1 ? '' : 's'} · {Object.values(peopleCount).reduce((a, b) => a + b, 0)} pessoas cadastradas
+            </span>
+            <button onClick={() => setModal({ post: null })}
+              style={{ padding:'8px 16px', borderRadius:8, border:'none', background:'#2E3192', color:'#fff', cursor:'pointer', ...font, fontSize:12, fontWeight:700 }}>
+              + Novo Posto
+            </button>
+          </div>
+          {filteredPosts.length === 0 ? (
+            <div style={{ padding:'28px 0', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
+              Nenhum posto. Cadastre com "+ Novo Posto" ou rode a importação das planilhas.
+            </div>
+          ) : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'150px 1fr 150px 60px 110px 110px 70px', gap:8, padding:'0 10px 6px', alignItems:'center' }}>
+                {['CNPJ','Categoria / função','Localidade','Armado','Postos/Pessoas','Cadastradas',''].map((h, i) => <span key={i} style={{ ...lbl, marginBottom:0 }}>{h}</span>)}
+              </div>
+              {filteredPosts.map(p => {
+                const cadastradas = peopleCount[p.id] || 0
+                const okPeople = cadastradas >= p.qty_people
+                return (
+                  <div key={p.id} style={{ display:'grid', gridTemplateColumns:'150px 1fr 150px 60px 110px 110px 70px', gap:8, alignItems:'center', padding:'9px 10px', borderRadius:8, border:'1px solid #eef0f6', marginBottom:4, opacity: p.active ? 1 : .5 }}>
+                    <span style={{ ...font, fontSize:12, color:'#1a1c5e', fontWeight:600 }}>{fmtCnpj(p.supplier_cnpj)}</span>
+                    <div>
+                      <div style={{ ...font, fontSize:12.5, color:'#1a1c5e' }}>{catMap[p.category_id]?.name || `#${p.category_id}`}</div>
+                      {p.funcao_label && <div style={{ ...font, fontSize:11, color:'#9B9B9B' }}>{p.funcao_label}</div>}
+                    </div>
+                    <span style={{ ...font, fontSize:12, color:'#64748b' }}>{p.site_city}/{p.site_uf}</span>
+                    <span style={{ fontSize:13 }}>{p.armado ? '🔫' : '—'}</span>
+                    <span style={{ ...font, fontSize:12, color:'#64748b' }}>{p.qty_posts} / {p.qty_people}</span>
+                    <span style={{ ...font, fontSize:12, fontWeight:700, color: okPeople ? '#22c55e' : '#f59e0b' }}>
+                      {cadastradas}/{p.qty_people} {okPeople ? '✓' : ''}
+                    </span>
+                    <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
+                      <button onClick={() => setModal({ post: p })} title="Editar"
+                        style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:2 }}>✏️</button>
+                      <button onClick={() => togglePost(p)} title={p.active ? 'Desativar' : 'Reativar'}
+                        style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, padding:2 }}>{p.active ? '⏸' : '▶️'}</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </Card>
+      ) : (
+        <div>
+          <div style={{ marginBottom:12, padding:'10px 14px', borderRadius:10, background:'rgba(46,49,146,.04)', ...font, fontSize:12, color:'#64748b' }}>
+            Docs por <b>Pessoa</b> são exigidos de cada colaborador cadastrado; docs por <b>Posto</b> valem uma vez por posto/unidade (ex.: PCMSO, PGR, Registro da Arma).
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {(matrizCats.length ? matrizCats : categories).slice(0, 60).map(cat => {
+              const isOpen = expanded === cat.id
+              return (
+                <Card key={cat.id} style={{ borderRadius:12, padding:0, overflow:'visible', border:'1px solid #e2e4ef' }}>
+                  <button onClick={() => toggleExpand(cat.id)}
+                    style={{ width:'100%', background:'#fff', border:'none', cursor:'pointer', padding:'12px 16px', display:'flex', alignItems:'center', gap:10, textAlign:'left', borderRadius:12 }}>
+                    <span style={{ color:'#9B9B9B', fontSize:11, transform: isOpen ? 'rotate(90deg)' : 'none', display:'inline-block', transition:'transform .15s' }}>▶</span>
+                    <span style={{ ...font, fontSize:13, fontWeight:600, color:'#1a1c5e', flex:1 }}>{cat.name}</span>
+                    {mobCatIds.has(cat.id) && <span style={{ fontSize:9, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 7px', borderRadius:20, ...titleF }}>📍 tem postos</span>}
+                    {isOpen && <span style={{ ...font, fontSize:11, color:'#9B9B9B' }}>{docs.length} docs</span>}
+                  </button>
+                  {isOpen && (
+                    <div style={{ padding:'4px 16px 16px', borderTop:'1px solid #f0f0f5' }}>
+                      <div style={{ position:'relative', margin:'12px 0' }}>
+                        <input value={addSearch} onChange={e => setAddSearch(e.target.value)}
+                          placeholder="➕ Adicionar documento de mobilidade a esta categoria..."
+                          style={{ ...inputCss, border:'1px dashed #2E319266', background:'rgba(46,49,146,.02)' }}/>
+                        {addSearch.trim() && (
+                          <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:100, maxHeight:240, overflowY:'auto' }}>
+                            {addable.length === 0
+                              ? <div style={{ padding:'10px 14px', ...font, fontSize:13, color:'#9B9B9B' }}>Nenhum documento disponível</div>
+                              : addable.map(d => (
+                                <button key={d.id} disabled={busy} onClick={() => { addDoc(d); setAddSearch('') }}
+                                  style={{ width:'100%', padding:'9px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background:'#fff', cursor:'pointer', textAlign:'left', ...font, fontSize:13, color:'#1a1c5e', display:'flex', justifyContent:'space-between' }}>
+                                  {d.name}<span style={{ fontSize:11, color:'#22c55e', fontWeight:700 }}>+ adicionar</span>
+                                </button>
+                              ))
+                            }
+                          </div>
+                        )}
+                      </div>
+                      {docs.length === 0 ? (
+                        <div style={{ padding:'10px 0', ...font, fontSize:13, color:'#9B9B9B', textAlign:'center' }}>
+                          Nenhum documento de mobilidade nesta categoria
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 130px 120px 36px', gap:8, padding:'0 10px 4px', alignItems:'center' }}>
+                            <span style={{ ...lbl, marginBottom:0 }}>Documento</span>
+                            <span style={{ ...lbl, marginBottom:0, textAlign:'center' }}>Escopo</span>
+                            <span style={{ ...lbl, marginBottom:0, textAlign:'center' }}>Desclassificatório</span>
+                            <span/>
+                          </div>
+                          {docs
+                            .map(row => ({ ...row, name: catalogMap[row.document_id]?.name || `Documento #${row.document_id}` }))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(row => (
+                            <div key={row.id} style={{ display:'grid', gridTemplateColumns:'1fr 130px 120px 36px', gap:8, alignItems:'center', padding:'8px 10px', borderRadius:8, border:'1px solid #eef0f6', marginBottom:4, background: row.blocking ? 'rgba(239,68,68,.03)' : '#fff' }}>
+                              <span style={{ ...font, fontSize:13, color:'#1a1c5e' }}>{row.name}</span>
+                              <select value={row.escopo} disabled={busy}
+                                onChange={e => updateDoc(row, { escopo: e.target.value })}
+                                style={{ ...inputCss, padding:'5px 8px', fontSize:12 }}>
+                                <option value="pessoa">👤 Pessoa</option>
+                                <option value="posto">📍 Posto</option>
+                              </select>
+                              <div style={{ textAlign:'center' }}>
+                                <input type="checkbox" checked={!!row.blocking} disabled={busy}
+                                  onChange={() => updateDoc(row, { blocking: !row.blocking })}
+                                  style={{ width:15, height:15, accentColor:'#ef4444', cursor:'pointer' }}/>
+                              </div>
+                              <button onClick={() => removeDoc(row)} disabled={busy} title="Remover da categoria"
+                                style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'#9B9B9B' }}>🗑</button>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {modal && <PostFormModal post={modal.post} categories={categories} busy={modalBusy} onSave={savePost} onClose={() => setModal(null)}/>}
+    </div>
+  )
+}
+
 // ── Página ────────────────────────────────────────────────────────────────
 export default function BackofficeClientDocumentFlows() {
   const [clients, setClients]       = useState([])
@@ -546,7 +927,7 @@ export default function BackofficeClientDocumentFlows() {
       ) : (
         <>
           <div style={{ display:'flex', gap:8, marginBottom:20, borderBottom:'1px solid #e2e4ef' }}>
-            {[['fluxos','📂 Fluxos de Categorias'],['matriz','🧩 Matriz de Documentos']].map(([k, l]) => (
+            {[['fluxos','📂 Fluxos de Categorias'],['matriz','🧩 Matriz de Documentos'],['mobilidade','👷 Mobilidade']].map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)}
                 style={{ padding:'10px 18px', border:'none', borderBottom: tab===k ? '2.5px solid #2E3192' : '2.5px solid transparent', background:'none', cursor:'pointer', ...titleF, fontWeight:700, fontSize:13, color: tab===k ? '#2E3192' : '#9B9B9B' }}>
                 {l}
@@ -559,8 +940,10 @@ export default function BackofficeClientDocumentFlows() {
             </div>
           )}
           {tab === 'fluxos'
-            ? <FlowsTab   key={clientId} clientId={clientId} categories={categories} setError={setError}/>
-            : <MatrixTab  key={clientId} clientId={clientId} categories={categories} setError={setError}/>
+            ? <FlowsTab      key={clientId} clientId={clientId} categories={categories} setError={setError}/>
+            : tab === 'matriz'
+            ? <MatrixTab     key={clientId} clientId={clientId} categories={categories} setError={setError}/>
+            : <MobilidadeTab key={clientId} clientId={clientId} categories={categories} setError={setError}/>
           }
         </>
       ))}

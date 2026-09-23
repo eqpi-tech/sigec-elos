@@ -754,6 +754,7 @@ export default function DocumentAnalysis() {
                     </div>
                     <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                       {doc.source === 'AUTO' ? '⚡ Auto' : '📎 Manual'}
+                      {String(doc.type).startsWith('mob:') && ' · 👷 Mobilidade'}
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
                   </div>
@@ -824,7 +825,8 @@ export default function DocumentAnalysis() {
       {/* Modais */}
       {editModal && (
         <EditDocModal doc={editModal} reasons={reasons}
-          rule={catalog.find(c => String(c.id) === String(editModal.type))?.validation_rule}
+          rule={catalog.find(c => String(c.id) === (String(editModal.type).startsWith('mob:')
+            ? String(editModal.type).split(':')[1] : String(editModal.type)))?.validation_rule}
           onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
       )}
       {aiModal && (

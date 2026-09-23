@@ -101,18 +101,26 @@ exports.handler = async (event) => {
     const d = byType[String(t)]
     return !d || ['PENDING', 'MISSING', 'EXPIRING', 'EXPIRED'].includes(d.status)
   })
-  if (unreviewed.length > 0 || reqTypes.length === 0) {
+  // Mobilidade bloqueia o selo (SPEC_MOBILIDADE §7): pessoas faltando ou
+  // docs de posto/pessoa exigidos não revisados mantêm o processo aberto
+  const mob = await mobilityPending(supabaseAdmin, supplierId, procSeal?.client_id)
+    .catch(e => { console.warn('[admin-approve-document] mobilidade:', e.message); return { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0 } })
+  if (unreviewed.length > 0 || reqTypes.length === 0 || mob.peopleShortfall > 0 || mob.missingOrUnreviewed > 0) {
     return {
       statusCode: 200,
       headers: HEADERS,
-      body: JSON.stringify({ updated: true, autoFinalized: false, pendingCount: unreviewed.length }),
+      body: JSON.stringify({
+        updated: true, autoFinalized: false,
+        pendingCount: unreviewed.length + mob.peopleShortfall + mob.missingOrUnreviewed,
+        mobilityPending: mob.peopleShortfall + mob.missingOrUnreviewed,
+      }),
     }
   }
 
   // ── Auto-finalização: toda a matriz exigida foi revisada ─────────
   const rejected = reqTypes.filter(t => byType[String(t)]?.status === 'REJECTED')
   const approved = reqTypes.filter(t => ['VALID', 'NOT_APPLICABLE'].includes(byType[String(t)]?.status))
-  const outcome  = rejected.length === 0 ? 'approved' : 'rejected'
+  const outcome  = (rejected.length === 0 && mob.rejected === 0) ? 'approved' : 'rejected'
 
   // Busca dados do fornecedor para o email
   const { data: supplier } = await supabaseAdmin
@@ -241,8 +249,11 @@ exports.handler = async (event) => {
     }
 
   } else {
-    // Rejeição automática
-    const rejectedDocs   = rejected.map(t => byType[String(t)])
+    // Rejeição automática (inclui docs de mobilidade rejeitados — o label
+    // já carrega pessoa/posto, ex. "ASO — Fulano (Cidade/UF)")
+    const mobRejected = (allDocs || []).filter(d =>
+      String(d.type).startsWith('mob:') && d.status === 'REJECTED')
+    const rejectedDocs   = [...rejected.map(t => byType[String(t)]), ...mobRejected]
     const rejectedLabels = rejectedDocs.map(d => d.label || `Documento tipo ${d.type}`).join(', ')
     const reason = `Homologação reprovada automaticamente. Documentos com pendências: ${rejectedLabels}. Corrija os documentos e solicite nova análise.`
 
@@ -287,7 +298,7 @@ exports.handler = async (event) => {
 // Matriz de documentos que o fluxo de um selo exige (categorias do fluxo →
 // category_documents required). Vazio quando o selo não tem fluxo definido.
 // requiredDocsForSeal/flowRequiredDocs extraídos p/ lib/required_docs.js (21/09)
-const { requiredDocsForSeal } = require('./lib/required_docs.js')
+const { requiredDocsForSeal, mobilityPending } = require('./lib/required_docs.js')
 
 
 async function recalcSealScores(sb, supplierId) {

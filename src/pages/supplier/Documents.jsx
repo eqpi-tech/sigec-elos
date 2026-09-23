@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, categoriesApi, assertivaApi, getRequiredTypesBySeal } from '../../services/api.js'
+import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { hasAction } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
@@ -60,6 +60,14 @@ export default function SupplierDocuments() {
   const [uploadingPresentation, setUploadingPresentation] = useState(false)
 
   const [collecting, setCollecting] = useState(null)
+
+  // ── Mobilidade (SPEC_MOBILIDADE.md): postos abertos para o CNPJ ──
+  const [mobPosts, setMobPosts]   = useState([])
+  const [mobPeople, setMobPeople] = useState([])   // pessoas ativas de todos os postos
+  const [mobMatrix, setMobMatrix] = useState([])   // matriz de mobilidade das categorias
+  const [mobOpen, setMobOpen]     = useState({})   // post_id → aberto?
+  const [personForm, setPersonForm] = useState(null) // { postId, nome, cpf }
+  const [personBusy, setPersonBusy] = useState(false)
 
   // Reservado para integração futura via proxy residencial (ScrapingBee/Zyte)
   // Por ora FGTS e CND usam upload manual com link direto para o site emissor
@@ -138,6 +146,22 @@ export default function SupplierDocuments() {
       // 3. Documentos já enviados
       const d = await documentApi.list(user.supplierId)
       setUploaded(d)
+
+      // 3b. Mobilidade: postos abertos para o CNPJ deste fornecedor
+      try {
+        const posts = await mobilityApi.myPosts(s.cnpj)
+        setMobPosts(posts)
+        if (posts.length) {
+          const catIds = [...new Set(posts.map(p => p.category_id))]
+          const [matrix, people] = await Promise.all([
+            mobilityApi.matrixFor(catIds),
+            mobilityApi.listPeople(posts.map(p => p.id)),
+          ])
+          setMobMatrix(matrix)
+          setMobPeople(people)
+          setMobOpen(Object.fromEntries(posts.map(p => [p.id, posts.length === 1])))
+        }
+      } catch (err) { console.warn('mobilidade:', err.message) }
 
       // 4. Auto-validar CNPJ (doc_id 37) se ainda não estiver no banco
       const alreadyHasCnpj = d.some(u => u.type === '37' || u.type === 'CNPJ_CARD')
@@ -318,6 +342,53 @@ export default function SupplierDocuments() {
   }
 
   const getDoc = (docId) => uploaded.find(d => d.type === String(docId) || d.type === `CNPJ_CARD` && docId === 37)
+
+  // ── Mobilidade: pessoas e uploads por posto/pessoa ──
+  const handleAddPerson = async () => {
+    if (!personForm?.nome?.trim() || !personForm?.cpf) return
+    setPersonBusy(true)
+    try {
+      const p = await mobilityApi.addPerson({
+        postId: personForm.postId, supplierId: user.supplierId,
+        nome: personForm.nome, cpf: personForm.cpf,
+      })
+      setMobPeople(prev => [...prev, p])
+      setPersonForm(null)
+      showToast('✅ Colaborador cadastrado — envie os documentos dele abaixo.')
+    } catch (err) { showToast(err.message, 'error') }
+    finally { setPersonBusy(false) }
+  }
+
+  const handleRemovePerson = async (person) => {
+    if (!window.confirm(`Remover ${person.nome} deste posto? Os documentos já enviados ficam no histórico.`)) return
+    try {
+      await mobilityApi.removePerson(person.id)
+      setMobPeople(prev => prev.filter(p => p.id !== person.id))
+    } catch (err) { showToast(err.message, 'error') }
+  }
+
+  const handleMobUpload = async (typeKey, label, file, { personId = null, postId = null }) => {
+    if (!file) return
+    if (file.size > 20 * 1024 * 1024) { showToast('Arquivo muito grande. Máx 20MB', 'error'); return }
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (!ALLOWED_MIME.includes(file.type) && !ALLOWED_EXTS.includes(ext)) {
+      showToast(`Formato não permitido. Use: ${ALLOWED_EXTS.join(', ')}`, 'error'); return
+    }
+    setUploading(typeKey)
+    try {
+      const uploadedDoc = await documentApi.upload(user.supplierId, user.id, file, typeKey)
+      await supabase.from('documents')
+        .update({ label, mobility_person_id: personId, mobility_post_id: postId })
+        .eq('id', uploadedDoc.id)
+      const enriched = { ...uploadedDoc, label, mobility_person_id: personId, mobility_post_id: postId }
+      setUploaded(prev => {
+        const i = prev.findIndex(d => d.type === typeKey)
+        return i >= 0 ? prev.map(d => d.type === typeKey ? enriched : d) : [...prev, enriched]
+      })
+      showToast('✅ Documento enviado! Aguardando validação.')
+    } catch (err) { showToast('Erro: ' + err.message, 'error') }
+    finally { setUploading(null) }
+  }
 
   if (loading) return <div style={{ display:'flex',justifyContent:'center',alignItems:'center',height:'50vh' }}><Spinner size={48}/></div>
 
@@ -570,6 +641,169 @@ export default function SupplierDocuments() {
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
           </div>
+        </Card>
+      )}
+
+      {/* ── Documentos de Mobilidade: postos → pessoas → docs PF ── */}
+      {mobPosts.length > 0 && (
+        <Card style={{ borderRadius:16, padding:'20px 24px', marginTop:16 }}>
+          <SectionTitle>👷 Documentos de Mobilidade</SectionTitle>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', margin:'4px 0 16px' }}>
+            Sua empresa tem postos de trabalho com mão de obra alocada. Cadastre cada colaborador
+            (nome e CPF) e envie os documentos <b>da pessoa</b> para <b>aquele posto</b> — certidões e
+            certificados podem variar conforme a cidade.
+          </div>
+          {mobPosts.map(post => {
+            const people     = mobPeople.filter(p => p.post_id === post.id)
+            const matrix     = mobMatrix.filter(m => m.category_id === post.category_id)
+            // Registro da Arma (10017) só é exigido em posto armado
+            const postDocs   = matrix.filter(m => m.escopo === 'posto' && (m.document_id !== 10017 || post.armado))
+            const personDocs = matrix.filter(m => m.escopo === 'pessoa')
+            const isOpen     = !!mobOpen[post.id]
+
+            const mobDocRow = (m, typeKey, label, personId, postId) => {
+              const up  = uploaded.find(d => d.type === typeKey)
+              const status = up?.status || 'MISSING'
+              const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
+              const busy = uploading === typeKey
+              const inputId = `mob-${typeKey}`
+              return (
+                <div key={typeKey} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, background:cfg.bg, border:`1px solid ${cfg.bd}`, marginBottom:6 }}>
+                  <StatusDot status={status}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {m.documents_catalog?.name || `Documento #${m.document_id}`}
+                    </div>
+                    <div style={{ display:'flex', gap:6, marginTop:2, alignItems:'center' }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:cfg.color, background:`${cfg.color}18`, padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{cfg.label}</span>
+                      {up?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>vence {up.expires_at.slice(0,10)}</span>}
+                    </div>
+                    {up?.review_note && <div style={{ fontSize:11, color:'#dc2626', marginTop:2 }}>⚠ {up.review_note}</div>}
+                  </div>
+                  {up?.storage_path && (
+                    <Button variant="neutral" size="sm" onClick={() => handleViewDoc(up)}>👁 Ver</Button>
+                  )}
+                  {['MISSING','REJECTED','EXPIRED'].includes(status) && (
+                    hasAction(user, 'acao:enviar_documentos') ? (
+                      <>
+                        <input type="file" id={inputId} accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display:'none' }}
+                          onChange={e => handleMobUpload(typeKey, label, e.target.files[0], { personId, postId })}/>
+                        {busy ? <Spinner size={18}/> : (
+                          <Button variant="orange" size="sm" onClick={() => document.getElementById(inputId)?.click()}>↑ Enviar</Button>
+                        )}
+                      </>
+                    ) : <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão</span>
+                  )}
+                </div>
+              )
+            }
+
+            // farol do posto: pessoas completas + docs exigidos satisfeitos
+            const slots = []
+            for (const m of postDocs.filter(x => x.required)) slots.push(mobilityApi.docTypeKey(m.document_id, 'posto', post.id))
+            for (const p of people) for (const m of personDocs.filter(x => x.required)) slots.push(mobilityApi.docTypeKey(m.document_id, 'pessoa', p.id))
+            const okSlots = slots.filter(k => isSatisfied(uploaded.find(d => d.type === k))).length
+            const conforme = people.length >= post.qty_people && okSlots === slots.length
+
+            return (
+              <div key={post.id} style={{ border:'1px solid #e2e4ef', borderRadius:14, marginBottom:12, overflow:'hidden' }}>
+                <button onClick={() => setMobOpen(p => ({ ...p, [post.id]: !p[post.id] }))}
+                  style={{ width:'100%', background:'#fafbfe', border:'none', cursor:'pointer', padding:'14px 16px', display:'flex', alignItems:'center', gap:10, textAlign:'left' }}>
+                  <span style={{ color:'#9B9B9B', fontSize:11, transform: isOpen ? 'rotate(90deg)' : 'none', display:'inline-block', transition:'transform .15s' }}>▶</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>
+                      📍 {post.categories?.name || 'Posto'} — {post.site_city}/{post.site_uf} {post.armado ? '· 🔫 armado' : ''}
+                    </div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#9B9B9B', marginTop:2 }}>
+                      {post.clients?.nome_fantasia || post.clients?.razao_social}
+                      {post.funcao_label ? ` · ${post.funcao_label}` : ''} · {post.qty_posts} posto{post.qty_posts > 1 ? 's' : ''} / {post.qty_people} pessoa{post.qty_people > 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:10.5, fontWeight:700, fontFamily:'Montserrat,sans-serif', padding:'3px 10px', borderRadius:20,
+                    color: conforme ? '#15803d' : '#92400e', background: conforme ? '#dcfce7' : '#fef3c7' }}>
+                    {conforme ? '✓ Posto conforme' : `${people.length}/${post.qty_people} pessoas · ${okSlots}/${slots.length} docs`}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div style={{ padding:'14px 16px', borderTop:'1px solid #f0f0f5' }}>
+                    {postDocs.length > 0 && (
+                      <>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
+                          Documentos do posto ({post.site_city}/{post.site_uf})
+                        </div>
+                        {postDocs.map(m => mobDocRow(
+                          m, mobilityApi.docTypeKey(m.document_id, 'posto', post.id),
+                          `${m.documents_catalog?.name || m.document_id} — Posto ${post.site_city}/${post.site_uf}`,
+                          null, post.id))}
+                      </>
+                    )}
+
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', margin:'14px 0 8px' }}>
+                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5 }}>
+                        Colaboradores ({people.length}/{post.qty_people})
+                      </div>
+                      {hasAction(user, 'acao:enviar_documentos') && (
+                        <Button variant="orange" size="sm" onClick={() => setPersonForm({ postId: post.id, nome:'', cpf:'' })}>
+                          + Cadastrar colaborador
+                        </Button>
+                      )}
+                    </div>
+
+                    {personForm?.postId === post.id && (
+                      <div style={{ display:'flex', gap:8, alignItems:'flex-end', padding:'12px', borderRadius:10, background:'rgba(46,49,146,.04)', marginBottom:10, flexWrap:'wrap' }}>
+                        <div style={{ flex:2, minWidth:180 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', marginBottom:4 }}>Nome completo *</div>
+                          <input value={personForm.nome} onChange={e => setPersonForm(p => ({ ...p, nome: e.target.value }))}
+                            style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}/>
+                        </div>
+                        <div style={{ flex:1, minWidth:140 }}>
+                          <div style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', marginBottom:4 }}>CPF *</div>
+                          <input value={personForm.cpf} onChange={e => setPersonForm(p => ({ ...p, cpf: e.target.value }))}
+                            placeholder="000.000.000-00"
+                            style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:`1px solid ${personForm.cpf && !mobilityApi.validCpf(personForm.cpf) ? '#ef4444' : '#e2e4ef'}`, fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box' }}/>
+                        </div>
+                        <div style={{ display:'flex', gap:6 }}>
+                          <Button variant="neutral" size="sm" onClick={() => setPersonForm(null)}>Cancelar</Button>
+                          <Button variant="orange" size="sm" disabled={personBusy || !personForm.nome.trim() || !mobilityApi.validCpf(personForm.cpf)}
+                            onClick={handleAddPerson}>
+                            {personBusy ? '...' : 'Salvar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {people.length === 0 ? (
+                      <div style={{ padding:'14px 0', textAlign:'center', fontFamily:'DM Sans,sans-serif', fontSize:12.5, color:'#9B9B9B' }}>
+                        Nenhum colaborador cadastrado neste posto ainda.
+                      </div>
+                    ) : people.map(person => {
+                      const pOk = personDocs.filter(m => m.required)
+                        .every(m => isSatisfied(uploaded.find(d => d.type === mobilityApi.docTypeKey(m.document_id, 'pessoa', person.id))))
+                      return (
+                        <div key={person.id} style={{ border:'1px solid #eef0f6', borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                            <span style={{ fontSize:15 }}>👤</span>
+                            <div style={{ flex:1 }}>
+                              <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e' }}>{person.nome}</span>
+                              <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#9B9B9B', marginLeft:8 }}>CPF {mobilityApi.maskCpf(person.cpf_digits)}</span>
+                            </div>
+                            {pOk && <span style={{ fontSize:10, fontWeight:700, color:'#15803d', fontFamily:'Montserrat,sans-serif' }}>✓ completo</span>}
+                            <button onClick={() => handleRemovePerson(person)} title="Remover colaborador"
+                              style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'#9B9B9B' }}>🗑</button>
+                          </div>
+                          {personDocs.map(m => mobDocRow(
+                            m, mobilityApi.docTypeKey(m.document_id, 'pessoa', person.id),
+                            `${m.documents_catalog?.name || m.document_id} — ${person.nome} (${post.site_city}/${post.site_uf})`,
+                            person.id, post.id))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </Card>
       )}
     </div>

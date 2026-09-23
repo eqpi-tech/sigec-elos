@@ -58,4 +58,64 @@ async function requiredDocsForSeal(sb, supplierId, seal) {
   return [...union]
 }
 
-module.exports = { requiredDocsForSeal, flowRequiredDocs }
+// ── Mobilidade (SPEC_MOBILIDADE.md §7 — bloqueia o selo) ──────────────────
+// Pendências de mobilidade do fornecedor no cliente do selo:
+// · pessoas cadastradas < qty_people em algum posto ativo → processo aberto
+// · slot exigido (doc por pessoa ativa / por posto) sem linha VALID/N.A.
+// O doc de mobilidade é um `documents` comum com type
+// 'mob:<docId>:p:<personId>' | 'mob:<docId>:s:<postId>'.
+async function mobilityPending(sb, supplierId, clientId) {
+  const empty = { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0, slots: 0 }
+  if (!clientId) return empty
+  const { data: sup } = await sb.from('suppliers').select('cnpj').eq('id', supplierId).single()
+  if (!sup) return empty
+  const { data: posts } = await sb
+    .from('mobility_posts')
+    .select('id, category_id, armado, qty_people')
+    .eq('client_id', clientId).eq('supplier_cnpj', sup.cnpj).eq('active', true)
+  if (!posts?.length) return empty
+
+  const catIds = [...new Set(posts.map(p => p.category_id))]
+  const { data: matrix } = await sb
+    .from('category_mobility_documents')
+    .select('category_id, document_id, escopo')
+    .eq('required', true).in('category_id', catIds)
+  const { data: people } = await sb
+    .from('mobility_people')
+    .select('id, post_id').eq('supplier_id', supplierId).eq('active', true)
+    .in('post_id', posts.map(p => p.id))
+
+  const REGISTRO_ARMA = 10017
+  const slotKeys = []
+  let peopleShortfall = 0
+  for (const post of posts) {
+    const pPeople = (people || []).filter(p => p.post_id === post.id)
+    peopleShortfall += Math.max(0, post.qty_people - pPeople.length)
+    for (const m of (matrix || []).filter(x => x.category_id === post.category_id)) {
+      if (m.escopo === 'posto') {
+        if (m.document_id === REGISTRO_ARMA && !post.armado) continue
+        slotKeys.push(`mob:${m.document_id}:s:${post.id}`)
+      } else {
+        for (const p of pPeople) slotKeys.push(`mob:${m.document_id}:p:${p.id}`)
+      }
+    }
+  }
+  if (!slotKeys.length && !peopleShortfall) return empty
+
+  const byType = {}
+  for (let i = 0; i < slotKeys.length; i += 200) {
+    const { data: docs } = await sb
+      .from('documents').select('type, status')
+      .eq('supplier_id', supplierId).in('type', slotKeys.slice(i, i + 200))
+    for (const d of (docs || [])) byType[d.type] = d.status
+  }
+  let missingOrUnreviewed = 0, rejected = 0
+  for (const k of slotKeys) {
+    const st = byType[k]
+    if (st === 'REJECTED') rejected++
+    else if (!['VALID', 'NOT_APPLICABLE'].includes(st)) missingOrUnreviewed++
+  }
+  return { peopleShortfall, missingOrUnreviewed, rejected, slots: slotKeys.length }
+}
+
+module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending }
