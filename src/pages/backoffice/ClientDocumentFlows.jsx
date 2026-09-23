@@ -619,6 +619,8 @@ function MobilidadeTab({ clientId, categories, setError }) {
   const [catDocs, setCatDocs]   = useState({})
   const [addSearch, setAddSearch] = useState('')
   const [busy, setBusy]         = useState(false)
+  const [matrixCatIds, setMatrixCatIds] = useState(new Set()) // categorias do cliente COM matriz de mobilidade
+  const [catSearch, setCatSearch] = useState('')              // busca p/ montar matriz numa categoria nova
 
   const catMap = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories])
   // categorias com matriz de mobilidade OU com postos — as relevantes para a aba
@@ -646,6 +648,14 @@ function MobilidadeTab({ clientId, categories, setError }) {
     supabase.from('documents_catalog').select('id, name').order('name')
       .then(({ data }) => setCatalog(data || []))
   }, [])
+  // categorias DESTE cliente que já têm matriz de mobilidade (join no servidor)
+  useEffect(() => {
+    fetchAll(supabase.from('category_mobility_documents')
+      .select('category_id, categories!inner(client_id)')
+      .eq('categories.client_id', clientId))
+      .then(rows => setMatrixCatIds(new Set(rows.map(r => r.category_id))))
+      .catch(e => setError(e.message))
+  }, [clientId, setError])
   const catalogMap = useMemo(() => Object.fromEntries(catalog.map(d => [d.id, d])), [catalog])
 
   async function savePost(values) {
@@ -700,7 +710,10 @@ function MobilidadeTab({ clientId, categories, setError }) {
       .insert({ category_id: expanded, document_id: doc.id, escopo: 'pessoa', required: true, blocking: true })
       .select('id, document_id, escopo, required, blocking').single()
     if (error) setError(error.message)
-    else setCatDocs(p => ({ ...p, [expanded]: [...(p[expanded] || []), data] }))
+    else {
+      setCatDocs(p => ({ ...p, [expanded]: [...(p[expanded] || []), data] }))
+      setMatrixCatIds(p => new Set([...p, expanded]))
+    }
     setBusy(false)
   }
   async function removeDoc(row) {
@@ -726,10 +739,19 @@ function MobilidadeTab({ clientId, categories, setError }) {
       || p.site_city.toLowerCase().includes(q))
   }, [posts, filter, catMap])
 
-  const matrizCats = useMemo(() => {
-    const withMatrix = new Set(Object.keys(catDocs).filter(k => (catDocs[k] || []).length).map(Number))
-    return categories.filter(c => mobCatIds.has(c.id) || withMatrix.has(c.id))
-  }, [categories, mobCatIds, catDocs])
+  // Só categorias de mobilidade do cliente (com postos ou matriz) aparecem —
+  // cliente sem mobilidade (ex. sem postos) vê o painel vazio, não a lista
+  // inteira de categorias (feedback 23/09). Categoria nova entra pela busca.
+  const [extraCats, setExtraCats] = useState(new Set())
+  const matrizCats = useMemo(() =>
+    categories.filter(c => mobCatIds.has(c.id) || matrixCatIds.has(c.id) || extraCats.has(c.id)),
+  [categories, mobCatIds, matrixCatIds, extraCats])
+  const catSearchResults = useMemo(() => {
+    const q = catSearch.trim().toLowerCase()
+    if (!q) return []
+    const shown = new Set(matrizCats.map(c => c.id))
+    return categories.filter(c => !shown.has(c.id) && c.name.toLowerCase().includes(q)).slice(0, 12)
+  }, [categories, matrizCats, catSearch])
 
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
 
@@ -799,8 +821,31 @@ function MobilidadeTab({ clientId, categories, setError }) {
           <div style={{ marginBottom:12, padding:'10px 14px', borderRadius:10, background:'rgba(46,49,146,.04)', ...font, fontSize:12, color:'#64748b' }}>
             Docs por <b>Pessoa</b> são exigidos de cada colaborador cadastrado; docs por <b>Posto</b> valem uma vez por posto/unidade (ex.: PCMSO, PGR, Registro da Arma).
           </div>
+          <div style={{ position:'relative', marginBottom:12 }}>
+            <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
+              placeholder="➕ Buscar categoria do cliente para montar a matriz de mobilidade..."
+              style={{ ...inputCss, maxWidth:480, border:'1px dashed #2E319266', background:'rgba(46,49,146,.02)' }}/>
+            {catSearch.trim() && (
+              <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, width:'100%', maxWidth:480, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:150, maxHeight:240, overflowY:'auto' }}>
+                {catSearchResults.length === 0
+                  ? <div style={{ padding:'10px 14px', ...font, fontSize:13, color:'#9B9B9B' }}>Nenhuma categoria encontrada</div>
+                  : catSearchResults.map(c => (
+                    <button key={c.id} onClick={() => { setExtraCats(p => new Set([...p, c.id])); setCatSearch(''); toggleExpand(c.id) }}
+                      style={{ width:'100%', padding:'9px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background:'#fff', cursor:'pointer', textAlign:'left', ...font, fontSize:13, color:'#1a1c5e', display:'flex', justifyContent:'space-between' }}>
+                      {c.name}<span style={{ fontSize:11, color:'#22c55e', fontWeight:700 }}>montar matriz</span>
+                    </button>
+                  ))
+                }
+              </div>
+            )}
+          </div>
+          {matrizCats.length === 0 && (
+            <div style={{ padding:'24px 0', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
+              Este cliente não tem categorias com mobilidade. Cadastre postos ou busque uma categoria acima para montar a matriz.
+            </div>
+          )}
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            {(matrizCats.length ? matrizCats : categories).slice(0, 60).map(cat => {
+            {matrizCats.slice(0, 60).map(cat => {
               const isOpen = expanded === cat.id
               return (
                 <Card key={cat.id} style={{ borderRadius:12, padding:0, overflow:'visible', border:'1px solid #e2e4ef' }}>
