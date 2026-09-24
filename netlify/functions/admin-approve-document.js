@@ -106,6 +106,37 @@ exports.handler = async (event) => {
   const mob = await mobilityPending(supabaseAdmin, supplierId, procSeal?.client_id)
     .catch(e => { console.warn('[admin-approve-document] mobilidade:', e.message); return { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0 } })
   if (unreviewed.length > 0 || reqTypes.length === 0 || mob.peopleShortfall > 0 || mob.missingOrUnreviewed > 0) {
+    // Régua divulgada: "Documento reprovado" é AUTO na reprovação — avisa o
+    // fornecedor na hora com o motivo (na finalização, o e-mail de resultado
+    // já cobre; aqui o processo segue aberto e ele precisa reenviar)
+    if (status === 'REJECTED') {
+      try {
+        const { data: sup } = await supabaseAdmin
+          .from('suppliers').select('razao_social, user_id').eq('id', supplierId).single()
+        if (sup?.user_id) {
+          await fetch(`${process.env.URL}/.netlify/functions/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: sup.user_id,
+              subject: `⚠️ Documento reprovado — reenvio necessário · ${sup.razao_social}`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
+    <p>O documento <strong>${updatedDoc.label || updatedDoc.type}</strong> foi reprovado pela análise:</p>
+    <div style="background:#fff5f5;border:1px solid #fee2e2;border-radius:8px;padding:12px 16px;margin:14px 0;color:#b91c1c">
+      ${note}
+    </div>
+    <p>Corrija o apontamento e reenvie o documento pela plataforma — o restante do seu processo continua normalmente.</p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Reenviar documento</a></p>
+  </div>
+  <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`,
+            }),
+          })
+        }
+      } catch (e) { console.warn('[admin-approve-document] email doc reprovado:', e.message) }
+    }
     return {
       statusCode: 200,
       headers: HEADERS,
