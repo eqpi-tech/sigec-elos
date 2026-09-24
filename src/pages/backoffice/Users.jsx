@@ -228,6 +228,12 @@ export default function BackofficeUsers() {
                         onClick={() => { if (confirm(`Enviar e-mail de redefinição de senha para ${u.email}?`)) act(u.id, 'reset-password') }}>
                         {acting[u.id]==='reset-password' ? '⏳...' : '🔑 Reset Senha'}
                       </Button>
+                      <Button variant="neutral" size="sm"
+                        disabled={isActing}
+                        title="Remove os fatores de verificação em duas etapas — o usuário cadastra um novo aparelho no próximo login"
+                        onClick={() => { if (confirm(`Resetar a verificação em duas etapas de ${u.name || u.email}? O usuário vai cadastrar o autenticador de novo no próximo acesso.`)) act(u.id, 'reset-mfa') }}>
+                        {acting[u.id]==='reset-mfa' ? '⏳...' : '🔐 Reset MFA'}
+                      </Button>
                       {u.banned ? (
                         <Button variant="success" size="sm" disabled={isActing} onClick={() => act(u.id, 'unblock')}>
                           {acting[u.id]==='unblock' ? '⏳...' : '↺ Desbloquear'}

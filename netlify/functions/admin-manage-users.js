@@ -166,6 +166,22 @@ exports.handler = async (event) => {
       return { statusCode:200, headers, body: JSON.stringify({ success:true }) }
     }
 
+    // ── RESET MFA (usuário trocou/perdeu o aparelho autenticador) ────────────
+    if (action === 'reset-mfa') {
+      if (!userId) return { statusCode:400, headers, body: JSON.stringify({ error:'userId obrigatório' }) }
+      const { data: fData, error: fErr } = await supabaseAdmin.auth.admin.mfa.listFactors({ userId })
+      if (fErr) throw new Error(fErr.message)
+      for (const f of (fData?.factors || [])) {
+        const { error: dErr } = await supabaseAdmin.auth.admin.mfa.deleteFactor({ id: f.id, userId })
+        if (dErr) throw new Error(dErr.message)
+      }
+      await supabaseAdmin.from('audit_log').insert({
+        user_id: caller.id, action: 'MFA_RESET', entity_type: 'user', entity_id: userId,
+        metadata: { factors_removidos: (fData?.factors || []).length },
+      })
+      return { statusCode:200, headers, body: JSON.stringify({ success:true, removed: (fData?.factors || []).length }) }
+    }
+
     // ── UNBLOCK ───────────────────────────────────────────────────────────────
     if (action === 'unblock') {
       if (!userId) return { statusCode:400, headers, body: JSON.stringify({ error:'userId obrigatório' }) }

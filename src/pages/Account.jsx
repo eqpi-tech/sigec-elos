@@ -140,6 +140,16 @@ export default function Account() {
         </Button>
         <Msg m={msgPw} />
       </Card>
+
+      <Card style={{ borderRadius: 16, padding: '24px 28px', marginTop: 20 }}>
+        <SectionTitle>Verificação em duas etapas</SectionTitle>
+        <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
+          <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Ativa</span> — sua conta é protegida por um
+          aplicativo autenticador, obrigatório em toda a plataforma.
+          <br />Trocou de celular ou perdeu o acesso ao aplicativo? Fale com o suporte para resetar —
+          você cadastra o novo aparelho no próximo login.
+        </div>
+      </Card>
     </div>
   )
 }
