@@ -56,8 +56,10 @@ lo, hi = myc.fetchone()
 log(f"log_processo ids: {lo}..{hi}")
 
 def esc(v):
+    # Literal SQL padrão: backslash é literal (standard_conforming_strings=on),
+    # só a aspa simples precisa de escape — dobrar '\' corromperia o JSON
     if v is None: return "NULL"
-    return "'" + str(v).replace("\\", "\\\\").replace("'", "''") + "'"
+    return "'" + str(v).replace("'", "''") + "'"
 
 total_read = total_written = total_sem_fornecedor = 0
 STEP = 100_000

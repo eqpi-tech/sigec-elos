@@ -49,3 +49,7 @@ SECURITY-FINDINGS.local.md
 # Supabase CLI (Branching)
 supabase/.branches/
 supabase/.temp/
+
+# artefatos de build do Python (ops scripts)
+__pycache__/
+*.pyc
