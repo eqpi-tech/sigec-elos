@@ -115,9 +115,6 @@ export default function Account() {
         <div style={{ marginBottom: 14 }}>
           <label style={lbl}>Telefone celular</label>
           <input value={phone} onChange={(e) => setPhone(fmtPhone(e.target.value))} placeholder="(00) 00000-0000" style={inp} />
-          <div style={{ fontSize: 11, color: '#9B9B9B', fontFamily: 'DM Sans,sans-serif', marginTop: 4 }}>
-            📱 Em breve: verificação em duas etapas (MFA) usando este número.
-          </div>
         </div>
         <Button variant="primary" disabled={savingData} onClick={saveData}>
           {savingData ? 'Salvando…' : 'Salvar dados'}
@@ -141,15 +138,122 @@ export default function Account() {
         <Msg m={msgPw} />
       </Card>
 
-      <Card style={{ borderRadius: 16, padding: '24px 28px', marginTop: 20 }}>
-        <SectionTitle>Verificação em duas etapas</SectionTitle>
-        <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#64748b', lineHeight: 1.6 }}>
-          <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Ativa</span> — sua conta é protegida por um
-          aplicativo autenticador, obrigatório em toda a plataforma.
-          <br />Trocou de celular ou perdeu o acesso ao aplicativo? Fale com o suporte para resetar —
-          você cadastra o novo aparelho no próximo login.
-        </div>
-      </Card>
+      <MfaSection />
     </div>
+  )
+}
+
+// ── Verificação em duas etapas: status + ativar agora + trocar aparelho ──
+// Trocar aparelho: matricula um fator NOVO (nome único — Supabase exige
+// friendly_name distinto por usuário), confirma o código e só então remove
+// os fatores antigos. A sessão já está em AAL2 (passou no desafio do login).
+function MfaSection() {
+  const [factors, setFactors] = useState(null)   // fatores TOTP verificados
+  const [enroll, setEnroll]   = useState(null)   // { id, qr, secret, swapping }
+  const [code, setCode]       = useState('')
+  const [busy, setBusy]       = useState(false)
+  const [msg, setMsg]         = useState(null)   // { ok, text }
+
+  const load = async () => {
+    const { data } = await supabase.auth.mfa.listFactors()
+    setFactors(data?.totp || [])
+  }
+  useEffect(() => { load() }, [])
+
+  async function startEnroll(swapping) {
+    setBusy(true); setMsg(null)
+    try {
+      const { data: f } = await supabase.auth.mfa.listFactors()
+      for (const old of (f?.all || []).filter(x => x.factor_type === 'totp' && x.status !== 'verified')) {
+        await supabase.auth.mfa.unenroll({ factorId: old.id }).catch(() => {})
+      }
+      const { data, error } = await supabase.auth.mfa.enroll({
+        factorType: 'totp',
+        friendlyName: swapping ? `SIGEC-ELOS ${new Date().toISOString().slice(0, 16)}` : 'SIGEC-ELOS',
+      })
+      if (error) throw error
+      setEnroll({ id: data.id, qr: data.totp.qr_code, secret: data.totp.secret, swapping })
+      setCode('')
+    } catch (e) { setMsg({ ok: false, text: e.message }) }
+    finally { setBusy(false) }
+  }
+
+  async function confirm() {
+    if (code.trim().length < 6) return
+    setBusy(true); setMsg(null)
+    try {
+      const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: enroll.id, code: code.trim() })
+      if (error) throw error
+      if (enroll.swapping) {
+        // novo aparelho confirmado — remove os fatores anteriores
+        const { data: f } = await supabase.auth.mfa.listFactors()
+        for (const old of (f?.totp || []).filter(x => x.id !== enroll.id)) {
+          await supabase.auth.mfa.unenroll({ factorId: old.id }).catch(() => {})
+        }
+      }
+      setEnroll(null); setCode('')
+      setMsg({ ok: true, text: enroll.swapping ? 'Aparelho trocado com sucesso!' : 'Verificação ativada!' })
+      await load()
+    } catch (e) { setMsg({ ok: false, text: 'Código inválido ou expirado — confira o app e tente de novo.' }) }
+    finally { setBusy(false) }
+  }
+
+  const active = (factors || []).length > 0
+
+  return (
+    <Card style={{ borderRadius: 16, padding: '24px 28px', marginTop: 20 }}>
+      <SectionTitle>Verificação em duas etapas</SectionTitle>
+      {factors === null ? <Spinner size={20}/> : !enroll ? (
+        <>
+          <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#64748b', lineHeight: 1.6, marginBottom: 14 }}>
+            {active ? (
+              <><span style={{ color: '#15803d', fontWeight: 700 }}>✓ Ativa</span> — sua conta é protegida por um aplicativo autenticador.</>
+            ) : (
+              <><span style={{ color: '#b45309', fontWeight: 700 }}>Ainda não ativada</span> — a plataforma vai exigir a verificação
+              em duas etapas para todos os acessos. Ative agora e evite o aviso na entrada.</>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {active
+              ? <Button variant="neutral" size="sm" disabled={busy} onClick={() => startEnroll(true)}>🔄 Trocar de aparelho</Button>
+              : <Button variant="orange" size="sm" disabled={busy} onClick={() => startEnroll(false)}>Ativar verificação →</Button>
+            }
+          </div>
+          {active && (
+            <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 11.5, color: '#9B9B9B', marginTop: 10 }}>
+              Perdeu o acesso ao aplicativo antigo e não consegue entrar? Peça ao suporte para resetar.
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#64748b', marginBottom: 12 }}>
+            Escaneie o QR code com o aplicativo autenticador {enroll.swapping ? 'do NOVO aparelho' : ''} e digite o código de 6 dígitos.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <img src={enroll.qr} alt="QR code do autenticador" style={{ width: 170, height: 170, border: '1px solid #e2e4ef', borderRadius: 12, background: '#fff' }}/>
+          </div>
+          <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 11, color: '#9B9B9B', textAlign: 'center', marginBottom: 12, wordBreak: 'break-all' }}>
+            Sem câmera? Insira manualmente: <b>{enroll.secret}</b>
+          </div>
+          <input autoFocus value={code} maxLength={6} inputMode="numeric"
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            onKeyDown={(e) => { if (e.key === 'Enter') confirm() }}
+            placeholder="000000"
+            style={{ ...inp, fontSize: 20, letterSpacing: 6, textAlign: 'center', maxWidth: 220, display: 'block', margin: '0 auto' }}/>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
+            <Button variant="neutral" size="sm" disabled={busy} onClick={() => { setEnroll(null); setCode('') }}>Cancelar</Button>
+            <Button variant="orange" size="sm" disabled={busy || code.length < 6} onClick={confirm}>
+              {busy ? <Spinner size={14}/> : enroll.swapping ? 'Confirmar novo aparelho' : 'Confirmar e ativar'}
+            </Button>
+          </div>
+        </>
+      )}
+      {msg && (
+        <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 12.5, marginTop: 12, color: msg.ok ? '#15803d' : '#dc2626' }}>
+          {msg.ok ? '✓ ' : '⚠ '}{msg.text}
+        </div>
+      )}
+    </Card>
   )
 }
