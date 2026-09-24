@@ -59,7 +59,7 @@ exports.handler = async (event) => {
     // processos ELOS em aberto de clientes ativos
     const { data: seals } = await supabase
       .from('seals')
-      .select('id, supplier_id, client_id, flow_id, clients(active, nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
+      .select('id, supplier_id, client_id, flow_id, created_at, clients(active, nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
       .eq('status', 'PENDING')
       .is('hoc_process_id', null)
       .limit(500)
@@ -84,6 +84,10 @@ exports.handler = async (event) => {
         .eq('action', 'DOC_PENDING_REMINDER').eq('entity_id', seal.id)
         .order('created_at', { ascending: false }).limit(MAX_REMINDERS)
       if (hist?.length >= MAX_REMINDERS) { skipped++; continue }
+      // 1º lembrete só ≥3 dias após o início do processo — cadastro de hoje
+      // não pode receber cobrança no mesmo dia (régua divulgada: "a cada 3 dias")
+      if (!hist?.length && seal.created_at
+          && Date.now() - new Date(seal.created_at).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
       if (hist?.[0] && Date.now() - new Date(hist[0].created_at).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
 
       // pendências de documentos: exigidos sem envio (REJECTED/EXPIRED contam

@@ -231,7 +231,7 @@ exports.handler = async (event) => {
     // CNPJ significa fornecedor convidado — selo ELOS é só para espontâneo
     let hasOpenInvite = false
     if (isNewSupplier && !invitation_token && !ref_slug) {
-      const { data: openInv } = await supabase
+      const { data: openInv } = await supabaseAdmin
         .from('invitations').select('id')
         .eq('supplier_cnpj', cnpj).in('status', ['SENT', 'VIEWED'])
         .limit(1)
@@ -465,7 +465,7 @@ exports.handler = async (event) => {
     // esforço, nunca bloqueia o cadastro. Se veio por convite/portal de
     // cliente, o e-mail cita o cliente e os próximos passos.
     try {
-      const { data: sealRow } = await supabase
+      const { data: sealRow } = await supabaseAdmin
         .from('seals').select('clients(nome_fantasia, razao_social)')
         .eq('supplier_id', supplier.id).not('client_id', 'is', null)
         .order('created_at', { ascending: false }).limit(1).maybeSingle()

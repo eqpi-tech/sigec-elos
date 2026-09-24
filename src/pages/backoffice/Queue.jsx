@@ -439,6 +439,15 @@ export function BackofficeAnalysis() {
 
   const sendAnalysisStartEmail = async (supplierData) => {
     if (!supplierData?.user_id) return
+    // Régua divulgada (24/09): "entrou em análise" SÓ quando o fornecedor
+    // enviou tudo — abrir a ficha com exigidos faltando não pode disparar
+    // (o analista abre para acompanhar, não necessariamente para analisar)
+    const docsAll = supplierData?.documents || []
+    if (!docsAll.length) return
+    const requiredMissing = docsAll.some(d =>
+      d.source === 'REQUIRED' && d.status === 'MISSING' && !['37','61','62'].includes(String(d.type)))
+    const nothingSent = !docsAll.some(d => d.status && d.status !== 'MISSING')
+    if (requiredMissing || nothingSent) return
     try {
       // Verifica se já enviamos este email hoje (audit_log)
       const { data: existing } = await supabase
