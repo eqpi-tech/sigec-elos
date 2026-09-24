@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi, assertivaApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 
@@ -286,10 +286,30 @@ export function BackofficeAnalysis() {
   const [archiving,     setArchiving]     = useState(false)
   const [isArchived,    setIsArchived]    = useState(false)
 
+  // Mobilidade: postos/pessoas/matriz do fornecedor (árvore na aba Documentos)
+  const [mob, setMob] = useState(null) // { posts, people, matrix }
+
   useEffect(() => {
     adminApi.getSealAnalysis(id)
       .then(d => {
         setData(d)
+        if (d.cnpj) {
+          supabase.from('mobility_posts')
+            .select('id, client_id, category_id, site_city, site_uf, armado, qty_posts, qty_people, funcao_label, clients(razao_social, nome_fantasia), categories(name)')
+            .eq('supplier_cnpj', d.cnpj).eq('active', true)
+            .then(async ({ data: posts }) => {
+              if (!posts?.length) { setMob({ posts: [], people: [], matrix: [] }); return }
+              const catIds = [...new Set(posts.map(p => p.category_id))]
+              const [{ data: people }, { data: matrix }] = await Promise.all([
+                supabase.from('mobility_people').select('id, post_id, nome, cpf_digits, active')
+                  .in('post_id', posts.map(p => p.id)).eq('active', true).order('nome'),
+                supabase.from('category_mobility_documents')
+                  .select('category_id, document_id, escopo, required, blocking, documents_catalog(id, name)')
+                  .in('category_id', catIds),
+              ])
+              setMob({ posts, people: people || [], matrix: matrix || [] })
+            })
+        }
         const sealIds = (d.seals || []).map(x => x.id)
         if (sealIds.length) {
           supabase.from('supplier_category_approvals')
@@ -488,7 +508,11 @@ export function BackofficeAnalysis() {
   // Documentos do PROCESSO selecionado: com 2+ clientes as exigências vêm
   // separadas por matriz (required_by); 'ALL' mostra a união de todos
   const procKey  = procSelKey === 'ALL' ? null : (processSeal ? (processSeal.client_id || '__ELOS__') : null)
-  const docsView = (data?.documents || []).filter(d => !procKey || !d.required_by || d.required_by.includes(procKey))
+  // docs de mobilidade (type 'mob:...') saem da lista plana — ganham a árvore
+  // posto → pessoa abaixo, espelhando a tela do fornecedor (24/09)
+  const docsView = (data?.documents || []).filter(d => !String(d.type).startsWith('mob:'))
+    .filter(d => !procKey || !d.required_by || d.required_by.includes(procKey))
+  const mobUploaded = (data?.documents || []).filter(d => String(d.type).startsWith('mob:'))
 
   // Verifica documentos impeditivos antes de aprovar (só do processo selecionado)
   const blockingMissing = docsView.filter(d =>
@@ -1419,6 +1443,90 @@ export function BackofficeAnalysis() {
                 </div>
               )
             })}
+
+            {/* ── Documentos de Mobilidade: árvore posto → pessoa (espelho da
+                 tela do fornecedor); aprovar/rejeitar = mesmas ações dos docs
+                 PJ (mesma linha de documents por baixo) ── */}
+            {mob?.posts?.length > 0 && (() => {
+              const mobByType = {}
+              for (const d of mobUploaded) mobByType[d.type] = d
+              const mobRow = (doc, catalogName, missing) => {
+                const actn   = doc && docActions[doc.id]
+                const status = missing ? 'MISSING' : (actn && actn !== 'loading' ? actn : doc.status)
+                const colors  = { VALID:'#f8fffe',PENDING:'#fff7ed',MISSING:'#fff5f5',REJECTED:'#fff5f5' }
+                const borders = { VALID:'#dcfce7',PENDING:'#fed7aa',MISSING:'#fee2e2',REJECTED:'#fee2e2' }
+                return (
+                  <div key={doc?.id || catalogName} style={{ display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:10,marginBottom:6,background:colors[status]||'#f4f5f9',border:`1px solid ${borders[status]||'#e2e4ef'}` }}>
+                    <StatusDot status={status}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12.5,fontWeight:600,color:'#1a1c5e',fontFamily:'DM Sans,sans-serif' }}>{catalogName}</div>
+                      {doc?.expires_at && <div style={{ fontSize:10.5,color:'#9B9B9B' }}>vence {doc.expires_at.slice(0,10)}</div>}
+                      {doc?.review_note && <div style={{ fontSize:11,color:'#dc2626' }}>⚠ {doc.review_note}</div>}
+                      {missing && <div style={{ fontSize:10.5,color:'#9B9B9B' }}>não enviado pelo fornecedor</div>}
+                    </div>
+                    {doc?.storage_path && (
+                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                    )}
+                    {doc && ['PENDING','VALID','EXPIRING','EXPIRED'].includes(status) && (
+                      actn==='loading' ? <Spinner size={16}/> : <>
+                        {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
+                          <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
+                        )}
+                        <Button variant="danger" size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>
+                          {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )
+              }
+              return (
+                <div style={{ marginTop:20, paddingTop:16, borderTop:'1.5px dashed #c7c9e2' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+                    <SectionTitle style={{ marginBottom:0 }}>👷 Documentos de Mobilidade</SectionTitle>
+                    <span style={{ fontSize:10,fontWeight:700,color:'#2E3192',background:'rgba(46,49,146,.08)',padding:'2px 8px',borderRadius:20,fontFamily:'Montserrat,sans-serif' }}>
+                      {mob.posts.length} posto{mob.posts.length>1?'s':''}
+                    </span>
+                  </div>
+                  {mob.posts.map(post => {
+                    const people     = mob.people.filter(p => p.post_id === post.id)
+                    const matrix     = mob.matrix.filter(m => m.category_id === post.category_id)
+                    const postDocs   = matrix.filter(m => m.escopo === 'posto' && (m.document_id !== 10017 || post.armado))
+                    const personDocs = matrix.filter(m => m.escopo === 'pessoa')
+                    return (
+                      <div key={post.id} style={{ border:'1px solid #e2e4ef', borderRadius:12, marginBottom:12, padding:'12px 14px' }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>
+                          📍 {post.categories?.name || 'Posto'} — {post.site_city}/{post.site_uf} {post.armado ? '· 🔫 armado' : ''}
+                        </div>
+                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#9B9B9B', margin:'2px 0 10px' }}>
+                          Processo {post.clients?.nome_fantasia || post.clients?.razao_social || '—'}
+                          {post.funcao_label ? ` · ${post.funcao_label}` : ''} · {post.qty_posts} posto{post.qty_posts>1?'s':''} / {post.qty_people} pessoa{post.qty_people>1?'s':''} · {people.length}/{post.qty_people} cadastrada{people.length===1?'':'s'}
+                        </div>
+                        {postDocs.map(m => {
+                          const doc = mobByType[mobilityApi.docTypeKey(m.document_id, 'posto', post.id)]
+                          return mobRow(doc, `${m.documents_catalog?.name || m.document_id} — doc. do posto`, !doc && m.required)
+                        })}
+                        {people.length === 0 ? (
+                          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', padding:'8px 0' }}>
+                            Nenhum colaborador cadastrado pelo fornecedor ainda.
+                          </div>
+                        ) : people.map(person => (
+                          <div key={person.id} style={{ border:'1px solid #eef0f6', borderRadius:10, padding:'8px 10px', margin:'8px 0' }}>
+                            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:700, color:'#1a1c5e', marginBottom:6 }}>
+                              👤 {person.nome} <span style={{ fontWeight:400, color:'#9B9B9B' }}>· CPF {mobilityApi.maskCpf(person.cpf_digits)}</span>
+                            </div>
+                            {personDocs.map(m => {
+                              const doc = mobByType[mobilityApi.docTypeKey(m.document_id, 'pessoa', person.id)]
+                              return mobRow(doc, m.documents_catalog?.name || String(m.document_id), !doc && m.required)
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
             </>)}
 
             {/* ── Aba: Dados Bancários ── */}
