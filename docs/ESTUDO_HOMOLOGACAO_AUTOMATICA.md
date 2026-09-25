@@ -146,8 +146,9 @@ estruturada e Batch API.
 
 ## 7. API × modelo próprio: custo
 
-- API (Sonnet 5, Batch): ~R$ 1 a R$ 4 por homologação. A 500 homologações/mês de
-  nível 2, algo na casa de **R$ 800/mês**.
+- API, só a parte de IA (as consultas oficiais existem nos dois cenários): a 500
+  homologações/mês de nível 2, **entre R$ 330 (Sonnet 5) e R$ 810 (Opus 5) por mês**
+  em Batch.
 - Modelo próprio (Gemma ou similar) numa GPU dedicada em nuvem: ordem de
   grandeza de **alguns milhares de reais por mês** por GPU, mais operação — e com
   qualidade inferior aos modelos de ponta em documentos complexos (a medir).
