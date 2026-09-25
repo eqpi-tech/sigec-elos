@@ -12,6 +12,7 @@
 // function (15 min) com teto de e-mails por execução.
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardMail } = require('./lib/mail_guard.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 
 const supabase = createClient(
@@ -26,10 +27,12 @@ const MAX_EMAILS_PER_RUN = 100
 const SENT_STATUSES = ['PENDING', 'VALID', 'EXPIRING', 'NOT_APPLICABLE'] // já enviado/atendido
 
 async function sendEmail(to, subject, html) {
+  const g = guardMail(to, subject)   // trava: fora de produção não sai para o real
+  if (g.skip) { console.log('[pending-docs] descartado (não-produção):', subject); return }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to: [to], subject, html }),
+    body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to: g.to, subject: g.subject, html }),
   })
   if (!res.ok) throw new Error(`Resend ${res.status}`)
 }

@@ -7,6 +7,22 @@
   directory  = "netlify/functions"
   node_bundler = "esbuild"
 
+# ── Ambientes ────────────────────────────────────────────────────────────
+# ELOS_ENV distingue produção de staging/preview no código (hoje: trava de
+# e-mails em lib/mail_guard.js — fora de produção nada sai para o
+# destinatário real). Os VALORES sensíveis do staging (URL/keys do Supabase
+# de staging, Stripe de teste, MAIL_TEST_INBOX) ficam no painel do Netlify
+# com escopo para o branch — nunca no repositório. Deploys de branch não
+# executam funções agendadas, então o cron do BC Report só roda em produção.
+[context.production.environment]
+  ELOS_ENV = "production"
+
+[context."staging".environment]
+  ELOS_ENV = "staging"
+
+[context.deploy-preview.environment]
+  ELOS_ENV = "preview"
+
 # BC Report: fila processada 1/min EM PRODUÇÃO pelo wrapper agendado
 # (function com schedule não aceita POST externo — 403 — por isso o gatilho
 # da tela usa bc-report-worker.js, HTTP, e o cron usa bc-report-cron.js;

@@ -3,6 +3,7 @@
 // POST body: { to?, userId?, subject, html }
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardMail } = require('./lib/mail_guard.js')
 
 exports.handler = async (event) => {
   const headers = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' }
@@ -49,6 +50,13 @@ exports.handler = async (event) => {
     return { statusCode:200, headers, body: JSON.stringify({ sent: false, reason:'no_api_key' }) }
   }
 
+  // trava de ambiente: fora de produção nada chega ao destinatário real
+  const g = guardMail(recipient, subject)
+  if (g.skip) {
+    console.log('[send-email] descartado (ambiente não-produção):', subject)
+    return { statusCode:200, headers, body: JSON.stringify({ sent: false, reason:'non_production' }) }
+  }
+
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -58,8 +66,8 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-        to: [recipient],
-        subject,
+        to: g.to,
+        subject: g.subject,
         html,
       }),
     })

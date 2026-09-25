@@ -5,19 +5,22 @@
 // com header Authorization: Bearer CRON_SECRET
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardMail } = require('./lib/mail_guard.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
 // Usamos fetch direto para a API do Resend.
 async function sendEmailDirect({ to, subject, html }) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey) { console.warn('[check-expiring-docs] RESEND_API_KEY ausente — e-mail não enviado'); return }
+  const g = guardMail(to, subject)   // trava: fora de produção não sai para o real
+  if (g.skip) { console.log('[check-expiring] descartado (não-produção):', subject); return }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
     body: JSON.stringify({
       from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-      to:   [to],
-      subject,
+      to:   g.to,
+      subject: g.subject,
       html,
     }),
   })

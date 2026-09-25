@@ -5,6 +5,7 @@
 // Depois disso, para de lembrar. Convites de "contato" não recebem lembrete.
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardMail } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -61,14 +62,18 @@ exports.handler = async (event) => {
       const daysAgo = Math.round((now - new Date(inv.created_at).getTime()) / DAY)
 
       if (process.env.RESEND_API_KEY) {
+        // trava: fora de produção não sai para o destinatário real
+        const gm = guardMail(
+          inv.supplier_email.split(/[;,]/).map(e => e.trim()).filter(e => /@/.test(e)).slice(0, 5),
+          `Lembrete: ${clientName} aguarda seu cadastro — SIGEC-ELOS`)
+        if (gm.skip) { console.log('[invitation-reminders] descartado (não-produção)'); continue }
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
           body: JSON.stringify({
             from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-            // supplier_email pode vir com múltiplos endereços separados por vírgula
-            to: inv.supplier_email.split(/[;,]/).map(e => e.trim()).filter(e => /@/.test(e)).slice(0, 5),
-            subject: `Lembrete: ${clientName} aguarda seu cadastro — SIGEC-ELOS`,
+            to: gm.to,
+            subject: gm.subject,
             html: `
               <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
                 <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
