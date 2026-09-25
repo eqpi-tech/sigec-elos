@@ -1317,6 +1317,47 @@ export const mobilityApi = {
       .from('mobility_people').update({ active: false }).eq('id', personId)
     if (error) throw new Error(error.message)
   },
+
+  // Completude da mobilidade do fornecedor — mesma regra do servidor
+  // (lib/required_docs.js mobilityPending): pessoas cadastradas >= vagas e
+  // todos os docs exigidos (pessoa/posto) aprovados. Fornecedor sem posto
+  // aberto é 'completo' por definição. Usado nos avisos das telas.
+  pendingFor: async (supplierCnpj, supplierId) => {
+    const vazio = { posts: 0, peopleShortfall: 0, docsMissing: 0, complete: true }
+    if (!supplierCnpj || !supplierId) return vazio
+    const posts = await mobilityApi.myPosts(supplierCnpj)
+    if (!posts.length) return vazio
+    const [matrix, people] = await Promise.all([
+      mobilityApi.matrixFor([...new Set(posts.map(p => p.category_id))]),
+      mobilityApi.listPeople(posts.map(p => p.id)),
+    ])
+    const REGISTRO_ARMA = 10017
+    const keys = []
+    let peopleShortfall = 0
+    for (const post of posts) {
+      const pPeople = people.filter(p => p.post_id === post.id)
+      peopleShortfall += Math.max(0, post.qty_people - pPeople.length)
+      for (const m of matrix.filter(x => x.category_id === post.category_id && x.required)) {
+        if (m.escopo === 'posto') {
+          if (m.document_id === REGISTRO_ARMA && !post.armado) continue
+          keys.push(mobilityApi.docTypeKey(m.document_id, 'posto', post.id))
+        } else {
+          for (const p of pPeople) keys.push(mobilityApi.docTypeKey(m.document_id, 'pessoa', p.id))
+        }
+      }
+    }
+    const byType = {}
+    for (let i = 0; i < keys.length; i += 200) {
+      const { data } = await supabase.from('documents').select('type, status')
+        .eq('supplier_id', supplierId).in('type', keys.slice(i, i + 200))
+      for (const d of (data || [])) byType[d.type] = d.status
+    }
+    const docsMissing = keys.filter(k => !['VALID', 'NOT_APPLICABLE'].includes(byType[k])).length
+    return {
+      posts: posts.length, peopleShortfall, docsMissing,
+      complete: peopleShortfall === 0 && docsMissing === 0,
+    }
+  },
 }
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────

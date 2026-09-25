@@ -69,6 +69,10 @@ export default function SupplierDocuments() {
   const [personForm, setPersonForm] = useState(null) // { postId, nome, cpf }
   const [personBusy, setPersonBusy] = useState(false)
 
+  // Conclusão da homologação: prontidão do servidor (docs + questionário) +
+  // mobilidade completa, com processo aguardando análise (pedido 25/09)
+  const [completion, setCompletion] = useState(null) // { ready, mobComplete, pendingSeal }
+
   // Reservado para integração futura via proxy residencial (ScrapingBee/Zyte)
   // Por ora FGTS e CND usam upload manual com link direto para o site emissor
   const handleCollect = async (docId, docLabel) => {
@@ -89,6 +93,20 @@ export default function SupplierDocuments() {
     setCollecting(null)
   }
 
+  const refreshCompletion = async (cnpj, pendingSeal) => {
+    try {
+      const [{ data: rdy }, mob] = await Promise.all([
+        supabase.rpc('supplier_ready_for_analysis', { p_supplier: user.supplierId }),
+        mobilityApi.pendingFor(cnpj, user.supplierId),
+      ])
+      setCompletion(prev => ({
+        ready: rdy === true,
+        mobComplete: mob.complete,
+        pendingSeal: pendingSeal !== undefined ? pendingSeal : (prev?.pendingSeal ?? false),
+      }))
+    } catch { /* não crítico */ }
+  }
+
   const loadAll = async () => {
     if (!user?.supplierId) { setLoading(false); return }
     try {
@@ -100,6 +118,7 @@ export default function SupplierDocuments() {
       //    cliente (categorias com client_id), fluxo padrão para o selo ELOS
       let docs = []
       let groups = []
+      let pendingSealFound = false
       try {
         const { requiredBySeal, seals } = await getRequiredTypesBySeal(user.supplierId)
         const unionIds = new Set()
@@ -115,6 +134,8 @@ export default function SupplierDocuments() {
           docs.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
         }
 
+        // processo aguardando análise (para o aviso de conclusão)
+        pendingSealFound = seals.some(x => x.status === 'PENDING' && !x.client_suspended_at)
         // Um grupo por cliente (dedup) + um para o fluxo padrão
         const seenOwner = new Set()
         for (const seal of seals) {
@@ -162,6 +183,8 @@ export default function SupplierDocuments() {
           setMobOpen(Object.fromEntries(posts.map(p => [p.id, posts.length === 1])))
         }
       } catch (err) { console.warn('mobilidade:', err.message) }
+
+      await refreshCompletion(s.cnpj, pendingSealFound)
 
       // 4. Auto-validar CNPJ (doc_id 37) se ainda não estiver no banco
       const alreadyHasCnpj = d.some(u => u.type === '37' || u.type === 'CNPJ_CARD')
@@ -305,6 +328,7 @@ export default function SupplierDocuments() {
                       : [...prev, { ...uploadedDoc, label: docLabel }]
       })
       showToast('✅ Documento enviado! Aguardando validação.')
+      refreshCompletion(supplier?.cnpj)
     } catch (err) { showToast('Erro: ' + err.message, 'error') }
     finally { setUploading(null) }
   }
@@ -355,6 +379,7 @@ export default function SupplierDocuments() {
       setMobPeople(prev => [...prev, p])
       setPersonForm(null)
       showToast('✅ Colaborador cadastrado — envie os documentos dele abaixo.')
+      refreshCompletion(supplier?.cnpj)
     } catch (err) { showToast(err.message, 'error') }
     finally { setPersonBusy(false) }
   }
@@ -364,6 +389,7 @@ export default function SupplierDocuments() {
     try {
       await mobilityApi.removePerson(person.id)
       setMobPeople(prev => prev.filter(p => p.id !== person.id))
+      refreshCompletion(supplier?.cnpj)
     } catch (err) { showToast(err.message, 'error') }
   }
 
@@ -386,6 +412,7 @@ export default function SupplierDocuments() {
         return i >= 0 ? prev.map(d => d.type === typeKey ? enriched : d) : [...prev, enriched]
       })
       showToast('✅ Documento enviado! Aguardando validação.')
+      refreshCompletion(supplier?.cnpj)
     } catch (err) { showToast('Erro: ' + err.message, 'error') }
     finally { setUploading(null) }
   }
@@ -723,6 +750,25 @@ export default function SupplierDocuments() {
       )}
 
       <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
+
+      {/* Fechou a fase: docs + questionário + mobilidade completos e processo
+          aguardando a análise da EQPI (pedido 25/09) */}
+      {completion?.ready && completion?.mobComplete && completion?.pendingSeal
+        && totCount > 0 && okCount === totCount && (
+        <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.3)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ fontSize:28, lineHeight:1 }}>🎉</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#15803d' }}>
+              Parabéns! Você concluiu a homologação.
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#166534', marginTop:3 }}>
+              Seus documentos foram encaminhados para análise — prazo padrão de 3 dias úteis.
+              Avisaremos por e-mail quando houver resultado; se algum documento precisar de ajuste,
+              ele volta a aparecer aqui como pendente.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap:16, marginBottom:24 }}>

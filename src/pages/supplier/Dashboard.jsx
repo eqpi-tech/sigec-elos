@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { planName, planCycle } from '../../lib/planLabels.js'
 import { ELOS_VERIFICADO_DOCS } from '../../lib/score.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, getRequiredTypesBySeal } from '../../services/api.js'
+import { supplierApi, documentApi, mobilityApi, getRequiredTypesBySeal } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
@@ -28,6 +28,7 @@ export default function SupplierDashboard() {
   const [alertDocs,      setAlertDocs]      = useState([])
   const [questPending,   setQuestPending]   = useState(0)  // perguntas obrigatórias sem resposta
   const [ready,          setReady]          = useState(null)  // regra do servidor: processo pronto p/ análise?
+  const [mobPend,        setMobPend]        = useState(null)  // mobilidade: { complete, peopleShortfall, docsMissing, posts }
   const [reqBySeal,      setReqBySeal]      = useState({})    // seal.id → tipos exigidos DAQUELE processo
 
   const load = useCallback(async () => {
@@ -73,6 +74,12 @@ export default function SupplierDashboard() {
           reqRes.requiredBySeal.forEach((list, sealId) => { obj[sealId] = (list || []).map(String) })
           setReqBySeal(obj)
         }
+      } catch { /* não crítico */ }
+
+      // Mobilidade (docs de PF por posto/pessoa) também conta para 'concluiu
+      // a parte dele' — o SQL de prontidão ainda não enxerga mobilidade
+      try {
+        setMobPend(await mobilityApi.pendingFor(s.cnpj, user.supplierId))
       } catch { /* não crítico */ }
 
       // Questionário faz parte da homologação (18/09): o processo só entra
@@ -192,6 +199,26 @@ export default function SupplierDashboard() {
       </div>
 
       {/* ── Alertas ── */}
+      {/* Concluiu a parte dele (docs + questionário + mobilidade) e o processo
+          está aguardando a análise da EQPI — confirmação visual do fechamento
+          da fase, além do e-mail (pedido 25/09) */}
+      {ready === true && docsMissing === 0 && questPending === 0
+        && (mobPend ? mobPend.complete : true)
+        && seals.some(s => s.status === 'PENDING' && !s.client_suspended_at) && (
+        <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.3)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+          <div style={{ fontSize:28, lineHeight:1 }}>🎉</div>
+          <div style={{ flex:1, minWidth:220 }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#15803d' }}>
+              Parabéns! Você concluiu a homologação.
+            </div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#166534', marginTop:2 }}>
+              Seus documentos foram encaminhados para análise — prazo padrão de 3 dias úteis.
+              Você será avisado por e-mail quando houver resultado; não é necessário fazer mais nada agora.
+            </div>
+          </div>
+          <Button variant="neutral" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Ver meus documentos</Button>
+        </div>
+      )}
       {/* Processo do cliente só entra EM ANÁLISE quando o fornecedor completa
           a parte dele: TODOS os documentos + questionário (18/09) */}
       {(docsMissing > 0 || questPending > 0) && seals.some(s => s.client_id && s.status === 'PENDING') && (
