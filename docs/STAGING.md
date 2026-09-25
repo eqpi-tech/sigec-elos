@@ -87,23 +87,44 @@ estiverem todos cobertos.
 
 ## 5. Usuários de teste no staging
 
-O banco vem sem usuários. Pelo painel do Supabase de staging (*Authentication →
-Add user*), crie ao menos:
+Criados em 25/09 e com login verificado (senha distribuída pelo canal seguro do
+time, nunca aqui):
 
-1. um **ADMIN** (backoffice) e
-2. um **usuário de cliente** para testar a visão do contratante.
+| Usuário | Papel | Observação |
+| --- | --- | --- |
+| `admin.preview@eqpitech.com.br` | ADMIN (backoffice) | já existia no Auth do staging; papéis recriados após o rebuild do schema |
+| `staging.cliente@equipoinfo.com.br` | CLIENT | vinculado ao cliente âncora (`clients.user_id`) |
 
-Depois, no SQL editor do staging, vincule o papel:
+**Atenção ao recriar o banco** (`staging_sync.sh` derruba o schema `public`):
+os usuários continuam no Auth, mas `profiles` e `user_roles` são apagados — é
+preciso recriar os vínculos. SQL de referência:
 
 ```sql
--- ADMIN do backoffice
-insert into user_roles (user_id, role) values ('<uuid do usuário>', 'ADMIN');
-insert into profiles (id, role, name) values ('<uuid do usuário>', 'ADMIN', 'Admin Staging')
-  on conflict (id) do nothing;
+-- papel de ADMIN
+insert into user_roles (user_id, role)
+select id, 'ADMIN' from auth.users where email='<e-mail do admin>' on conflict do nothing;
+insert into profiles (id, role, name)
+select id, 'ADMIN', 'Admin Staging' from auth.users where email='<e-mail do admin>'
+on conflict (id) do update set role='ADMIN';
 
--- usuário de um cliente (pegue o id em: select id, razao_social from clients)
-update clients set user_id = '<uuid do usuário>' where id = '<uuid do cliente>';
-insert into user_roles (user_id, role, client_id) values ('<uuid do usuário>', 'CLIENT', '<uuid do cliente>');
+-- papel de CLIENTE (pegue o id em: select id, razao_social from clients)
+insert into user_roles (user_id, role, client_id)
+select id, 'CLIENT', '<uuid do cliente>' from auth.users where email='<e-mail do cliente>' on conflict do nothing;
+insert into profiles (id, role, name)
+select id, 'CLIENT', 'Cliente Staging' from auth.users where email='<e-mail do cliente>'
+on conflict (id) do update set role='CLIENT';
+update clients set user_id = (select id from auth.users where email='<e-mail do cliente>')
+ where id = '<uuid do cliente>';
+```
+
+**Criando usuário direto por SQL** (sem o painel): além de `auth.users` e
+`auth.identities`, as colunas de token precisam vir como string vazia — em
+NULL o GoTrue responde `Database error querying schema` no login:
+
+```sql
+update auth.users
+   set confirmation_token='', recovery_token='', email_change='', email_change_token_new=''
+ where email='<e-mail criado por SQL>';
 ```
 
 Fornecedores: cadastre pelo próprio fluxo (`/cadastro` no endereço do staging)
