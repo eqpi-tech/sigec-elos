@@ -218,6 +218,9 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
   const [status, setStatus]       = useState('')       // '' = manter atual
   const [inscription, setInscription] = useState(doc.inscription_number || '')
   const [reasonText, setReasonText] = useState('')   // motivo (datalist com busca por digitação)
+  // Validade sugerida na aprovação: análise (hoje) + 1 ano — regra 09/09
+  const umAnoDaAnalise = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10) })()
+  const hojeISO = new Date().toISOString().slice(0, 10)
   const [customNote, setCustomNote] = useState('')
   const [saving, setSaving]       = useState(false)
 
@@ -278,17 +281,28 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
           placeholder="Ex.: 123.456.789.000" style={{ ...inp, marginBottom:14 }}/>
 
         <span style={lbl}>Data de vencimento</span>
-        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} style={{ ...inp, marginBottom:14 }}/>
+        <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} style={{ ...inp, marginBottom:5 }}/>
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+          <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color: expiry && expiry < hojeISO ? '#b45309' : '#9B9B9B', flex:1 }}>
+            {expiry === umAnoDaAnalise
+              ? '✓ Sugerido automaticamente: análise + 1 ano'
+              : expiry && expiry < hojeISO
+                ? '⚠ Data no passado — aprovar exige uma validade futura'
+                : 'Ao aprovar sem validade informada, usamos análise + 1 ano'}
+          </span>
+          <button type="button" onClick={() => setExpiry(umAnoDaAnalise)}
+            style={{ padding:'4px 10px', borderRadius:8, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#2E3192', whiteSpace:'nowrap' }}>
+            análise + 1 ano
+          </button>
+        </div>
 
         <span style={lbl}>Status</span>
         <select value={status} onChange={e => {
             const v = e.target.value
             setStatus(v); setReasonText(''); setCustomNote('')
-            // Regra (09/09): aprovação sem validade informada → análise + 1 ano
-            if (v === 'VALID' && !expiry) {
-              const d = new Date(); d.setFullYear(d.getFullYear() + 1)
-              setExpiry(d.toISOString().slice(0, 10))
-            }
+            // Regra (09/09, ampliada 25/09): aprovar sem validade informada OU
+            // com validade já vencida → sugere análise + 1 ano
+            if (v === 'VALID' && (!expiry || expiry < hojeISO)) setExpiry(umAnoDaAnalise)
           }} style={{ ...inp, marginBottom:14 }}>
           <option value="">Manter status atual</option>
           <option value="VALID">✓ Aprovado</option>
