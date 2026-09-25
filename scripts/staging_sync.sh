@@ -102,7 +102,16 @@ SQL
 "$PSQL" "$STAG" -q -f "$TMP/post.sql" 2>&1 \
   | grep -E 'ERROR' | grep -vE 'default privileges|already exists' | head -20 || true
 
-echo "5/5 · buckets de storage e conferência…"
+echo "5/6 · marcando as migrations do repositório como aplicadas…"
+# O staging é montado por pg_dump, não pelas migrations do Supabase CLI. Se a
+# branch do Supabase rodar migrations num push, ela não deve reaplicar nada.
+for f in "$(dirname "$0")/../supabase/migrations/"*.sql; do
+  [ -e "$f" ] || continue
+  b=$(basename "$f" .sql); v="${b%%_*}"; n="${b#*_}"
+  "$PSQL" "$STAG" -q -c "insert into supabase_migrations.schema_migrations (version, name) values ('$v', '$n') on conflict (version) do nothing" || true
+done
+
+echo "6/6 · buckets de storage e conferência…"
 "$PSQL" "$STAG" -v ON_ERROR_STOP=1 -q <<'SQL'
 insert into storage.buckets (id, name, public)
 values ('documents','documents',false), ('bc-reports','bc-reports',false),

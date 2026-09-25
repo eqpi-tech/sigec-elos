@@ -146,7 +146,21 @@ leva do código, como sempre.
 Para "resetar" o staging depois de testes sujos: rodar `staging_sync.sh --yes`
 de novo — ele reconstrói o schema e a configuração a partir da produção.
 
-## 7. Limites conhecidos
+## 7. O banco de staging é uma *preview branch* do Supabase — cuidados
+
+Decisão de 25/09: mantido como **preview branch** (o nome no painel é o da
+antiga branch de trabalho do BC Report), sem converter para persistent.
+Consequências e proteções:
+
+| Risco | Situação |
+| --- | --- |
+| Apagar a branch Git associada **destrói o banco de staging** | Mitigado: a branch está **protegida contra deleção** no GitHub (regra de proteção aplicada em 25/09). Não remova essa proteção. |
+| PR daquela branch ser aberto/mergeado/fechado | Não há PR aberto; o merge para a `main` já foi feito por linha de comando, sem PR. |
+| Push disparar migrations do `supabase/migrations/` e bagunçar o banco | Mitigado: as 13 migrations do repositório foram **marcadas como aplicadas** em `supabase_migrations.schema_migrations` do staging, então uma execução não encontra nada para rodar. O `staging_sync.sh` refaz essa marcação. |
+| Branch reset a partir do projeto pai | Não usar o botão *Reset* da branch no painel: ele reaplicaria migrations sobre o que o `staging_sync.sh` montou. |
+| Perder o ambiente | Impacto pequeno: o staging **não guarda nada único** — a configuração vem da produção e os dados de teste são descartáveis. Recuperação: criar nova branch/projeto, apontar `SUPABASE_DB_URL_PREVIEW` e as 4 variáveis do Netlify, rodar `staging_sync.sh --yes` e recriar os dois usuários (~15 min). |
+
+## 8. Limites conhecidos
 
 - Sem as listas `ref_*`, o BC Report não encontra sanções/mídia local; os
   conectores de API externa funcionam se as credenciais de teste existirem.
