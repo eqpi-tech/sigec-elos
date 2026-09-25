@@ -4,6 +4,8 @@ import { adminApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
+import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
+import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 
 // Dois filtros INDEPENDENTES (patch_075):
 // · Limite de análise = a FILA do analista (regra HOC: envio + 3 dias úteis)
@@ -375,6 +377,15 @@ export default function DocumentAnalysis() {
   const [saving,      setSaving]      = useState(new Set())
   const [aiModal,     setAiModal]     = useState(null) // { doc, extractType }
   const [editModal,   setEditModal]   = useState(null) // doc object
+  const [cnaeModal,   setCnaeModal]   = useState(null) // { doc } — doc 61 exige vínculo CNAE×categoria antes
+  const [histModal,   setHistModal]   = useState(null) // doc — histórico de versões/decisões
+
+  // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE — mesma
+  // regra da ficha do processo (paridade corrigida em 25/09)
+  const openEdit = (doc) => {
+    if (String(doc.type) === '61') { setCnaeModal({ doc }); return }
+    setEditModal(doc)
+  }
 
   const PAGE_SIZE = 50
 
@@ -798,8 +809,10 @@ export default function DocumentAnalysis() {
                       <Button variant="primary" size="sm" title="Extração IA"
                         onClick={() => setAiModal({ doc, extractType: getDocAiType(doc) })}>🤖</Button>
                     )}
+                    <Button variant="neutral" size="sm" title="Histórico do documento"
+                      onClick={() => setHistModal(doc)}>🕓</Button>
                     {isSaving ? <Spinner size={16}/> : (
-                      <Button variant="primary" size="sm" onClick={() => setEditModal(doc)}>✏️ Editar</Button>
+                      <Button variant="primary" size="sm" onClick={() => openEdit(doc)}>✏️ Editar</Button>
                     )}
                   </div>
                 </div>
@@ -828,6 +841,13 @@ export default function DocumentAnalysis() {
           rule={catalog.find(c => String(c.id) === (String(editModal.type).startsWith('mob:')
             ? String(editModal.type).split(':')[1] : String(editModal.type)))?.validation_rule}
           onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
+      )}
+      {histModal && <DocHistoryModal doc={histModal} onClose={() => setHistModal(null)}/>}
+      {cnaeModal && (
+        <CnaeValidationModal
+          supplierId={cnaeModal.doc.supplier_id}
+          onValidated={() => { const d = cnaeModal.doc; setCnaeModal(null); setEditModal(d) }}
+          onClose={() => setCnaeModal(null)}/>
       )}
       {aiModal && (
         <DocAiModal

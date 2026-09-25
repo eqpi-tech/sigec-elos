@@ -4,6 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
+import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
+import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -705,50 +707,18 @@ export function BackofficeAnalysis() {
 
   // ── Validação do CNAE = vínculo categoria×CNAE (18/09) ──────────────────
   const [cnaeModal, setCnaeModal] = useState(null)     // { doc, cats:[{id,name,cnae}], saving }
-  const openCnaeModal = async (doc) => {
-    // categorias do PROCESSO (cliente do selo em análise; sem cliente → todas)
-    const cats = (data?.categories || []).filter(c =>
-      !processSeal?.client_id || c.client_id === processSeal.client_id)
-    const list = cats.length ? cats : (data?.categories || [])
-    const { data: scRows } = await supabase
-      .from('supplier_categories').select('category_id, cnae')
-      .eq('supplier_id', id)
-    const cur = Object.fromEntries((scRows || []).map(r => [r.category_id, r.cnae]))
-    setCnaeModal({
-      doc,
-      cats: list.map(c => ({ id: c.id, name: c.name, cnae: cur[c.id] || '' })),
-    })
-  }
-  const getCnaeOptions = () => {
-    const cd = data?.cnpj_consultation?.cnpj_data
-    const list = []
-    if (cd?.cnae_fiscal) list.push({ code: String(cd.cnae_fiscal), desc: cd.cnae_fiscal_descricao || cnaeMap[String(cd.cnae_fiscal)] || '', main: true })
-    for (const c of (cd?.cnaes_secundarios || []))
-      list.push({ code: String(c.codigo), desc: c.descricao || cnaeMap[String(c.codigo)] || '', main: false })
-    return list
-  }
-  const confirmCnaeValidation = async () => {
-    const faltam = cnaeModal.cats.filter(c => !c.cnae)
-    if (faltam.length) { alert(`Vincule um CNAE a todas as categorias (faltam ${faltam.length}).`); return }
-    setCnaeModal(m => ({ ...m, saving: true }))
-    try {
-      const { data: { user: adminUser } } = await supabase.auth.getUser()
-      for (const c of cnaeModal.cats) {
-        const { error } = await supabase.from('supplier_categories')
-          .update({ cnae: c.cnae, cnae_validated_at: new Date().toISOString(), cnae_validated_by: adminUser?.id })
-          .eq('supplier_id', id).eq('category_id', c.id)
-        if (error) throw new Error(error.message)
-      }
-      const doc = cnaeModal.doc
-      setCnaeModal(null)
-      // segue para a aprovação normal do doc 61 (validade pré-preenchida)
-      setApproveModal({ docId: doc.id, docLabel: doc.label, docLabelLower: (doc.label || '').toLowerCase() })
-      setApproveNote(''); setApproveInscription('')
-      if (!approveExpiry) {
-        const d = new Date(); d.setFullYear(d.getFullYear() + 1)
-        setApproveExpiry(d.toISOString().slice(0, 10))
-      }
-    } catch (e) { alert('Erro ao salvar vínculos: ' + e.message); setCnaeModal(m => ({ ...m, saving: false })) }
+  // doc 61: a validação É o de/para categoria×CNAE — modal compartilhado com
+  // a fila de análise (CnaeValidationModal), fonte única da regra (25/09)
+  const openCnaeModal = (doc) => setCnaeModal({ doc })
+  const afterCnaeValidated = () => {
+    const doc = cnaeModal.doc
+    setCnaeModal(null)
+    setApproveModal({ docId: doc.id, docLabel: doc.label, docLabelLower: (doc.label || '').toLowerCase() })
+    setApproveNote(''); setApproveInscription('')
+    if (!approveExpiry) {
+      const d = new Date(); d.setFullYear(d.getFullYear() + 1)
+      setApproveExpiry(d.toISOString().slice(0, 10))
+    }
   }
 
   const fetchLog = async () => {
@@ -1430,13 +1400,7 @@ export function BackofficeAnalysis() {
                     return null
                   })()}
                   <Button variant="neutral" size="sm" title="Histórico do documento"
-                    onClick={async () => {
-                      setDocHistModal({ doc, entries: null })
-                      try {
-                        const entries = await documentApi.getHistory(doc.supplier_id || id, doc.type)
-                        setDocHistModal(m => m && m.doc.id === doc.id ? { ...m, entries } : m)
-                      } catch { setDocHistModal(m => m && m.doc.id === doc.id ? { ...m, entries: [] } : m) }
-                    }}>🕓</Button>
+                    onClick={() => setDocHistModal({ doc: { ...doc, supplier_id: doc.supplier_id || id } })}>🕓</Button>
                   {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
@@ -1965,92 +1929,16 @@ export function BackofficeAnalysis() {
       )}
 
       {/* Modal Histórico do Documento */}
-      {docHistModal && (() => {
-        const EV_LABEL = { CREATED:'Registrado', UPLOADED:'Novo arquivo', APPROVED:'Aprovado', REJECTED:'Rejeitado', REVOKED:'Revogado', EXPIRED:'Vencido', UPDATED:'Atualizado' }
-        const EV_COLOR = { CREATED:'#64748b', UPLOADED:'#2E3192', APPROVED:'#22c55e', REJECTED:'#ef4444', REVOKED:'#f59e0b', EXPIRED:'#ef4444', UPDATED:'#64748b' }
-        return (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-            <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:560, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,.2)', maxHeight:'85vh', overflowY:'auto' }}>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:2 }}>
-                🕓 Histórico do Documento
-              </div>
-              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:16 }}>
-                {docHistModal.doc.label}
-              </div>
-
-              {docHistModal.entries === null ? (
-                <div style={{ display:'flex', justifyContent:'center', padding:30 }}><Spinner size={28}/></div>
-              ) : docHistModal.entries.length === 0 ? (
-                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', padding:'16px 0' }}>
-                  Sem eventos registrados. O histórico passa a ser gravado a partir do patch_029.
-                </div>
-              ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
-                  {docHistModal.entries.map(h => (
-                    <div key={h.id} style={{ borderLeft:`3px solid ${EV_COLOR[h.event]||'#64748b'}`, background:'#f8f9fd', borderRadius:'0 8px 8px 0', padding:'8px 12px' }}>
-                      <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
-                        <span style={{ fontSize:11, fontWeight:700, color:EV_COLOR[h.event]||'#64748b', fontFamily:'Montserrat,sans-serif' }}>
-                          {EV_LABEL[h.event] || h.event}
-                        </span>
-                        <span style={{ flex:1 }}/>
-                        <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                          {new Date(h.created_at).toLocaleString('pt-BR')}
-                        </span>
-                      </div>
-                      <div style={{ fontSize:11.5, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>
-                        {h.expires_at ? `Validade: ${new Date(h.expires_at).toLocaleDateString('pt-BR')}` : 'Sem validade definida'}
-                        {h.inscription_number ? ` · Inscrição: ${h.inscription_number}` : ''}
-                        {h.review_note ? ` · ${h.review_note}` : ''}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <Button variant="neutral" full onClick={() => setDocHistModal(null)}>Fechar</Button>
-            </div>
-          </div>
-        )
-      })()}
+      {docHistModal && <DocHistoryModal doc={docHistModal.doc} onClose={() => setDocHistModal(null)}/>}
 
       {/* Modal Aprovar Documento com Data de Expiração */}
       {/* Modal Validação do CNAE — de/para categoria × CNAE (18/09) */}
       {cnaeModal && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:640, width:'94%', maxHeight:'86vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:4 }}>🧩 Validação do CNAE</div>
-            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:16 }}>
-              Vincule cada categoria da homologação a um CNAE do fornecedor (principal ou secundário).
-              O vínculo garante que a atividade da empresa cobre a categoria contratada.
-            </div>
-            {cnaeModal.cats.length === 0 ? (
-              <div style={{ padding:16, background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, fontSize:13, color:'#92400e', marginBottom:16 }}>
-                ⚠️ O fornecedor ainda não tem categorias neste processo.
-              </div>
-            ) : cnaeModal.cats.map((c, i) => (
-              <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, border:'1px solid #eef0f6', marginBottom:8, background: c.cnae ? 'rgba(34,197,94,.04)' : '#fff' }}>
-                <div style={{ flex:1, minWidth:0, fontSize:13, fontFamily:'DM Sans,sans-serif', fontWeight:600, color:'#1a1c5e' }} title={c.name}>{c.name}</div>
-                <span style={{ color:'#9B9B9B' }}>→</span>
-                <select value={c.cnae}
-                  onChange={e => setCnaeModal(m => ({ ...m, cats: m.cats.map((x, xi) => xi === i ? { ...x, cnae: e.target.value } : x) }))}
-                  style={{ flex:1.4, padding:'8px 10px', borderRadius:8, border:`1px solid ${c.cnae ? '#86efac' : '#e2e4ef'}`, fontFamily:'DM Sans,sans-serif', fontSize:12, background:'#fff' }}>
-                  <option value="">Selecionar CNAE...</option>
-                  {getCnaeOptions().map(o => (
-                    <option key={o.code} value={o.code}>
-                      {o.main ? '★ ' : ''}{o.code.replace(/^(\d{4})(\d)(\d{2})$/, '$1-$2/$3')} — {(o.desc || '').slice(0, 60)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-            <div style={{ display:'flex', gap:8, marginTop:16 }}>
-              <Button variant="neutral" full onClick={() => setCnaeModal(null)}>Cancelar</Button>
-              <Button variant="success" full disabled={cnaeModal.saving || cnaeModal.cats.length === 0} onClick={confirmCnaeValidation}>
-                {cnaeModal.saving ? '⏳ Salvando...' : '✓ Validar vínculos e aprovar CNAE'}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CnaeValidationModal
+          supplierId={id}
+          clientId={processSeal?.client_id || null}
+          onValidated={afterCnaeValidated}
+          onClose={() => setCnaeModal(null)}/>
       )}
 
       {approveModal && (
