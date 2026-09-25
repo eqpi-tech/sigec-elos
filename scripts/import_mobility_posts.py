@@ -1,36 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Importa postos de mobilidade (SPEC_MOBILIDADE.md §8) das planilhas:
-  ~/Downloads/Relatório Vigilância Patrimonial.xlsx
-  ~/Downloads/Relatório Limpeza Predial e Veicular.xlsx
+"""Importa postos de mobilidade (SPEC_MOBILIDADE.md §8) das planilhas de postos:
+  ~/Downloads/Relatório Vigilância Patrimonial_v2.xlsx
+  ~/Downloads/Relatório Limpeza Predial e Veicular_v2.xlsx
 
-Só linhas do contratante informado em --contratante (aceita grafia com/sem
-acento). Vigilância tem Armado/Qtde Posto/Qtde Pessoas; Limpeza não tem
-(cada linha = 1 posto, armado=false). Função → categoria do cliente
-(mapa DECIDIDO 23/09: SUPERVISOR vigilância → PORTARIA; FRENTISTA/MANOBRISTA
-→ LAVAGEM DE VEÍCULOS). Linhas rejeitadas saem em relatório — nada silencioso.
+v2 (25/09, respostas do cliente): as planilhas não têm mais a coluna
+'Empresa Contratante' — TODAS as linhas são do cliente âncora. Correções que
+o cliente confirmou: CNPJ da unidade de Parauapebas (quarteirizada), HIGITRONS
+× RRC separados, Guaíba/RS mantém o CNPJ da unidade de SP, e vigilância de
+Macaé/RJ é DESARMADA (Registro da Arma não é exigido nesses postos).
 
-Idempotente: upsert pelo índice único uq_mobility_posts_slot; source='import'.
+Função → categoria (decidido com o cliente):
+  · vigilância: fornecedor marcado "(quarteirizada)" → VIG. PATRIMONIAL ARMADA
+    QUARTEIRIZADA · VIGILANTE/VIGLANTE (armado ou não) e CONTROLADOR DE ACESSO
+    armado → VIG. PATRIMONIAL ARMADA · PORTEIRO, SUPERVISOR e controlador
+    desarmado → PORTARIA
+  · limpeza: MANOBRISTA/FRENTISTA → LAVAGEM DE VEÍCULOS · ASG, LAVADOR, AUX.
+    DE LIMPEZA, OPERADOR DE ETA, SUPERVISOR → LIMPEZA PREDIAL E DE ÔNIBUS
+O flag 'armado' da planilha decide a exigência do Registro da Arma, não a
+categoria. Linhas sem CNPJ válido ou função sem mapa saem em relatório.
 
-Uso: PYTHONPATH=<pylibs> arch -x86_64 python3 scripts/import_mobility_posts.py \
-       --contratante "VIX LOGISTICA" [--apply]
+Reconciliação: postos já importados que não estão mais na planilha são
+INATIVADOS (nunca apagados); os que têm pessoas/documentos anexados são
+preservados e listados para conferência manual.
+
+Uso: PYTHONPATH=<pylibs> arch -x86_64 python3 scripts/import_mobility_posts.py [--apply]
 """
 import os, re, sys, unicodedata
 import pg8000.native
 import openpyxl
 
 APPLY = '--apply' in sys.argv
-CONTRATANTE = sys.argv[sys.argv.index('--contratante') + 1] if '--contratante' in sys.argv else None
-if not CONTRATANTE:
-    sys.exit('uso: --contratante "NOME DO CONTRATANTE" [--apply]')
 
 CLIENT_CNPJ = '32681371000172'   # cliente dono dos postos na plataforma
 
-VIGILANCIA = os.path.expanduser('~/Downloads/Relatório Vigilância Patrimonial.xlsx')
-LIMPEZA    = os.path.expanduser('~/Downloads/Relatório Limpeza Predial e Veicular.xlsx')
+VIGILANCIA = os.path.expanduser('~/Downloads/Relatório Vigilância Patrimonial_v2.xlsx')
+LIMPEZA    = os.path.expanduser('~/Downloads/Relatório Limpeza Predial e Veicular_v2.xlsx')
 
-# Função (normalizada, por prefixo) → categoria (decidido 23/09)
-CAT_VIGILANCIA_ARMADA = 500027
+CAT_VIG_ARMADA        = 500027
+CAT_VIG_QUARTEIRIZADA = 500028
 CAT_PORTARIA          = 500029
 CAT_LIMPEZA           = 500030
 CAT_LAVAGEM           = 500031
@@ -40,20 +48,39 @@ def norm(s):
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
     return re.sub(r'\s+', ' ', s).strip()
 
-def map_funcao_vigilancia(funcao):
+def is_quarteirizada(fornecedor):
+    f = norm(fornecedor)
+    return 'QUARTEIRIZ' in f or 'QUARTERIZ' in f
+
+def map_funcao_vigilancia(funcao, fornecedor, armado):
     f = norm(funcao)
-    if f.startswith('VIGILANTE'): return CAT_VIGILANCIA_ARMADA
-    if f.startswith('PORTEIRO') or f.startswith('SUPERVISOR'): return CAT_PORTARIA
+    if is_quarteirizada(fornecedor):
+        return CAT_VIG_QUARTEIRIZADA
+    if f.startswith(('VIGILANTE', 'VIGLANTE')):          # inclui typo da planilha
+        return CAT_VIG_ARMADA                            # armado=Não → sem Registro da Arma
+    if f.startswith('CONTROLADOR DE ACESSO'):
+        return CAT_VIG_ARMADA if armado else CAT_PORTARIA
+    if f.startswith(('PORTEIRO', 'SUPERVISOR')):
+        return CAT_PORTARIA
     return None
 
 def map_funcao_limpeza(funcao):
     f = norm(funcao)
-    if 'MANOBRISTA' in f: return CAT_LAVAGEM   # FRENTISTA/MANOBRISTA, LAVADOR MANOBRISTA
-    if f.startswith(('ASG', 'LAVADOR', 'OPERADOR DE ETA', 'SUPERVISOR')): return CAT_LIMPEZA
+    if 'MANOBRISTA' in f or f.startswith('FRENTISTA'):
+        return CAT_LAVAGEM
+    if f.startswith(('ASG', 'LAVADOR', 'AUX. DE LIMPEZA', 'AUX DE LIMPEZA',
+                     'AUXILIAR DE LIMPEZA', 'OPERADOR DE ETA', 'SUPERVISOR')):
+        return CAT_LIMPEZA
     return None
 
+def clean_city(v, uf):
+    c = str(v or '').strip()
+    c = re.sub(r'\s*-\s*' + re.escape(uf) + r'$', '', c, flags=re.I)  # "IGARAPÉ - MG"
+    return c.title()
+
 def valid_cnpj(d):
-    if len(d) != 14 or d == d[0] * 14: return False
+    if len(d) != 14 or d == d[0] * 14:
+        return False
     def dv(n):
         w = [5,4,3,2,9,8,7,6,5,4,3,2] if n == 12 else [6,5,4,3,2,9,8,7,6,5,4,3,2]
         r = sum(p * int(d[i]) for i, p in enumerate(w)) % 11
@@ -68,40 +95,41 @@ def read_sheet(path):
     return [dict(zip(hdr, r)) for r in rows[hdr_i + 1:] if r and any(r)]
 
 posts, rejects = [], []
-alvo = norm(CONTRATANTE)
 
 for path, kind in [(VIGILANCIA, 'vigilancia'), (LIMPEZA, 'limpeza')]:
+    if not os.path.exists(path):
+        sys.exit(f'planilha não encontrada: {path}')
     for i, row in enumerate(read_sheet(path), start=1):
-        contr = norm(row.get('EMPRESA CONTRATANTE'))
-        if alvo not in contr:
-            continue
+        forn = str(row.get('FORNECEDOR') or row.get('FORNECEDOR ATUAL') or '').strip()
         cnpj = re.sub(r'\D', '', str(row.get('CNPJ') or '')).zfill(14)
         funcao = str(row.get('FUNCAO') or '').strip()
-        cidade = str(row.get('LOCALIDADE') or '').strip()
-        uf = norm(row.get('ESTADO'))[:2]
+        uf = norm(row.get('ESTADO') or row.get('ESTADO '))[:2]
+        cidade = clean_city(row.get('LOCALIDADE'), uf)
         if not valid_cnpj(cnpj):
-            rejects.append((kind, i, f'CNPJ inválido: {cnpj}', row.get('FORNECEDOR') or row.get('FORNECEDOR ATUAL')))
+            rejects.append((kind, i, f'CNPJ inválido: {cnpj}', f'{forn} · {cidade}/{uf} · {funcao}'))
             continue
         if not cidade or len(uf) != 2:
-            rejects.append((kind, i, f'localidade incompleta: {cidade}/{uf}', funcao)); continue
+            rejects.append((kind, i, f'localidade incompleta: {cidade}/{uf}', f'{forn} · {funcao}'))
+            continue
         if kind == 'vigilancia':
-            cat = map_funcao_vigilancia(funcao)
             armado = norm(row.get('ARMADO')) == 'SIM'
+            cat = map_funcao_vigilancia(funcao, forn, armado)
             qty_posts = int(row.get('QTDE POSTO') or 1)
-            qty_people = int(row.get('QTDE PESSOAS') or 0)
         else:
-            cat = map_funcao_limpeza(funcao)
             armado = False
+            cat = map_funcao_limpeza(funcao)
             qty_posts = 1
-            qty_people = int(row.get('QTDE PESSOAS') or 0)
+        qty_people = int(row.get('QTDE PESSOAS') or 0)
         if not cat:
-            rejects.append((kind, i, f'função sem mapa: "{funcao}"', cnpj)); continue
+            rejects.append((kind, i, f'função sem mapa: "{funcao}"', f'{forn} {cnpj}'))
+            continue
         if qty_people <= 0:
-            rejects.append((kind, i, 'qtde pessoas ausente', funcao)); continue
-        posts.append(dict(cnpj=cnpj, cat=cat, cidade=cidade.title(), uf=uf,
-                          armado=armado, qp=qty_posts, qpe=qty_people, label=funcao))
+            rejects.append((kind, i, 'qtde pessoas ausente', f'{forn} · {funcao}'))
+            continue
+        posts.append(dict(cnpj=cnpj, cat=cat, cidade=cidade, uf=uf, armado=armado,
+                          qp=qty_posts, qpe=qty_people, label=funcao, forn=forn))
 
-# linhas idênticas (mesmo slot) somam pessoas/postos
+# linhas do mesmo slot (CNPJ+categoria+cidade+UF+função) somam postos e pessoas
 merged = {}
 for p in posts:
     k = (p['cnpj'], p['cat'], norm(p['cidade']), p['uf'], norm(p['label']))
@@ -111,11 +139,16 @@ for p in posts:
         merged[k] = dict(p)
 posts = list(merged.values())
 
-print(f"contratante alvo: {CONTRATANTE} · {len(posts)} postos ({sum(p['qpe'] for p in posts)} pessoas) · {len(rejects)} rejeitados · modo {'APPLY' if APPLY else 'DRY-RUN'}\n")
-for p in sorted(posts, key=lambda x: (x['cnpj'], x['cidade'])):
-    print(f"  {p['cnpj']} · cat {p['cat']} · {p['cidade']}/{p['uf']} · {'ARMADO' if p['armado'] else 'sem arma'} · {p['qp']} posto(s)/{p['qpe']} pessoa(s) · {p['label']}")
+CAT_NOME = {CAT_VIG_ARMADA:'VIG.ARMADA', CAT_VIG_QUARTEIRIZADA:'VIG.QUARTEIRIZADA',
+            CAT_PORTARIA:'PORTARIA', CAT_LIMPEZA:'LIMPEZA', CAT_LAVAGEM:'LAVAGEM'}
+print(f"{len(posts)} postos · {sum(p['qp'] for p in posts)} vagas de posto · "
+      f"{sum(p['qpe'] for p in posts)} pessoas · {len(rejects)} rejeitados · "
+      f"modo {'APPLY' if APPLY else 'DRY-RUN'}\n")
+for p in sorted(posts, key=lambda x: (x['cnpj'], x['cidade'], x['label'])):
+    print(f"  {p['cnpj']} · {CAT_NOME[p['cat']]:18s} · {p['cidade']}/{p['uf']:2s} · "
+          f"{'ARMADO' if p['armado'] else '  --  '} · {p['qp']}p/{p['qpe']}pe · {p['label']}")
 if rejects:
-    print('\nREJEITADOS (corrigir na planilha ou cadastrar manualmente):')
+    print('\nREJEITADOS (reportar ao cliente):')
     for r in rejects:
         print(f"  [{r[0]} linha {r[1]}] {r[2]} — {r[3]}")
 
@@ -130,6 +163,7 @@ pg = pg8000.native.Connection(m.group(1), host=m.group(3), port=int(m.group(4) o
 client_id = pg.run('select id from clients where cnpj=:c', c=CLIENT_CNPJ)[0][0]
 
 ins = upd = 0
+vistos = set()
 for p in posts:
     sup = pg.run('select id from suppliers where cnpj=:c', c=p['cnpj'])
     r = pg.run("""
@@ -139,11 +173,35 @@ for p in posts:
         values (:cl, :cat, :cnpj, :sup, :cid, :uf, :arm, :qp, :qpe, :lb, 'import')
         on conflict (client_id, supplier_cnpj, category_id, site_city, site_uf, coalesce(funcao_label,''))
         do update set armado = excluded.armado, qty_posts = excluded.qty_posts,
-                      qty_people = excluded.qty_people, active = true
-        returning (xmax = 0) as inserted
+                      qty_people = excluded.qty_people, category_id = excluded.category_id,
+                      supplier_id = coalesce(excluded.supplier_id, mobility_posts.supplier_id),
+                      active = true
+        returning id, (xmax = 0) as inserted
     """, cl=client_id, cat=p['cat'], cnpj=p['cnpj'], sup=sup[0][0] if sup else None,
          cid=p['cidade'], uf=p['uf'], arm=p['armado'], qp=p['qp'], qpe=p['qpe'], lb=p['label'])
-    if r[0][0]: ins += 1
+    vistos.add(r[0][0])
+    if r[0][1]: ins += 1
     else: upd += 1
 
-print(f"\nGRAVADO: {ins} inseridos · {upd} atualizados")
+# reconciliação: importados que saíram da planilha
+orfaos = pg.run("""
+    select p.id, p.supplier_cnpj, p.site_city, p.site_uf, coalesce(p.funcao_label,''),
+           (select count(*) from mobility_people mp where mp.post_id = p.id),
+           (select count(*) from documents d where d.mobility_post_id = p.id)
+    from mobility_posts p
+    where p.client_id = :cl and p.source = 'import' and p.active
+      and not (p.id = any(:vis))
+""", cl=client_id, vis=list(vistos))
+inativados, preservados = 0, []
+for oid, ocnpj, ocity, ouf, olabel, npeople, ndocs in orfaos:
+    if npeople or ndocs:
+        preservados.append((ocnpj, f'{ocity}/{ouf}', olabel, npeople, ndocs))
+        continue
+    pg.run('update mobility_posts set active = false where id = :i', i=oid)
+    inativados += 1
+
+print(f"\nGRAVADO: {ins} inseridos · {upd} atualizados · {inativados} inativados (fora da planilha)")
+if preservados:
+    print('PRESERVADOS (fora da planilha, mas com dados do fornecedor — conferir manualmente):')
+    for x in preservados:
+        print(f"  {x[0]} · {x[1]} · {x[2]} · {x[3]} pessoa(s), {x[4]} doc(s)")
