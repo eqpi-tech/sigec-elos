@@ -394,6 +394,9 @@ export default function DocumentAnalysis() {
   const [editModal,   setEditModal]   = useState(null) // doc object
   const [cnaeModal,   setCnaeModal]   = useState(null) // { doc } — doc 61 exige vínculo CNAE×categoria antes
   const [notice,      setNotice]      = useState('')   // resultado da última edição (o doc pode sair do filtro)
+  const [mobPend,     setMobPend]     = useState([])   // processos com documentos de PF faltando (patch_097)
+  const [mobOpen,     setMobOpen]     = useState(false)
+  const mobPendIds = new Set(mobPend.map(m => m.supplier_id))
   const [histModal,   setHistModal]   = useState(null) // doc — histórico de versões/decisões
 
   // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE — mesma
@@ -414,6 +417,7 @@ export default function DocumentAnalysis() {
       setCatalog(catRes.data || [])
       setReasons(reasonsData)
     })
+    adminApi.getMobilityPending().then(setMobPend).catch(() => {})
   }, [])
 
   const fetchDocs = useCallback(async (pg = 0) => {
@@ -463,9 +467,19 @@ export default function DocumentAnalysis() {
         headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
         body: JSON.stringify({ documentId: docId, status, expiresAt: expiry || undefined, note: note || undefined, inscriptionNumber: inscriptionNumber || undefined }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
       setDocStatus(p => ({ ...p, [docId]: status }))
       setRows(p => p.map(d => d.id === docId ? { ...d, status, expires_at: expiry || d.expires_at, review_note: note || d.review_note } : d))
+      if (result.mobilityPending > 0) {
+        setNotice(`Documentos da empresa em ordem, mas faltam ${result.mobilityPending} pendência(s) de mobilidade `
+          + '(colaboradores ou documentos de pessoa física) — a homologação não foi emitida.')
+        adminApi.getMobilityPending().then(setMobPend).catch(() => {})
+      } else if (result.autoFinalized) {
+        setNotice(result.outcome === 'approved'
+          ? 'Processo concluído — homologação aprovada e fornecedor avisado por e-mail.'
+          : 'Processo encerrado como REPROVADO — fornecedor avisado por e-mail.')
+      }
     } catch (e) { alert('Erro ao salvar: ' + e.message); throw e }
     finally { setSaving(p => { const n = new Set(p); n.delete(docId); return n }) }
   }
@@ -734,6 +748,50 @@ export default function DocumentAnalysis() {
         </div>
       </Card>
 
+      {/* Documentos de PF faltando: não têm linha em documents, então não
+          apareceriam na esteira — o processo não está pronto (25/09) */}
+      {mobPend.length > 0 && (
+        <Card style={{ borderRadius:14, padding:'14px 20px', marginBottom:16, background:'#fffbeb', border:'1px solid #fde68a' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+            <span style={{ fontSize:20 }}>👷</span>
+            <div style={{ flex:1, minWidth:240 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#92400e' }}>
+                {mobPend.length} processo{mobPend.length>1?'s':''} com documentos de mobilidade (PF) pendentes
+              </div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', marginTop:2 }}>
+                Estes processos <strong>não estão prontos</strong>: faltam colaboradores cadastrados ou documentos
+                de pessoa física aprovados. Como o documento não enviado não gera linha, ele não aparece na lista abaixo.
+              </div>
+            </div>
+            <Button variant="neutral" size="sm" onClick={() => setMobOpen(o => !o)}>
+              {mobOpen ? 'Ocultar' : 'Ver processos'}
+            </Button>
+          </div>
+          {mobOpen && (
+            <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:6 }}>
+              {mobPend.map(m => (
+                <div key={m.supplier_id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:8, background:'#fff', border:'1px solid #fde68a' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:700, color:'#1a1c5e' }}>{m.razao_social}</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>
+                      {m.cnpj}{m.client_name ? ` · ${m.client_name}` : ''} · {m.postos} posto{m.postos>1?'s':''}
+                    </div>
+                  </div>
+                  <span style={{ fontFamily:'Montserrat,sans-serif', fontSize:10.5, fontWeight:700, color:'#b45309', whiteSpace:'nowrap' }}>
+                    {m.people_shortfall > 0 && `${m.people_shortfall} pessoa(s) a cadastrar`}
+                    {m.people_shortfall > 0 && m.docs_missing > 0 && ' · '}
+                    {m.docs_missing > 0 && `${m.docs_missing} doc(s) de PF`}
+                  </span>
+                  <Button variant="primary" size="sm" onClick={() => navigate(`/backoffice/analise/${m.supplier_id}`)}>
+                    Abrir processo
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       {notice && (
         <div style={{ marginBottom:12, padding:'11px 16px', borderRadius:10, background:'#eff6ff', border:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:10 }}>
           <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1e40af', flex:1 }}>ℹ️ {notice}</span>
@@ -804,6 +862,12 @@ export default function DocumentAnalysis() {
                       <div style={{ fontSize:10.5, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, marginTop:3, lineHeight:1.35 }}
                         title={doc.client_names}>
                         🏢 {doc.client_names}
+                      </div>
+                    )}
+                    {mobPendIds.has(doc.supplier_id) && (
+                      <div style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', display:'inline-block', padding:'1px 7px', borderRadius:20, marginTop:3, fontFamily:'Montserrat,sans-serif' }}
+                        title="Faltam colaboradores ou documentos de pessoa física — o processo não está completo">
+                        👷 PF pendente
                       </div>
                     )}
                   </div>

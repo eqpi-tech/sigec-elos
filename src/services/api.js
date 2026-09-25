@@ -1015,6 +1015,17 @@ export const adminApi = {
     return data || []
   },
 
+  // Pendências de MOBILIDADE (documentos de PF): documento que o fornecedor
+  // ainda não enviou não tem linha em documents, então não aparece na esteira
+  // — este RPC revela os processos operáveis com pessoas/documentos de PF
+  // faltando, para nada parecer pronto sem estar (patch_097)
+  getMobilityPending: async () => {
+    const { data, error } = await supabase.rpc('admin_mobility_pending')
+    if (error) throw new Error(error.message)
+    if (data && data.error) throw new Error(data.error)
+    return Array.isArray(data) ? data : []
+  },
+
   getDocumentFarol: async () => {
     // RPC admin_document_farol (patch_074): FILA DO ANALISTA fiel ao HOC —
     // docs AGUARDANDO ANÁLISE de fornecedor que completou a parte dele,
