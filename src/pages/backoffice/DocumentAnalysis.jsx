@@ -225,6 +225,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
 
   const rejectSemMotivo = status === 'REJECTED' && !reasonText.trim()
   const nadaMudou       = !file && !status && expiry === (doc.expires_at ? doc.expires_at.slice(0, 10) : '')
+    && inscription.trim() === (doc.inscription_number || '')
 
   async function confirm() {
     if (rejectSemMotivo || nadaMudou) return
@@ -282,7 +283,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         <span style={lbl}>Status</span>
         <select value={status} onChange={e => {
             const v = e.target.value
-            setStatus(v); setReasonCode(''); setCustomNote('')
+            setStatus(v); setReasonText(''); setCustomNote('')
             // Regra (09/09): aprovação sem validade informada → análise + 1 ano
             if (v === 'VALID' && !expiry) {
               const d = new Date(); d.setFullYear(d.getFullYear() + 1)
@@ -378,6 +379,7 @@ export default function DocumentAnalysis() {
   const [aiModal,     setAiModal]     = useState(null) // { doc, extractType }
   const [editModal,   setEditModal]   = useState(null) // doc object
   const [cnaeModal,   setCnaeModal]   = useState(null) // { doc } — doc 61 exige vínculo CNAE×categoria antes
+  const [notice,      setNotice]      = useState('')   // resultado da última edição (o doc pode sair do filtro)
   const [histModal,   setHistModal]   = useState(null) // doc — histórico de versões/decisões
 
   // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE — mesma
@@ -468,6 +470,15 @@ export default function DocumentAnalysis() {
   // 1) arquivo → replace_file (fica VALID) · 2) status → approve-document
   // (dispara auto-finalização) · 3) só vencimento → set_expiry
   async function handleEditSubmit(docId, { file, expiry, status, note, inscriptionNumber }) {
+    // Substituir arquivo aprova o documento (regra: substituição pelo analista
+    // já é verificada) e mudança de status pode tirá-lo do filtro atual — sem
+    // aviso, o analista acha que 'sumiu' da fila (apontamento 25/09)
+    const finalStatus = file && (!status || status === 'VALID') ? 'VALID' : status
+    const label = rows.find(r => r.id === docId)?.label || 'Documento'
+    if (finalStatus && queueFilter !== 'todos') {
+      setNotice(`${label}: agora está "${STATUS_LABEL[finalStatus] || finalStatus}"`
+        + (finalStatus === 'PENDING' ? '.' : ' — sai da fila de análise, que lista apenas documentos aguardando análise.'))
+    }
     if (file) {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -691,6 +702,14 @@ export default function DocumentAnalysis() {
           </div>
         </div>
       </Card>
+
+      {notice && (
+        <div style={{ marginBottom:12, padding:'11px 16px', borderRadius:10, background:'#eff6ff', border:'1px solid #bfdbfe', display:'flex', alignItems:'center', gap:10 }}>
+          <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1e40af', flex:1 }}>ℹ️ {notice}</span>
+          <Button variant="neutral" size="sm" onClick={() => { setNotice(''); fetchDocs(page) }}>Atualizar lista</Button>
+          <button onClick={() => setNotice('')} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:16, lineHeight:1 }}>✕</button>
+        </div>
+      )}
 
       {/* Contagem */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
