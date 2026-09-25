@@ -527,14 +527,31 @@ export default function DocumentAnalysis() {
     setSaving(p => new Set([...p, docId]))
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/.netlify/functions/admin-approve-document', {
+      const post = (extra = {}) => fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', Authorization:`Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note }),
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note, ...extra }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      let res    = await post()
+      let result = await res.json()
+      // Fornecedor homologado: reprovar revoga o selo vigente — confirma antes
+      if (res.status === 409 && result.requiresRevokeConfirm) {
+        const ok = window.confirm(
+          `⚠️ Este fornecedor está HOMOLOGADO${result.sealName ? ` (${result.sealName})` : ''}.\n\n`
+          + 'Reprovar este documento vai SUSPENDER a homologação vigente: o cliente deixa de vê-lo '
+          + 'como homologado e o fornecedor será avisado.\n\nConfirmar a reprovação?')
+        if (!ok) return
+        res = await post({ confirmRevoke: true })
+        result = await res.json()
+      }
+      if (!res.ok) throw new Error(result.error)
       setDocStatus(p => ({ ...p, [docId]: 'REJECTED' }))
       setRows(p => p.map(d => d.id === docId ? { ...d, status: 'REJECTED', review_note: note } : d))
+      if (result.autoFinalized) {
+        setNotice(result.outcome === 'rejected'
+          ? 'Processo encerrado como REPROVADO — a homologação foi suspensa e o fornecedor avisado por e-mail.'
+          : 'Processo concluído automaticamente — homologação aprovada.')
+      }
     } catch (e) { alert('Erro ao rejeitar: ' + e.message) }
     finally { setSaving(p => { const n = new Set(p); n.delete(docId); return n }) }
   }

@@ -776,12 +776,23 @@ export function BackofficeAnalysis() {
     setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/.netlify/functions/admin-approve-document', {
+      const post = (extra = {}) => fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo }),
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo, ...extra }),
       })
-      const result = await res.json()
+      let res = await post()
+      let result = await res.json()
+      // Fornecedor homologado: reprovar revoga o selo vigente — confirma antes
+      if (res.status === 409 && result.requiresRevokeConfirm) {
+        const ok = window.confirm(
+          `⚠️ Este fornecedor está HOMOLOGADO${result.sealName ? ` (${result.sealName})` : ''}.\n\n`
+          + 'Reprovar este documento vai SUSPENDER a homologação vigente: o cliente deixa de vê-lo '
+          + 'como homologado e o fornecedor será avisado.\n\nConfirmar a reprovação?')
+        if (!ok) { setDocActions(prev => ({ ...prev, [docId]: undefined })); return }
+        res = await post({ confirmRevoke: true })
+        result = await res.json()
+      }
       if (!res.ok) throw new Error(result.error)
       setDocActions(prev => ({ ...prev, [docId]: 'REJECTED' }))
       setData(prev => ({

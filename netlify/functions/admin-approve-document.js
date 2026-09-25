@@ -50,6 +50,32 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Motivo (note) é obrigatório para reprovação' }) }
   }
 
+  // ── Guarda de revogação (25/09) ──────────────────────────────────────
+  // Reprovar documento de fornecedor com selo ATIVO revoga a homologação
+  // vigente (o cliente deixa de vê-lo homologado, o fornecedor recebe aviso
+  // de reprovação dias depois do de aprovação). Exige confirmação explícita.
+  if (status === 'REJECTED' && !body.confirmRevoke) {
+    const { data: docRow } = await supabaseAdmin
+      .from('documents').select('supplier_id').eq('id', documentId).maybeSingle()
+    if (docRow?.supplier_id) {
+      const { data: activeSeal } = await supabaseAdmin
+        .from('seals').select('seal_name, clients(razao_social, nome_fantasia)')
+        .eq('supplier_id', docRow.supplier_id).eq('status', 'ACTIVE')
+        .limit(1).maybeSingle()
+      if (activeSeal) {
+        return {
+          statusCode: 409, headers: HEADERS,
+          body: JSON.stringify({
+            error: 'Fornecedor HOMOLOGADO: reprovar este documento suspende a homologação vigente.',
+            requiresRevokeConfirm: true,
+            sealName: activeSeal.seal_name || activeSeal.clients?.nome_fantasia
+              || activeSeal.clients?.razao_social || null,
+          }),
+        }
+      }
+    }
+  }
+
   // ── Atualizar documento ──────────────────────────────────────────
   const updatePayload = {
     status,
