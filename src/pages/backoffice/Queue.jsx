@@ -1711,6 +1711,8 @@ export function BackofficeAnalysis() {
                         SEAL_REVERTED:          { label:'Análise revertida',       color:'#f59e0b', icon:'↩️' },
                         SEAL_AUTO_APPROVED:     { label:'Aprovação automática',    color:'#22c55e', icon:'⚡' },
                         SEAL_AUTO_REJECTED:     { label:'Rejeição automática',     color:'#ef4444', icon:'⚡' },
+                        PROCESS_REOPENED:       { label:'Processo reaberto (reenvio)', color:'#2E3192', icon:'↻' },
+                        MFA_RESET:              { label:'Verificação em 2 etapas resetada', color:'#f59e0b', icon:'🔐' },
                         DOCUMENT_REPLACED:      { label:'Documento substituído',   color:'#2E3192', icon:'🔄' },
                         DOCUMENT_EXPIRY_CHANGED:{ label:'Vencimento alterado',     color:'#2E3192', icon:'📅' },
                         HOC_LOG:                { label:'Registro HOC',            color:'#64748b', icon:'📜' },
