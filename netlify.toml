@@ -23,10 +23,9 @@
   ROUTE_A_ENABLED = "true"
   VITE_ROUTE_A_ENABLED = "true"
   # Rota B — pré-análise por IA dos documentos enviados (SPEC_ROTA_B.md) — só staging.
-  # PAUSADA em 28/09 (saldo da API esgotado pelo piloto): as telas continuam
-  # mostrando as análises feitas; novos envios ficam na fila sem chamar a IA.
-  # Para retomar: ROUTE_B_ENABLED = "true" (o teto diário abaixo continua valendo).
-  ROUTE_B_ENABLED = "false"
+  # Econômica desde 29/09: modo lote (50% do preço), esforço 'low', regra do
+  # cliente em cache e teto de R$ 5/dia. Pausar: ROUTE_B_ENABLED = "false".
+  ROUTE_B_ENABLED = "true"
   VITE_ROUTE_B_ENABLED = "true"
   ROUTE_B_DAILY_LIMIT_BRL = "5"
   # MFA desligado para os testes no staging (28/09). NUNCA copiar para

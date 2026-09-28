@@ -43,6 +43,7 @@ exports.handler = async (event) => {
     supplier_id: doc.supplier_id, document_id: doc.id, doc_type: doc.type, storage_path: doc.storage_path,
     status: 'queued', attempts: 0, next_attempt_at: new Date().toISOString(), last_error: null,
     verdict: null, confidence: null, result: null, finished_at: null, requested_by: user.id,
+    batch_id: null, submitted_at: null,
   }, { onConflict: 'document_id,storage_path' })
   if (error) return res(500, { error: error.message })
 

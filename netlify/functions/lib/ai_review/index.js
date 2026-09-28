@@ -88,39 +88,75 @@ function blocoDocumento(arquivo) {
   return { type: 'image', source: { type: 'base64', media_type: arquivo.mime, data: arquivo.b64 } }
 }
 
-async function revisar({ client, motivos, tipo, tipoNome, regra, fornecedor, dataReferencia, arquivo, model = MODEL }) {
-  client = client || new Anthropic()
+// Esforço de raciocínio (28/09): o Sonnet 5 raciocina por padrão quando nada
+// é configurado — no piloto, 2/3 da saída cobrada era raciocínio (o JSON tem
+// ~600 tokens; a saída média foi ~2.800). 'low' corta esse custo; a regra do
+// cliente já traz o critério, a tarefa é conferir, não deduzir.
+const EFFORT = process.env.ROUTE_B_EFFORT || 'low'
+const FORMATO = zodOutputFormat(ReviewSchema)
+
+// Monta a requisição (a mesma para chamada direta e para o modo lote).
+// Cache: 1º bloco = instruções + motivos (iguais para todos os tipos);
+// 2º bloco = tipo + regra do cliente (iguais para todos os arquivos do tipo).
+// Só o documento e os dados do fornecedor mudam a cada arquivo.
+function montarRequisicao({ motivos, tipo, tipoNome, regra, fornecedor, dataReferencia, arquivo, model = MODEL, effort = EFFORT }) {
   // sem o tipo (eval antigo), mantém o comportamento do v2
   const checarTipoEmpresa = tipo == null || TIPOS_ATO_CONSTITUTIVO.has(String(tipo))
-  const contexto = `Tipo de documento solicitado: ${tipoNome}
+  const regraTipo = `Tipo de documento solicitado: ${tipoNome}
 
 Regra do cliente para este documento:
-${regra}
-
-Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}${checarTipoEmpresa && fornecedor.tipo_empresa ? ` · tipo de empresa ${fornecedor.tipo_empresa}` : ''}${fornecedor.regime_tributario ? ` · regime tributário ${fornecedor.regime_tributario}` : ''}
+${regra}`
+  const contexto = `Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}${checarTipoEmpresa && fornecedor.tipo_empresa ? ` · tipo de empresa ${fornecedor.tipo_empresa}` : ''}${fornecedor.regime_tributario ? ` · regime tributário ${fornecedor.regime_tributario}` : ''}
 Categorias de atuação no processo: ${(fornecedor.categorias || []).join('; ') || 'não informadas'}
 Data de referência da análise: ${dataReferencia}`
-  const t0 = Date.now()
-  const resp = await client.messages.parse({
+  return {
     model,
     max_tokens: 16000,
-    system: [{ type: 'text', text: systemPrompt(motivos, { checarTipoEmpresa }), cache_control: { type: 'ephemeral' } }],
+    system: [
+      { type: 'text', text: systemPrompt(motivos, { checarTipoEmpresa }), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: regraTipo, cache_control: { type: 'ephemeral' } },
+    ],
     messages: [{ role: 'user', content: [blocoDocumento(arquivo), { type: 'text', text: contexto }] }],
-    output_config: { format: zodOutputFormat(ReviewSchema) },
-  })
-  const u = resp.usage || {}
+    output_config: { format: { type: FORMATO.type, schema: FORMATO.schema }, ...(effort ? { effort } : {}) },
+  }
+}
+
+// Custo em R$ a partir do uso informado pela API (lote = 50% do preço)
+function custoBRL(usage, model = MODEL, { lote = false } = {}) {
+  const u = usage || {}
   const p = PRICE[model] || PRICE['claude-sonnet-5']
   const usd = ((u.input_tokens || 0) + 1.25 * (u.cache_creation_input_tokens || 0) + 0.1 * (u.cache_read_input_tokens || 0)) / 1e6 * p.in
             + (u.output_tokens || 0) / 1e6 * p.out
-  return {
-    resultado: resp.parsed_output,
-    stop_reason: resp.stop_reason,
-    usage: u,
-    custo_brl: Math.round(usd * USD_BRL * 10000) / 10000,
-    ms: Date.now() - t0,
-    model,
-    prompt_version: PROMPT_VERSION,
+  return Math.round(usd * (lote ? 0.5 : 1) * USD_BRL * 10000) / 10000
+}
+
+// Lê a resposta (direta ou do lote): o bloco de texto é o JSON do formato pedido
+function lerResposta(message, { lote = false } = {}) {
+  const texto = (message.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')
+  let resultado = null
+  if (message.stop_reason !== 'max_tokens' && message.stop_reason !== 'refusal') {
+    try {
+      const r = ReviewSchema.safeParse(JSON.parse(texto))
+      if (r.success) resultado = r.data
+    } catch { /* JSON inválido: sem sugestão */ }
   }
+  return {
+    resultado,
+    stop_reason: message.stop_reason,
+    usage: message.usage,
+    custo_brl: custoBRL(message.usage, message.model || MODEL, { lote }),
+    model: message.model || MODEL,
+    prompt_version: PROMPT_VERSION,
+    effort: EFFORT,
+  }
+}
+
+// Chamada direta (eval local e modo síncrono do processador)
+async function revisar({ client, ...args }) {
+  client = client || new Anthropic()
+  const t0 = Date.now()
+  const resp = await client.messages.create(montarRequisicao(args))
+  return { ...lerResposta(resp), ms: Date.now() - t0 }
 }
 
 // Prepara o arquivo para a IA dentro da function (sem pdftotext): PDF com
@@ -159,4 +195,4 @@ async function prepararArquivo(buf) {
   return { modo: 'pdf', b64: buf.toString('base64'), paginas }
 }
 
-module.exports = { Anthropic, PROMPT_VERSION, TIPOS_ATO_CONSTITUTIVO, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, revisar, prepararArquivo, MODEL }
+module.exports = { Anthropic, PROMPT_VERSION, EFFORT, TIPOS_ATO_CONSTITUTIVO, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, montarRequisicao, lerResposta, custoBRL, revisar, prepararArquivo, MODEL }
