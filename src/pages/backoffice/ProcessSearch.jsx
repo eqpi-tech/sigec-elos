@@ -75,8 +75,11 @@ const ELOS_PSEUDO_CLIENT = { id: '__ELOS__', razao_social: '⭐ ELOS (processo p
 
 // Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
 // só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)' }
-const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8' }
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)' }
+const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1' }
+// convite que ainda não virou cadastro (28/09: cliente recém-chegado só tem
+// convites — a busca voltava vazia e parecia defeito)
+const INVITE_LABEL = { SENT:'Enviado', VIEWED:'Visualizado — ainda não cadastrou', EXPIRED:'Expirado', CANCELLED:'Cancelado' }
 
 export default function BackofficeProcessSearch() {
   const navigate  = useNavigate()
@@ -87,6 +90,7 @@ export default function BackofficeProcessSearch() {
   const [filterClient,setFilterClient]= useState('')         // client_id ou ''
   const [showInactive,setShowInactive]= useState(false)
   const [results,     setResults]     = useState([])
+  const [pendingInvites, setPendingInvites] = useState([])   // convites do cliente ainda sem cadastro
   const [clients,     setClients]     = useState([])
   const [loading,     setLoading]     = useState(false)
   const [searched,    setSearched]    = useState(false)
@@ -100,6 +104,7 @@ export default function BackofficeProcessSearch() {
   const handleSearch = async () => {
     setLoading(true)
     setSearched(true)
+    setPendingInvites([])
 
     const qTrim = q.trim()
     const qNums = qTrim.replace(/\D/g, '')
@@ -142,19 +147,29 @@ export default function BackofficeProcessSearch() {
         isElos
           ? Promise.resolve({ data: [] })
           : supabase.from('invitations')
-              .select('supplier_id, client_id')
+              .select('id, supplier_id, client_id, supplier_cnpj, supplier_razao_social, supplier_email, status, created_at')
               .eq('client_id', filterClient),
       ])
 
       const clientSeals   = sealRes.status === 'fulfilled' ? (sealRes.value.data   || []) : []
       const clientInvites = invRes.status  === 'fulfilled' ? (invRes.value.data    || []) : []
 
+      // convite sem cadastro não tem supplier_id: fora da consulta de fornecedores
       const supplierIdSet = new Set([
         ...clientSeals.map(s => s.supplier_id),
         ...clientInvites.map(i => i.supplier_id),
-      ])
+      ].filter(Boolean))
 
-      if (!supplierIdSet.size) { setResults([]); setLoading(false); return }
+      // convites aguardando cadastro (reenvio substituído não conta de novo)
+      const digitos = (v) => String(v || '').replace(/\D/g, '')
+      const pend = clientInvites
+        .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED'].includes(i.status))
+        .filter(i => !qTrim || (qNums.length >= 8 ? digitos(i.supplier_cnpj).includes(qNums)
+          : `${i.supplier_razao_social || ''} ${i.supplier_email || ''}`.toLowerCase().includes(qTrim.toLowerCase())))
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      const mostrarConvites = ['Todos', 'CONVITE'].includes(filterType)
+
+      if (!supplierIdSet.size) { setResults([]); setPendingInvites(mostrarConvites ? pend : []); setLoading(false); return }
 
       // Busca dados dos fornecedores em lotes de 150 (URL segura)
       const allIds = [...supplierIdSet]
@@ -182,7 +197,10 @@ export default function BackofficeProcessSearch() {
       if (filterType !== 'Todos')
         enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
 
+      // convite de CNPJ que já aparece como fornecedor não se repete
+      const cnpjsListados = new Set(suppliers.map(x => digitos(x.cnpj)))
       setResults(enriched)
+      setPendingInvites(mostrarConvites ? pend.filter(i => !cnpjsListados.has(digitos(i.supplier_cnpj))) : [])
       setLoading(false)
       return
     }
@@ -251,7 +269,7 @@ export default function BackofficeProcessSearch() {
 
         <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
           <div style={{ display:'flex', gap:6 }}>
-            {['Todos','ACTIVE','PENDING','SUSPENDED','CADASTRO'].map(f => (
+            {['Todos','ACTIVE','PENDING','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
               <button key={f} onClick={() => setFilterType(f)}
                 style={{ padding:'6px 12px', borderRadius:20, border:`1px solid ${filterType===f?SEAL_COLOR[f]||'#2E3192':'#e2e4ef'}`, background:filterType===f?`${SEAL_COLOR[f]||'#2E3192'}12`:'#fff', color:filterType===f?SEAL_COLOR[f]||'#2E3192':'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {f === 'Todos' ? 'Todos' : SEAL_LABEL[f]}
@@ -270,8 +288,32 @@ export default function BackofficeProcessSearch() {
         <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={40}/></div>
       )}
 
-      {!loading && searched && results.length === 0 && (
+      {!loading && searched && results.length === 0 && pendingInvites.length === 0 && (
         <EmptyState icon="🔍" title="Nenhum fornecedor encontrado" subtitle="Tente ajustar os filtros ou termos de busca"/>
+      )}
+
+      {!loading && pendingInvites.length > 0 && (
+        <Card style={{ borderRadius:14, padding:'16px 20px', marginBottom:16, border:'1px solid rgba(99,102,241,.25)' }}>
+          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#4338ca', marginBottom:4 }}>
+            ✉️ Convites aguardando cadastro ({pendingInvites.length})
+          </div>
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:10 }}>
+            {results.length === 0 ? 'Este cliente ainda não tem fornecedores cadastrados — ' : ''}o processo começa quando o fornecedor conclui o cadastro pelo convite.
+          </div>
+          {pendingInvites.map(i => (
+            <div key={i.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 0', borderTop:'1px solid #f4f5f9' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e' }}>{i.supplier_razao_social || '(razão social não informada)'}</div>
+                <div style={{ fontSize:11.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
+                  {i.supplier_cnpj || 'CNPJ não informado'}{i.supplier_email ? ` · ${i.supplier_email}` : ''} · enviado em {String(i.created_at || '').slice(0,10).split('-').reverse().join('/')}
+                </div>
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, color: i.status === 'VIEWED' ? '#b45309' : '#4338ca', background: i.status === 'VIEWED' ? '#fef3c7' : 'rgba(99,102,241,.1)', padding:'3px 10px', borderRadius:20, whiteSpace:'nowrap' }}>
+                {INVITE_LABEL[i.status] || i.status}
+              </span>
+            </div>
+          ))}
+        </Card>
       )}
 
       {!loading && !searched && (
