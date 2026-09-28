@@ -22,6 +22,9 @@
   # homologação automática, fase 1 (SPEC_HOMOLOGACAO_AUTOMATICA.md) — só staging
   ROUTE_A_ENABLED = "true"
   VITE_ROUTE_A_ENABLED = "true"
+  # MFA desligado para os testes no staging (28/09). NUNCA copiar para
+  # [context.production] — e o código ignora a flag no domínio de produção.
+  VITE_MFA_DISABLED = "true"
 
 [context.deploy-preview.environment]
   ELOS_ENV = "preview"
