@@ -375,7 +375,7 @@ exports.handler = async (event) => {
         const { data: linkedInv } = await supabaseAdmin.from('invitations')
           .update({ status: 'REGISTERED', supplier_id: supplier.id })
           .eq('token', invitation_token)
-          .neq('status', 'REGISTERED')
+          .not('status', 'in', '(REGISTERED,CANCELLED)')   // cancelado (patch_103) não vincula
           .select('id, client_id, flow_id')
         if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id)
 
@@ -409,7 +409,7 @@ exports.handler = async (event) => {
         const { data: matchingInvites } = await supabaseAdmin
           .from('invitations')
           .select('id, client_id, flow_id')
-          .neq('status', 'REGISTERED')
+          .not('status', 'in', '(REGISTERED,CANCELLED,SUPERSEDED)')   // só convites vigentes
           .or(userEmail
             ? `supplier_email.eq.${userEmail},supplier_cnpj.eq.${cleanCnpj}`
             : `supplier_cnpj.eq.${cleanCnpj}`)

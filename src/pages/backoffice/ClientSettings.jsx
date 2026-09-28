@@ -212,7 +212,10 @@ export default function BackofficeClientSettings() {
                   </Button>
                   {c.active !== false && (
                     <Button variant="primary" size="sm"
-                      onClick={() => { setInviteForm({ ...EMPTY_INVITE, subsidiado: c.homologation_payer === 'client' }); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
+                      onClick={async () => {
+                        // padrão SIM quando o cliente opera subsidiado (fluxo com preço subsidiado) — 28/09
+                        const sub = c.homologation_payer === 'client' || await invitationsApi.subsidyDefault(c.id)
+                        setInviteForm({ ...EMPTY_INVITE, subsidiado: sub }); setInviteMsg({ ok:'', err:'' }); setInviteModal(c) }}>
                       📨 Convidar fornecedor
                     </Button>
                   )}

@@ -163,7 +163,7 @@ export default function BackofficeProcessSearch() {
       // convites aguardando cadastro (reenvio substituído não conta de novo)
       const digitos = (v) => String(v || '').replace(/\D/g, '')
       const pend = clientInvites
-        .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED'].includes(i.status))
+        .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED', 'CANCELLED'].includes(i.status))
         .filter(i => !qTrim || (qNums.length >= 8 ? digitos(i.supplier_cnpj).includes(qNums)
           : `${i.supplier_razao_social || ''} ${i.supplier_email || ''}`.toLowerCase().includes(qTrim.toLowerCase())))
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))

@@ -70,6 +70,10 @@ export default function ClientSupplierDiscover() {
   // Modal de convite
   const [showModal,   setShowModal]   = useState(false)
   const [inviteForm,  setInviteForm]  = useState({ tipo:'servico', escopo:'', subsidiado:false })
+  // padrão SIM quando o cliente opera no modelo subsidiado (28/09)
+  useEffect(() => {
+    invitationsApi.subsidyDefault(user?.clientId).then(sub => sub && setInviteForm(f => ({ ...f, subsidiado: true })))
+  }, [user?.clientId])
   const [inviting,    setInviting]    = useState(false)
   const [inviteSent,  setInviteSent]  = useState(false)
   const [inviteError, setInviteError] = useState('')
