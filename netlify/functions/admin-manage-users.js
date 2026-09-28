@@ -8,6 +8,7 @@
 //   action='update'         → { userId, name } atualiza nome
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
@@ -200,7 +201,7 @@ exports.handler = async (event) => {
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
       if (!authUser?.user?.email) return { statusCode:404, headers, body: JSON.stringify({ error:'Usuário não encontrado' }) }
 
-      const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const frontendUrl = frontendUrl()
 
       // Gera link de reset de senha (válido por 24h)
       const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({

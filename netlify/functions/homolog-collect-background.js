@@ -9,6 +9,7 @@
 // homolog-collect-cron para novas tentativas. POST com Bearer CRON_SECRET.
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { downloadReceipt } = require('./lib/infosimples.js')
 const { ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, RETRY_MIN } = require('./lib/route_a.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
@@ -221,7 +222,7 @@ async function avisarFornecedor(sealId) {
     ${obtidos.length ? `<p><strong>✅ Já obtivemos automaticamente (${obtidos.length}):</strong></p><ul style="padding-left:18px">${lis(obtidos)}</ul>
     <p style="font-size:13px;color:#6b7280">Esses documentos você não precisa enviar — nossa equipe vai conferi-los.</p>` : ''}
     ${faltam.length ? `<p><strong>📄 Falta você enviar (${faltam.length}):</strong></p><ul style="padding-left:18px">${lis(faltam)}</ul>` : '<p>Não falta nenhum documento. 🎉</p>'}
-    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">${faltam.length ? 'Enviar documentos' : 'Ver meus documentos'}</a></p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">${faltam.length ? 'Enviar documentos' : 'Ver meus documentos'}</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
 

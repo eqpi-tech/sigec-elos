@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Spinner } from './ui.jsx'
 import MfaGate from './MfaGate.jsx'
+import { isProdHost } from '../lib/siteUrl.js'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
 
@@ -9,9 +10,7 @@ const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffi
 // VITE_MFA_DISABLED existe apenas em [context."staging".environment] do
 // netlify.toml. Trava dupla: mesmo que a flag chegue a um build de produção,
 // ela é ignorada nos domínios de produção.
-const PROD_HOSTS = ['elos.eqpitech.com.br', 'sigec-elos.netlify.app']
-const MFA_OFF = import.meta.env.VITE_MFA_DISABLED === 'true'
-  && typeof window !== 'undefined' && !PROD_HOSTS.includes(window.location.hostname)
+const MFA_OFF = import.meta.env.VITE_MFA_DISABLED === 'true' && !isProdHost()
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()

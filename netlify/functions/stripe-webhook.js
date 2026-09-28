@@ -6,6 +6,7 @@
 //          customer.subscription.deleted, invoice.payment_failed
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const { functionsUrl } = require('./lib/runtime_env.js')
 const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
@@ -182,7 +183,7 @@ exports.handler = async (event) => {
       const { data: supplierData } = await supabase
         .from('suppliers').select('razao_social').eq('id', supplierId).single()
       if (supplierData && session.customer_email) {
-        await fetch(`${process.env.FRONTEND_URL}/.netlify/functions/send-email`, {
+        await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -234,7 +235,7 @@ exports.handler = async (event) => {
         if (qErr) console.error('[nfe-queue]', qErr.message)
         else if (amount > 0) {
           // tentativa imediata de emissão (o cron diário é a rede de segurança)
-          fetch(`${process.env.URL}/.netlify/functions/nfe-emit-pending`, {
+          fetch(`${functionsUrl()}/.netlify/functions/nfe-emit-pending`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
           }).catch(() => {})

@@ -9,6 +9,7 @@
 //  3. Comprador Pro (planFor = 'buyer')             → subscription Stripe com priceId comprador
 
 const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { createClient } = require('@supabase/supabase-js')
 
 const supabaseAdmin = createClient(
@@ -52,7 +53,7 @@ exports.handler = async (event) => {
       buyerUserId,   // auth user UUID
     } = JSON.parse(event.body)
 
-    const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+    const frontendUrl = frontendUrl()
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: 'STRIPE_SECRET_KEY não configurado' }) }

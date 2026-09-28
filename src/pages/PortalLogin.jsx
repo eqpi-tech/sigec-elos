@@ -7,6 +7,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Spinner } from '../components/ui.jsx'
+import { siteUrl } from '../lib/siteUrl.js'
 
 export default function PortalLogin() {
   const { slug } = useParams()
@@ -52,7 +53,7 @@ export default function PortalLogin() {
     e.preventDefault(); setForgotLoading(true)
     try {
       const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: 'https://elos.eqpitech.com.br/redefinir-senha',
+        redirectTo: `${siteUrl()}/redefinir-senha`,
       })
       if (err) throw new Error(err.message)
       setForgotSent(true)

@@ -1,6 +1,7 @@
 // register-buyer.js — auto-cadastro de compradores
 // Não requer auth (é o fluxo de onboarding público)
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
 
 const headers = {
@@ -74,7 +75,7 @@ exports.handler = async (event) => {
 
     // Envia e-mail com credenciais
     if (process.env.RESEND_API_KEY) {
-      const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const frontendUrl = frontendUrl()
       const html = `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
           <div style="background:#2E3192;padding:28px;border-radius:12px 12px 0 0;text-align:center">

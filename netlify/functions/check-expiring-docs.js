@@ -5,6 +5,7 @@
 // com header Authorization: Bearer CRON_SECRET
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
@@ -48,7 +49,7 @@ function buildExpiringEmail(razaoSocial, documents) {
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
-        <a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
+        <a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700">
           Atualizar documentos →
         </a>
         <p style="color:#9B9B9B;font-size:12px;margin-top:24px">SIGEC-ELOS · EQPI Tech</p>
@@ -106,7 +107,7 @@ exports.handler = async (event) => {
       // Teto por execução + chamadas em paralelo com timeout individual
       const batch = autoEligible.slice(0, 15)
       console.log(`🔄 Auto-renovando ${batch.length}/${autoEligible.length} documento(s) AUTO...`)
-      const baseUrl = process.env.URL || process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const baseUrl = frontendUrl()
       const renew = async (doc) => {
         const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
         if (!cnpj) return

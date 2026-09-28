@@ -8,6 +8,7 @@ import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
 import { authFetch } from '../../lib/authFetch.js'
+import { siteUrl } from '../../lib/siteUrl.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -488,7 +489,7 @@ export function BackofficeAnalysis() {
                   <li>Ao final, voce recebe o resultado por email</li>
                 </ul>
               </div>
-              <a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
+              <a href="${siteUrl()}/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
             </div>
             <div style="background:#f8fafc;padding:14px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
           </div>`,
@@ -659,7 +660,7 @@ export function BackofficeAnalysis() {
                 <p style="margin:0;font-size:13px;color:#15803d">✅ <strong>Sua empresa já está visível no marketplace</strong> para compradores qualificados da plataforma.</p>
               </div>
               <div style="text-align:center">
-                <a href="https://elos.eqpitech.com.br/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
+                <a href="${siteUrl()}/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
               </div>
             </div>
             <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div>

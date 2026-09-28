@@ -5,6 +5,7 @@
 // Depois disso, para de lembrar. Convites de "contato" não recebem lembrete.
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
@@ -46,7 +47,7 @@ exports.handler = async (event) => {
     )
 
     let sent = 0
-    const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+    const frontendUrl = frontendUrl()
 
     for (const inv of due) {
       const clientName = inv.clients?.razao_social || inv.buyer_name || 'a empresa contratante'

@@ -3,6 +3,7 @@
 // POST body: { name, email, role, organization?, cnpj? }
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
@@ -161,7 +162,7 @@ exports.handler = async (event) => {
           <div style="background:#FFF3E8;border:1px solid #F47E2F;border-radius:8px;padding:16px;margin-bottom:24px">
             <strong>⚠️ Altere sua senha no primeiro acesso.</strong> Esta senha é temporária.
           </div>
-          <a href="${process.env.FRONTEND_URL}/login"
+          <a href="${frontendUrl()}/login"
              style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">
             Acessar Plataforma →
           </a>

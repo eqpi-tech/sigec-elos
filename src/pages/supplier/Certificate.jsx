@@ -8,6 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Spinner } from '../../components/ui.jsx'
+import { siteUrl } from '../../lib/siteUrl.js'
 
 const fmtCnpj = (c) => {
   const d = String(c || '').replace(/\D/g, '')
@@ -167,7 +168,7 @@ export default function SupplierCertificate() {
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 700, fontSize: 10, letterSpacing: 1.5, color: '#8a8fa8', textTransform: 'uppercase', marginBottom: 4 }}>Certificado Nº</div>
                   <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 13, color: '#1a1c5e', fontWeight: 700 }}>{certNumber}</div>
-                  <a href={`https://elos.eqpitech.com.br/verificar?code=${certNumber}`} target="_blank" rel="noopener noreferrer"
+                  <a href={`${siteUrl()}/verificar?code=${certNumber}`} target="_blank" rel="noopener noreferrer"
                     style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 10, color: '#2E3192', textDecoration: 'none', display: 'inline-block', marginTop: 3 }}>
                     🔎 elos.eqpitech.com.br/verificar?code={certNumber}
                   </a>

@@ -9,6 +9,7 @@
 //   62 = Simples Nacional (BrasilAPI — já feito no cadastro)
 
 const { createClient } = require('@supabase/supabase-js')
+const { functionsUrl } = require('./lib/runtime_env.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -36,7 +37,7 @@ exports.handler = async (event) => {
   try {
     // ── Documento 7: CRF FGTS ───────────────────────────────────────────────
     if (docIdNum === 7) {
-      const fgtsUrl = new URL(`${process.env.FRONTEND_URL}/.netlify/functions/fgts-crf-lookup`)
+      const fgtsUrl = new URL(`${functionsUrl()}/.netlify/functions/fgts-crf-lookup`)
       fgtsUrl.searchParams.set('cnpj', cnpj.replace(/\D/g,''))
       fgtsUrl.searchParams.set('uf',   uf || '')
 

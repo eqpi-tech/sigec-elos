@@ -5,7 +5,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
-const { env } = require('./lib/runtime_env.js')
+const { env, frontendUrl } = require('./lib/runtime_env.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -490,7 +490,7 @@ exports.handler = async (event) => {
       <li>❓ Responder o questionário do cliente, quando houver</li>
     </ul>
     <p>Com tudo enviado, seu processo entra automaticamente na fila de análise (prazo padrão: 3 dias úteis).</p>
-    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Acessar meu painel</a></p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Acessar meu painel</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
       const g = guardMail(user.email, `🎉 Bem-vindo ao SIGEC-ELOS — cadastro da ${razao_social} concluído`)

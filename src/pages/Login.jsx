@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { Button } from '../components/ui.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
 import BannerStrip from '../components/BannerStrip.jsx'
+import { siteUrl } from '../lib/siteUrl.js'
 
 export default function Login() {
   const [email,    setEmail]    = useState('')
@@ -31,7 +32,7 @@ export default function Login() {
     e.preventDefault(); setForgotLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: 'https://elos.eqpitech.com.br/redefinir-senha',
+        redirectTo: `${siteUrl()}/redefinir-senha`,
       })
       if (error) throw new Error(error.message)
       setForgotSent(true)

@@ -5,6 +5,7 @@
 // ao mesmo client_id, com o perfil de módulos escolhido (default: Acesso Total).
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
@@ -113,7 +114,7 @@ exports.handler = async (event) => {
     const { data: clientRow } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()
     const clientName = clientRow?.razao_social || 'sua empresa'
     if (process.env.RESEND_API_KEY) {
-      const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const frontendUrl = frontendUrl()
       await guardedResend('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },

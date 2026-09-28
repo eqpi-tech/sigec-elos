@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { adminApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
+import { siteUrl } from '../../lib/siteUrl.js'
 
 function slugify(str) {
   return (str || '')
@@ -215,7 +216,7 @@ export default function BackofficeLandingPages() {
                 style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
                 /portal/{lp.slug}/login ↗
               </a>
-              <button onClick={() => { navigator.clipboard.writeText(`https://elos.eqpitech.com.br/portal/${lp.slug}/login`); alert('Link copiado!') }}
+              <button onClick={() => { navigator.clipboard.writeText(`${siteUrl()}/portal/${lp.slug}/login`); alert('Link copiado!') }}
                 style={{ fontSize:11, padding:'2px 10px', borderRadius:20, border:'1px solid #e2e4ef', background:'#fff', cursor:'pointer', color:'#64748b', fontFamily:'DM Sans,sans-serif' }}>
                 📋 Copiar
               </button>
