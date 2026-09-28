@@ -1406,7 +1406,7 @@ export function BackofficeAnalysis() {
                     }
                     // Docs normais: botão Ver (Storage próprio ou S3 do HOC via URL pré-assinada)
                     if (doc.storage_path) return (
-                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
                     )
                     if (doc.hoc_arquivo_id) return (
                       <Button variant="neutral" size="sm" onClick={async()=>{
@@ -1455,7 +1455,7 @@ export function BackofficeAnalysis() {
                       {missing && <div style={{ fontSize:10.5,color:'#9B9B9B' }}>não enviado pelo fornecedor</div>}
                     </div>
                     {doc?.storage_path && (
-                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
                     )}
                     {doc && ['PENDING','VALID','EXPIRING','EXPIRED'].includes(status) && (
                       actn==='loading' ? <Spinner size={16}/> : <>

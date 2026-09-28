@@ -125,8 +125,7 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
 
         <div style={{ display:'flex', gap:8, marginBottom:20 }}>
           <Button variant="neutral" size="sm" onClick={async () => {
-            const url = await documentApi.getSignedUrl(doc.storage_path)
-            window.open(url, '_blank')
+            try { await documentApi.view(doc) } catch (e) { alert(e.message) }
           }}>👁 Ver documento</Button>
           <Button variant="primary" size="sm" disabled={aiLoading} onClick={extractWithAI}>
             {aiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
@@ -473,10 +472,7 @@ export default function DocumentAnalysis() {
   // Abre o arquivo (Storage ELOS ou S3 legado do HOC)
   async function viewDoc(doc) {
     try {
-      const url = doc.storage_path
-        ? await documentApi.getSignedUrl(doc.storage_path)
-        : await documentApi.getHocFileUrl(doc.id)
-      window.open(url, '_blank')
+      await documentApi.view(doc)
     } catch (e) { alert(e.message) }
   }
 

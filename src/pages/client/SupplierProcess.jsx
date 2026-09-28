@@ -679,10 +679,7 @@ export default function ClientSupplierProcess() {
                   {(doc.storage_path || doc.hoc_arquivo_id) && hasAction(user, 'acao:ver_documentos') && (
                     <Button variant="neutral" size="sm" onClick={async () => {
                       try {
-                        const url = doc.storage_path
-                          ? await documentApi.getSignedUrl(doc.storage_path)
-                          : await documentApi.getHocFileUrl(doc.id)
-                        window.open(url, '_blank')
+                        await documentApi.view(doc)
                       } catch { alert('Erro ao abrir documento') }
                     }}>
                       👁 Ver

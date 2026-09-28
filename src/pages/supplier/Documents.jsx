@@ -361,11 +361,8 @@ export default function SupplierDocuments() {
   // Abre arquivo do storage novo OU migrado do HOC (S3, via get-hoc-file)
   const handleViewDoc = async (doc) => {
     try {
-      const url = doc?.storage_path
-        ? await documentApi.getSignedUrl(doc.storage_path)
-        : await documentApi.getHocFileUrl(doc.id)
-      window.open(url, '_blank')
-    } catch (e) { showToast('Erro ao abrir documento', 'error') }
+      await documentApi.view(doc)
+    } catch (e) { showToast(e.message || 'Erro ao abrir documento', 'error') }
   }
 
   const handlePresentationUpload = async (file) => {
@@ -516,7 +513,7 @@ export default function SupplierDocuments() {
         </div>
 
         {/* Link direto para emissão (documentos com site externo) */}
-        {DOC_LINKS[doc.id] && (
+        {DOC_LINKS[doc.id] && !daFonte && !coletando && (
           <a href={DOC_LINKS[doc.id]} target="_blank" rel="noopener noreferrer"
             style={{ textDecoration:'none' }}
             title="Abrir site emissor para baixar o documento">

@@ -314,6 +314,35 @@ export const documentApi = {
     return data
   },
 
+  // Abre o arquivo de um documento numa aba nova — Storage do ELOS ou S3
+  // legado do HOC. Comprovante oficial em HTML (Rota A: FGTS, Sintegra…): o
+  // Storage o entrega como texto puro (mostrava o código); aqui ele é exibido
+  // dentro de um iframe SANDBOX — sem scripts e sem acesso à sessão do ELOS.
+  view: async (doc) => {
+    const path = doc?.storage_path || doc?.letter_path || null
+    const isHtml = /\.html?$/i.test(path || '')
+    const w = isHtml ? window.open('', '_blank') : null   // abre já no clique (bloqueio de pop-up)
+    try {
+      if (!path) { window.open(await documentApi.getHocFileUrl(doc.id), '_blank'); return }
+      const url = await documentApi.getSignedUrl(path)
+      if (!isHtml) { window.open(url, '_blank'); return }
+      const html = await (await fetch(url)).text()
+      const titulo = String(doc.label || 'Comprovante').replace(/[<>&"]/g, '')
+      const srcdoc = html.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      if (!w) throw new Error('O navegador bloqueou a nova aba — permita pop-ups para este site')
+      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${titulo}</title>
+<style>html,body{margin:0;height:100%;background:#f4f5fa;font-family:Arial,sans-serif}
+.bar{background:#2E3192;color:#fff;padding:8px 14px;font-size:13px}
+iframe{border:0;width:100%;height:calc(100% - 34px);background:#fff}</style></head>
+<body><div class="bar">SIGEC-ELOS · ${titulo} · comprovante oficial (visualização segura)</div>
+<iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${srcdoc}"></iframe></body></html>`)
+      w.document.close()
+    } catch (e) {
+      if (w) w.close()
+      throw e
+    }
+  },
+
   getSignedUrl: async (storagePath) => {
     const { data, error } = await supabase.storage
       .from('documents')
