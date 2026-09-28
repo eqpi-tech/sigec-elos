@@ -79,6 +79,23 @@ const fmtVal = (v) => {
   return esc(v)
 }
 
+// Base CNPJ gratuita (28/09): substitui o bloco pago "Comprovante CNPJ + QSA"
+// — mostra quadro de sócios (nome e qualificação; o CPF parcial da Receita
+// fica de fora), contato e endereço completo
+function baseView(d = {}) {
+  const e = d.endereco || {}
+  const dt = (v) => (/^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10).split('-').reverse().join('/') : v)
+  const brl = (v) => (v == null || v === '' || isNaN(Number(v)) ? v : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))
+  return {
+    razao_social: d.razao_social, nome_fantasia: d.nome_fantasia, situacao: d.situacao, data_situacao: dt(d.data_situacao),
+    abertura: dt(d.abertura), natureza_juridica: d.natureza_juridica, porte: d.porte, capital_social: brl(d.capital_social),
+    cnae_principal: d.cnae_principal, simples_nacional: d.simples_nacional,
+    endereco: [e.logradouro, e.numero, e.bairro, e.municipio && `${e.municipio}/${e.uf || ''}`, e.cep].filter(Boolean).join(', ') || null,
+    email: d.email, telefone: d.telefone,
+    quadro_societario: (d.socios || []).map((s) => ({ nome: s.nome, qualificacao: s.qualificacao })),
+  }
+}
+
 function kv(details, max = 14) {
   const rows = []
   const walk = (obj, prefix) => {
@@ -143,7 +160,7 @@ function buildFullHtml({ req, sources, solicitante = null, evidenceIndex = {} })
           <div><b>${esc(NOME_FONTE[slug] || slug)}</b><div class="hl">${esc(s.parsed?.headline || '')}</div></div>
           <span class="badge" style="background:${b.bg};color:${b.fg}">${b.label}</span>
         </div>
-        <table class="kv">${kv(s.parsed?.details)}</table>
+        <table class="kv">${slug === 'cnpj_base' ? kv(baseView(s.parsed?.details), 24) : kv(s.parsed?.details)}</table>
         ${ev ? `<div class="ev">🧾 Evidência oficial anexa — ver Índice de Evidências</div>` : ''}
       </div>`
     }).join('\n')
