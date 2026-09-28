@@ -432,7 +432,13 @@ exports.handler = async (event) => {
           .eq('is_active', true)
           .single()
 
-        if (lp?.client_id) {
+        // já entrou por convite deste cliente (token ou e-mail/CNPJ): o vínculo
+        // existe — não cria um 2º convite "espontâneo" nem troca o fluxo
+        const { data: jaConvidado } = lp?.client_id
+          ? await supabaseAdmin.from('invitations').select('id')
+              .eq('supplier_id', supplier.id).eq('client_id', lp.client_id).limit(1)
+          : { data: null }
+        if (lp?.client_id && !jaConvidado?.length) {
           // Espontâneo via LP: fluxo escolhido no portal (validado) ou o PADRÃO
           let defFlow = null
           if (ref_flow_id) {
