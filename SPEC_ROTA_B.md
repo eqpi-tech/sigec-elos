@@ -146,7 +146,7 @@ decides — this phase) → `automatico` (AI approves clean results alone). `aut
 scope**: it requires ≥ 3 months in `assistido` with the targets met, and an explicit EQPI
 decision per type recorded in `audit_log`.
 
-## 9. Data model — `patch_106_rota_b.sql` (staging)
+## 9. Data model — `patch_107_rota_b.sql` (staging)
 
 - `documents_catalog.route = 'B'` for G1/G2 types; `validation_rule` gains a structured
   checklist (`validation_checklist jsonb` — items derived from the rule text + top reasons) and
