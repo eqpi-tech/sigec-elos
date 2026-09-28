@@ -50,6 +50,18 @@ module.exports = {
         cnae_principal: raw.cnae_fiscal ? `${raw.cnae_fiscal} — ${raw.cnae_fiscal_descricao || ''}`.trim() : null,
         simples: raw.opcao_pelo_simples === true,
         mei: raw.opcao_pelo_mei === true,
+        // regime por extenso (28/09): substitui a consulta paga do Simples no
+        // BC Report — a base pública já traz opção, exclusão e MEI
+        simples_nacional: (() => {
+          const d = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : null)
+          if (raw.opcao_pelo_mei === true && !raw.data_exclusao_do_mei) return `MEI${raw.data_opcao_pelo_mei ? ` desde ${d(raw.data_opcao_pelo_mei)}` : ''}`
+          if (raw.opcao_pelo_simples === true && !raw.data_exclusao_do_simples) return `Optante${raw.data_opcao_pelo_simples ? ` desde ${d(raw.data_opcao_pelo_simples)}` : ''}`
+          if (raw.data_exclusao_do_simples) return `Não optante (excluído em ${d(raw.data_exclusao_do_simples)})`
+          return 'Não optante'
+        })(),
+        // contato público da empresa (o bloco pago "Comprovante CNPJ" exibia)
+        email: raw.email || null,
+        telefone: [raw.ddd_telefone_1, raw.ddd_telefone_2].filter(Boolean).join(' / ') || null,
         endereco: {
           logradouro: [raw.descricao_tipo_de_logradouro, raw.logradouro].filter(Boolean).join(' ') || null,
           numero: raw.numero || null, bairro: raw.bairro || null,
