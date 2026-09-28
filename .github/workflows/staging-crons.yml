@@ -1,7 +1,7 @@
 # .github/workflows/staging-crons.yml — rotinas agendadas do STAGING.
 # O Netlify não executa funções agendadas em deploys de branch, então o
-# coletor da Rota A (novas tentativas a cada 15 min) do staging é chamado
-# daqui. Só toca o staging — a produção usa o schedule do netlify.toml.
+# coletor da Rota A (novas tentativas a cada 15 min) e a pré-análise por IA
+# da Rota B do staging são chamados daqui. Só toca o staging — a produção usa o schedule do netlify.toml.
 # O agendamento do GitHub só roda a partir do branch padrão (main).
 # Secret: STAGING_CRON_SECRET (= CRON_SECRET do contexto staging no Netlify).
 
@@ -24,4 +24,16 @@ jobs:
             "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-collect-background")
           echo "homolog-collect-background (staging): HTTP $response"
           # background function responde 202 (aceito)
+          if [ "$response" != "202" ] && [ "$response" != "200" ]; then exit 1; fi
+
+  rota-b-pre-analise:
+    name: Pré-análise por IA da Rota B (staging)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispara o processador background
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.STAGING_CRON_SECRET }}" \
+            "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-ai-review-background")
+          echo "homolog-ai-review-background (staging): HTTP $response"
           if [ "$response" != "202" ] && [ "$response" != "200" ]; then exit 1; fi
