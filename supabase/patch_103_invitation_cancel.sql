@@ -2,7 +2,7 @@
 -- O cliente cancela um convite enviado errado (ex.: para um e-mail interno);
 -- por rastreabilidade o convite NÃO é apagado: fica CANCELLED com quando,
 -- quem e por quê. O link deixa de valer (get-invitation / create-supplier
--- recusam CANCELLED) e o token é trocado — o original fica no audit_log.
+-- recusam CANCELLED); o token é mantido, para rastreabilidade.
 alter table invitations
   add column if not exists cancelled_at timestamptz,
   add column if not exists cancelled_by uuid,
