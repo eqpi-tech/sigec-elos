@@ -59,7 +59,8 @@ async function processar(item) {
     const arq = preparar(await baixar(item.arquivo_id), item.pd_id)
     if (arq.modo === 'pular') return { ...base, modo: 'pular', erro: arq.motivo }
     const r = await revisar({ client, motivos, tipoNome: regras[item.tipo].nome, regra: regras[item.tipo].regra,
-      fornecedor: { cnpj: item.cnpj, razao_social: item.razao_social, municipio: item.municipio, categorias: item.categorias },
+      fornecedor: { cnpj: item.cnpj, razao_social: item.razao_social, municipio: item.municipio, categorias: item.categorias,
+                    tipo_empresa: item.tipo_empresa, regime_tributario: item.regime_tributario },
       dataReferencia: item.data_analise, arquivo: arq })
     return { ...base, modo: arq.modo, paginas: arq.paginas, ...r }
   } catch (e) {

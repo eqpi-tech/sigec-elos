@@ -11,6 +11,10 @@ const { zodOutputFormat } = require('@anthropic-ai/sdk/helpers/zod')
 const { z } = require('zod')
 
 const MODEL = process.env.ROUTE_B_MODEL || 'claude-sonnet-5'
+// v2 (28/09, após o piloto): validade da regra ≠ idade do documento; tipo de
+// empresa do cadastro; compatibilidade de atividade só "claramente"; exceção
+// da regra (outro documento aceito) → revisar
+const PROMPT_VERSION = 'v2'
 // US$ por milhão de tokens (tabela da API, 06/2026) e câmbio de referência
 const PRICE = { 'claude-sonnet-5': { in: 2, out: 10 }, 'claude-opus-5': { in: 5, out: 25 }, 'claude-haiku-4-5': { in: 1, out: 5 } }
 const USD_BRL = Number(process.env.USD_BRL || 5.5)
@@ -46,6 +50,16 @@ Como decidir:
 - "revisar" quando algo depende de julgamento ou não pode ser verificado (documento parcialmente ilegível, regra com exceção que exige conferência externa, dúvida real).
 - Nunca aprove se "documento_solicitado" for falso. Falha de leitura sozinha não é motivo para reprovar: use "revisar".
 - Julgue a validade pela DATA DE REFERÊNCIA informada, não pela data de hoje.
+
+Validade (leia com atenção):
+- A linha "VALIDADE:" da regra diz qual vencimento o analista vai REGISTRAR depois de aprovar (ex.: "1 ano da data de análise" = o sistema considera o documento válido por 1 ano a partir da análise). Isso NÃO é uma idade máxima do documento: um contrato social registrado há 3 anos continua aceitável.
+- O documento só está vencido se ele PRÓPRIO trouxer uma validade já expirada na data de referência, ou se a regra fixar expressamente um prazo máximo desde a emissão (ex.: "emitido há no máximo 90 dias"). Alvará "de exercício" vale até o fim do ano de exercício.
+
+Tipo de empresa: compare a natureza do documento com o tipo de empresa do CADASTRO (ex.: estatuto/ata de S.A. para empresa cadastrada como LTDA, ou o contrário). Divergência de tipo de empresa é motivo para reprovar.
+
+Atividade × categorias: só conclua que a atividade licenciada/autorizada atende quando a relação com as categorias do processo for CLARA. Se a compatibilidade depender de interpretação, use "revisar" (não aprove nem reprove por inferência).
+
+Documento diferente aceito por exceção: se o arquivo não é o documento principal pedido, mas pode ser aceito por uma exceção da regra (ex.: dispensa, autorização de outro órgão, decreto), use "revisar" e cite no motivo qual item da regra permitiria aceitá-lo.
 - Na checklist, um item por critério da regra, com uma evidência curta do próprio documento.
 - CPF e RG podem aparecer mascarados; isso é intencional e não é defeito do documento.
 
@@ -76,7 +90,7 @@ async function revisar({ client, motivos, tipoNome, regra, fornecedor, dataRefer
 Regra do cliente para este documento:
 ${regra}
 
-Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}
+Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}${fornecedor.tipo_empresa ? ` · tipo de empresa ${fornecedor.tipo_empresa}` : ''}${fornecedor.regime_tributario ? ` · regime tributário ${fornecedor.regime_tributario}` : ''}
 Categorias de atuação no processo: ${(fornecedor.categorias || []).join('; ') || 'não informadas'}
 Data de referência da análise: ${dataReferencia}`
   const t0 = Date.now()
@@ -98,7 +112,8 @@ Data de referência da análise: ${dataReferencia}`
     custo_brl: Math.round(usd * USD_BRL * 10000) / 10000,
     ms: Date.now() - t0,
     model,
+    prompt_version: PROMPT_VERSION,
   }
 }
 
-module.exports = { Anthropic, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, revisar, MODEL }
+module.exports = { Anthropic, PROMPT_VERSION, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, revisar, MODEL }
