@@ -182,7 +182,7 @@ async function processar(job, catalogo, prefOverrides) {
   }, { onConflict: 'supplier_id,type' })
   if (docErr) throw new Error(`documents: ${docErr.message}`)
 
-  return { status: 'done', attempts: job.attempts + 1, cost_brl: gasto, last_error: null }
+  return { status: 'done', attempts: job.attempts + 1, cost_brl: gasto, last_error: null, sugestao: r.sugestao, motivo: r.motivo }
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -298,9 +298,15 @@ exports.handler = async (event) => {
                   next_attempt_at: new Date(Date.now() + RETRY_MIN * 60000).toISOString() }
         }
         const terminal = ['done', 'fallback'].includes(fim.status)
+        // histórico da tentativa (evidência no quadro "Coleta automática" — patch_108)
+        const tentativa = { em: new Date().toISOString(), resultado: fim.status, motivo: fim.last_error || fim.motivo || null,
+                            custo: Number(fim.cost_brl || 0), sugestao: fim.sugestao || null }
         await sb.from('auto_collect_jobs').update({
-          ...fim,
+          status: fim.status, attempts: fim.attempts ?? job.attempts, last_error: fim.last_error ?? null,
+          ...(fim.next_attempt_at ? { next_attempt_at: fim.next_attempt_at } : {}),
           cost_brl: Number(job.cost_brl || 0) + Number(fim.cost_brl || 0),   // acumula entre tentativas
+          fonte: ROUTE_A[job.doc_type]?.connector || job.fonte || null,
+          history: [...(Array.isArray(job.history) ? job.history : []), tentativa].slice(-20),
           ...(terminal ? { finished_at: new Date().toISOString() } : {}),
         }).eq('id', job.id)
         tocados.add(job.seal_id); feitos++

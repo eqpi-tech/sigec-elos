@@ -1419,6 +1419,20 @@ export const routeAApi = {
     if (error) { console.warn('auto_collect_jobs:', error.message); return {} }
     return Object.fromEntries((data || []).map(j => [j.doc_type, j]))
   },
+
+  // Backoffice: fila completa da coleta de um fornecedor (quadro "Coleta
+  // automática" — evidência da Rota A: fonte, situação, tentativas, custo)
+  collectJobs: async (supplierId) => {
+    if (!ROUTE_A_ENABLED || !supplierId) return []
+    const { data, error } = await supabase.from('auto_collect_jobs')
+      .select('id, seal_id, doc_type, fonte, status, attempts, next_attempt_at, last_error, cost_brl, history, created_at, finished_at')
+      .eq('supplier_id', supplierId).order('doc_type')
+    if (error) { console.warn('auto_collect_jobs:', error.message); return [] }
+    const ids = [...new Set((data || []).map(j => Number(j.doc_type)).filter(Boolean))]
+    const { data: cat } = ids.length ? await supabase.from('documents_catalog').select('id, name').in('id', ids) : { data: [] }
+    const nome = Object.fromEntries((cat || []).map(c => [String(c.id), c.name]))
+    return (data || []).map(j => ({ ...j, doc_name: nome[j.doc_type] || null }))
+  },
 }
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────

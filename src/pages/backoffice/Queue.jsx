@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
+import AutoCollectPanel from '../../components/AutoCollectPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
 import { siteUrl } from '../../lib/siteUrl.js'
 
@@ -1373,6 +1374,7 @@ export function BackofficeAnalysis() {
                 </button>
               </div>
             )}
+            <AutoCollectPanel supplierId={id} sealId={procSelKey === 'ALL' ? null : processSeal?.id} docs={docs}/>
             {docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
               const status = actn && actn!=='loading' ? actn : doc.status
