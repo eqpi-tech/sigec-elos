@@ -37,6 +37,12 @@ CLIENT_CNPJ = '32681371000172'   # cliente dono dos postos na plataforma
 VIGILANCIA = os.path.expanduser('~/Downloads/Relatório Vigilância Patrimonial_v2.xlsx')
 LIMPEZA    = os.path.expanduser('~/Downloads/Relatório Limpeza Predial e Veicular_v2.xlsx')
 
+# Linhas que vieram com CNPJ zerado na planilha e tiveram o CNPJ informado pelo
+# cliente depois: (fornecedor normalizado, cidade normalizada) → CNPJ
+CNPJ_CORRIGIDO = {
+    ('INOVA', 'IGARAPE'): '04079177000186',   # cliente, 28/09
+}
+
 CAT_VIG_ARMADA        = 500027
 CAT_VIG_QUARTEIRIZADA = 500028
 CAT_PORTARIA          = 500029
@@ -59,7 +65,7 @@ def map_funcao_vigilancia(funcao, fornecedor, armado):
     if f.startswith(('VIGILANTE', 'VIGLANTE')):          # inclui typo da planilha
         return CAT_VIG_ARMADA                            # armado=Não → sem Registro da Arma
     if f.startswith('CONTROLADOR DE ACESSO'):
-        return CAT_VIG_ARMADA if armado else CAT_PORTARIA
+        return CAT_PORTARIA          # cliente (28/09): controlador de acesso NÃO é armado
     if f.startswith(('PORTEIRO', 'SUPERVISOR')):
         return CAT_PORTARIA
     return None
@@ -105,6 +111,8 @@ for path, kind in [(VIGILANCIA, 'vigilancia'), (LIMPEZA, 'limpeza')]:
         funcao = str(row.get('FUNCAO') or '').strip()
         uf = norm(row.get('ESTADO') or row.get('ESTADO '))[:2]
         cidade = clean_city(row.get('LOCALIDADE'), uf)
+        if cnpj == '0' * 14:
+            cnpj = CNPJ_CORRIGIDO.get((norm(forn), norm(cidade)), cnpj)
         if not valid_cnpj(cnpj):
             rejects.append((kind, i, f'CNPJ inválido: {cnpj}', f'{forn} · {cidade}/{uf} · {funcao}'))
             continue
@@ -112,7 +120,7 @@ for path, kind in [(VIGILANCIA, 'vigilancia'), (LIMPEZA, 'limpeza')]:
             rejects.append((kind, i, f'localidade incompleta: {cidade}/{uf}', f'{forn} · {funcao}'))
             continue
         if kind == 'vigilancia':
-            armado = norm(row.get('ARMADO')) == 'SIM'
+            armado = norm(row.get('ARMADO')) == 'SIM' and not norm(funcao).startswith('CONTROLADOR DE ACESSO')
             cat = map_funcao_vigilancia(funcao, forn, armado)
             qty_posts = int(row.get('QTDE POSTO') or 1)
         else:
