@@ -8,6 +8,7 @@
 //   action='update'         → { userId, name } atualiza nome
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -212,7 +213,7 @@ exports.handler = async (event) => {
       const resetLink = linkData?.properties?.action_link || linkData?.action_link
 
       if (process.env.RESEND_API_KEY && resetLink) {
-        await fetch('https://api.resend.com/emails', {
+        await guardedResend('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
           body: JSON.stringify({

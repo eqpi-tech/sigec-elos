@@ -3,6 +3,7 @@
 // POST body: { name, email, role, organization?, cnpj? }
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -172,7 +173,7 @@ exports.handler = async (event) => {
     `
 
     if (process.env.RESEND_API_KEY) {
-      await fetch('https://api.resend.com/emails', {
+      await guardedResend('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
         body: JSON.stringify({

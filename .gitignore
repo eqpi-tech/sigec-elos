@@ -53,3 +53,6 @@ supabase/.temp/
 # artefatos de build do Python (ops scripts)
 __pycache__/
 *.pyc
+
+# gerado no build (scripts/write_build_env.cjs)
+netlify/functions/lib/_build_env.json

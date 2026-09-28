@@ -1,4 +1,6 @@
 // Envia formulário de interesse de Comprador para comercial@eqpitech.com.br
+const { guardedResend } = require('./lib/mail_guard.js')
+
 exports.handler = async (event) => {
   const h = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' }
   if (event.httpMethod === 'OPTIONS') return { statusCode:200, headers:h, body:'' }
@@ -20,7 +22,7 @@ exports.handler = async (event) => {
   </div>`
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    await guardedResend('https://api.resend.com/emails', {
       method:'POST',
       headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
       body: JSON.stringify({

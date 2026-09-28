@@ -3,14 +3,18 @@
 // coletor precisa (nunca os valores) e o tamanho da fila.
 const { createClient } = require('@supabase/supabase-js')
 const { enabled } = require('./lib/route_a.js')
+const { env } = require('./lib/runtime_env.js')
+const { isProd } = require('./lib/mail_guard.js')
 
 exports.handler = async (event) => {
   const bearer = (event.headers?.authorization || '').replace('Bearer ', '')
   if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return { statusCode: 401, body: '{}' }
   const out = {
-    elos_env: process.env.ELOS_ENV || null,
+    elos_env: env('ELOS_ENV') || null,
+    mail_guard_producao: isProd(),
+    site: env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL')) || null,
     route_a_enabled: enabled(),
-    has: Object.fromEntries(['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'INFOSIMPLES_TOKEN', 'RESEND_API_KEY', 'MAIL_TEST_INBOX', 'DEPLOY_PRIME_URL']
+    has: Object.fromEntries(['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'INFOSIMPLES_TOKEN', 'RESEND_API_KEY', 'MAIL_TEST_INBOX']
       .map((k) => [k, !!process.env[k]])),
   }
   try {

@@ -25,7 +25,8 @@ const ROUTE_A = {
   '150':   { connector: 'falencia_rj',      validade: null },
 }
 
-const enabled = () => process.env.ROUTE_A_ENABLED === 'true'
+const { env } = require('./runtime_env.js')
+const enabled = () => env('ROUTE_A_ENABLED') === 'true'
 const MAX_ATTEMPTS = 3
 const RETRY_MIN = 15
 

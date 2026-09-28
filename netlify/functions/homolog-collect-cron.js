@@ -4,10 +4,11 @@
 // limitada a ~26s. Deploys de branch não executam schedules — no staging o
 // coletor é disparado pelo cadastro ou manualmente (docs/STAGING.md).
 const { enabled } = require('./lib/route_a.js')
+const { env } = require('./lib/runtime_env.js')
 
 exports.handler = async () => {
   if (!enabled()) return { statusCode: 200 }
-  const site = process.env.URL || process.env.DEPLOY_PRIME_URL
+  const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
   if (!site || !process.env.CRON_SECRET) {
     console.warn('[homolog-collect-cron] URL/CRON_SECRET ausentes — nada a fazer')
     return { statusCode: 200 }

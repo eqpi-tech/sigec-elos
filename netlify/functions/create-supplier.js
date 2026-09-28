@@ -5,6 +5,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
+const { env } = require('./lib/runtime_env.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -501,7 +502,7 @@ exports.handler = async (event) => {
     if (routeA.enabled()) {
       try {
         const n = await routeA.enqueueRouteA(supabaseAdmin, supplier.id)
-        const site = process.env.ELOS_ENV === 'production' ? process.env.URL : (process.env.DEPLOY_PRIME_URL || process.env.URL)
+        const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
         if (n && site && process.env.CRON_SECRET) {
           await fetch(`${site}/.netlify/functions/homolog-collect-background`, {
             method: 'POST', headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, body: '{}',

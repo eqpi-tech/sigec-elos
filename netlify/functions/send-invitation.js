@@ -5,6 +5,7 @@
 //                                           subsidiado?, escopo?, client_id, invited_by_role:'CLIENT' }
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -141,7 +142,7 @@ async function handleBuyerInvitation(body, h) {
       : `Convite de ${senderName} — SIGEC-ELOS`
 
     await Promise.allSettled(emails.map(to =>
-      fetch('https://api.resend.com/emails', {
+      guardedResend('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
         body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[to], reply_to: buyerEmail||undefined, subject, html })
@@ -304,7 +305,7 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
     </div>`
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    await guardedResend('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
       body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[email], reply_to: undefined, subject, html: emailHtml })
