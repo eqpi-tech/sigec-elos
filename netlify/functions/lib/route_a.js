@@ -18,6 +18,9 @@ const ROUTE_A = {
   '7':     { connector: 'fgts_crf',         validade: 'fonte' },
   '8':     { connector: 'cndt',             validade: 'fonte', positivaEfeitoNegativa: true },
   '16':    { connector: 'sefaz_cnd',        validade: 'fonte', positivaEfeitoNegativa: true },
+  // dívida ativa estadual (Medicina N2): a CND da Sefaz cobre débitos inscritos em
+  // dívida ativa na maioria das UFs — confirmado com o Luiz em 28/09
+  '10039': { connector: 'sefaz_cnd',        validade: 'fonte', positivaEfeitoNegativa: true },
   '6':     { connector: 'pref_cnd',         validade: null },
   '10040': { connector: 'pref_cnd',         validade: null },
   '10038': { connector: 'pgfn_devedores',   validade: null },
