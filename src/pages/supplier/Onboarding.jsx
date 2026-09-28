@@ -421,7 +421,10 @@ export default function SupplierOnboarding() {
                   <div style={{ maxHeight:340, overflowY:'auto', paddingRight:4 }}>
                     <CategorySelector selectedIds={selectedCategories} onChange={setSelectedCategories} showDocuments={true} cnpjData={cnpjData}
                       clientIds={invitation?.client_id ? [invitation.client_id] : undefined}
-                      allowedIds={invitation?.flow_category_ids || undefined} />
+                      allowedIds={invitation?.flow_category_ids || undefined}
+                      allowedHint={invitation?.flow_category_ids?.length
+                        ? `Categorias definidas por ${invitation?.sender_name || 'quem enviou o convite'} para o seu convite — marque a(s) que se aplica(m) à sua empresa.`
+                        : null} />
                   </div>
                   <div style={{ display:'flex', gap:8, marginTop:20 }}>
                     <Button variant="neutral" full onClick={() => setStep(0)}>← Voltar</Button>
