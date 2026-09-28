@@ -14,6 +14,9 @@ const NAVS = {
     { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦', module:'categorias' },
     { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢', module:'meus_dados' },
     { path:'/fornecedor/clientes',      label:'Clientes ELOS', icon:'🤝', module:'clientes_elos' },
+    // cotações dos clientes (patch_102) — módulo do Dashboard: perfis
+    // personalizados já existentes não conhecem uma chave nova
+    { path:'/fornecedor/cotacoes',      label:'Cotações',    icon:'💬', module:'dashboard' },
     { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥', module:'equipe' },
   ],
   BUYER: [

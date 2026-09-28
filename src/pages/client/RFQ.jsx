@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { hasAction } from '../../lib/modules.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supabase } from '../../lib/supabase.js'
 import { clientRfqApi } from '../../services/api.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
@@ -10,32 +9,34 @@ const STATUS_LABEL = { SENT:'Enviada', ACCEPTED:'Aceita', DECLINED:'Recusada', R
 
 function NewRFQModal({ clientId, onClose, onCreated }) {
   const [categories, setCategories] = useState([])
-  const [form, setForm] = useState({ title:'', description:'', categoryId:'', deadline:'' })
-  const [eligibleCount, setEligibleCount] = useState(null)
+  const [form, setForm] = useState({ title:'', description:'', categoryId:'', deadline:'', scope:'own' })
+  const [counts, setCounts] = useState(null)          // { own, elos }
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
   useEffect(() => {
-    supabase.from('categories').select('id, name').order('name').then(({ data }) => setCategories(data || []))
-  }, [])
+    if (clientId) clientRfqApi.categories(clientId).then(setCategories)
+  }, [clientId])
 
   useEffect(() => {
-    if (!form.categoryId) { setEligibleCount(null); return }
-    clientRfqApi.getEligibleCount(Number(form.categoryId)).then(setEligibleCount)
+    if (!form.categoryId) { setCounts(null); return }
+    clientRfqApi.getEligibleCount(Number(form.categoryId)).then(setCounts)
   }, [form.categoryId])
+  const eligibleCount = counts ? (form.scope === 'elos' ? counts.elos : counts.own) : null
 
   async function submit() {
     if (!form.title.trim() || !form.categoryId) { setError('Preencha o título e a categoria.'); return }
     setSaving(true); setError('')
     try {
-      const rfq = await clientRfqApi.create({
-        clientId,
+      const out = await clientRfqApi.create({
         title: form.title.trim(),
         description: form.description.trim(),
         categoryId: Number(form.categoryId),
         deadline: form.deadline || null,
+        scope: form.scope,
       })
-      onCreated(rfq)
+      alert(`📤 Cotação enviada para ${out.fornecedores} fornecedor(es)` + (out.proprios < out.fornecedores ? ` (${out.proprios} da sua base e ${out.fornecedores - out.proprios} da base ELOS)` : '') + '.')
+      onCreated(out)
       onClose()
     } catch (e) { setError(e.message) }
     finally { setSaving(false) }
@@ -60,11 +61,25 @@ function NewRFQModal({ clientId, onClose, onCreated }) {
             <option value="">Selecione uma categoria...</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          {eligibleCount !== null && (
-            <div style={{ fontSize:11, color: eligibleCount > 0 ? '#22c55e' : '#f59e0b', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
-              {eligibleCount > 0
-                ? `✓ ${eligibleCount} fornecedor${eligibleCount !== 1 ? 'es' : ''} homologado${eligibleCount !== 1 ? 's' : ''} nesta categoria receberão a solicitação`
-                : '⚠ Nenhum fornecedor homologado nesta categoria no momento'}
+          {counts && (
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:10 }}>
+              {[
+                { v:'own',  t:'Minha base homologada', d:'Fornecedores homologados no seu processo, nesta categoria', n:counts.own },
+                { v:'elos', t:'Minha base + homologados ELOS', d:'Inclui fornecedores homologados em outros processos do ELOS, em categoria de mesmo nome', n:counts.elos },
+              ].map(o => (
+                <label key={o.v} style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'9px 12px', borderRadius:10, cursor:'pointer',
+                  border:`1px solid ${form.scope === o.v ? '#2E3192' : '#e2e4ef'}`, background: form.scope === o.v ? 'rgba(46,49,146,.04)' : '#fff' }}>
+                  <input type="radio" name="scope" checked={form.scope === o.v} onChange={() => setForm(p => ({ ...p, scope:o.v }))} style={{ marginTop:3 }}/>
+                  <span style={{ flex:1 }}>
+                    <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e' }}>{o.t}</span>
+                    <span style={{ display:'block', fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>{o.d}</span>
+                  </span>
+                  <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color: o.n > 0 ? '#15803d' : '#b45309' }}>{o.n}</span>
+                </label>
+              ))}
+              {eligibleCount === 0 && (
+                <div style={{ fontSize:11, color:'#b45309', fontFamily:'DM Sans,sans-serif' }}>⚠ Nenhum fornecedor homologado nesta categoria para o alcance escolhido</div>
+              )}
             </div>
           )}
         </div>
@@ -85,7 +100,7 @@ function NewRFQModal({ clientId, onClose, onCreated }) {
 
         <div style={{ display:'flex', gap:8 }}>
           <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" full disabled={saving || !form.title || !form.categoryId} onClick={submit}>
+          <Button variant="primary" full disabled={saving || !form.title || !form.categoryId || !eligibleCount} onClick={submit}>
             {saving ? <><Spinner size={14}/> Enviando...</> : `📤 Enviar para ${eligibleCount ?? '...'} fornecedores`}
           </Button>
         </div>
@@ -148,9 +163,10 @@ function RFQDetailModal({ rfq, onClose }) {
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (r.message||r.price) ? 10 : 0 }}>
                 <div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:700, color:'#1a1c5e' }}>
-                    {r.suppliers?.razao_social || '—'}
+                    {r.razao_social || '—'}
+                    {r.own === false && <span style={{ marginLeft:6, fontSize:9, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'1px 6px', borderRadius:20 }}>base ELOS</span>}
                   </div>
-                  <div style={{ fontSize:11, color:'#9B9B9B' }}>{r.suppliers?.cnpj} · {r.suppliers?.city}/{r.suppliers?.state}</div>
+                  <div style={{ fontSize:11, color:'#9B9B9B' }}>{r.cnpj} · {r.city}/{r.state}</div>
                 </div>
                 <span style={{ fontSize:11, fontWeight:700, color: STATUS_COLOR[r.status], background:`${STATUS_COLOR[r.status]}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
                   {STATUS_LABEL[r.status] || r.status}
@@ -247,7 +263,7 @@ export default function ClientRFQ() {
         <NewRFQModal
           clientId={user?.clientId}
           onClose={() => setShowNew(false)}
-          onCreated={rfq => setRfqs(prev => [rfq, ...prev])}
+          onCreated={() => clientRfqApi.list(user.clientId).then(setRfqs)}
         />
       )}
       {detailRfq && <RFQDetailModal rfq={detailRfq} onClose={() => setDetailRfq(null)}/>}

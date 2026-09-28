@@ -47,6 +47,7 @@ import BackofficeComunicados         from './pages/backoffice/Comunicados.jsx'
 import BackofficeFeriados            from './pages/backoffice/Feriados.jsx'
 import SupplierQuestionnaire    from './pages/supplier/Questionnaire.jsx'
 import SupplierTeam             from './pages/supplier/Team.jsx'
+import SupplierQuotations      from './pages/supplier/Quotations.jsx'
 import LandingPage   from './pages/LandingPage.jsx'
 import Privacidade   from './pages/Privacidade.jsx'
 import VerifyCertificate from './pages/VerifyCertificate.jsx'
@@ -129,6 +130,7 @@ function AppRoutes() {
       <Route path="/fornecedor/equipe"           element={<Protect roles={['SUPPLIER']} module="equipe"><SupplierTeam/></Protect>} />
       <Route path="/fornecedor/dados"            element={<Protect roles={['SUPPLIER']} module="meus_dados"><SupplierMyData/></Protect>} />
       <Route path="/fornecedor/clientes"         element={<Protect roles={['SUPPLIER']} module="clientes_elos"><SupplierClientsDirectory/></Protect>} />
+      <Route path="/fornecedor/cotacoes"         element={<Protect roles={['SUPPLIER']} module="dashboard"><SupplierQuotations/></Protect>} />
 
       {/* Buyer */}
       <Route path="/comprador"                  element={<Protect roles={['BUYER']}><BuyerMarketplace/></Protect>} />
