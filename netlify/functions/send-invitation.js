@@ -353,10 +353,19 @@ exports.handler = async (event) => {
     // Primeiro fetch com campos básicos (sempre existem)
     const { data: inv, error: invErr } = await supabaseAdmin
       .from('invitations')
-      .select('id, supplier_razao_social, supplier_email, supplier_cnpj, buyer_name, status')
+      .select('id, supplier_razao_social, supplier_email, supplier_cnpj, buyer_name, status, client_id, buyer_id')
       .eq('id', body.resendId)
       .maybeSingle()
     if (invErr || !inv) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Convite não encontrado' }) }
+    // quem pode reenviar (28/09): backoffice, usuário do cliente dono do
+    // convite ou o comprador que enviou — antes qualquer usuário logado podia
+    {
+      const { data: papeis } = await supabaseAdmin.from('user_roles').select('role, client_id, buyer_id').eq('user_id', user.id)
+      const pode = (papeis || []).some(r => r.role === 'ADMIN'
+        || (r.role === 'CLIENT' && inv.client_id && r.client_id === inv.client_id)
+        || (r.role === 'BUYER' && inv.buyer_id && r.buyer_id === inv.buyer_id))
+      if (!pode) return { statusCode:403, headers:h, body: JSON.stringify({ error:'Sem permissão para reenviar este convite' }) }
+    }
     if (inv.status === 'CANCELLED') return { statusCode:409, headers:h, body: JSON.stringify({ error:'Convite cancelado não pode ser reenviado — envie um novo convite' }) }
 
     // Fetch dos campos opcionais (adicionados pelos patches — podem não existir ainda)

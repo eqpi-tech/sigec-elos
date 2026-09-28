@@ -49,6 +49,7 @@ const NAVS = {
         { path:'/backoffice/analise-documentos', label:'Análise de Docs', icon:'📄', action:'acao:analise_docs', desc:'Revisar documentos em lote' },
         { path:'/backoffice/processos',          label:'Processos',       icon:'🔍', action:'acao:processos', desc:'Buscar e abrir fichas de fornecedores' },
         { path:'/backoffice/homologados',        label:'Homologados',     icon:'✅', action:'acao:homologados', desc:'Fornecedores com selo ativo' },
+        { path:'/backoffice/convites',           label:'Convites',        icon:'✉️', action:'acao:convites', desc:'Convites enviados pelos clientes' },
         { path:'/backoffice/questionarios',      label:'Questionários',   icon:'❓', action:'acao:questionarios', desc:'Gerenciar questionários dos clientes' },
       ],
     },
