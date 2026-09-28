@@ -277,7 +277,9 @@ exports.handler = async (event) => {
         }
         const terminal = ['done', 'fallback'].includes(fim.status)
         await sb.from('auto_collect_jobs').update({
-          ...fim, ...(terminal ? { finished_at: new Date().toISOString() } : {}),
+          ...fim,
+          cost_brl: Number(job.cost_brl || 0) + Number(fim.cost_brl || 0),   // acumula entre tentativas
+          ...(terminal ? { finished_at: new Date().toISOString() } : {}),
         }).eq('id', job.id)
         tocados.add(job.seal_id); feitos++
       }))
