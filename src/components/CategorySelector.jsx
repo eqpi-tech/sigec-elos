@@ -43,7 +43,9 @@ function iconFor(cat) {
 // allowedIds: convite com FLUXO — a seleção fica restrita SOMENTE às
 // categorias do fluxo (18/09: a versão anterior deixava as globais passarem
 // e o convidado escolhia categoria fora do contrato do cliente)
-export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined, allowedIds = undefined }) {
+// allowedHint: texto de orientação mostrado no topo quando o convite restringe
+// as categorias (ex.: "Categorias definidas pela VIX para o seu convite…")
+export default function CategorySelector({ selectedIds = new Set(), onChange, showDocuments = true, cnpjData = null, clientIds = undefined, allowedIds = undefined, allowedHint = null }) {
   const allowSet = allowedIds?.length ? new Set(allowedIds.map(Number)) : null
   const filterTree = (tree) => {
     if (!allowSet || !tree) return tree
@@ -188,6 +190,16 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     }
   }
 
+  // Convite com poucas categorias (28/09 — fornecedor não achava as opções
+  // dentro do grupo recolhido): os grupos já abrem, com as categorias à vista
+  const autoAberto = useRef(false)
+  useEffect(() => {
+    if (autoAberto.current || loading || !allowSet || allowSet.size > 12 || !parents.length) return
+    autoAberto.current = true
+    setExpanded(new Set(parents.map(p => p.id)))
+    parents.forEach(p => { loadTree(p) })
+  }, [loading, parents])
+
   const toggleParent = async (parent) => {
     const isOpen = expanded.has(parent.id)
     if (isOpen) { setExpanded(prev => { const n = new Set(prev); n.delete(parent.id); return n }); return }
@@ -306,6 +318,11 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
 
   return (
     <div>
+      {allowSet && allowedHint && (
+        <div style={{ background:'rgba(46,49,146,.05)', border:'1px solid rgba(46,49,146,.18)', borderRadius:10, padding:'10px 14px', marginBottom:12, fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', lineHeight:1.5 }}>
+          📋 {allowedHint}
+        </div>
+      )}
       {/* Search + AI */}
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
         <input value={search} onChange={e => setSearch(e.target.value)}
