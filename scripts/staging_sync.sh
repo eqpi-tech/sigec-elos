@@ -120,10 +120,23 @@ values ('documents','documents',false), ('bc-reports','bc-reports',false),
 on conflict (id) do nothing;
 SQL
 
+# Regras de acesso do storage (28/09): o dump do schema public não leva as
+# policies de storage.objects — sem elas ninguém abria arquivo no staging
+# ("Ver" não funcionava). Copiadas da produção, idênticas.
+echo "   policies de storage.objects (cópia da produção)…"
+"$PSQL" "$PROD" -At -c "
+select format('drop policy if exists %I on storage.objects; create policy %I on storage.objects as %s for %s to %s%s%s;',
+  policyname, policyname, permissive, cmd, array_to_string(roles, ', '),
+  case when qual is not null then ' using ('||qual||')' else '' end,
+  case when with_check is not null then ' with check ('||with_check||')' else '' end)
+from pg_policies where schemaname='storage' and tablename='objects' order by policyname" > "$TMP/storage_policies.sql"
+"$PSQL" "$STAG" -v ON_ERROR_STOP=1 -q -f "$TMP/storage_policies.sql" 2>&1 | grep -v NOTICE || true
+
 "$PSQL" "$STAG" -P pager=off -c "
 select 'tabelas' item, count(*)::text valor from information_schema.tables where table_schema='public'
 union all select 'funções', count(*)::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'
 union all select 'policies', count(*)::text from pg_policies where schemaname='public'
+union all select 'policies do storage', count(*)::text from pg_policies where schemaname='storage' and tablename='objects'
 union all select 'catálogo de documentos', count(*)::text from documents_catalog
 union all select 'categorias', count(*)::text from categories
 union all select 'matriz PJ', count(*)::text from category_documents

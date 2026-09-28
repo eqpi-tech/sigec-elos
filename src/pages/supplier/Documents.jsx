@@ -32,6 +32,22 @@ const DOC_LINKS = {
   19: null, // Licença ambiental — emitida pelo órgão estadual
 }
 
+// Legenda dos ícones da lista (28/09): com a Rota A, a coleta nas fontes
+// oficiais é o caminho principal — a legenda acompanha o que a tela mostra.
+// Limites de envio = os reais do upload (20 MB; PDF, JPG, PNG, DOCX).
+function DocLegend() {
+  const itens = ROUTE_A_ENABLED
+    ? ['🏛 Fonte oficial = obtido por nós na fonte oficial (a equipe EQPI confere)',
+       '🔎 Consultando = estamos buscando — não precisa enviar',
+       '⚡ Auto = gerado com os dados da Receita',
+       '🌐 Emitir = abre o site oficial para você baixar',
+       '📊 Emitir = gera o relatório na hora']
+    : ['⚡ Auto = coletado automaticamente',
+       '🌐 Emitir = abre o site oficial',
+       '📊 Emitir = gera relatório automático']
+  return <span style={{ display:'block', marginTop:4 }}>{itens.join(' · ')} · Envio: PDF, JPG, PNG ou DOCX, até 20 MB</span>
+}
+
 const STATUS_CONFIG = {
   VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
   EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vencendo' },
@@ -877,7 +893,7 @@ export default function SupplierDocuments() {
           })}
           <div style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             Documentos compartilhados entre processos são enviados uma única vez.
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · Máx 10MB
+            <DocLegend/>
           </div>
         </>
       ) : (
@@ -892,7 +908,7 @@ export default function SupplierDocuments() {
           </div>
           {reqDocs.map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
+            <DocLegend/>
           </div>
           {renderMobilitySection(docGroups[0]?.key)}
         </Card>
