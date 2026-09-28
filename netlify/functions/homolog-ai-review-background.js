@@ -17,6 +17,13 @@ const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_R
   { auth: { persistSession: false } })
 
 const enabled = () => env('ROUTE_B_ENABLED') === 'true'
+// teto de gasto por dia (R$) — protege o saldo da API: atingido, a fila espera o dia seguinte
+const LIMITE_DIA = () => Number(env('ROUTE_B_DAILY_LIMIT_BRL') || 5)
+async function gastoHoje() {
+  const inicio = new Date(`${hojeSP()}T00:00:00-03:00`).toISOString()
+  const { data } = await sb.from('ai_review_jobs').select('cost_brl').gte('finished_at', inicio)
+  return (data || []).reduce((a, j) => a + Number(j.cost_brl || 0), 0)
+}
 const CONCORRENCIA = 3
 const MAX_ATTEMPTS = 3
 const RETRY_MIN = 15
@@ -104,7 +111,12 @@ exports.handler = async (event) => {
   const motivos = rr || []
   let feitos = 0, custo = 0
 
+  let gasto = await gastoHoje()
   while (Date.now() < deadline - 90000) {
+    if (gasto >= LIMITE_DIA()) {
+      console.warn(`[rota-b] teto diário atingido (R$ ${gasto.toFixed(2)} de R$ ${LIMITE_DIA()}) — fila retomada amanhã`)
+      break
+    }
     const { data: jobs } = await sb.from('ai_review_jobs').select('*')
       .in('status', ['queued', 'retry']).lte('next_attempt_at', new Date().toISOString())
       .order('next_attempt_at').limit(CONCORRENCIA * 3)
@@ -132,7 +144,7 @@ exports.handler = async (event) => {
           cost_brl: Number(job.cost_brl || 0) + Number(fim.cost_brl || 0),   // acumula entre tentativas
           ...(terminal ? { finished_at: new Date().toISOString() } : {}),
         }).eq('id', job.id)
-        feitos++; custo += Number(fim.cost_brl || 0)
+        feitos++; custo += Number(fim.cost_brl || 0); gasto += Number(fim.cost_brl || 0)
       }))
     }
   }

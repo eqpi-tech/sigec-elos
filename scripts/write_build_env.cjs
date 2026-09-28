@@ -8,7 +8,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const KEYS = ['ELOS_ENV', 'ROUTE_A_ENABLED', 'ROUTE_B_ENABLED', 'CONTEXT', 'BRANCH', 'URL', 'DEPLOY_PRIME_URL']
+const KEYS = ['ELOS_ENV', 'ROUTE_A_ENABLED', 'ROUTE_B_ENABLED', 'ROUTE_B_DAILY_LIMIT_BRL', 'CONTEXT', 'BRANCH', 'URL', 'DEPLOY_PRIME_URL']
 const out = Object.fromEntries(KEYS.filter((k) => process.env[k]).map((k) => [k, process.env[k]]))
 const file = path.join(__dirname, '..', 'netlify', 'functions', 'lib', '_build_env.json')
 fs.writeFileSync(file, JSON.stringify(out, null, 2) + '\n')
