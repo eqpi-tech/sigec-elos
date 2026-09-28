@@ -201,13 +201,13 @@ exports.handler = async (event) => {
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
       if (!authUser?.user?.email) return { statusCode:404, headers, body: JSON.stringify({ error:'Usuário não encontrado' }) }
 
-      const frontendUrl = frontendUrl()
+      const siteBase = frontendUrl()
 
       // Gera link de reset de senha (válido por 24h)
       const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
         type:  'recovery',
         email: authUser.user.email,
-        options: { redirectTo: `${frontendUrl}/redefinir-senha` }
+        options: { redirectTo: `${siteBase}/redefinir-senha` }
       })
       if (linkErr) throw new Error(linkErr.message)
 

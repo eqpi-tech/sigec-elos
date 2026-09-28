@@ -53,7 +53,7 @@ exports.handler = async (event) => {
       buyerUserId,   // auth user UUID
     } = JSON.parse(event.body)
 
-    const frontendUrl = frontendUrl()
+    const siteBase = frontendUrl()
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: 'STRIPE_SECRET_KEY não configurado' }) }
@@ -71,8 +71,8 @@ exports.handler = async (event) => {
         mode: 'subscription',
         allow_promotion_codes: true,
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${frontendUrl}/comprador/plano?activated=true`,
-        cancel_url:  `${frontendUrl}/comprador/plano`,
+        success_url: `${siteBase}/comprador/plano?activated=true`,
+        cancel_url:  `${siteBase}/comprador/plano`,
         metadata: {
           planFor:     'buyer',
           buyerUserId: buyerUserId,
@@ -137,7 +137,7 @@ exports.handler = async (event) => {
       return {
         statusCode: 200,
         headers: HEADERS,
-        body: JSON.stringify({ url: `${frontendUrl}/fornecedor/plano-ativo?supplier=${supplierId}&subsidiado=true` }),
+        body: JSON.stringify({ url: `${siteBase}/fornecedor/plano-ativo?supplier=${supplierId}&subsidiado=true` }),
       }
     }
 
@@ -159,8 +159,8 @@ exports.handler = async (event) => {
           },
           quantity: 1,
         }],
-        success_url: `${frontendUrl}/fornecedor/plano-ativo?session_id={CHECKOUT_SESSION_ID}&supplier=${supplierId}`,
-        cancel_url:  `${frontendUrl}/cadastro`,
+        success_url: `${siteBase}/fornecedor/plano-ativo?session_id={CHECKOUT_SESSION_ID}&supplier=${supplierId}`,
+        cancel_url:  `${siteBase}/cadastro`,
         metadata: {
           supplierId,
           planType:    'homologado',
@@ -183,8 +183,8 @@ exports.handler = async (event) => {
       // Cupom do Stripe não distingue preço mensal/anual do mesmo produto —
       // a restrição real é esta: o campo só existe no checkout do mensal.
       allow_promotion_codes: planType === 'verificado_mensal' || undefined,
-      success_url: `${frontendUrl}/fornecedor/plano-ativo?session_id={CHECKOUT_SESSION_ID}&supplier=${supplierId}`,
-      cancel_url:  `${frontendUrl}/cadastro`,
+      success_url: `${siteBase}/fornecedor/plano-ativo?session_id={CHECKOUT_SESSION_ID}&supplier=${supplierId}`,
+      cancel_url:  `${siteBase}/cadastro`,
       metadata: {
         supplierId,
         planType,

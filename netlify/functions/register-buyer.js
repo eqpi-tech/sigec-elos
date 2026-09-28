@@ -75,7 +75,7 @@ exports.handler = async (event) => {
 
     // Envia e-mail com credenciais
     if (process.env.RESEND_API_KEY) {
-      const frontendUrl = frontendUrl()
+      const siteBase = frontendUrl()
       const html = `
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
           <div style="background:#2E3192;padding:28px;border-radius:12px 12px 0 0;text-align:center">
@@ -90,7 +90,7 @@ exports.handler = async (event) => {
               <p style="margin:0"><strong>Senha provisória:</strong> <code style="background:#eef2ff;padding:2px 8px;border-radius:4px;font-size:14px">${password}</code></p>
             </div>
             <p style="color:#9B9B9B;font-size:13px">Recomendamos que você altere sua senha após o primeiro acesso.</p>
-            <a href="${frontendUrl}/login" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;margin-top:8px">
+            <a href="${siteBase}/login" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;margin-top:8px">
               Acessar o Marketplace →
             </a>
             <p style="color:#9B9B9B;font-size:12px;margin-top:24px">Dúvidas? <a href="mailto:comercial@eqpitech.com.br" style="color:#2E3192">comercial@eqpitech.com.br</a></p>
