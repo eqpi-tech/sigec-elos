@@ -17,6 +17,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { pendingOfCategory, hojeBR, fmtBR } = require('./lib/exception_cover.js')
 const { guardMail } = require('./lib/mail_guard.js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -124,7 +125,7 @@ exports.handler = async (event) => {
         let to = sup?.email
         if (sup?.user_id) { const { data: u } = await supabaseAdmin.auth.admin.getUserById(sup.user_id); to = u?.user?.email || to }
         const cliente = seal.clients?.razao_social || 'o cliente'
-        const site = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+        const site = frontendUrl()
         const subject = `🏅 Homologado com exceção — ${sup?.razao_social || ''} · regularize até ${fmtBR(validUntil)}`
         const g = guardMail(to, subject)
         if (!g.skip && process.env.RESEND_API_KEY) {
