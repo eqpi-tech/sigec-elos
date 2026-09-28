@@ -4,10 +4,15 @@ module.exports = makeCertConnector({
   slug: 'sintegra', nome: 'Sintegra', costExtra: 0.20,
   pathFor: ({ company }) => company?.uf ? `sintegra/${company.uf.toLowerCase()}` : null,
   unsupportedNote: 'UF da sede desconhecida (base CNPJ indisponível)',
+  // Classifica pelos VALORES dos campos de situação — nunca pelo JSON inteiro:
+  // o nome de campo vazio "inatividade_data" casava com /inativ/ e toda
+  // inscrição de SP saía como "não habilitada" (achado nos testes de 28/09)
   classify: (nome, d) => {
-    const t = JSON.stringify(d).toLowerCase()
-    if (/habilitad[oa]|ativ[oa]/.test(t) && !/n[aã]o habilitad|inativ/.test(t)) return { result_flag: 'nada_consta', headline: 'Sintegra: inscrição estadual habilitada' }
-    if (/baixad|inativ|n[aã]o habilitad|suspens/.test(t)) return { result_flag: 'verificar', headline: 'Sintegra: inscrição não habilitada/baixada — verificar' }
-    return { result_flag: 'nada_consta', headline: 'Sintegra: consulta realizada (ver detalhes)' }
+    const t = Object.entries(d || {})
+      .filter(([k, v]) => typeof v === 'string' && v && /situa|ocorr|status/.test(k) && !/data|observ/.test(k))
+      .map(([, v]) => v.toLowerCase()).join(' | ')
+    if (/n[aã]o habilitad|baixad|inativ|suspens|cancelad|inapt|nul[oa]/.test(t)) return { result_flag: 'verificar', headline: `Sintegra: inscrição ${t.split(' | ')[0]} — verificar` }
+    if (/habilitad|ativ|regular/.test(t)) return { result_flag: 'nada_consta', headline: 'Sintegra: inscrição estadual habilitada' }
+    return { result_flag: 'verificar', headline: 'Sintegra: situação da inscrição não identificada — ver comprovante' }
   },
 })

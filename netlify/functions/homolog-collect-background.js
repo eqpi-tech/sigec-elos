@@ -84,14 +84,14 @@ async function processar(job, catalogo, prefOverrides) {
 
   if (r.indisponivel) {
     const tentativas = job.attempts + 1
-    return tentativas >= MAX_ATTEMPTS
+    return r.permanente || tentativas >= MAX_ATTEMPTS
       ? { status: 'fallback', attempts: tentativas, last_error: r.motivo, cost_brl: gasto }
       : { status: 'retry', attempts: tentativas, last_error: r.motivo, cost_brl: gasto,
           next_attempt_at: new Date(Date.now() + RETRY_MIN * 60000).toISOString() }
   }
 
   // comprovante oficial vira o arquivo do documento (recibos da Infosimples expiram — baixar já)
-  let storage_path = null, sha256 = null
+  let storage_path = null, sha256 = null, comprovante_tipo = null
   if (r.comprovante) {
     try {
       const rec = await downloadReceipt(r.comprovante)
@@ -100,8 +100,26 @@ async function processar(job, catalogo, prefOverrides) {
         .upload(storage_path, rec.buf, { contentType: rec.contentType, upsert: true })
       if (upErr) throw new Error(upErr.message)
       sha256 = rec.sha256
+      comprovante_tipo = 'fonte'
     } catch (e) {
       console.warn(`[rota-a] comprovante ${job.doc_type}/${sup.cnpj}: ${e.message}`)
+      storage_path = null
+    }
+  }
+  // fonte sem comprovante próprio (ex.: Lista Suja, lista baixada do MTE):
+  // o ELOS gera o registro da consulta, para o analista ter o que abrir
+  if (!storage_path) {
+    try {
+      const html = registroConsulta({ sup, docNome: catalogo[job.doc_type] || job.doc_type, fonte: ROUTE_A[job.doc_type].connector, r })
+      const buf = Buffer.from(html, 'utf8')
+      storage_path = `${sup.user_id || sup.id}/${job.doc_type}_consulta_${Date.now()}.html`
+      const { error: upErr } = await sb.storage.from('documents')
+        .upload(storage_path, buf, { contentType: 'text/html; charset=utf-8', upsert: true })
+      if (upErr) throw new Error(upErr.message)
+      sha256 = require('crypto').createHash('sha256').update(buf).digest('hex')
+      comprovante_tipo = 'registro_elos'
+    } catch (e) {
+      console.warn(`[rota-a] registro ${job.doc_type}/${sup.cnpj}: ${e.message}`)
       storage_path = null
     }
   }
@@ -128,6 +146,8 @@ async function processar(job, catalogo, prefOverrides) {
         emissao: r.emissao ? r.emissao.toISOString().slice(0, 10) : null,
         validade_fonte: r.validade ? r.validade.toISOString().slice(0, 10) : null,
         comprovante_sha256: sha256,
+        comprovante_tipo,
+        dados: r.dados,
         coletado_em: agora,
       },
     },
@@ -135,6 +155,26 @@ async function processar(job, catalogo, prefOverrides) {
   if (docErr) throw new Error(`documents: ${docErr.message}`)
 
   return { status: 'done', attempts: job.attempts + 1, cost_brl: gasto, last_error: null }
+}
+
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+function registroConsulta({ sup, docNome, fonte, r }) {
+  const cnpj = String(sup.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  const linhas = Object.entries(r.dados || {}).slice(0, 40)
+    .map(([k, v]) => `<tr><td style="color:#6b7280;padding:3px 10px 3px 0">${esc(k)}</td><td>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td></tr>`).join('')
+  return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Registro de consulta — ${esc(docNome)}</title>
+<body style="font-family:Arial,sans-serif;max-width:760px;margin:24px auto;color:#1f2937;font-size:14px">
+<div style="border-bottom:3px solid #2E3192;padding-bottom:8px;margin-bottom:14px"><strong style="color:#2E3192">SIGEC-ELOS</strong> · Registro de consulta automática</div>
+<p style="background:#fef3c7;padding:8px 12px;border-radius:6px;font-size:12px">A fonte não emite comprovante próprio. Este registro foi gerado pelo ELOS no momento da consulta.</p>
+<table style="font-size:13px;margin:10px 0">
+<tr><td style="color:#6b7280;padding:3px 10px 3px 0">Documento</td><td><strong>${esc(docNome)}</strong></td></tr>
+<tr><td style="color:#6b7280;padding:3px 10px 3px 0">Empresa</td><td>${esc(sup.razao_social)} — CNPJ ${esc(cnpj)}</td></tr>
+<tr><td style="color:#6b7280;padding:3px 10px 3px 0">Fonte</td><td>${esc(fonte)}</td></tr>
+<tr><td style="color:#6b7280;padding:3px 10px 3px 0">Consultado em</td><td>${esc(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</td></tr>
+<tr><td style="color:#6b7280;padding:3px 10px 3px 0">Resultado</td><td><strong>${esc(r.motivo)}</strong></td></tr>
+</table>
+${linhas ? `<h4 style="margin:16px 0 6px">Dados devolvidos pela fonte</h4><table style="font-size:12px">${linhas}</table>` : ''}
+</body></html>`
 }
 
 // Fim da coleta de um processo: avisa o fornecedor do que já foi obtido e do

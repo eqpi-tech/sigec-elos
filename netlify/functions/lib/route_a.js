@@ -52,7 +52,12 @@ function somar(base, { anos = 0, meses = 0 }) {
 function avaliar(docType, raw, parsed, agora = new Date()) {
   const cfg = ROUTE_A[docType]
   const flag = parsed?.result_flag
-  if (flag === 'indisponivel') return { indisponivel: true, motivo: parsed?.headline || 'fonte indisponível' }
+  if (flag === 'indisponivel') {
+    const motivo = parsed?.headline || 'fonte indisponível'
+    // praça fora da cobertura / fonte que exige certificado digital: não muda com retry
+    const permanente = /n[aã]o coberta|fora da cobertura|emiss[aã]o indispon[ií]vel pela fonte|desconhecida/i.test(motivo)
+    return { indisponivel: true, permanente, motivo }
+  }
 
   const d = (Array.isArray(raw?.data) && raw.data[0]) || {}
   const texto = `${parsed?.headline || ''} ${JSON.stringify(d).slice(0, 4000)}`
@@ -65,9 +70,25 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
     motivo = `${motivo} — aceita pela regra do cliente`
   }
 
+  const emissao = parseData(d.emissao_data || d.normalizado_emissao_data || d.expedicao || d.consulta_datahora || d.datahora)
   let validade = null
   if (cfg.validade === 'fonte') {
-    validade = parseData(d.validade_fim_data || d.validade_data || d.normalizado_validade || d.validade)
+    validade = parseData(d.validade_fim_data || d.validade_data || d.normalizado_validade_data || d.normalizado_validade || d.validade)
+    // qualquer outro campo de validade com data (cada Sefaz/prefeitura nomeia de um jeito)
+    if (!validade) {
+      for (const [k, v] of Object.entries(d)) {
+        if (/valid/i.test(k) && typeof v === 'string' && (validade = parseData(v))) break
+      }
+    }
+    // "validade de 6 (seis) meses / 90 dias contados da emissão"
+    if (!validade) {
+      const txt = Object.entries(d).filter(([k, v]) => /valid|mensagem|observ/i.test(k) && typeof v === 'string').map(([, v]) => v).join(' ')
+      const m = txt.match(/(\d{1,3})\s*(?:\([^)]*\))?\s*(dias|meses)/i)
+      if (m) {
+        const base = emissao || agora
+        validade = /dia/i.test(m[2]) ? new Date(base.getTime() + (+m[1]) * 864e5) : somar(base, { meses: +m[1] })
+      }
+    }
   } else if (cfg.validade) {
     validade = somar(agora, cfg.validade)
   }
@@ -75,11 +96,24 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
   return {
     indisponivel: false,
     sugestao, motivo, validade,
-    emissao: parseData(d.emissao_data || d.expedicao || d.consulta_datahora || d.datahora),
+    emissao,
     codigo: parsed?.protocol || d.certidao_codigo || null,
     comprovante: (parsed?.evidence || []).find((e) => e.url)?.url || null,
     resultado: flag,
+    dados: resumoDados(d),
   }
+}
+
+// o que a fonte devolveu, para auditoria e para o analista (sem links de
+// comprovante, que expiram, e limitado em tamanho)
+function resumoDados(d) {
+  const out = {}
+  for (const [k, v] of Object.entries(d || {})) {
+    if (/receipt|comprovante_url|html|pdf_base64/i.test(k) || v === '' || v == null) continue
+    out[k] = typeof v === 'string' ? v.slice(0, 500) : v
+  }
+  const s = JSON.stringify(out)
+  return s.length > 8000 ? JSON.parse(JSON.stringify(out, (k, v) => (typeof v === 'object' && v && k) ? '[…]' : v)) : out
 }
 
 // Infosimples só cobra quando a fonte devolve dado (código 200)
