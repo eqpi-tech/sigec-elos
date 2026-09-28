@@ -5,6 +5,7 @@
 import { supabase } from '../lib/supabase.js'
 import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 import { planLabel } from '../lib/planLabels.js'
+import { authFetch } from '../lib/authFetch.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const DOC_LABELS = {
@@ -564,38 +565,29 @@ export const rfqApi = {
 
 // RFQ para CLIENT
 export const clientRfqApi = {
-  // Cria RFQ + insere respostas para todos os fornecedores elegíveis da categoria
-  create: async ({ clientId, title, description, categoryId, deadline }) => {
-    const { data: rfq, error } = await supabase
-      .from('rfqs')
-      .insert({ client_id: clientId, title, description, category_id: categoryId, deadline, requester_role: 'CLIENT', status: 'SENT' })
-      .select().single()
-    if (error) throw new Error(error.message)
+  // RFQ do cliente (patch_102): gravação e envio no servidor
+  // (client-rfq-create); leituras/decisões por RPCs que validam quem chama
+  create: async ({ title, description, categoryId, deadline, scope }) => {
+    const res = await authFetch('/.netlify/functions/client-rfq-create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description, categoryId, deadline, scope }),
+    })
+    const out = await res.json()
+    if (!res.ok) throw new Error(out.error || 'Erro ao enviar a cotação')
+    return out
+  },
 
-    // Busca fornecedores com selo ACTIVE que atuam nessa categoria
-    const { data: catSuppliers } = await supabase
-      .from('supplier_categories')
-      .select('supplier_id')
-      .eq('category_id', categoryId)
-
-    const supplierIds = [...new Set((catSuppliers || []).map(r => r.supplier_id))]
-    if (supplierIds.length > 0) {
-      const { data: activeSeals } = await supabase
-        .from('seals').select('supplier_id').eq('status','ACTIVE').in('supplier_id', supplierIds)
-      const eligible = [...new Set((activeSeals || []).map(s => s.supplier_id))]
-      if (eligible.length > 0) {
-        const responses = eligible.map(sid => ({ rfq_id: rfq.id, supplier_id: sid, status: 'SENT' }))
-        await supabase.from('rfq_responses').insert(responses)
-      }
-      rfq._eligibleCount = eligible.length
-    }
-    return rfq
+  // categorias do PRÓPRIO cliente (o menu listava as de todos os clientes)
+  categories: async (clientId) => {
+    const { data } = await supabase.from('categories').select('id, name')
+      .eq('client_id', clientId).eq('active', true).order('name')
+    return data || []
   },
 
   list: async (clientId) => {
     const { data } = await supabase
       .from('rfqs')
-      .select('id, title, description, category_id, deadline, status, created_at, categories(name)')
+      .select('id, title, description, category_id, deadline, status, scope, created_at, categories(name)')
       .eq('client_id', clientId)
       .eq('requester_role', 'CLIENT')
       .order('created_at', { ascending: false })
@@ -603,25 +595,37 @@ export const clientRfqApi = {
   },
 
   getResponses: async (rfqId) => {
-    const { data } = await supabase
-      .from('rfq_responses')
-      .select('id, status, message, price, created_at, updated_at, supplier_id, suppliers(id, razao_social, cnpj, city, state)')
-      .eq('rfq_id', rfqId)
-      .order('created_at')
+    const { data, error } = await supabase.rpc('client_rfq_responses', { p_rfq: rfqId })
+    if (error) throw new Error(error.message)
     return data || []
   },
 
   updateResponseStatus: async (responseId, status) => {
-    const { error } = await supabase.from('rfq_responses').update({ status, updated_at: new Date().toISOString() }).eq('id', responseId)
+    const { error } = await supabase.rpc('client_rfq_decide', { p_response: responseId, p_status: status })
     if (error) throw new Error(error.message)
   },
 
+  // { own, elos } — alcance "minha base" e "minha base + homologados ELOS"
   getEligibleCount: async (categoryId) => {
-    const { data: catSuppliers } = await supabase.from('supplier_categories').select('supplier_id').eq('category_id', categoryId)
-    const ids = [...new Set((catSuppliers || []).map(r => r.supplier_id))]
-    if (!ids.length) return 0
-    const { count } = await supabase.from('seals').select('*', { count:'exact', head:true }).eq('status','ACTIVE').in('supplier_id', ids)
-    return count || 0
+    const { data, error } = await supabase.rpc('client_rfq_counts', { p_category: categoryId })
+    if (error) { console.warn('client_rfq_counts:', error.message); return { own: 0, elos: 0 } }
+    return data || { own: 0, elos: 0 }
+  },
+}
+
+// Caixa de entrada de cotações do fornecedor (patch_102)
+export const supplierRfqApi = {
+  inbox: async () => {
+    const { data, error } = await supabase.rpc('supplier_rfq_inbox')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  markRead: async (responseId) => {
+    await supabase.rpc('supplier_rfq_respond', { p_response: responseId, p_message: null, p_price: null, p_only_read: true })
+  },
+  respond: async (responseId, message, price) => {
+    const { error } = await supabase.rpc('supplier_rfq_respond', { p_response: responseId, p_message: message, p_price: price, p_only_read: false })
+    if (error) throw new Error(error.message)
   },
 }
 
