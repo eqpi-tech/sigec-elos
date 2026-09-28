@@ -11,8 +11,9 @@ const { requiredDocsForSeal } = require('./required_docs.js')
 // contada da coleta (regra do cliente); null = sem regra do cliente — o
 // analista define a data (premissa 10 da spec)
 const ROUTE_A = {
-  '37':    { connector: 'cartao_cnpj',      validade: { anos: 1 } },
-  '62':    { connector: 'simples',          validade: { anos: 1 } },
+  // 37 e 62 pela base pública gratuita (antes Infosimples: R$ 0,64/fornecedor)
+  '37':    { connector: 'receita_cadastro', validade: { anos: 1 } },
+  '62':    { connector: 'receita_simples',  validade: { anos: 1 } },
   '10001': { connector: 'sintegra',         validade: { anos: 1 } },
   '42':    { connector: 'pgfn_cnd',         validade: 'fonte', positivaEfeitoNegativa: true },
   '7':     { connector: 'fgts_crf',         validade: 'fonte' },

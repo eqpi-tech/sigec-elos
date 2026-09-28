@@ -45,19 +45,28 @@ async function contexto(supplierId) {
       .order('consulted_at', { ascending: false }).limit(1).maybeSingle(),
   ])
   let cd = consulta?.cnpj_data || {}
-  if (sup && (!cd.uf || !cd.municipio)) {
-    try { cd = await registry.cnpj_base.fetch({ cnpj: sup.cnpj }) } catch (e) { console.warn('[rota-a] BrasilAPI:', e.message) }
+  // sem consulta gravada (ou incompleta): BrasilAPI, gratuita — e grava no
+  // banco (o banco é a fonte de leitura; a API só o atualiza)
+  if (sup && (!cd.uf || !cd.municipio || !cd.descricao_situacao_cadastral)) {
+    try {
+      const fresco = await registry.cnpj_base.fetch({ cnpj: sup.cnpj })
+      if (fresco && !fresco.notFound) {
+        cd = fresco
+        await sb.from('cnpj_consultations').insert({ cnpj: sup.cnpj, supplier_id: sup.id, cnpj_data: fresco, consulted_at: new Date().toISOString() })
+      }
+    } catch (e) { console.warn('[rota-a] BrasilAPI:', e.message) }
   }
   const ctx = {
     sup,
     company: { razao_social: sup?.razao_social || cd.razao_social, uf: cd.uf, municipio: cd.municipio },
+    cnpjData: cd && cd.cnpj ? cd : null,
   }
   cacheCtx.set(supplierId, ctx)
   return ctx
 }
 
 async function processar(job, catalogo, prefOverrides) {
-  const { sup, company } = await contexto(job.supplier_id)
+  const { sup, company, cnpjData } = await contexto(job.supplier_id)
   if (!sup) return { status: 'fallback', last_error: 'fornecedor não encontrado' }
 
   // já tem documento válido deste tipo, com folga de validade: não paga a consulta
@@ -79,7 +88,7 @@ async function processar(job, catalogo, prefOverrides) {
     consultasDaRodada.set(chave, (async () => {
       try {
         const raw = await Promise.race([
-          c.fetch({ cnpj: sup.cnpj, company, socios: [], tipo: 'full', prefOverrides, supplierId: sup.id, pfCert: await pfCert() }),
+          c.fetch({ cnpj: sup.cnpj, company, socios: [], tipo: 'full', prefOverrides, supplierId: sup.id, pfCert: await pfCert(), cnpjData }),
           new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout ${TIMEOUT_FONTE_MS}ms`)), TIMEOUT_FONTE_MS)),
         ])
         return { raw, parsed: c.parse(raw), primeira: true }
