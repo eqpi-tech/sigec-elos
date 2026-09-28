@@ -32,6 +32,10 @@ const { env } = require('./runtime_env.js')
 const enabled = () => env('ROUTE_A_ENABLED') === 'true'
 const MAX_ATTEMPTS = 3
 const RETRY_MIN = 15
+// fonte pausada pela Infosimples (615) costuma voltar em horas: 6 tentativas
+// com espera crescente (15, 30, 60, 120, 240 min ≈ 8 h) antes de pedir o arquivo
+const MAX_ATTEMPTS_PAUSADA = 6
+const esperaMin = (tentativa) => RETRY_MIN * 2 ** Math.max(0, tentativa - 1)
 
 // datas das fontes vêm como dd/mm/aaaa (às vezes com hora) ou ISO
 function parseData(v) {
@@ -77,10 +81,10 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
              motivo: `Consulta automática indisponível para esta praça (${raw.code}: ${String(erroFonte).slice(0, 160)})` }
   }
   if (flag === 'indisponivel') {
-    const motivo = parsed?.headline || 'fonte indisponível'
+    const motivo = raw?.code === 615 ? `${parsed?.headline || 'fonte indisponível'} (consulta pausada pela Infosimples — instabilidade na fonte)` : (parsed?.headline || 'fonte indisponível')
     // praça fora da cobertura / fonte que exige certificado digital: não muda com retry
     const permanente = /n[aã]o coberta|fora da cobertura|emiss[aã]o indispon[ií]vel pela fonte|desconhecida/i.test(motivo)
-    return { indisponivel: true, permanente, motivo }
+    return { indisponivel: true, permanente, pausada: raw?.code === 615, motivo }
   }
 
   const d = (Array.isArray(raw?.data) && raw.data[0]) || {}
@@ -177,4 +181,4 @@ function connectorFor(docType) {
   return cfg ? registry[cfg.connector] : null
 }
 
-module.exports = { ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, RETRY_MIN }
+module.exports = { ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin }

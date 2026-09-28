@@ -11,7 +11,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { downloadReceipt } = require('./lib/infosimples.js')
-const { ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, RETRY_MIN } = require('./lib/route_a.js')
+const { ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin } = require('./lib/route_a.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const registry = require('./lib/connectors/index.js')
@@ -85,16 +85,17 @@ async function processar(job, catalogo, prefOverrides) {
 
   if (r.indisponivel) {
     const tentativas = job.attempts + 1
+    const limite = r.pausada ? MAX_ATTEMPTS_PAUSADA : MAX_ATTEMPTS
     // nova coleta falhou: um documento de coleta anterior ainda em análise
     // sai da fila (senão o analista veria uma sugestão velha)
-    if ((r.permanente || tentativas >= MAX_ATTEMPTS) && atual?.metadata?.route === 'A' && atual.status === 'PENDING') {
+    if ((r.permanente || tentativas >= limite) && atual?.metadata?.route === 'A' && atual.status === 'PENDING') {
       await sb.from('documents').update({ status: 'MISSING', storage_path: null, expires_at: null,
         metadata: { ...atual.metadata, route: null, coleta_anterior: atual.metadata.consulta, consulta: null } }).eq('id', atual.id)
     }
-    return r.permanente || tentativas >= MAX_ATTEMPTS
+    return r.permanente || tentativas >= limite
       ? { status: 'fallback', attempts: tentativas, last_error: r.motivo, cost_brl: gasto }
       : { status: 'retry', attempts: tentativas, last_error: r.motivo, cost_brl: gasto,
-          next_attempt_at: new Date(Date.now() + RETRY_MIN * 60000).toISOString() }
+          next_attempt_at: new Date(Date.now() + (r.pausada ? esperaMin(tentativas) : RETRY_MIN) * 60000).toISOString() }
   }
 
   // comprovante oficial vira o arquivo do documento (recibos da Infosimples expiram — baixar já)

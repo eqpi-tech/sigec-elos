@@ -4,6 +4,9 @@ module.exports = makeCertConnector({
   slug: 'sintegra', nome: 'Sintegra', costExtra: 0.20,
   pathFor: ({ company }) => company?.uf ? `sintegra/${company.uf.toLowerCase()}` : null,
   unsupportedNote: 'UF da sede desconhecida (base CNPJ indisponível)',
+  // sem registro = sem inscrição estadual: pode ser normal (serviço/isenta),
+  // mas quem decide é o analista — nunca "nada consta" (RRC, 28/09)
+  notFoundFlag: 'verificar',
   // Classifica pelos VALORES dos campos de situação — nunca pelo JSON inteiro:
   // o nome de campo vazio "inatividade_data" casava com /inativ/ e toda
   // inscrição de SP saía como "não habilitada" (achado nos testes de 28/09)
