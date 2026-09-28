@@ -26,7 +26,7 @@ const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', c
 export default function AutoCollectPanel({ supplierId, sealId = null, docNames = {}, docs = [] }) {
   const [jobs, setJobs] = useState([])
   const [aberto, setAberto] = useState(null)
-  const [recolhido, setRecolhido] = useState(false)
+  const [recolhido, setRecolhido] = useState(true)   // sempre inicia fechado (pedido 28/09)
   useEffect(() => { if (supplierId) routeAApi.collectJobs(supplierId).then(setJobs) }, [supplierId])
   if (!ROUTE_A_ENABLED) return null
   const lista = sealId ? jobs.filter((j) => j.seal_id === sealId) : jobs
@@ -74,7 +74,7 @@ export default function AutoCollectPanel({ supplierId, sealId = null, docNames =
                       <span style={{ fontSize: 10.5, fontWeight: 700, color: st.color, background: st.bg, padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{st.label}</span>
                       {j.status === 'retry' && j.next_attempt_at && <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>às {dt(j.next_attempt_at)}</div>}
                     </td>
-                    <td style={{ ...td, maxWidth: 380 }}>{resultado}</td>
+                    <td style={{ ...td, maxWidth: 380 }} title={resultado}>{resultado.length > 160 ? `${resultado.slice(0, 157)}…` : resultado}</td>
                     <td style={td}>{j.attempts}{hist.length ? ' ▾' : ''}</td>
                     <td style={td}>{brl(j.cost_brl)}</td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{dt(j.finished_at || j.created_at)}</td>
