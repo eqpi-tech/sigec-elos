@@ -54,6 +54,21 @@ jobs:
             exit 1
           fi
 
+  exception-letters:
+    name: Cartas de exceção (aviso 7 dias antes e vencimento → suspensão)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/exception-letters-expire")
+          echo "exception-letters-expire: $response"
+          if [ "$(echo "$response" | tail -1)" != "200" ]; then
+            echo "❌ Falha na rotina das cartas de exceção"
+            exit 1
+          fi
+
   nfe-emissao:
     name: Emissão de NFSe pendentes (varredura)
     runs-on: ubuntu-latest

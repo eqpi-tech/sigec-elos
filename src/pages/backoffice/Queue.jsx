@@ -318,7 +318,7 @@ export function BackofficeAnalysis() {
         const sealIds = (d.seals || []).map(x => x.id)
         if (sealIds.length) {
           supabase.from('supplier_category_approvals')
-            .select('id, seal_id, category_id, status, letter_path, letter_name, client_note, categories(name)')
+            .select('id, seal_id, category_id, status, letter_path, letter_name, client_note, letter_valid_until, covered_docs, categories(name)')
             .in('seal_id', sealIds)
             .then(({ data: rows }) => setExLetters(rows || []))
         }
@@ -1811,8 +1811,17 @@ export function BackofficeAnalysis() {
                   <div key={l.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:'1px solid rgba(245,158,11,.15)' }}>
                     <div style={{ flex:1,minWidth:0 }}>
                       <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,color:'#1a1c5e' }}>{l.categories?.name || `Categoria ${l.category_id}`}</div>
-                      <div style={{ fontSize:10,color: l.status==='EXCEPTION_APPROVED' ? '#15803d' : '#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
-                        {l.status==='EXCEPTION_APPROVED' ? '✓ Exceção aprovada' : 'Carta anexada — aguardando decisão'}
+                      <div style={{ fontSize:10,color: { EXCEPTION_APPROVED:'#15803d', EXCEPTION_EXPIRED:'#b91c1c', EXCEPTION_RESOLVED:'#475569' }[l.status] || '#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
+                        {(() => {
+                          const ate = l.letter_valid_until ? l.letter_valid_until.split('-').reverse().join('/') : null
+                          if (l.status === 'EXCEPTION_APPROVED') return `✓ Exceção vigente${ate ? ` até ${ate}` : ''} (carta do cliente)`
+                          if (l.status === 'EXCEPTION_EXPIRED')  return `Carta vencida em ${ate} — processo suspenso`
+                          if (l.status === 'EXCEPTION_RESOLVED') return 'Exceção encerrada — documentos regularizados'
+                          return 'Carta anexada — aguardando decisão (regra antiga)'
+                        })()}
+                        {(l.covered_docs || []).length > 0 && l.status === 'EXCEPTION_APPROVED' && (
+                          <span style={{ color:'#6b7280', fontWeight:400 }}> · cobre {l.covered_docs.length} documento(s) a regularizar</span>
+                        )}
                       </div>
                     </div>
                     {l.letter_path && (

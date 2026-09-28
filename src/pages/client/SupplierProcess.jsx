@@ -54,7 +54,8 @@ const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ']
 
 
 // ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
-//    reprovado/faltante; backoffice então homologa com exceção ────────────
+//    reprovado/faltante e informa a VALIDADE — vale na hora, sem análise do
+//    backoffice (28/09, patch_101). Vencida sem regularização → suspenso ──
 function ExceptionLetters({ seal, supplierId, clientId }) {
   const { user: exUser } = useAuth()
   const podeCarta = hasAction(exUser, 'acao:carta_excecao')
@@ -62,6 +63,10 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
   const [letters, setLetters] = useState({})   // category_id → row
   const [busy, setBusy]       = useState(null)
   const [open, setOpen]       = useState(false)
+  const [validade, setValidade] = useState({})   // category_id → 'AAAA-MM-DD'
+  const [trocar, setTrocar]     = useState({})   // category_id → true (substituir/renovar)
+  const amanha = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10) })()
+  const fmt = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : ''
 
   useEffect(() => {
     if (!seal?.id) return
@@ -70,7 +75,7 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
       .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
       .then(({ data }) => setCats((data || []).map(r => r.categories)))
     supabase.from('supplier_category_approvals')
-      .select('category_id, status, letter_name, approved_at')
+      .select('category_id, status, letter_name, approved_at, letter_valid_until, covered_docs')
       .eq('seal_id', seal.id)
       .then(({ data }) => setLetters(Object.fromEntries((data || []).map(r => [r.category_id, r]))))
   }, [seal?.id])
@@ -89,12 +94,16 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
       const resp = await authFetch('/.netlify/functions/exception-letter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', sealId: seal.id, categoryId: cat.id,
+        body: JSON.stringify({ action: 'upload', sealId: seal.id, categoryId: cat.id, validUntil: validade[cat.id],
           file: { name: file.name, mime: file.type, base64 } }),
       })
       const out = await resp.json()
       if (!resp.ok) throw new Error(out.error)
-      setLetters(p => ({ ...p, [cat.id]: { category_id: cat.id, status: 'EXCEPTION_REQUESTED', letter_name: file.name } }))
+      setLetters(p => ({ ...p, [cat.id]: { category_id: cat.id, status: 'EXCEPTION_APPROVED', letter_name: file.name,
+        letter_valid_until: out.valid_until, covered_docs: (out.covered || []).map(d => d.type) } }))
+      setTrocar(p => ({ ...p, [cat.id]: false }))
+      alert(`🏅 Carta registrada — ${cat.name} homologada com exceção até ${fmt(out.valid_until)}.`
+        + ((out.covered || []).length ? `\n\nO fornecedor precisa regularizar até lá: ${out.covered.map(d => d.label).join(', ')}.` : ''))
     } catch (e) { alert('Erro ao anexar carta: ' + e.message) }
     finally { setBusy(null) }
   }
@@ -106,7 +115,7 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
         <div style={{ flex:1 }}>
           <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#92400e' }}>Carta de Exceção</div>
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>
-            Aprove uma categoria específica mesmo com documento reprovado — anexe a carta e o backoffice homologa com exceção
+            Aprove uma categoria mesmo com documento reprovado ou faltando: anexe a carta e informe a validade — a homologação com exceção vale na hora
           </div>
         </div>
         <span style={{ color:'#9B9B9B', fontSize:12 }}>{open ? '▲' : '▼'}</span>
@@ -118,16 +127,45 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
             return (
               <div key={cat.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:'1px solid #eef0f6' }}>
                 <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>{cat.name}</span>
-                {l?.status === 'EXCEPTION_APPROVED' ? (
-                  <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>✓ Exceção aprovada</span>
-                ) : l ? (
+                {l?.status === 'EXCEPTION_APPROVED' && !trocar[cat.id] ? (
+                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>
+                      ✓ Exceção vigente{l.letter_valid_until ? ` até ${fmt(l.letter_valid_until)}` : ''}
+                    </span>
+                    {podeCarta && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: true }))} title="Substituir a carta / renovar a validade"
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>renovar</button>}
+                  </span>
+                ) : l?.status === 'EXCEPTION_EXPIRED' && !trocar[cat.id] ? (
+                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b91c1c', background:'#fee2e2', padding:'3px 10px', borderRadius:20 }}>
+                      Carta vencida em {fmt(l.letter_valid_until)} — processo suspenso
+                    </span>
+                    {podeCarta && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: true }))}
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>nova carta</button>}
+                  </span>
+                ) : l?.status === 'EXCEPTION_RESOLVED' && !trocar[cat.id] ? (
+                  <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#475569', background:'#f1f5f9', padding:'3px 10px', borderRadius:20 }}>Exceção encerrada — documentos regularizados</span>
+                ) : l?.status === 'EXCEPTION_REQUESTED' && !trocar[cat.id] ? (
                   <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b45309', background:'#fef3c7', padding:'3px 10px', borderRadius:20 }}>📜 Carta anexada — aguardando backoffice</span>
                 ) : podeCarta ? (
-                  <label style={{ fontSize:11, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#2E3192', border:'1px dashed #2E319266', padding:'6px 12px', borderRadius:8, cursor: busy ? 'wait' : 'pointer' }}>
-                    {busy === cat.id ? 'Enviando…' : '📎 Anexar carta'}
-                    <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!busy}
-                      onChange={e => e.target.files?.[0] && upload(cat, e.target.files[0])}/>
-                  </label>
+                  <span style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                    <label style={{ fontSize:10, color:'#6b7280', fontFamily:'DM Sans,sans-serif', display:'flex', alignItems:'center', gap:4 }}>
+                      Validade da carta
+                      <input type="date" min={amanha} value={validade[cat.id] || ''}
+                        onChange={e => setValidade(p => ({ ...p, [cat.id]: e.target.value }))}
+                        style={{ fontSize:11, padding:'4px 6px', borderRadius:6, border:'1px solid #e2e4ef' }}/>
+                    </label>
+                    <label title={validade[cat.id] ? '' : 'Informe a validade da carta primeiro'}
+                      style={{ fontSize:11, fontWeight:700, fontFamily:'Montserrat,sans-serif', color: validade[cat.id] ? '#2E3192' : '#9B9B9B',
+                        border:`1px dashed ${validade[cat.id] ? '#2E319266' : '#d1d5db'}`, padding:'6px 12px', borderRadius:8,
+                        cursor: busy ? 'wait' : validade[cat.id] ? 'pointer' : 'not-allowed' }}>
+                      {busy === cat.id ? 'Enviando…' : '📎 Anexar carta'}
+                      <input type="file" accept=".pdf,.png,.jpg,.jpeg" style={{ display:'none' }} disabled={!!busy || !validade[cat.id]}
+                        onChange={e => e.target.files?.[0] && upload(cat, e.target.files[0])}/>
+                    </label>
+                    {trocar[cat.id] && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: false }))}
+                      style={{ fontSize:10, border:'none', background:'none', color:'#9B9B9B', cursor:'pointer' }}>cancelar</button>}
+                  </span>
                 ) : (
                   <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão p/ anexar</span>
                 )}

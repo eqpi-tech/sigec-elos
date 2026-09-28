@@ -57,8 +57,11 @@ exports.handler = async (event) => {
   // de reprovação dias depois do de aprovação). Exige confirmação explícita.
   if (status === 'REJECTED' && !body.confirmRevoke) {
     const { data: docRow } = await supabaseAdmin
-      .from('documents').select('supplier_id').eq('id', documentId).maybeSingle()
-    if (docRow?.supplier_id) {
+      .from('documents').select('supplier_id, type').eq('id', documentId).maybeSingle()
+    // documento coberto por carta de exceção vigente: reprovar não revoga (patch_101)
+    const coberto = docRow?.supplier_id
+      && (await coveredTypes(supabaseAdmin, docRow.supplier_id)).has(String(docRow.type))
+    if (docRow?.supplier_id && !coberto) {
       const { data: activeSeal } = await supabaseAdmin
         .from('seals').select('seal_name, clients(razao_social, nome_fantasia)')
         .eq('supplier_id', docRow.supplier_id).eq('status', 'ACTIVE')
@@ -119,7 +122,11 @@ exports.handler = async (event) => {
     .order('created_at', { ascending: false })
     .limit(1).maybeSingle()
 
-  const reqTypes = await requiredDocsForSeal(supabaseAdmin, supplierId, procSeal)
+  // documentos cobertos por carta de exceção vigente saem da conta: não
+  // travam nem reprovam o processo enquanto a carta valer (patch_101)
+  const cobertos = await coveredTypes(supabaseAdmin, supplierId)
+  const reqTypes = (await requiredDocsForSeal(supabaseAdmin, supplierId, procSeal))
+    .filter(t => !cobertos.has(String(t)))
   const byType = {}
   for (const d of (allDocs || [])) byType[String(d.type)] = d
 
@@ -357,6 +364,7 @@ exports.handler = async (event) => {
 // category_documents required). Vazio quando o selo não tem fluxo definido.
 // requiredDocsForSeal/flowRequiredDocs extraídos p/ lib/required_docs.js (21/09)
 const { requiredDocsForSeal, mobilityPending } = require('./lib/required_docs.js')
+const { coveredTypes } = require('./lib/exception_cover.js')
 
 
 async function recalcSealScores(sb, supplierId) {
