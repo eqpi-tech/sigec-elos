@@ -6,6 +6,7 @@ import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
+import RouteABadge from '../../components/RouteABadge.jsx'
 
 // Dois filtros INDEPENDENTES (patch_075):
 // · Limite de análise = a FILA do analista (regra HOC: envio + 3 dias úteis)
@@ -882,6 +883,7 @@ export default function DocumentAnalysis() {
                       {String(doc.type).startsWith('mob:') && ' · 👷 Mobilidade'}
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
+                    <RouteABadge doc={doc} compact/>
                   </div>
 
                   {/* Status */}

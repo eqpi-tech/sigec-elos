@@ -19,6 +19,9 @@
 
 [context."staging".environment]
   ELOS_ENV = "staging"
+  # homologação automática, fase 1 (SPEC_HOMOLOGACAO_AUTOMATICA.md) — só staging
+  ROUTE_A_ENABLED = "true"
+  VITE_ROUTE_A_ENABLED = "true"
 
 [context.deploy-preview.environment]
   ELOS_ENV = "preview"
@@ -29,6 +32,10 @@
 # branch deploys não executam schedules)
 [functions."bc-report-cron"]
   schedule = "* * * * *"
+
+# Rota A: novas tentativas da coleta automática (inerte sem ROUTE_A_ENABLED)
+[functions."homolog-collect-cron"]
+  schedule = "*/15 * * * *"
 
 # O worker background gera o PDF (Playwright): o binário do chromium lambda
 # não pode ser bundlado pelo esbuild — vai como módulo externo + arquivos

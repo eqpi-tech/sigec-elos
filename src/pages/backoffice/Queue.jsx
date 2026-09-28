@@ -6,6 +6,7 @@ import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionT
 import { supabase } from '../../lib/supabase.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
+import RouteABadge from '../../components/RouteABadge.jsx'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -699,7 +700,10 @@ export function BackofficeAnalysis() {
     setApproveInscription('')
     // validade: sugestão do load (fim do plano) ou análise + 1 ano (18/09 —
     // o campo vinha vazio p/ fornecedor sem plano, ex.: subsidiado)
-    if (!approveExpiry) {
+    // Rota A: a certidão da fonte oficial já traz a validade — ela prevalece
+    if (doc.metadata?.route === 'A' && doc.expires_at) {
+      setApproveExpiry(doc.expires_at.slice(0, 10))
+    } else if (!approveExpiry) {
       const d = new Date(); d.setFullYear(d.getFullYear() + 1)
       setApproveExpiry(d.toISOString().slice(0, 10))
     }
@@ -1382,6 +1386,7 @@ export function BackofficeAnalysis() {
                       {doc.source==='AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}
                       {doc.expires_at ? ` · vence ${doc.expires_at.slice(0,10)}` : ''}
                     </div>
+                    <RouteABadge doc={doc}/>
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
                   {(() => {

@@ -3,6 +3,8 @@
 // Chamado pelo onboarding APÓS o signup — não depende de RLS
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardMail } = require('./lib/mail_guard.js')
+const routeA = require('./lib/route_a.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -484,13 +486,30 @@ exports.handler = async (event) => {
     <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Acessar meu painel</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
-      await fetch('https://api.resend.com/emails', {
+      const g = guardMail(user.email, `🎉 Bem-vindo ao SIGEC-ELOS — cadastro da ${razao_social} concluído`)
+      if (!g.skip) await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
         body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-          to: [user.email], subject: `🎉 Bem-vindo ao SIGEC-ELOS — cadastro da ${razao_social} concluído`, html }),
+          to: g.to, subject: g.subject, html }),
       })
     } catch (e) { console.warn('welcome email (não crítico):', e.message) }
+
+    // Homologação automática — Rota A (staging, ROUTE_A_ENABLED): enfileira a
+    // consulta às fontes oficiais dos documentos exigidos e dispara o coletor.
+    // Melhor esforço: se falhar, o fornecedor segue o fluxo manual de sempre.
+    if (routeA.enabled()) {
+      try {
+        const n = await routeA.enqueueRouteA(supabaseAdmin, supplier.id)
+        const site = process.env.ELOS_ENV === 'production' ? process.env.URL : (process.env.DEPLOY_PRIME_URL || process.env.URL)
+        if (n && site && process.env.CRON_SECRET) {
+          await fetch(`${site}/.netlify/functions/homolog-collect-background`, {
+            method: 'POST', headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, body: '{}',
+          })
+        }
+        console.log(`[rota-a] ${n} consulta(s) enfileirada(s) para ${supplier.id}`)
+      } catch (e) { console.warn('[rota-a] enfileirar (não crítico):', e.message) }
+    }
 
     return {
       statusCode: 201,

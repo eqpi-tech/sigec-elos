@@ -1371,6 +1371,23 @@ export const mobilityApi = {
   },
 }
 
+// ── Homologação automática — Rota A (SPEC_HOMOLOGACAO_AUTOMATICA.md) ─────────
+// Fila da coleta nas fontes oficiais. Só leitura no browser: quem enfileira e
+// processa é o servidor (create-supplier + homolog-collect-background).
+export const ROUTE_A_ENABLED = import.meta.env.VITE_ROUTE_A_ENABLED === 'true'
+
+export const routeAApi = {
+  // doc_type → { status, attempts, last_error } (o job mais recente por tipo)
+  jobsFor: async (supplierId) => {
+    if (!ROUTE_A_ENABLED || !supplierId) return {}
+    const { data, error } = await supabase.from('auto_collect_jobs')
+      .select('doc_type, status, attempts, last_error, created_at')
+      .eq('supplier_id', supplierId).order('created_at', { ascending: true })
+    if (error) { console.warn('auto_collect_jobs:', error.message); return {} }
+    return Object.fromEntries((data || []).map(j => [j.doc_type, j]))
+  },
+}
+
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
 export const clientApi = {
   // Dashboard KPIs: fornecedores convidados por este cliente
