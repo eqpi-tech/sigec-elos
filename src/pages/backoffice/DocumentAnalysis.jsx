@@ -248,6 +248,13 @@ function EditDocModal({ doc, reasons, rule, ia, onView, onSubmit, onClose }) {
           {doc.expires_at && ` · vence em ${doc.expires_at.slice(0,10)}`}
         </div>
 
+        {ia && (
+          <div style={{ border:'1px solid rgba(46,49,146,.18)', background:'#fafbff', borderRadius:10, padding:'8px 12px', marginBottom:14 }}>
+            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', color:'#2E3192' }}>🤖 Pré-análise por IA (sugestão)</strong>
+            <RouteBReview review={ia}/>
+          </div>
+        )}
+
         {rule && (
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1e40af', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:14, whiteSpace:'pre-line' }}>
             <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom:4 }}>📋 Como validar este documento</strong>
@@ -255,12 +262,6 @@ function EditDocModal({ doc, reasons, rule, ia, onView, onSubmit, onClose }) {
           </div>
         )}
 
-        {ia && (
-          <div style={{ border:'1px solid rgba(46,49,146,.18)', background:'#fafbff', borderRadius:10, padding:'8px 12px', marginBottom:14 }}>
-            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', color:'#2E3192' }}>🤖 Pré-análise por IA (sugestão)</strong>
-            <RouteBReview review={ia}/>
-          </div>
-        )}
 
         {(doc.storage_path || doc.hoc_arquivo_id) && (
           <Button variant="neutral" size="sm" style={{ marginBottom:16 }} onClick={() => onView(doc)}>
