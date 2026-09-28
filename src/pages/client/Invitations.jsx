@@ -63,8 +63,12 @@ export default function ClientInvitations() {
   }, [user?.clientId])
 
   // Ao escolher o objetivo, gera o template (a mensagem continua editável)
+  // texto automático: refeito ao escolher o objetivo e ao digitar a razão
+  // social, ENQUANTO o usuário não editar a mensagem (28/09 — saía "Olá,
+  // fornecedor!" porque o texto era montado antes da razão social)
+  const [msgEditada, setMsgEditada] = useState(false)
   const pickObjetivo = (val) => {
-    setForm(f => ({ ...f, objetivo: val, message: buildTemplate(val, f.razao_social, clientName, user?.name) }))
+    setForm(f => ({ ...f, objetivo: val, message: msgEditada ? f.message : buildTemplate(val, f.razao_social, clientName, user?.name) }))
   }
 
   // Pré-preenchimento vindo de outras telas (ex.: relatório de interessados)
@@ -141,6 +145,7 @@ export default function ClientInvitations() {
       setSuccess(`Convite enviado para ${form.email}!`)
       setShowModal(false)
       setForm({ ...EMPTY_FORM, subsidiado: subsidioPadrao })
+      setMsgEditada(false)
       load()
     } catch (err) {
       setError(err.message)
@@ -310,7 +315,7 @@ export default function ClientInvitations() {
               <div style={row2}>
                 <div>
                   <label style={lbl}>Razão Social *</label>
-                  <input value={form.razao_social} onChange={e=>setForm(f=>({...f, razao_social:e.target.value}))} required placeholder="Empresa Ltda" style={inp} />
+                  <input value={form.razao_social} onChange={e=>{ const v = e.target.value; setForm(f=>({...f, razao_social:v, message: (!msgEditada && f.objetivo) ? buildTemplate(f.objetivo, v, clientName, user?.name) : f.message})) }} required placeholder="Empresa Ltda" style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>CNPJ</label>
@@ -399,7 +404,7 @@ export default function ClientInvitations() {
               {form.objetivo && (
                 <div style={{ marginBottom:20 }}>
                   <label style={lbl}>Prévia da mensagem (editável)</label>
-                  <textarea value={form.message} onChange={e=>setForm(f=>({...f, message:e.target.value}))} rows={6}
+                  <textarea value={form.message} onChange={e=>{ setMsgEditada(true); setForm(f=>({...f, message:e.target.value})) }} rows={6}
                     style={{ ...inp, resize:'vertical', minHeight:120, lineHeight:1.6 }}/>
                   <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
                     Este texto é o corpo do e-mail que o fornecedor receberá{form.objetivo === 'homologacao' ? ', junto com o link de cadastro' : ''}.
