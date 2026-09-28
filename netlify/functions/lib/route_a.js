@@ -52,6 +52,27 @@ function somar(base, { anos = 0, meses = 0 }) {
 function avaliar(docType, raw, parsed, agora = new Date()) {
   const cfg = ROUTE_A[docType]
   const flag = parsed?.result_flag
+  const d0 = (Array.isArray(raw?.data) && raw.data[0]) || {}
+  const erroFonte = (raw?.errors || [])[0] || raw?.codeMessage || ''
+
+  // a fonte respondeu, mas NÃO emitiu a certidão (pendência do fornecedor):
+  // não adianta tentar de novo — o fornecedor precisa regularizar ou enviar
+  // a certidão que conseguir (ex.: positiva com efeito de negativa)
+  if (parsed?.nao_emitida || d0.conseguiu_emitir_certidao_negativa === false) {
+    return { indisponivel: true, permanente: true, fornecedor: true,
+             motivo: `A fonte não emitiu a certidão: ${String(d0.mensagem || parsed?.headline || '').slice(0, 220)}` }
+  }
+  // 611 dados insuficientes p/ emitir pela internet · 620 erro permanente da
+  // fonte (ex.: impedimentos na Caixa): a mensagem da fonte interessa ao fornecedor
+  if (raw?.code === 611 || raw?.code === 620) {
+    return { indisponivel: true, permanente: true, fornecedor: true, motivo: `A fonte informou: ${String(erroFonte).slice(0, 240)}` }
+  }
+  // 602 praça sem serviço · 606 a fonte exige dado que não coletamos (ex.:
+  // inscrição municipal no Rio): permanente, mensagem técnica fica p/ a equipe
+  if (raw?.code === 602 || raw?.code === 606) {
+    return { indisponivel: true, permanente: true, fornecedor: false,
+             motivo: `Consulta automática indisponível para esta praça (${raw.code}: ${String(erroFonte).slice(0, 160)})` }
+  }
   if (flag === 'indisponivel') {
     const motivo = parsed?.headline || 'fonte indisponível'
     // praça fora da cobertura / fonte que exige certificado digital: não muda com retry
@@ -60,11 +81,15 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
   }
 
   const d = (Array.isArray(raw?.data) && raw.data[0]) || {}
-  const texto = `${parsed?.headline || ''} ${JSON.stringify(d).slice(0, 4000)}`
+  // só o veredito do conector e os campos de TIPO/SITUAÇÃO da certidão — nunca
+  // mensagens livres, que citam "positiva com efeito de negativa" como instrução
+  const texto = [parsed?.headline || '', ...Object.entries(d)
+    .filter(([k, v]) => typeof v === 'string' && /tipo|situa|conclus|resultado|^certidao$/i.test(k))
+    .map(([, v]) => v)].join(' ')
   let sugestao = 'revisar', motivo = parsed?.headline || ''
   if (flag === 'nada_consta') sugestao = 'aprovar'
   else if (flag === 'apontamento') sugestao = 'reprovar'
-  else if (flag === 'verificar' && cfg.positivaEfeitoNegativa
+  else if (flag === 'verificar' && cfg.positivaEfeitoNegativa && !parsed?.nao_emitida
            && /positiva com efeitos? de negativa/i.test(texto)) {
     sugestao = 'aprovar'                       // regra do cliente: aceita positiva c/ efeito de negativa
     motivo = `${motivo} — aceita pela regra do cliente`

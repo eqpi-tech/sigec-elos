@@ -22,8 +22,9 @@ module.exports = {
     const msg = String(d.mensagem || '').toLowerCase()
     let result_flag = 'indisponivel', headline = 'CNDT — fonte indisponível'
     if (status === 'ok') {
-      if (d.consta === false || /negativa/.test(msg)) { result_flag = 'nada_consta'; headline = 'CNDT: negativa — sem débitos trabalhistas' }
-      else if (/positiva com efeito/.test(msg))       { result_flag = 'verificar';   headline = 'CNDT: POSITIVA com efeitos de negativa' }
+      // "positiva com efeito de negativa" também contém "negativa": testar antes
+      if (/positiva com efeito/.test(msg))            { result_flag = 'verificar';   headline = 'CNDT: POSITIVA com efeitos de negativa' }
+      else if (d.consta === false || /negativa/.test(msg)) { result_flag = 'nada_consta'; headline = 'CNDT: negativa — sem débitos trabalhistas' }
       else if (d.consta === true || /positiva/.test(msg)) { result_flag = 'apontamento'; headline = 'CNDT: POSITIVA — consta no BNDT (débitos trabalhistas)' }
       else { result_flag = 'verificar'; headline = `CNDT: ${d.mensagem || 'ver certidão'}` }
     } else if (status === 'not_found') {

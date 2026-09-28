@@ -50,7 +50,7 @@ async function processar(job, catalogo, prefOverrides) {
 
   // já tem documento válido deste tipo, com folga de validade: não paga a consulta
   const { data: atual } = await sb.from('documents')
-    .select('id, status, expires_at, source, storage_path').eq('supplier_id', sup.id).eq('type', job.doc_type).maybeSingle()
+    .select('id, status, expires_at, source, storage_path, metadata').eq('supplier_id', sup.id).eq('type', job.doc_type).maybeSingle()
   if (atual?.status === 'VALID' && atual.expires_at && new Date(atual.expires_at) > new Date(Date.now() + 30 * 864e5)) {
     return { status: 'done', last_error: 'documento válido já existente — reaproveitado' }
   }
@@ -84,6 +84,12 @@ async function processar(job, catalogo, prefOverrides) {
 
   if (r.indisponivel) {
     const tentativas = job.attempts + 1
+    // nova coleta falhou: um documento de coleta anterior ainda em análise
+    // sai da fila (senão o analista veria uma sugestão velha)
+    if ((r.permanente || tentativas >= MAX_ATTEMPTS) && atual?.metadata?.route === 'A' && atual.status === 'PENDING') {
+      await sb.from('documents').update({ status: 'MISSING', storage_path: null, expires_at: null,
+        metadata: { ...atual.metadata, route: null, coleta_anterior: atual.metadata.consulta, consulta: null } }).eq('id', atual.id)
+    }
     return r.permanente || tentativas >= MAX_ATTEMPTS
       ? { status: 'fallback', attempts: tentativas, last_error: r.motivo, cost_brl: gasto }
       : { status: 'retry', attempts: tentativas, last_error: r.motivo, cost_brl: gasto,

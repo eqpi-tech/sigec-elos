@@ -10,8 +10,17 @@ function textOf(d) {
   return JSON.stringify(d || {}).toLowerCase()
 }
 
+// "Não foi possível emitir a Certidão Negativa..." contém a palavra
+// "negativa" (e às vezes "positiva com efeito de negativa", como instrução):
+// sem esta checagem a certidão NÃO emitida saía como "negativa / nada consta"
+// (achado nos testes da Rota A em 28/09 — Sefaz SP e ES)
+const NAO_EMITIDA = /n[aã]o (foi|[eé]) poss[ií]vel emitir|insuficientes para emitir|n[aã]o p[oô]de ser emitida/
+
 function defaultClassify(nome, d) {
   const t = textOf(d)
+  if (d?.conseguiu_emitir_certidao_negativa === false || NAO_EMITIDA.test(t)) {
+    return { result_flag: 'verificar', nao_emitida: true, headline: `${nome}: a fonte NÃO emitiu a certidão negativa — há pendências a verificar` }
+  }
   if (/positiva com efeitos? de negativa/.test(t)) return { result_flag: 'verificar', headline: `${nome}: POSITIVA com efeitos de negativa` }
   if (/negativa|regular(?!iza)|nada consta|n[aã]o consta/.test(t)) return { result_flag: 'nada_consta', headline: `${nome}: negativa / nada consta` }
   if (/positiva|consta|irregular|d[eé]bito/.test(t)) return { result_flag: 'apontamento', headline: `${nome}: POSITIVA — ver certidão` }
@@ -65,4 +74,4 @@ function makeCertConnector(cfg) {
   }
 }
 
-module.exports = { makeCertConnector, defaultClassify }
+module.exports = { makeCertConnector, defaultClassify, NAO_EMITIDA }

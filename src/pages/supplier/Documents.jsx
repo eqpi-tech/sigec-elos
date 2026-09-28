@@ -476,7 +476,10 @@ export default function SupplierDocuments() {
             <div style={{ fontSize:10, color:'#0369a1', marginTop:2 }}>Estamos buscando este documento para você — não precisa enviar.</div>
           )}
           {fonteFalhou && (
-            <div style={{ fontSize:10, color:'#b45309', marginTop:2 }}>Não conseguimos obter este documento na fonte oficial — envie o arquivo, por favor.</div>
+            <div style={{ fontSize:10, color:'#b45309', marginTop:2 }}>
+              Não conseguimos obter este documento na fonte oficial — envie o arquivo, por favor.
+              {/^A fonte /.test(job.last_error || '') && <div style={{ color:'#6b7280', marginTop:1 }}>{job.last_error}</div>}
+            </div>
           )}
           {/* Indicador de reaproveitamento: documento aprovado previamente e reusado neste processo */}
           {up?.reviewed_by && up?.status === 'VALID' && (
