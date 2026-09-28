@@ -38,6 +38,14 @@ export default function SupplierOnboarding() {
       return sessionStorage.getItem(`elos_onb_${key}`) || null
     } catch { return val }
   }
+  // O link aberto AGORA manda: convite (token) e portal (ref/flow) são
+  // entradas diferentes — um ref antigo guardado na aba não pode viajar junto
+  // de um convite, nem um token antigo junto de um portal (28/09: convite
+  // duplicado "sem razão social" na aba de convites do cliente)
+  try {
+    if (_params.get('token')) { sessionStorage.removeItem('elos_onb_ref'); sessionStorage.removeItem('elos_onb_flow') }
+    else if (_params.get('ref')) sessionStorage.removeItem('elos_onb_token')
+  } catch { /* storage bloqueado: segue só com a URL */ }
   const inviteToken = _keep('token', _params.get('token'))
   const refSlug     = _keep('ref',   _params.get('ref'))
   const refFlowId   = _keep('flow',  _params.get('flow'))   // pacote escolhido no portal do cliente
