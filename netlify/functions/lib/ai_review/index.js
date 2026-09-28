@@ -14,7 +14,12 @@ const MODEL = process.env.ROUTE_B_MODEL || 'claude-sonnet-5'
 // v2 (28/09, após o piloto): validade da regra ≠ idade do documento; tipo de
 // empresa do cadastro; compatibilidade de atividade só "claramente"; exceção
 // da regra (outro documento aceito) → revisar
-const PROMPT_VERSION = 'v2'
+// v3 (28/09, integração ao sistema): a checagem de tipo de empresa vale só
+// para o ato constitutivo (contrato social/estatuto) — no piloto ela foi
+// aplicada indevidamente a uma Licença de Operação
+const PROMPT_VERSION = 'v3'
+// tipos cujo documento É o ato constitutivo (natureza jurídica verificável)
+const TIPOS_ATO_CONSTITUTIVO = new Set(['39'])
 // US$ por milhão de tokens (tabela da API, 06/2026) e câmbio de referência
 const PRICE = { 'claude-sonnet-5': { in: 2, out: 10 }, 'claude-opus-5': { in: 5, out: 25 }, 'claude-haiku-4-5': { in: 1, out: 5 } }
 const USD_BRL = Number(process.env.USD_BRL || 5.5)
@@ -41,7 +46,7 @@ const ReviewSchema = z.object({
   confianca: z.number().describe('0 a 1'),
 })
 
-function systemPrompt(motivos) {
+function systemPrompt(motivos, { checarTipoEmpresa = false } = {}) {
   return `Você é analista de homologação de fornecedores da EQPI. Sua tarefa é fazer a PRÉ-ANÁLISE de um documento enviado por um fornecedor, aplicando a regra do cliente para aquele tipo de documento. Um analista humano sempre confere sua conclusão.
 
 Como decidir:
@@ -55,9 +60,9 @@ Validade (leia com atenção):
 - A linha "VALIDADE:" da regra diz qual vencimento o analista vai REGISTRAR depois de aprovar (ex.: "1 ano da data de análise" = o sistema considera o documento válido por 1 ano a partir da análise). Isso NÃO é uma idade máxima do documento: um contrato social registrado há 3 anos continua aceitável.
 - O documento só está vencido se ele PRÓPRIO trouxer uma validade já expirada na data de referência, ou se a regra fixar expressamente um prazo máximo desde a emissão (ex.: "emitido há no máximo 90 dias"). Alvará "de exercício" vale até o fim do ano de exercício.
 
-Tipo de empresa: compare a natureza do documento com o tipo de empresa do CADASTRO (ex.: estatuto/ata de S.A. para empresa cadastrada como LTDA, ou o contrário). Divergência de tipo de empresa é motivo para reprovar.
+${checarTipoEmpresa ? `Tipo de empresa: compare a natureza do documento com o tipo de empresa do CADASTRO (ex.: estatuto/ata de S.A. para empresa cadastrada como LTDA, ou o contrário). Divergência de tipo de empresa é motivo para reprovar.
 
-Atividade × categorias: só conclua que a atividade licenciada/autorizada atende quando a relação com as categorias do processo for CLARA. Se a compatibilidade depender de interpretação, use "revisar" (não aprove nem reprove por inferência).
+` : ''}Atividade × categorias: só conclua que a atividade licenciada/autorizada atende quando a relação com as categorias do processo for CLARA. Se a compatibilidade depender de interpretação, use "revisar" (não aprove nem reprove por inferência).
 
 Documento diferente aceito por exceção: se o arquivo não é o documento principal pedido, mas pode ser aceito por uma exceção da regra (ex.: dispensa, autorização de outro órgão, decreto), use "revisar" e cite no motivo qual item da regra permitiria aceitá-lo.
 - Na checklist, um item por critério da regra, com uma evidência curta do próprio documento.
@@ -83,21 +88,23 @@ function blocoDocumento(arquivo) {
   return { type: 'image', source: { type: 'base64', media_type: arquivo.mime, data: arquivo.b64 } }
 }
 
-async function revisar({ client, motivos, tipoNome, regra, fornecedor, dataReferencia, arquivo, model = MODEL }) {
+async function revisar({ client, motivos, tipo, tipoNome, regra, fornecedor, dataReferencia, arquivo, model = MODEL }) {
   client = client || new Anthropic()
+  // sem o tipo (eval antigo), mantém o comportamento do v2
+  const checarTipoEmpresa = tipo == null || TIPOS_ATO_CONSTITUTIVO.has(String(tipo))
   const contexto = `Tipo de documento solicitado: ${tipoNome}
 
 Regra do cliente para este documento:
 ${regra}
 
-Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}${fornecedor.tipo_empresa ? ` · tipo de empresa ${fornecedor.tipo_empresa}` : ''}${fornecedor.regime_tributario ? ` · regime tributário ${fornecedor.regime_tributario}` : ''}
+Fornecedor (dados do cadastro): CNPJ ${fornecedor.cnpj} · razão social ${fornecedor.razao_social}${fornecedor.municipio ? ` · município ${fornecedor.municipio}` : ''}${checarTipoEmpresa && fornecedor.tipo_empresa ? ` · tipo de empresa ${fornecedor.tipo_empresa}` : ''}${fornecedor.regime_tributario ? ` · regime tributário ${fornecedor.regime_tributario}` : ''}
 Categorias de atuação no processo: ${(fornecedor.categorias || []).join('; ') || 'não informadas'}
 Data de referência da análise: ${dataReferencia}`
   const t0 = Date.now()
   const resp = await client.messages.parse({
     model,
     max_tokens: 16000,
-    system: [{ type: 'text', text: systemPrompt(motivos), cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: systemPrompt(motivos, { checarTipoEmpresa }), cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: [blocoDocumento(arquivo), { type: 'text', text: contexto }] }],
     output_config: { format: zodOutputFormat(ReviewSchema) },
   })
@@ -116,4 +123,40 @@ Data de referência da análise: ${dataReferencia}`
   }
 }
 
-module.exports = { Anthropic, PROMPT_VERSION, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, revisar, MODEL }
+// Prepara o arquivo para a IA dentro da function (sem pdftotext): PDF com
+// camada de texto → texto com CPF/RG mascarados; PDF escaneado → o próprio
+// PDF; imagem → imagem. Mesmos limiares do piloto (scripts/eval_rota_b.cjs).
+function sniff(buf) {
+  if (buf.slice(0, 4).toString('latin1') === '%PDF') return 'pdf'
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg'
+  if (buf[0] === 0x89 && buf.slice(1, 4).toString('latin1') === 'PNG') return 'image/png'
+  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp'
+  return null
+}
+const MAX_PDF_BYTES = 20e6      // base64 cresce ~33%; a requisição tem teto de 32 MB
+const MAX_IMG_BYTES = 5e6       // limite da API para imagem
+const MAX_PAGINAS = 100
+
+async function prepararArquivo(buf) {
+  const t = sniff(buf)
+  if (!t) return { modo: 'pular', motivo: 'formato não suportado (envie PDF, JPG ou PNG)' }
+  if (t !== 'pdf') {
+    if (buf.length > MAX_IMG_BYTES) return { modo: 'pular', motivo: 'imagem grande demais para a pré-análise' }
+    return { modo: 'imagem', mime: t, b64: buf.toString('base64'), paginas: 1 }
+  }
+  let texto = '', paginas = 1
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf')
+    const pdf = await getDocumentProxy(new Uint8Array(buf))
+    const r = await extractText(pdf, { mergePages: false })
+    paginas = r.totalPages || 1
+    texto = r.text.map((p, i) => `--- página ${i + 1} ---\n${p}`).join('\n\n')
+  } catch { /* PDF sem camada de texto ou protegido: segue como arquivo */ }
+  if (paginas > MAX_PAGINAS) return { modo: 'pular', motivo: `PDF com ${paginas} páginas (máx. ${MAX_PAGINAS})`, paginas }
+  const util = texto.replace(/---\s*página\s*\d+\s*---/g, '').replace(/\s+/g, '').length
+  if (util >= 250 * paginas * 0.5 && util > 300) return { modo: 'texto', texto: mascararPII(texto), paginas }
+  if (buf.length > MAX_PDF_BYTES) return { modo: 'pular', motivo: 'PDF escaneado grande demais para a pré-análise', paginas }
+  return { modo: 'pdf', b64: buf.toString('base64'), paginas }
+}
+
+module.exports = { Anthropic, PROMPT_VERSION, TIPOS_ATO_CONSTITUTIVO, ReviewSchema, systemPrompt, mascararPII, blocoDocumento, revisar, prepararArquivo, MODEL }

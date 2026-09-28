@@ -1,6 +1,8 @@
 # SPEC — Route B: AI pre-analysis of supplier-uploaded documents
 
-Status: **draft for approval** (28/09). Depends on Route A (SPEC_HOMOLOGACAO_AUTOMATICA.md,
+Status: **implemented in staging** (28/09) — patch_109, `homolog-ai-review-background.js`,
+backoffice components `RouteBReview` / `AiReviewPanel`. Enabled types: 40 Alvará and 19 LO
+(passed the pilot); 39 Contrato Social is `route='B'` but stays `manual` until its rules are decided. Depends on Route A (SPEC_HOMOLOGACAO_AUTOMATICA.md,
 patch_098). Staging first; nothing reaches production until the eval gate (§7) passes.
 
 Principle (unchanged from Route A): **technology prepares, the team decides.** In this phase
@@ -59,8 +61,11 @@ parsing like today's `ai-extract-document.js`):
 }
 ```
 
-Stored in `documents.metadata.ia` together with `model`, `prompt_version`, `rule_version`,
-`cost_brl`, `reviewed_at`. The analyst's final decision is compared with it (agreement log, §7).
+Stored in `ai_review_jobs.result` (not `documents.metadata`: the supplier can read its own
+documents and must not see the AI verdict in this phase, and a re-upload overwrites metadata),
+together with `model`, `prompt_version`, `cost_brl`, `finished_at`. A trigger records the
+analyst's decision on the same row (`analyst_decision`) — agreement log, §7, view
+`ai_review_agreement`.
 
 Hard rules inside the prompt/checks: `doc_type_match=false` → never `aprovar`; identity
 mismatch → `reprovar` with `DOC_DADOS_DIVERGENTES`; expired → `reprovar` `DOC_VENCIDO`;
@@ -146,7 +151,7 @@ decides — this phase) → `automatico` (AI approves clean results alone). `aut
 scope**: it requires ≥ 3 months in `assistido` with the targets met, and an explicit EQPI
 decision per type recorded in `audit_log`.
 
-## 9. Data model — `patch_107_rota_b.sql` (staging)
+## 9. Data model — `patch_109_rota_b.sql` (staging; as implemented: `ai_review_jobs` holds queue + result + analyst decision, `ai_review_agreement` view; checklist comes from the rule text — no `validation_checklist` column yet)
 
 - `documents_catalog.route = 'B'` for G1/G2 types; `validation_rule` gains a structured
   checklist (`validation_checklist jsonb` — items derived from the rule text + top reasons) and

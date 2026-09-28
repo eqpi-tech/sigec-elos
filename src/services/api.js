@@ -1435,6 +1435,55 @@ export const routeAApi = {
   },
 }
 
+// ── Rota B — pré-análise por IA (SPEC_ROTA_B.md, patch_109) ─────────────────
+// Só o backoffice lê (RLS: is_admin). O fornecedor não vê a sugestão da IA.
+export const ROUTE_B_ENABLED = import.meta.env.VITE_ROUTE_B_ENABLED === 'true'
+
+export const routeBApi = {
+  // todas as pré-análises do fornecedor (a mais recente primeiro), com o nome do tipo
+  reviews: async (supplierId) => {
+    if (!ROUTE_B_ENABLED || !supplierId) return []
+    const { data, error } = await supabase.from('ai_review_jobs')
+      .select('id, document_id, doc_type, storage_path, status, attempts, last_error, verdict, confidence, result, input_mode, pages, model, prompt_version, cost_brl, requested_by, created_at, finished_at, analyst_decision, analyst_note, decided_at')
+      .eq('supplier_id', supplierId).order('created_at', { ascending: false })
+    if (error) { console.warn('ai_review_jobs:', error.message); return [] }
+    const ids = [...new Set((data || []).map(j => Number(j.doc_type)).filter(Boolean))]
+    const { data: cat } = ids.length ? await supabase.from('documents_catalog').select('id, name').in('id', ids) : { data: [] }
+    const nome = Object.fromEntries((cat || []).map(c => [String(c.id), c.name]))
+    return (data || []).map(j => ({ ...j, doc_name: nome[j.doc_type] || null }))
+  },
+
+  // pré-análise mais recente de cada documento (fila de análise)
+  latestByDocument: async (documentIds) => {
+    if (!ROUTE_B_ENABLED || !documentIds?.length) return {}
+    const { data, error } = await supabase.from('ai_review_jobs')
+      .select('id, document_id, storage_path, status, verdict, confidence, result, last_error, created_at')
+      .in('document_id', documentIds).order('created_at', { ascending: true })
+    if (error) { console.warn('ai_review_jobs:', error.message); return {} }
+    return Object.fromEntries((data || []).map(j => [j.document_id, j]))
+  },
+
+  // tipos de documento com pré-análise ligada (route B e fora do modo manual)
+  enabledTypes: async () => {
+    if (!ROUTE_B_ENABLED) return new Set()
+    const { data } = await supabase.from('documents_catalog').select('id')
+      .eq('route', 'B').neq('validation_mode', 'manual')
+    return new Set((data || []).map(d => String(d.id)))
+  },
+
+  // analista pede (re)análise de um documento — dispara o processador na hora
+  request: async (documentId) => {
+    const res = await authFetch('/.netlify/functions/homolog-ai-review-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId }),
+    })
+    const out = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(out.error || `Erro ${res.status}`)
+    return out
+  },
+}
+
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
 export const clientApi = {
   // Dashboard KPIs: fornecedores convidados por este cliente

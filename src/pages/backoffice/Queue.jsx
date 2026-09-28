@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
 import AutoCollectPanel from '../../components/AutoCollectPanel.jsx'
+import RouteBReview from '../../components/RouteBReview.jsx'
+import AiReviewPanel from '../../components/AiReviewPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
 import { siteUrl } from '../../lib/siteUrl.js'
 
@@ -261,6 +263,9 @@ export function BackofficeAnalysis() {
   const [rejectReasons,  setRejectReasons]  = useState([])
   const [rejectCode,     setRejectCode]     = useState('')
   const [rejectCustom,   setRejectCustom]   = useState('')
+  // Rota B: pré-análises por IA do fornecedor (mais recente primeiro) e tipos habilitados
+  const [aiReviews,      setAiReviews]      = useState([])
+  const [aiTypes,        setAiTypes]        = useState(new Set())
   // Número de inscrição (Municipal/Estadual)
   const [approveInscription, setApproveInscription] = useState('')
   // Cartas de exceção do processo (patch_051)
@@ -339,6 +344,9 @@ export function BackofficeAnalysis() {
     assertivaApi.getLast(id)
       .then(setAssertivaReport)
       .catch(() => setAssertivaReport(null))
+    // Rota B: pré-análises por IA
+    routeBApi.reviews(id).then(setAiReviews)
+    routeBApi.enabledTypes().then(setAiTypes)
     // Carrega motivos de recusa parametrizados
     adminApi.getRejectionReasons()
       .then(setRejectReasons)
@@ -373,6 +381,21 @@ export function BackofficeAnalysis() {
       })
       .catch(() => {})
   }, [data])
+
+  // Rota B: enquanto houver pré-análise em andamento, atualiza a cada 15 s
+  const aiPendente = aiReviews.some(r => ['queued', 'running', 'retry'].includes(r.status))
+  useEffect(() => {
+    if (!aiPendente) return
+    const t = setInterval(() => routeBApi.reviews(id).then(setAiReviews), 15000)
+    return () => clearInterval(t)
+  }, [aiPendente, id])
+  // pré-análise mais recente de cada documento
+  const aiPorDoc = {}
+  for (const r of aiReviews) if (!aiPorDoc[r.document_id]) aiPorDoc[r.document_id] = r
+  const pedirPreAnalise = async (docId) => {
+    try { await routeBApi.request(docId); setAiReviews(await routeBApi.reviews(id)) }
+    catch (e) { alert('Pré-análise por IA: ' + e.message) }
+  }
 
   const savePartner = async () => {
     if (!partnerForm.nome.trim()) return
@@ -768,9 +791,14 @@ export function BackofficeAnalysis() {
   }
 
   const handleDocReject = (docId, docLabel) => {
-    setRejectCode('')
+    // Rota B: a IA sugeriu reprovar este arquivo → motivo já preenchido
+    // (o analista confere e pode trocar)
+    const ia = aiPorDoc[docId]
+    const iaReprova = ia?.status === 'done' && ia.verdict === 'reprovar' ? ia.result : null
+    const iaMotivo = iaReprova && (rejectReasons.find(r => r.code === iaReprova.motivo_codigo)?.label || iaReprova.motivo_texto)
+    setRejectCode(iaMotivo || '')
     setRejectCustom('')
-    setRejectDocModal({ docId, docLabel })
+    setRejectDocModal({ docId, docLabel, ia: iaReprova })
   }
 
   const confirmDocReject = async () => {
@@ -1375,6 +1403,7 @@ export function BackofficeAnalysis() {
               </div>
             )}
             <AutoCollectPanel supplierId={id} sealId={procSelKey === 'ALL' ? null : processSeal?.id} docs={docs}/>
+            <AiReviewPanel reviews={aiReviews.filter(r => docs.some(d => d.id === r.document_id))}/>
             {docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
               const status = actn && actn!=='loading' ? actn : doc.status
@@ -1390,6 +1419,14 @@ export function BackofficeAnalysis() {
                       {doc.expires_at ? ` · vence ${doc.expires_at.slice(0,10)}` : ''}
                     </div>
                     <RouteABadge doc={doc}/>
+                    {ROUTE_B_ENABLED && (aiPorDoc[doc.id]
+                      ? <RouteBReview review={aiPorDoc[doc.id]} onReanalyze={() => pedirPreAnalise(doc.id)}/>
+                      : doc.storage_path && aiTypes.has(String(doc.type)) && (
+                        <button onClick={() => pedirPreAnalise(doc.id)}
+                          style={{ marginTop:3, fontSize:9.5, border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:20, padding:'1px 8px', cursor:'pointer' }}>
+                          🤖 Pré-analisar com IA
+                        </button>
+                      ))}
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
                   {(() => {
@@ -2101,6 +2138,12 @@ export function BackofficeAnalysis() {
           <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:460, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:6 }}>✕ Rejeitar Documento</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20 }}>{rejectDocModal.docLabel}</div>
+            {rejectDocModal.ia && (
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:10, padding:'8px 12px', marginTop:-10, marginBottom:16 }}>
+                🤖 Motivo preenchido pela pré-análise da IA — confira antes de confirmar.
+                {rejectDocModal.ia.motivo_texto && <div style={{ marginTop:4, color:'#78350f' }}>“{rejectDocModal.ia.motivo_texto}”</div>}
+              </div>
+            )}
 
             <div style={{ marginBottom:16 }}>
               <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>

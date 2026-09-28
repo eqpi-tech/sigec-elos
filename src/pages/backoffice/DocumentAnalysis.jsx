@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminApi, documentApi } from '../../services/api.js'
+import { adminApi, documentApi, routeBApi, ROUTE_B_ENABLED } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
+import RouteBReview from '../../components/RouteBReview.jsx'
 import { parseMoneyBR } from '../../lib/money.js'
 
 // Dois filtros INDEPENDENTES (patch_075):
@@ -197,7 +198,10 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
 
 // Modal ÚNICO de edição (paridade HOC): ver, substituir arquivo, vencimento,
 // status (Aprovado/Reprovado/Não se aplica) e motivo — tudo em um lugar.
-function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
+function EditDocModal({ doc, reasons, rule, ia, onView, onSubmit, onClose }) {
+  // Rota B: a IA sugeriu reprovar este arquivo → motivo pré-preenchido ao escolher "Reprovado"
+  const iaReprova = ia?.status === 'done' && ia.verdict === 'reprovar' ? ia.result : null
+  const iaMotivo = iaReprova && (reasons.find(r => r.code === iaReprova.motivo_codigo)?.label || iaReprova.motivo_texto)
   const [file, setFile]           = useState(null)
   const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
   const [status, setStatus]       = useState('')       // '' = manter atual
@@ -251,6 +255,13 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
           </div>
         )}
 
+        {ia && (
+          <div style={{ border:'1px solid rgba(46,49,146,.18)', background:'#fafbff', borderRadius:10, padding:'8px 12px', marginBottom:14 }}>
+            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', color:'#2E3192' }}>🤖 Pré-análise por IA (sugestão)</strong>
+            <RouteBReview review={ia}/>
+          </div>
+        )}
+
         {(doc.storage_path || doc.hoc_arquivo_id) && (
           <Button variant="neutral" size="sm" style={{ marginBottom:16 }} onClick={() => onView(doc)}>
             👁 Ver documento atual
@@ -284,7 +295,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         <span style={lbl}>Status</span>
         <select value={status} onChange={e => {
             const v = e.target.value
-            setStatus(v); setReasonText(''); setCustomNote('')
+            setStatus(v); setReasonText(v === 'REJECTED' && iaMotivo ? iaMotivo : ''); setCustomNote('')
             // Regra (09/09, ampliada 25/09): aprovar sem validade informada OU
             // com validade já vencida → sugere análise + 1 ano
             if (v === 'VALID' && (!expiry || expiry < hojeISO)) setExpiry(umAnoDaAnalise)
@@ -298,6 +309,11 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         {status === 'REJECTED' ? (
           <>
             <span style={lbl}>Motivo da reprovação * <span style={{ fontWeight:400, color:'#9B9B9B' }}>(digite para buscar — motivos do HOC)</span></span>
+            {iaMotivo && reasonText === iaMotivo && (
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'6px 10px', marginBottom:8 }}>
+                🤖 Motivo preenchido pela pré-análise da IA — confira antes de salvar.
+              </div>
+            )}
             <input list="motivos-reprovacao-doc" value={reasonText}
               onChange={e => setReasonText(e.target.value)}
               placeholder="Digite para buscar ou escreva um motivo..."
@@ -383,6 +399,7 @@ export default function DocumentAnalysis() {
   const [mobOpen,     setMobOpen]     = useState(false)
   const mobPendIds = new Set(mobPend.map(m => m.supplier_id))
   const [histModal,   setHistModal]   = useState(null) // doc — histórico de versões/decisões
+  const [aiMap,       setAiMap]       = useState({})   // Rota B: documentId → pré-análise por IA mais recente
 
   // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE — mesma
   // regra da ficha do processo (paridade corrigida em 25/09)
@@ -420,6 +437,7 @@ export default function DocumentAnalysis() {
       })
       setRows(result.rows)
       setTotal(result.total)
+      if (ROUTE_B_ENABLED) routeBApi.latestByDocument(result.rows.map(d => d.id)).then(setAiMap)
       setPage(pg)
       sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy, page: pg }))
     } catch (e) {
@@ -865,6 +883,7 @@ export default function DocumentAnalysis() {
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
                     <RouteABadge doc={doc} compact/>
+                    <RouteBReview review={aiMap[doc.id]} compact/>
                   </div>
 
                   {/* Status */}
@@ -937,6 +956,7 @@ export default function DocumentAnalysis() {
         <EditDocModal doc={editModal} reasons={reasons}
           rule={catalog.find(c => String(c.id) === (String(editModal.type).startsWith('mob:')
             ? String(editModal.type).split(':')[1] : String(editModal.type)))?.validation_rule}
+          ia={aiMap[editModal.id]}
           onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
       )}
       {histModal && <DocHistoryModal doc={histModal} onClose={() => setHistModal(null)}/>}
