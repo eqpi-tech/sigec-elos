@@ -7,8 +7,8 @@ import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 import { can } from '../../lib/permissions.js'
 
-const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado' }
-const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e' }
+const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado' }
+const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B' }
 
 function formatCnpj(v) {
   const n = v.replace(/\D/g,'').slice(0,14)
@@ -42,6 +42,8 @@ export default function ClientInvitations() {
   const [form, setForm]           = useState(EMPTY_FORM)
   const [clientName, setClientName] = useState('')
   const [flows, setFlows]         = useState([])   // fluxos ativos do cliente (com preço)
+  const [subsidioPadrao, setSubsidioPadrao] = useState(false)   // SIM quando o cliente opera subsidiado
+  const [cancelando, setCancelando] = useState(null)             // { inv, reason, busy }
   const location = useLocation()
 
   // Razão social do cliente para os templates de mensagem
@@ -52,7 +54,12 @@ export default function ClientInvitations() {
     supabase.from('client_flows')
       .select('id, name, price, price_subsidized, is_default')
       .eq('client_id', user.clientId).eq('active', true).order('name')
-      .then(({ data }) => setFlows(data || []))
+      .then(({ data }) => {
+        setFlows(data || [])
+        const sub = (data || []).some(f => f.price_subsidized != null)
+        setSubsidioPadrao(sub)
+        setForm(f => (f === EMPTY_FORM ? { ...EMPTY_FORM, subsidiado: sub } : f))
+      })
   }, [user?.clientId])
 
   // Ao escolher o objetivo, gera o template (a mensagem continua editável)
@@ -99,6 +106,17 @@ export default function ClientInvitations() {
     } catch (err) { setError(err.message) }
   }
 
+  const handleCancel = async () => {
+    if (!cancelando?.reason?.trim()) return
+    setCancelando(c => ({ ...c, busy: true })); setError(''); setSuccess('')
+    try {
+      await invitationsApi.cancel(cancelando.inv.id, cancelando.reason.trim())
+      setSuccess(`Convite para ${cancelando.inv.supplier_email} cancelado — o link enviado não vale mais.`)
+      setCancelando(null)
+      load()
+    } catch (err) { setError(err.message); setCancelando(c => ({ ...c, busy: false })) }
+  }
+
   const handleSend = async (e) => {
     e.preventDefault()
     setSending(true); setError(''); setSuccess('')
@@ -122,7 +140,7 @@ export default function ClientInvitations() {
 
       setSuccess(`Convite enviado para ${form.email}!`)
       setShowModal(false)
-      setForm(EMPTY_FORM)
+      setForm({ ...EMPTY_FORM, subsidiado: subsidioPadrao })
       load()
     } catch (err) {
       setError(err.message)
@@ -189,6 +207,11 @@ export default function ClientInvitations() {
                       Escopo: {inv.escopo}
                     </div>
                   )}
+                  {inv.status === 'CANCELLED' && (
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', marginTop:4 }}>
+                      Cancelado em {inv.cancelled_at ? new Date(inv.cancelled_at).toLocaleDateString('pt-BR') : '—'}{inv.cancel_reason ? ` · Motivo: ${inv.cancel_reason}` : ''}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6, flexShrink:0 }}>
                   <span style={{ fontSize:11, fontWeight:700, color: STATUS_COLOR[inv.status], background:`${STATUS_COLOR[inv.status]}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
@@ -202,17 +225,48 @@ export default function ClientInvitations() {
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(inv.created_at).toLocaleDateString('pt-BR')}
                   </div>
-                  {inv.status !== 'REGISTERED' && (
-                    <button
-                      onClick={() => handleResend(inv.id)}
-                      style={{ fontSize:10, color:'#2E3192', background:'none', border:'1px solid #2E3192', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
-                      Reenviar
-                    </button>
+                  {!['REGISTERED', 'CANCELLED'].includes(inv.status) && (
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button
+                        onClick={() => handleResend(inv.id)}
+                        style={{ fontSize:10, color:'#2E3192', background:'none', border:'1px solid #2E3192', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                        Reenviar
+                      </button>
+                      {hasAction(user, 'acao:novo_convite') && (
+                        <button
+                          onClick={() => setCancelando({ inv, reason:'', busy:false })}
+                          style={{ fontSize:10, color:'#b91c1c', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Cancelar convite (patch_103) — não apaga: fica "Cancelado" com o motivo */}
+      {cancelando && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:'24px 28px', width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:6 }}>Cancelar convite</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', marginBottom:12, lineHeight:1.5 }}>
+              <strong>{cancelando.inv.supplier_razao_social}</strong> · {cancelando.inv.supplier_email}<br/>
+              O link enviado deixa de funcionar. O convite continua na lista como <strong>cancelado</strong>, para rastreabilidade.
+            </div>
+            <textarea value={cancelando.reason} onChange={e => setCancelando(c => ({ ...c, reason: e.target.value }))} rows={3} autoFocus
+              placeholder="Motivo (obrigatório) — ex.: enviado para o e-mail errado"
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box', resize:'vertical', marginBottom:14 }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => setCancelando(null)}>Voltar</Button>
+              <Button variant="danger" full disabled={cancelando.busy || !cancelando.reason.trim()} onClick={handleCancel}>
+                {cancelando.busy ? 'Cancelando…' : 'Cancelar convite'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

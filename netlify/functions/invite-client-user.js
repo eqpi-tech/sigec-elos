@@ -113,6 +113,11 @@ exports.handler = async (event) => {
     const clientName = clientRow?.razao_social || 'sua empresa'
     if (process.env.RESEND_API_KEY) {
       const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      // o acesso vai direto ao login do PORTAL do cliente quando ele tem um
+      // (ex.: /portal/vixpar/login — marca e termos dele); senão, o login geral
+      const { data: lp } = await supabaseAdmin.from('client_landing_pages')
+        .select('slug').eq('client_id', clientId).eq('is_active', true).limit(1).maybeSingle()
+      const loginUrl = lp?.slug ? `${frontendUrl}/portal/${lp.slug}/login` : `${frontendUrl}/login`
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
@@ -136,7 +141,7 @@ exports.handler = async (event) => {
                 <p style="font-size:13px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px">⚠ Altere sua senha no primeiro acesso.</p>
                 ` : `<p>Use sua senha atual da plataforma para entrar — sua conta agora também acessa ${clientName}.</p>`}
                 <div style="text-align:center;margin-top:20px">
-                  <a href="${frontendUrl}/login" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">Acessar a Plataforma →</a>
+                  <a href="${loginUrl}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">Acessar a Plataforma →</a>
                 </div>
               </div>
               <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech · SIGEC-ELOS</div>

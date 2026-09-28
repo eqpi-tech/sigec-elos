@@ -175,10 +175,17 @@ async function handleClientInvitation(body, callerUser, h) {
     if (buyer) senderName = buyer.razao_social
   }
 
-  // Evita convite duplicado (mesmo client + mesmo email)
+  // Mesmo cliente + mesmo e-mail (28/09): convite ABERTO é substituído pelo
+  // novo (permite corrigir subsidiado/fluxo — antes dava 409 e travava);
+  // só bloqueia se aquele e-mail já se CADASTROU pela mesma empresa
+  let abertosMesmoEmail = []
   if (client_id) {
-    const { data: existing } = await supabaseAdmin.from('invitations').select('id').eq('client_id', client_id).eq('supplier_email', email).maybeSingle()
-    if (existing) return { statusCode:409, headers:h, body: JSON.stringify({ error:'Já existe um convite enviado para este e-mail.' }) }
+    const { data: existentes } = await supabaseAdmin.from('invitations')
+      .select('id, status, supplier_cnpj').eq('client_id', client_id).eq('supplier_email', email)
+    const cnpjNovo = String(cnpj || '').replace(/\D/g, '')
+    if ((existentes || []).some(e => e.status === 'REGISTERED' && String(e.supplier_cnpj || '').replace(/\D/g, '') === cnpjNovo))
+      return { statusCode:409, headers:h, body: JSON.stringify({ error:'Este fornecedor já se cadastrou por um convite enviado para este e-mail.' }) }
+    abertosMesmoEmail = (existentes || []).filter(e => ['SENT', 'VIEWED'].includes(e.status)).map(e => e.id)
   }
 
   const invitePayload = {
@@ -224,6 +231,10 @@ async function handleClientInvitation(body, callerUser, h) {
       .eq('client_id', invitePayload.client_id)
       .eq('supplier_cnpj', invitePayload.supplier_cnpj)
       .in('status', ['SENT', 'VIEWED'])
+  }
+
+  if (abertosMesmoEmail.length) {
+    await supabaseAdmin.from('invitations').update({ status: 'SUPERSEDED' }).in('id', abertosMesmoEmail)
   }
 
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
@@ -337,6 +348,7 @@ exports.handler = async (event) => {
       .eq('id', body.resendId)
       .maybeSingle()
     if (invErr || !inv) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Convite não encontrado' }) }
+    if (inv.status === 'CANCELLED') return { statusCode:409, headers:h, body: JSON.stringify({ error:'Convite cancelado não pode ser reenviado — envie um novo convite' }) }
 
     // Fetch dos campos opcionais (adicionados pelos patches — podem não existir ainda)
     let token = null, senderName = inv.buyer_name || user.email

@@ -24,6 +24,8 @@ exports.handler = async (event) => {
 
   if (error) return { statusCode: 500, headers: h, body: JSON.stringify({ error: error.message }) }
   if (!inv)  return { statusCode: 404, headers: h, body: JSON.stringify({ error: 'Convite não encontrado' }) }
+  // convite cancelado pelo cliente (patch_103): o link não vale mais
+  if (inv.status === 'CANCELLED') return { statusCode: 410, headers: h, body: JSON.stringify({ error: 'Este convite foi cancelado pelo cliente. Se você deveria ter recebido um convite, fale com quem o enviou.' }) }
 
   // Registra primeira visualização e muda status SENT → VIEWED
   if (!inv.viewed_at) {

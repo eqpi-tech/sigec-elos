@@ -1829,6 +1829,26 @@ export const invitationsApi = {
     return data
   },
 
+  // Cancela convite enviado errado (patch_103) — não apaga, fica CANCELLED
+  cancel: async (inviteId, reason) => {
+    const res = await authFetch('/.netlify/functions/invitation-cancel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteId, reason }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao cancelar convite')
+    return data
+  },
+
+  // Padrão do campo "Subsidiado?" (28/09): SIM quando o cliente opera no
+  // modelo subsidiado (algum fluxo ativo com preço subsidiado)
+  subsidyDefault: async (clientId) => {
+    if (!clientId) return false
+    const { data } = await supabase.from('client_flows').select('id')
+      .eq('client_id', clientId).eq('active', true).not('price_subsidized', 'is', null).limit(1)
+    return (data || []).length > 0
+  },
+
   // Busca convite por token (sem auth — usado no onboarding)
   getByToken: async (token) => {
     const res = await fetch(`/.netlify/functions/get-invitation?token=${token}`)
