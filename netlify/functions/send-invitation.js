@@ -199,6 +199,15 @@ async function handleClientInvitation(body, callerUser, h) {
     objetivo,
     message:               message?.trim() || null,  // persistida (patch_061)
   }
+  // Modelo de mensagem da tela com os textos de reserva (nome do cliente não
+  // carregado / razão social digitada depois): troca pelos nomes reais (28/09)
+  if (invitePayload.message) {
+    invitePayload.message = invitePayload.message
+      .replace(/^Olá, fornecedor!/, `Olá, ${razao_social}!`)
+      .replace(/\bA Nossa empresa\b/g, `A ${senderName}`)
+      .replace(/\bEquipe Nossa empresa\b/g, `Equipe ${senderName}`)
+      .replace(/\bSomos a Nossa empresa\b/g, `Somos a ${senderName}`)
+  }
   if (client_id)        invitePayload.client_id       = client_id
   // Fluxo do convite: o informado (validado contra o cliente) ou o padrão do cliente
   if (client_id) {
@@ -240,7 +249,7 @@ async function handleClientInvitation(body, callerUser, h) {
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 
-  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo, message })
+  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo, message: invitePayload.message })
 
   return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, message:`Convite enviado para ${email}` }) }
 }
