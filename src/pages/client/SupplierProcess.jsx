@@ -6,6 +6,7 @@ import { clientApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
+import { authFetch } from '../../lib/authFetch.js'
 
 function safeStr(val, fallback = '—') {
   if (val === null || val === undefined) return fallback
@@ -85,10 +86,9 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
       const base64 = await new Promise((res, rej) => {
         const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file)
       })
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch('/.netlify/functions/exception-letter', {
+      const resp = await authFetch('/.netlify/functions/exception-letter', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'upload', sealId: seal.id, categoryId: cat.id,
           file: { name: file.name, mime: file.type, base64 } }),
       })
@@ -174,10 +174,9 @@ function ClientProcessDocs({ seal, supplierId, existingDocs }) {
       const base64 = await new Promise((res, rej) => {
         const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file)
       })
-      const { data: { session } } = await supabase.auth.getSession()
-      const resp = await fetch('/.netlify/functions/client-upload-document', {
+      const resp = await authFetch('/.netlify/functions/client-upload-document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ supplierId, docTypeId: docType.id, file: { name: file.name, mime: file.type, base64 } }),
       })
       const out = await resp.json()

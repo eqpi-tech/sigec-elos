@@ -26,7 +26,7 @@ exports.handler = async (event) => {
   const token = (event.headers.authorization || '').replace('Bearer ', '')
   if (!token) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Token ausente' }) }
   const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token)
-  if (authErr || !user) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Token inválido' }) }
+  if (authErr || !user) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Sessão expirada — saia e entre novamente na plataforma' }) }
 
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) } }
@@ -81,7 +81,7 @@ exports.handler = async (event) => {
         user_id: user.id, action: 'EXCEPTION_LETTER_UPLOADED',
         entity_type: 'supplier', entity_id: seal.supplier_id,
         metadata: { seal_id: sealId, category_id: categoryId, letter: file.name, note: note || null },
-      }).catch(() => {})
+      })   // query builder do supabase não tem .catch: o erro vem no retorno e é ignorado
 
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true, letter_path: path }) }
     }
@@ -120,7 +120,7 @@ exports.handler = async (event) => {
       user_id: user.id, action: 'SEAL_APPROVED_EXCEPTION',
       entity_type: 'supplier', entity_id: seal.supplier_id,
       metadata: { seal_id: sealId, categorias: catNames, note: note || null },
-    }).catch(() => {})
+    })   // idem: sem .catch no query builder
 
     return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true, categorias: catNames }) }
   } catch (err) {

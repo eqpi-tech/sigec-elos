@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
+import { authFetch } from '../../lib/authFetch.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -609,10 +610,9 @@ export function BackofficeAnalysis() {
     if (!window.confirm(`Homologar COM EXCEÇÃO as categorias: ${pend.map(l => l.categories?.name || l.category_id).join(', ')}?\nDocumentos reprovados/faltantes destas categorias ficam cobertos pela carta do cliente.`)) return
     setProcessing(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/.netlify/functions/exception-letter', {
+      const res = await authFetch('/.netlify/functions/exception-letter', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'approve', sealId: processSeal.id, note: obs || undefined }),
       })
       const out = await res.json()
