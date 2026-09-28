@@ -39,6 +39,7 @@ module.exports = {
   falencia_rj:      require('./falencia_rj.js'),
   // homologação automática, fase 1b (28/09) — só Rota A, fora do plano do BC
   ibama_cr:         require('./ibama_cr.js'),
+  pf_seguranca:     require('./pf_seguranca.js'),
 }
 
 // dependem do cnpj_base resolvido antes (QSA p/ nomes, UF/município p/ rota)

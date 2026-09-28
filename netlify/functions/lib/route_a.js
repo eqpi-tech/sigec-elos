@@ -28,6 +28,8 @@ const ROUTE_A = {
   '150':   { connector: 'falencia_rj',      validade: null },
   // fase 1b (28/09): validade da própria certidão (~3 meses)
   '18':    { connector: 'ibama_cr',         validade: 'fonte' },
+  // alvará da PF (segurança privada) — validade do próprio alvará
+  '166':   { connector: 'pf_seguranca',     validade: 'fonte' },
 }
 
 const { env } = require('./runtime_env.js')
@@ -85,7 +87,7 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
   if (flag === 'indisponivel') {
     const motivo = raw?.code === 615 ? `${parsed?.headline || 'fonte indisponível'} (consulta pausada pela Infosimples — instabilidade na fonte)` : (parsed?.headline || 'fonte indisponível')
     // praça fora da cobertura / fonte que exige certificado digital: não muda com retry
-    const permanente = /n[aã]o coberta|fora da cobertura|emiss[aã]o indispon[ií]vel pela fonte|desconhecida/i.test(motivo)
+    const permanente = /n[aã]o coberta|fora da cobertura|emiss[aã]o indispon[ií]vel pela fonte|desconhecida|n[aã]o configurada/i.test(motivo)
     return { indisponivel: true, permanente, pausada: raw?.code === 615, motivo }
   }
 

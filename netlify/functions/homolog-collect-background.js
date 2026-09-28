@@ -24,6 +24,17 @@ const TIMEOUT_FONTE_MS = 120000
 
 // contexto p/ os conectores que dependem de UF/município (Sefaz, Sintegra,
 // prefeitura): consulta de CNPJ do cadastro; sem ela, BrasilAPI na hora
+// credencial gov.br (e-CNPJ da EQPI) para a consulta da Polícia Federal:
+// só o CIFRADO exigido pela Infosimples, lido do banco (patch_105)
+let _pfCert
+async function pfCert() {
+  if (_pfCert !== undefined) return _pfCert
+  const { data } = await sb.from('integration_secrets').select('key, value').in('key', ['infosimples_pkcs12_cert', 'infosimples_pkcs12_pass'])
+  const m = Object.fromEntries((data || []).map((r) => [r.key, r.value]))
+  _pfCert = m.infosimples_pkcs12_cert && m.infosimples_pkcs12_pass ? { pkcs12_cert: m.infosimples_pkcs12_cert, pkcs12_pass: m.infosimples_pkcs12_pass } : null
+  return _pfCert
+}
+
 const cacheCtx = new Map()
 const consultasDaRodada = new Map()   // `${fornecedor}:${conector}` → Promise<{raw, parsed}>
 async function contexto(supplierId) {
@@ -68,7 +79,7 @@ async function processar(job, catalogo, prefOverrides) {
     consultasDaRodada.set(chave, (async () => {
       try {
         const raw = await Promise.race([
-          c.fetch({ cnpj: sup.cnpj, company, socios: [], tipo: 'full', prefOverrides, supplierId: sup.id }),
+          c.fetch({ cnpj: sup.cnpj, company, socios: [], tipo: 'full', prefOverrides, supplierId: sup.id, pfCert: await pfCert() }),
           new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout ${TIMEOUT_FONTE_MS}ms`)), TIMEOUT_FONTE_MS)),
         ])
         return { raw, parsed: c.parse(raw), primeira: true }
