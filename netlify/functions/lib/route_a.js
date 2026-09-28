@@ -26,6 +26,8 @@ const ROUTE_A = {
   '10038': { connector: 'pgfn_devedores',   validade: null },
   '10002': { connector: 'trabalho_escravo', validade: { meses: 6 } },
   '150':   { connector: 'falencia_rj',      validade: null },
+  // fase 1b (28/09): validade da própria certidão (~3 meses)
+  '18':    { connector: 'ibama_cr',         validade: 'fonte' },
 }
 
 const { env } = require('./runtime_env.js')
