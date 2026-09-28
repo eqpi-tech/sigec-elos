@@ -1,10 +1,9 @@
 // netlify/functions/invitation-cancel.js — cliente (ou backoffice) cancela um
 // convite ainda não cadastrado (patch_103). Não apaga: status CANCELLED +
-// quando/quem/motivo; o token é trocado para o link antigo nunca mais valer
-// (o original vai para o audit_log, para rastreabilidade).
+// quando/quem/motivo. O token é mantido (rastreabilidade) — quem abre o link
+// vê "convite cancelado": get-invitation e create-supplier recusam CANCELLED.
 // POST { inviteId, reason }
 const { createClient } = require('@supabase/supabase-js')
-const crypto = require('crypto')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const HEADERS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' }
@@ -37,13 +36,12 @@ exports.handler = async (event) => {
 
   const { error } = await sb.from('invitations').update({
     status: 'CANCELLED', cancelled_at: new Date().toISOString(), cancelled_by: user.id, cancel_reason: reason,
-    token: crypto.randomUUID(),            // o link enviado deixa de existir
   }).eq('id', inv.id).neq('status', 'REGISTERED')
   if (error) return res(500, { error: error.message })
 
   await sb.from('audit_log').insert({
     user_id: user.id, action: 'INVITATION_CANCELLED', entity_type: 'invitation', entity_id: inv.id,
-    metadata: { client_id: inv.client_id, status_anterior: inv.status, token_original: inv.token,
+    metadata: { client_id: inv.client_id, status_anterior: inv.status,
                 supplier_email: inv.supplier_email, supplier_cnpj: inv.supplier_cnpj, razao_social: inv.supplier_razao_social, motivo: reason },
   })
   return res(200, { ok: true })
