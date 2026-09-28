@@ -4,15 +4,23 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
+// busca de cliente por nome fantasia OU razão social, sem acento/espaço/
+// pontuação: "vix par" acha "VIXPAR · VIX LOGISTICA S/A" (28/09 — o filtro só
+// olhava a razão social e a VIX não aparecia)
+const normBusca = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+const clientLabel = (c) => (c?.nome_fantasia && normBusca(c.nome_fantasia) !== normBusca(c.razao_social)
+  ? `${c.nome_fantasia} · ${c.razao_social}` : (c?.razao_social || c?.nome_fantasia || ''))
+
 function ClientSearchCombo({ clients, value, onChange }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const selected = clients.find(c => c.id === value)
   const filtered = useMemo(() => {
-    const lq = q.trim().toLowerCase()
+    const lq = normBusca(q)
     if (!lq) return clients.slice(0, 20)
-    return clients.filter(c => (c.razao_social || '').toLowerCase().includes(lq)).slice(0, 20)
+    return clients.filter(c => normBusca(`${c.nome_fantasia || ''} ${c.razao_social || ''}`).includes(lq)
+      || normBusca(c.nome_fantasia).includes(lq) || normBusca(c.razao_social).includes(lq)).slice(0, 20)
   }, [clients, q])
   useEffect(() => {
     if (!open) return
@@ -26,7 +34,7 @@ function ClientSearchCombo({ clients, value, onChange }) {
     <div ref={ref} style={{ position:'relative', minWidth:200 }}>
       <div style={{ position:'relative' }}>
         <input
-          value={open ? q : (selected ? selected.razao_social : '')}
+          value={open ? q : (selected ? clientLabel(selected) : '')}
           onChange={e => { setQ(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); setQ('') }}
           placeholder="Todos os clientes"
@@ -46,7 +54,7 @@ function ClientSearchCombo({ clients, value, onChange }) {
           {filtered.map(c => (
             <button key={c.id} onMouseDown={() => select(c)}
               style={{ width:'100%', padding:'10px 14px', border:'none', borderBottom:'1px solid #f4f5f9', background: c.id===value ? 'rgba(46,49,146,.06)' : '#fff', cursor:'pointer', textAlign:'left', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', display:'block' }}>
-              {c.razao_social}
+              {clientLabel(c)}
             </button>
           ))}
           {!q.trim() && clients.length > 20 && (
@@ -85,7 +93,7 @@ export default function BackofficeProcessSearch() {
 
   // Carrega lista de clientes para o filtro
   useEffect(() => {
-    supabase.from('clients').select('id, razao_social').order('razao_social')
+    supabase.from('clients').select('id, razao_social, nome_fantasia').order('razao_social')
       .then(({ data }) => setClients(data || []))
   }, [])
 
@@ -95,7 +103,7 @@ export default function BackofficeProcessSearch() {
 
     const qTrim = q.trim()
     const qNums = qTrim.replace(/\D/g, '')
-    const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = c.razao_social; return acc }, {})
+    const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = clientLabel(c); return acc }, {})
 
     const buildSealMap = (seals) => {
       const m = {}
