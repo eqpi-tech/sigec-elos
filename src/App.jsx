@@ -35,6 +35,7 @@ import BackofficeCreateClient from './pages/backoffice/CreateClient.jsx'
 import { BackofficeQueue, BackofficeAnalysis } from './pages/backoffice/Queue.jsx'
 import { BackofficeHomologados } from './pages/backoffice/Homologados.jsx'
 import BackofficeProcessSearch  from './pages/backoffice/ProcessSearch.jsx'
+import BackofficeInvitations    from './pages/backoffice/Invitations.jsx'
 import BackofficeQuestionnaires from './pages/backoffice/Questionnaires.jsx'
 import BackofficeUsers               from './pages/backoffice/Users.jsx'
 import BackofficeClientDocumentFlows from './pages/backoffice/ClientDocumentFlows.jsx'
@@ -152,6 +153,7 @@ function AppRoutes() {
       <Route path="/backoffice/criar-cliente"  element={<Protect roles={['ADMIN']} perm="manage_clients"><BackofficeCreateClient/></Protect>} />
       <Route path="/backoffice/homologados"     element={<Protect roles={['ADMIN']}><BackofficeHomologados/></Protect>} />
       <Route path="/backoffice/processos"        element={<Protect roles={['ADMIN']}><BackofficeProcessSearch/></Protect>} />
+      <Route path="/backoffice/convites"        element={<Protect roles={['ADMIN']}><BackofficeInvitations/></Protect>} />
       <Route path="/backoffice/questionarios"   element={<Protect roles={['ADMIN']}><BackofficeQuestionnaires/></Protect>} />
       <Route path="/backoffice/usuarios"        element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUsers/></Protect>} />
       <Route path="/backoffice/perfis"          element={<Protect roles={['ADMIN']} perm="manage_users"><BackofficeUserProfiles/></Protect>} />

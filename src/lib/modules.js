@@ -68,6 +68,7 @@ export const ACTIONS = {
     { key: 'acao:analise_docs',      module: 'analise',      label: 'Análise de Docs',              icon: '📄', desc: 'Revisar documentos em lote' },
     { key: 'acao:processos',         module: 'analise',      label: 'Processos',                    icon: '🔍', desc: 'Buscar e abrir fichas de fornecedores' },
     { key: 'acao:homologados',       module: 'analise',      label: 'Homologados',                  icon: '✅', desc: 'Fornecedores com selo ativo' },
+    { key: 'acao:convites',          module: 'analise',      label: 'Convites',                     icon: '✉️', desc: 'Convites enviados pelos clientes — ver, reenviar, cancelar e copiar o link' },
     { key: 'acao:questionarios',     module: 'analise',      label: 'Questionários',                icon: '❓', desc: 'Gerenciar questionários dos clientes' },
     { key: 'acao:custos',            module: 'financeiro',   label: 'Custos e COGS (BC Report)',    icon: '💰', desc: 'Aba de custos por rota/CNPJ no Financeiro' },
     { key: 'acao:emitir_bc',         module: 'bc_report',    label: 'Emitir BC Report',             icon: '🕵️', desc: 'Disparar emissões Light/Full (consome créditos)' },
