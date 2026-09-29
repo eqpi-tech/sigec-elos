@@ -223,6 +223,7 @@ function EditDocModal({ doc, reasons, rule, ia, aceitar = false, onView, onSubmi
   const [inscription, setInscription] = useState(doc.inscription_number || '')
   const [reasonText, setReasonText] = useState(pre?.status === 'REJECTED' ? pre.note : '')   // motivo (datalist com busca por digitação)
   const [aplicada, setAplicada]   = useState(!!pre)   // os campos vieram da sugestão
+  const [regraAberta, setRegraAberta] = useState(!pre)  // regra longa recolhida ao aceitar sugestão: a decisão fica à vista
   const aplicarSugestao = () => {
     if (!dec) return
     setStatus(dec.status)
@@ -303,8 +304,11 @@ function EditDocModal({ doc, reasons, rule, ia, aceitar = false, onView, onSubmi
 
         {rule && (
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1e40af', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:14, whiteSpace:'pre-line' }}>
-            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom:4 }}>📋 Como validar este documento</strong>
-            {rule}
+            <strong onClick={() => setRegraAberta(a => !a)}
+              style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom: regraAberta ? 4 : 0, cursor:'pointer' }}>
+              📋 Como validar este documento {regraAberta ? '▲' : '▼ (clique para ver a regra)'}
+            </strong>
+            {regraAberta && rule}
           </div>
         )}
 
