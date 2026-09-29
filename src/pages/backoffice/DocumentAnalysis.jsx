@@ -212,11 +212,14 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
   const note = status === 'REJECTED' ? reasonText.trim() : customNote.trim()
 
   const rejectSemMotivo = status === 'REJECTED' && !reasonText.trim()
+  // reverter decisão (29/09): aprovado/reprovado/"não se aplica" → volta para análise, com motivo
+  const decidido        = ['VALID', 'REJECTED', 'NOT_APPLICABLE'].includes(doc.status)
+  const revertSemMotivo = status === 'REVERT' && !customNote.trim()
   const nadaMudou       = !file && !status && expiry === (doc.expires_at ? doc.expires_at.slice(0, 10) : '')
     && inscription.trim() === (doc.inscription_number || '')
 
   async function confirm() {
-    if (rejectSemMotivo || nadaMudou) return
+    if (rejectSemMotivo || revertSemMotivo || nadaMudou) return
     if (file && file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5MB — reduza o tamanho'); return }
     setSaving(true)
     try {
@@ -293,6 +296,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
           <option value="VALID">✓ Aprovado</option>
           <option value="REJECTED">✕ Reprovado</option>
           <option value="NOT_APPLICABLE">◌ Não se aplica</option>
+          {decidido && <option value="REVERT">↩ Voltar para análise (reverter decisão)</option>}
         </select>
 
         {status === 'REJECTED' ? (
@@ -310,9 +314,16 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
           </>
         ) : (
           <>
-            <span style={lbl}>Observação</span>
+            <span style={lbl}>{status === 'REVERT' ? 'Motivo da reversão *' : 'Observação'}</span>
             <textarea value={customNote} onChange={e => setCustomNote(e.target.value)} rows={2}
-              placeholder="Opcional" style={{ ...inp, resize:'vertical', marginBottom:10 }}/>
+              placeholder={status === 'REVERT' ? 'Obrigatório — ex.: reprovado por engano, era o documento correto' : 'Opcional'}
+              style={{ ...inp, resize:'vertical', marginBottom:10 }}/>
+            {status === 'REVERT' && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'8px 12px', fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', marginBottom:10 }}>
+                A decisão atual (<strong>{STATUS_LABEL[doc.status] || doc.status}</strong>) será desfeita e o documento volta para <strong>Em análise</strong>
+                {doc.status === 'REJECTED' ? '; o fornecedor deixa de ver o motivo da reprovação' : ''}. Fica registrado no Log do Processo.
+              </div>
+            )}
           </>
         )}
 
@@ -324,7 +335,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
 
         <div style={{ display:'flex', gap:8, marginTop:8 }}>
           <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" full disabled={saving || rejectSemMotivo || nadaMudou} onClick={confirm}>
+          <Button variant="primary" full disabled={saving || rejectSemMotivo || revertSemMotivo || nadaMudou} onClick={confirm}>
             {saving ? <Spinner size={14}/> : '💾 Salvar'}
           </Button>
         </div>
@@ -486,7 +497,7 @@ export default function DocumentAnalysis() {
     // Substituir arquivo aprova o documento (regra: substituição pelo analista
     // já é verificada) e mudança de status pode tirá-lo do filtro atual — sem
     // aviso, o analista acha que 'sumiu' da fila (apontamento 25/09)
-    const finalStatus = file && (!status || status === 'VALID') ? 'VALID' : status
+    const finalStatus = file && (!status || status === 'VALID') ? 'VALID' : (status === 'REVERT' ? 'PENDING' : status)
     const label = rows.find(r => r.id === docId)?.label || 'Documento'
     if (finalStatus && queueFilter !== 'todos') {
       setNotice(`${label}: agora está "${STATUS_LABEL[finalStatus] || finalStatus}"`
@@ -506,6 +517,13 @@ export default function DocumentAnalysis() {
         note: note || undefined,
       })
       if (!status || status === 'VALID') return
+    }
+    if (status === 'REVERT') {
+      const r = await handleUpdateDoc(docId, { action: 'revert_decision', note })
+      setNotice(`${label}: decisão revertida — voltou para análise.`
+        + (r?.processoReaberto ? ' A reprovação tinha encerrado o processo; ele foi reaberto.' : '')
+        + (r?.homologacaoAtiva ? ' A homologação vigente não foi alterada (para reabrir o processo, use "Reverter Análise" na ficha).' : ''))
+      return
     }
     if (status) {
       if (status === 'REJECTED') await handleReject(docId, note)
@@ -531,6 +549,7 @@ export default function DocumentAnalysis() {
       const upd = result.document || {}
       setDocStatus(p => ({ ...p, [docId]: upd.status }))
       setRows(p => p.map(d => d.id === docId ? { ...d, ...upd } : d))
+      return result
     } finally {
       setSaving(p => { const n = new Set(p); n.delete(docId); return n })
     }

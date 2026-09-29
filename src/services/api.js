@@ -901,6 +901,19 @@ export const adminApi = {
     return { success: true }
   },
 
+  // Reverter a decisão de UM documento (aprovado/reprovado/não se aplica) —
+  // volta para análise; só o backoffice (admin-update-document valida ADMIN)
+  revertDocumentDecision: async (documentId, motivo) => {
+    const res = await authFetch('/.netlify/functions/admin-update-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId, action: 'revert_decision', note: motivo }),
+    })
+    const out = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(out.error || `Erro ${res.status}`)
+    return out
+  },
+
   revertSeal: async (supplierId, reason) => {
     const { error: sealErr } = await supabase
       .from('seals')

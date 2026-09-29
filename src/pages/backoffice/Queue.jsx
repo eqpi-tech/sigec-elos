@@ -225,6 +225,9 @@ export function BackofficeAnalysis() {
   const [docActions, setDocActions] = useState({})
   const [revertModal, setRevertModal] = useState(false)
   const [revertReason, setRevertReason] = useState('')
+  // Reverter a decisão de um documento (29/09): { doc } + motivo
+  const [docRevert, setDocRevert] = useState(null)
+  const [docRevertReason, setDocRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
   // Processo (cliente) selecionado na ficha — fornecedor multi-cliente tem as
   // pendências separadas por matriz: null = automático (selo em análise),
@@ -758,6 +761,28 @@ export function BackofficeAnalysis() {
     } catch (e) {
       alert('Erro ao aprovar: ' + e.message)
       setDocActions(prev => ({ ...prev, [approveModal.docId]: undefined }))
+    }
+  }
+
+  const STATUS_DECISAO = { VALID: 'aprovado', REJECTED: 'reprovado', NOT_APPLICABLE: '"não se aplica"' }
+  const confirmDocRevert = async () => {
+    const { doc } = docRevert
+    const motivo = docRevertReason.trim()
+    if (!motivo) return
+    setDocRevert(null); setDocRevertReason('')
+    setDocActions(prev => ({ ...prev, [doc.id]: 'loading' }))
+    try {
+      const r = await adminApi.revertDocumentDecision(doc.id, motivo)
+      setDocActions(prev => ({ ...prev, [doc.id]: 'PENDING' }))
+      setData(prev => ({
+        ...prev,
+        documents: prev.documents.map(d => d.id === doc.id ? { ...d, status: 'PENDING', review_note: null } : d),
+      }))
+      if (r.processoReaberto) alert('Decisão revertida. A reprovação tinha encerrado o processo — ele foi reaberto e volta para análise.')
+      else if (r.homologacaoAtiva) alert('Decisão revertida — o documento voltou para análise.\n\nA homologação vigente NÃO foi alterada; para reabrir o processo use "Reverter Análise".')
+    } catch (e) {
+      alert('Erro ao reverter: ' + e.message)
+      setDocActions(prev => ({ ...prev, [doc.id]: undefined }))
     }
   }
 
@@ -1424,6 +1449,10 @@ export function BackofficeAnalysis() {
                       </>}
                     </>
                   )}
+                  {actn !== 'loading' && STATUS_DECISAO[status] && (
+                    <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
+                      onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
+                  )}
                 </div>
               )
             })}
@@ -1460,6 +1489,10 @@ export function BackofficeAnalysis() {
                           {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
                         </Button>
                       </>
+                    )}
+                    {doc && actn !== 'loading' && STATUS_DECISAO[status] && (
+                      <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
+                        onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter</Button>
                     )}
                   </div>
                 )
@@ -1684,6 +1717,7 @@ export function BackofficeAnalysis() {
                         SEAL_APPROVED:          { label:'Homologação aprovada',    color:'#22c55e', icon:'✅' },
                         SEAL_REJECTED:          { label:'Homologação rejeitada',   color:'#ef4444', icon:'❌' },
                         SEAL_REVERTED:          { label:'Análise revertida',       color:'#f59e0b', icon:'↩️' },
+                        DOCUMENT_DECISION_REVERTED: { label:'Decisão de documento revertida', color:'#f59e0b', icon:'↩️' },
                         SEAL_AUTO_APPROVED:     { label:'Aprovação automática',    color:'#22c55e', icon:'⚡' },
                         SEAL_AUTO_REJECTED:     { label:'Rejeição automática',     color:'#ef4444', icon:'⚡' },
                         PROCESS_REOPENED:       { label:'Processo reaberto (reenvio)', color:'#2E3192', icon:'↻' },
@@ -1913,6 +1947,29 @@ export function BackofficeAnalysis() {
           </Card>
         </div>
       </div>
+
+      {/* Modal Reverter decisão de documento (29/09) */}
+      {docRevert && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:480, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#b45309', marginBottom:6 }}>↩ Reverter decisão do documento</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:12 }}>{docRevert.doc.label}</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
+              O documento está <strong>{STATUS_DECISAO[docRevert.doc.status]}</strong>
+              {docRevert.doc.review_note ? <> ({docRevert.doc.review_note})</> : null}. Ao reverter, ele volta para <strong>Em análise</strong>
+              {docRevert.doc.status === 'REJECTED' ? ' e o fornecedor deixa de ver o motivo da reprovação' : ''}. A decisão desfeita fica registrada no Log do Processo.
+            </div>
+            <textarea value={docRevertReason} onChange={e => setDocRevertReason(e.target.value)}
+              placeholder="Motivo da reversão (obrigatório) — ex.: reprovado por engano, era o documento correto"
+              rows={3}
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, resize:'vertical', boxSizing:'border-box', marginBottom:16 }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => { setDocRevert(null); setDocRevertReason('') }}>Cancelar</Button>
+              <Button variant="primary" full disabled={!docRevertReason.trim()} onClick={confirmDocRevert}>↩ Confirmar reversão</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Reverter Análise */}
       {revertModal && (
