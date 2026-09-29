@@ -11,6 +11,7 @@ import AutoCollectPanel from '../../components/AutoCollectPanel.jsx'
 import RouteBReview from '../../components/RouteBReview.jsx'
 import AiReviewPanel from '../../components/AiReviewPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
+import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { siteUrl } from '../../lib/siteUrl.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
@@ -734,6 +735,19 @@ export function BackofficeAnalysis() {
     }
   }
 
+  // "Aceitar sugestão" (29/09): abre a decisão já preenchida — aprovação com a
+  // validade da fonte/documento, ou rejeição com o motivo — para conferir
+  const aceitarSugestao = (doc) => {
+    const sug = sugestaoDoc(doc, aiPorDoc[doc.id])
+    const dec = decisaoSugerida(sug, rejectReasons)
+    if (!dec) return
+    if (dec.status === 'REJECTED') { handleDocReject(doc.id, doc.label); return }
+    openApproveModal(doc)
+    setApproveExpiry(dec.expiry)
+    setApproveNote(dec.note)
+    setApproveModal(m => m && { ...m, sug, expiryOrigem: dec.expiryOrigem })
+  }
+
   // ── Validação do CNAE = vínculo categoria×CNAE (18/09) ──────────────────
   const [cnaeModal, setCnaeModal] = useState(null)     // { doc, cats:[{id,name,cnae}], saving }
   // doc 61: a validação É o de/para categoria×CNAE — modal compartilhado com
@@ -793,12 +807,12 @@ export function BackofficeAnalysis() {
   const handleDocReject = (docId, docLabel) => {
     // Rota B: a IA sugeriu reprovar este arquivo → motivo já preenchido
     // (o analista confere e pode trocar)
-    const ia = aiPorDoc[docId]
-    const iaReprova = ia?.status === 'done' && ia.verdict === 'reprovar' ? ia.result : null
-    const iaMotivo = iaReprova && (rejectReasons.find(r => r.code === iaReprova.motivo_codigo)?.label || iaReprova.motivo_texto)
-    setRejectCode(iaMotivo || '')
+    const doc = (data?.documents || []).find(d => d.id === docId)
+    const sug = sugestaoDoc(doc, aiPorDoc[docId])
+    const reprova = sug?.veredito === 'reprovar' ? sug : null
+    setRejectCode(reprova ? motivoSugerido(reprova, rejectReasons) : '')
     setRejectCustom('')
-    setRejectDocModal({ docId, docLabel, ia: iaReprova })
+    setRejectDocModal({ docId, docLabel, sug: reprova })
   }
 
   const confirmDocReject = async () => {
@@ -1460,6 +1474,15 @@ export function BackofficeAnalysis() {
                   {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
+                        {status === 'PENDING' && (() => {
+                          const dec = decisaoSugerida(sugestaoDoc(doc, aiPorDoc[doc.id]), rejectReasons)
+                          return dec && (
+                            <Button variant="neutral" size="sm" onClick={() => aceitarSugestao(doc)}
+                              title="Abre a decisão já preenchida pela sugestão (validade ou motivo) para você conferir">
+                              {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
+                            </Button>
+                          )
+                        })()}
                         {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
                           <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
                         )}
@@ -2022,7 +2045,11 @@ export function BackofficeAnalysis() {
                 onChange={e => setApproveExpiry(e.target.value)}
                 style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box' }}
               />
-              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Sugestão: data de vencimento da assinatura do fornecedor</div>
+              <div style={{ fontSize:11, color: approveModal.sug ? '#92400e' : '#9B9B9B', marginTop:4 }}>
+                {approveModal.sug
+                  ? `${approveModal.sug.origem === 'A' ? '🏛' : '🤖'} Preenchida pela sugestão da ${ORIGEM[approveModal.sug.origem]}: ${approveModal.expiryOrigem} — confira`
+                  : 'Sugestão: data de vencimento da assinatura do fornecedor'}
+              </div>
             </div>
 
             {approveModal && (approveModal.docLabelLower?.includes('inscrição municipal') || approveModal.docLabelLower?.includes('inscricao municipal') || approveModal.docLabelLower?.includes('inscrição estadual') || approveModal.docLabelLower?.includes('inscricao estadual')) && (
@@ -2138,10 +2165,9 @@ export function BackofficeAnalysis() {
           <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:460, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:6 }}>✕ Rejeitar Documento</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20 }}>{rejectDocModal.docLabel}</div>
-            {rejectDocModal.ia && (
+            {rejectDocModal.sug && (
               <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:10, padding:'8px 12px', marginTop:-10, marginBottom:16 }}>
-                🤖 Motivo preenchido pela pré-análise da IA — confira antes de confirmar.
-                {rejectDocModal.ia.motivo_texto && <div style={{ marginTop:4, color:'#78350f' }}>“{rejectDocModal.ia.motivo_texto}”</div>}
+                {rejectDocModal.sug.origem === 'A' ? '🏛' : '🤖'} Motivo preenchido pela sugestão da {ORIGEM[rejectDocModal.sug.origem]} — confira antes de confirmar.
               </div>
             )}
 
