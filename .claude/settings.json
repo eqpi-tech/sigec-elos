@@ -113,16 +113,7 @@
       "Bash(PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs arch -x86_64 python3 -c ' *)",
       "Bash(PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs arch -x86_64 python3 enrich_partner_phones.py)",
       "Bash(git commit -m 'feat: e-mail e telefone da EMPRESA mascarados para comprador sem assinatura *)",
-      "Bash(git commit -m 'feat: fornecedor com selo vigente vê contatos abertos \\(vale como assinante\\) *)",
-      "Bash(export PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs)",
-      "Bash(PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs arch -x86_64 python3 -c \"import pg8000.native; print\\('ok'\\)\")",
-      "Bash(PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs arch -x86_64 python3 -c \"import sys; import pg8000; print\\(pg8000.__file__\\)\")",
-      "Bash(arch -x86_64 python3 -m pip install --target /private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs --upgrade pg8000 --quiet)",
-      "Bash(git commit -m 'feat: demandas pós-testes — convites em massa, modal único de análise, fluxos de categorias, correções *)",
-      "Bash(git commit -m 'feat: painel Decisão de Homologação alinhado ao conceito de selos por cliente *)",
-      "Bash(PYTHONPATH=/private/tmp/claude-501/-Users-luiz-panareli-Downloads-workspaces-eqpi-new-sigec-elos/649339e1-faaf-4193-a2f3-9050230a6ce3/scratchpad/pylibs arch -x86_64 python3 migrate_hoc_process_log.py)",
-      "Bash(git commit -m 'feat: Log do Processo do HOC importado no audit_log \\(aba já existente\\) *)",
-      "WebFetch(domain:claude.ai)"
+      "Bash(git commit -m 'feat: fornecedor com selo vigente vê contatos abertos \\(vale como assinante\\) *)"
     ],
     "additionalDirectories": [
       "/Users/luiz.panareli/Downloads/workspaces_eqpi_new/enrichment_data"
