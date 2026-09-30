@@ -25,13 +25,24 @@ const NAVS = {
     { key:'convites',       label:'Convites',       icon:'🤝' },
     { key:'rfq',            label:'Cotações (RFQ)', icon:'💬' },
     { key:'questionarios',  label:'Questionários',  icon:'📋' },
+    { key:'relatorios',     label:'Relatórios',     icon:'📈' },
+    { key:'compliance',     label:'Compliance',     icon:'🛡️' },
     { key:'configuracoes',  label:'Configurações',  icon:'⚙️' },
     { key:'equipe',         label:'Equipe',         icon:'👥' },
   ],
+  // Backoffice EQPI (refresh 30/09): os itens que o comercial apresenta
+  ADMIN: [
+    { key:'dashboard',  label:'Início',           icon:'⊞' },
+    { key:'analise',    label:'Análise de Docs',  icon:'📋' },
+    { key:'processo',   label:'Processo',         icon:'🔍' },
+    { key:'convites',   label:'Convites',         icon:'✉️' },
+    { key:'bc',         label:'BC Report',        icon:'🕵️' },
+    { key:'financeiro', label:'Financeiro',       icon:'💰' },
+  ],
 }
 
-const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente' }
-const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   CLIENT:'#059669' }
+const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente', ADMIN:'Backoffice' }
+const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   CLIENT:'#059669', ADMIN:'#7c3aed' }
 
 export default function DemoNavbar({ role, screen, navigate, onExit }) {
   const [open, setOpen] = useState(false)

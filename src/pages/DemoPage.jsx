@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import DemoNavbar               from './demo/DemoNavbar.jsx'
 import DemoSupplierOnboarding   from './demo/DemoSupplierOnboarding.jsx'
 import DemoSupplierDashboard    from './demo/DemoSupplierDashboard.jsx'
@@ -15,6 +15,12 @@ import {
   DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig,
   DemoSupplierCertificado, DemoPortalLanding, DemoPortalLogin,
 } from './demo/DemoExtraScreens.jsx'
+import { DemoClientRelatorios, DemoClientCompliance } from './demo/DemoNewScreens.jsx'
+// Backoffice EQPI: acesso restrito por código (validado em demo-unlock) e
+// carregado sob demanda — não vai no pacote principal do /demo, que é público
+const DemoBackofficeScreen = lazy(() => import('./demo/DemoBackoffice.jsx'))
+const UNLOCK_KEY = 'demo_backoffice_ok'
+const lerLiberado = () => { try { return sessionStorage.getItem(UNLOCK_KEY) === '1' } catch { return false } }
 import { DEMO_PROCESSO }        from './demo/demoData.js'
 import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
 
@@ -52,18 +58,66 @@ const PROFILES = [
   },
   {
     id: 'CLIENT',
-    label: 'Cliente (HOC)',
+    label: 'Cliente',
     icon: '🏢',
     name: 'Rafael Costa',
     company: 'Horizonte Mineração S/A',
-    desc: 'Gerencie sua cadeia de fornecedores homologados, convites e solicitações de cotação.',
+    desc: 'Convide e acompanhe fornecedores, relatórios executivos, compliance, cotações e carta de exceção.',
     color: '#059669',
     bg: '#f0fdf4',
+  },
+  {
+    id: 'ADMIN',
+    label: 'Backoffice EQPI',
+    icon: '🛠️',
+    name: 'Ana Ribeiro',
+    company: 'EQPI Tech',
+    desc: 'A operação por trás do selo: farol e fila de análise, ficha do processo, convites, BC Report e financeiro.',
+    color: '#7c3aed',
+    bg: '#f5f3ff',
   },
 ]
 
 // ── Profile selector screen ───────────────────────────────────────────────────
+// Código de acesso ao perfil interno — conferido no servidor
+function CodigoAcesso({ onOk, onClose }) {
+  const [code, setCode] = useState('')
+  const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const enviar = async (e) => {
+    e.preventDefault()
+    if (!code.trim()) return
+    setEnviando(true); setErro('')
+    try {
+      const res = await fetch('/.netlify/functions/demo-unlock', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code.trim() }),
+      })
+      if (res.ok) { try { sessionStorage.setItem(UNLOCK_KEY, '1') } catch { /* sem storage: vale só nesta tela */ } onOk(); return }
+      setErro(res.status === 503 ? 'Acesso interno não configurado.' : 'Código inválido.')
+    } catch { setErro('Não foi possível validar agora. Tente de novo.') }
+    finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <form onSubmit={enviar} style={{ background:'#fff', borderRadius:16, padding:26, maxWidth:380, width:'100%' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:6 }}>🔒 Acesso interno EQPI</div>
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:14 }}>Informe o código de acesso da equipe.</div>
+        <input autoFocus type="password" value={code} onChange={e => setCode(e.target.value)} placeholder="Código de acesso"
+          style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box', marginBottom:8 }}/>
+        {erro && <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#dc2626', marginBottom:8 }}>{erro}</div>}
+        <div style={{ display:'flex', gap:8, marginTop:6 }}>
+          <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" full type="submit" disabled={enviando || !code.trim()}>{enviando ? 'Validando…' : 'Entrar'}</Button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function ProfileSelector({ onSelect }) {
+  const [liberado, setLiberado] = useState(lerLiberado)
+  const [pedirCodigo, setPedirCodigo] = useState(false)
+  const perfis = PROFILES.filter(p => p.id !== 'ADMIN' || liberado)
   return (
     <div style={{ minHeight:'100vh', background:'#f4f5f9', display:'flex', flexDirection:'column', fontFamily:'DM Sans,sans-serif' }}>
       <div style={{ background:'#2E3192', height:58, display:'flex', alignItems:'center', padding:'0 32px', gap:12, boxShadow:'0 2px 12px rgba(46,49,146,.4)' }}>
@@ -82,8 +136,8 @@ function ProfileSelector({ onSelect }) {
           </div>
         </div>
 
-        <div style={{ display:'flex', gap:18, flexWrap:'wrap', justifyContent:'center', maxWidth:960 }}>
-          {PROFILES.map(p => (
+        <div style={{ display:'flex', gap:18, flexWrap:'wrap', justifyContent:'center', maxWidth:1200 }}>
+          {perfis.map(p => (
             <button key={p.id} onClick={() => onSelect(p.id)}
               style={{ width:220, padding:'24px 20px', borderRadius:20, background:'#fff', border:`2px solid ${p.bg}`, cursor:'pointer', textAlign:'left', transition:'all .2s', boxShadow:'0 2px 12px rgba(0,0,0,.06)', display:'flex', flexDirection:'column', gap:12 }}
               onMouseOver={e => { e.currentTarget.style.border=`2px solid ${p.color}`; e.currentTarget.style.boxShadow=`0 8px 24px ${p.color}22`; e.currentTarget.style.transform='translateY(-2px)' }}
@@ -108,6 +162,13 @@ function ProfileSelector({ onSelect }) {
         <div style={{ marginTop:28, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', textAlign:'center' }}>
           Dados de demonstração · Sem dados reais · Sem necessidade de login
         </div>
+        {!liberado && (
+          <button onClick={() => setPedirCodigo(true)}
+            style={{ marginTop:10, background:'none', border:'none', cursor:'pointer', fontSize:11, color:'#b8bccf', fontFamily:'DM Sans,sans-serif' }}>
+            🔒 Acesso interno EQPI
+          </button>
+        )}
+        {pedirCodigo && <CodigoAcesso onOk={() => { setLiberado(true); setPedirCodigo(false) }} onClose={() => setPedirCodigo(false)}/>}
       </div>
     </div>
   )
@@ -197,10 +258,21 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
     if (screen === 'rfq')           return <DemoRFQ profile="CLIENT" navigate={navigate}/>
     if (screen === 'questionarios')  return <DemoClientQuestionarios navigate={navigate}/>
+    if (screen === 'relatorios')    return <DemoClientRelatorios/>
+    if (screen === 'compliance')    return <DemoClientCompliance/>
     if (screen === 'configuracoes') return <DemoClientConfig navigate={navigate}/>
     if (screen === 'equipe')        return <DemoTeam role="CLIENT"/>
     if (screen === 'processo')      return <DemoBuyerPerfil navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
+  }
+  if (profile === 'ADMIN') {
+    // só chega aqui depois do código validado (o card nem aparece antes)
+    if (!lerLiberado()) return null
+    return (
+      <Suspense fallback={<div style={{ padding:40, textAlign:'center', fontFamily:'DM Sans,sans-serif', color:'#9B9B9B' }}>Carregando…</div>}>
+        <DemoBackofficeScreen screen={screen} navigate={navigate}/>
+      </Suspense>
+    )
   }
   return null
 }

@@ -1,5 +1,6 @@
 import { Card, Button, StatusDot, PageHeader } from '../../components/ui.jsx'
 import { DEMO_DOCS, DEMO_SUPPLIER } from './demoData.js'
+import { DemoMobilidadeBloco } from './DemoNewScreens.jsx'
 
 const STATUS_CONFIG = {
   VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
@@ -62,6 +63,11 @@ export default function DemoSupplierDocumentos({ navigate }) {
                     <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                       {doc.source === 'AUTO' ? '🤖 automático' : '📎 manual'}
                     </span>
+                    {doc.review_note && (
+                      <span style={{ fontSize:11, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>
+                        ⚠ {doc.review_note} · aviso enviado por e-mail
+                      </span>
+                    )}
                     {doc.expires_at && doc.expires_at !== '2099-12-31' && (
                       <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                         vence {doc.expires_at}
@@ -85,6 +91,8 @@ export default function DemoSupplierDocumentos({ navigate }) {
           })}
         </div>
       </Card>
+
+      <DemoMobilidadeBloco/>
     </div>
   )
 }

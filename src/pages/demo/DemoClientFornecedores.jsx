@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Card, Button, ScoreBar } from '../../components/ui.jsx'
+import { CartaExcecaoModal } from './DemoNewScreens.jsx'
 import { DEMO_CLIENT_SUPPLIERS, DEMO_INTERESTED_SUPPLIERS } from './demoData.js'
 import DemoBuyerMarketplace from './DemoBuyerMarketplace.jsx'
 
@@ -67,6 +68,7 @@ const TABS = [
 
 export default function DemoClientFornecedores({ navigate }) {
   const [tab, setTab] = useState('meus')
+  const [carta, setCarta] = useState(null)   // fornecedor da carta de exceção (modal)
   const [filter, setFilter] = useState('Todos')
   const [q, setQ] = useState('')
 
@@ -170,13 +172,22 @@ export default function DemoClientFornecedores({ navigate }) {
                 )}
               </div>
               {/* Ação */}
-              <button style={{ padding:'5px 12px', borderRadius:8, background:'#EEF0FF', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>
-                Ver →
-              </button>
+              {s.sealStatus === 'PENDING' ? (
+                <button onClick={e => { e.stopPropagation(); setCarta(s.razao_social) }}
+                  title="Aprovar com pendência mediante carta assinada pelo cliente"
+                  style={{ padding:'5px 10px', borderRadius:8, background:'#fff7ed', color:'#c2410c', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>
+                  📜 Carta
+                </button>
+              ) : (
+                <button style={{ padding:'5px 12px', borderRadius:8, background:'#EEF0FF', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>
+                  Ver →
+                </button>
+              )}
             </div>
           )
         })}
       </Card>
+      {carta && <CartaExcecaoModal fornecedor={carta} onClose={() => setCarta(null)}/>}
     </div>
   )
 }
