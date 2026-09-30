@@ -2,9 +2,7 @@ import { useState, lazy, Suspense } from 'react'
 import DemoNavbar               from './demo/DemoNavbar.jsx'
 import DemoSupplierOnboarding   from './demo/DemoSupplierOnboarding.jsx'
 import DemoSupplierDashboard    from './demo/DemoSupplierDashboard.jsx'
-import DemoSupplierDocumentos   from './demo/DemoSupplierDocumentos.jsx'
 import DemoBuyerMarketplace     from './demo/DemoBuyerMarketplace.jsx'
-import DemoBuyerPerfil          from './demo/DemoBuyerPerfil.jsx'
 import DemoClientDashboard      from './demo/DemoClientDashboard.jsx'
 import DemoClientFornecedores   from './demo/DemoClientFornecedores.jsx'
 import DemoRFQ                  from './demo/DemoRFQ.jsx'
@@ -16,13 +14,13 @@ import {
   DemoSupplierCertificado, DemoPortalLanding, DemoPortalLogin,
 } from './demo/DemoExtraScreens.jsx'
 import { DemoClientRelatorios, DemoClientCompliance } from './demo/DemoNewScreens.jsx'
+import { DemoSupplierProcessoFicha, DemoSupplierDocumentosFicha, DemoClientProcesso, DemoBuyerFicha } from './demo/DemoFichas.jsx'
 // Backoffice EQPI: acesso restrito por código (validado em demo-unlock) e
 // carregado sob demanda — não vai no pacote principal do /demo, que é público
 const DemoBackofficeScreen = lazy(() => import('./demo/DemoBackoffice.jsx'))
 const UNLOCK_KEY = 'demo_backoffice_ok'
 const lerLiberado = () => { try { return sessionStorage.getItem(UNLOCK_KEY) === '1' } catch { return false } }
-import { DEMO_PROCESSO }        from './demo/demoData.js'
-import { Card, Button, ScoreBar, StatusDot } from '../components/ui.jsx'
+import { Button } from '../components/ui.jsx'
 
 // ── Profile cards data ────────────────────────────────────────────────────────
 const PROFILES = [
@@ -174,69 +172,11 @@ function ProfileSelector({ onSelect }) {
   )
 }
 
-// ── Supplier process detail ───────────────────────────────────────────────────
-function DemoSupplierProcesso({ navigate }) {
-  const p = DEMO_PROCESSO
-  const STATUS_C  = { VALID:'#22c55e', EXPIRING:'#f59e0b', MISSING:'#ef4444', PENDING:'#f59e0b', REJECTED:'#ef4444' }
-  const STATUS_L  = { VALID:'Válido', EXPIRING:'Vencendo', MISSING:'Pendente', PENDING:'Em análise', REJECTED:'Rejeitado' }
-  const STATUS_BG = { VALID:'#f0fdf4', EXPIRING:'#fffbeb', MISSING:'#fff5f5', PENDING:'#fff7ed', REJECTED:'#fff5f5' }
-  const scoreC = p.score >= 90 ? '#22c55e' : p.score >= 70 ? '#f59e0b' : '#ef4444'
-
-  return (
-    <div style={{ padding:'28px 32px', maxWidth:1000, margin:'0 auto' }}>
-      <button onClick={() => navigate('dashboard')} style={{ display:'flex', alignItems:'center', gap:6, background:'none', border:'none', color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, fontSize:13, cursor:'pointer', marginBottom:20 }}>
-        ← Voltar ao Dashboard
-      </button>
-      <Card style={{ borderRadius:16, padding:'24px 28px', marginBottom:24 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
-          <div>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:20, color:'#1a1c5e' }}>{p.sealName}</div>
-            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginTop:2 }}>Cliente: {p.clientName}</div>
-            <div style={{ marginTop:10 }}>
-              <span style={{ fontSize:11, fontWeight:700, background:'rgba(245,158,11,.15)', color:'#f59e0b', padding:'3px 12px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>Em análise</span>
-            </div>
-          </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:11, color:'#9B9B9B', marginBottom:2 }}>Score do processo</div>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:32, color:scoreC, lineHeight:1 }}>
-              {p.score}<span style={{ fontSize:14, color:'#9B9B9B', fontWeight:400 }}>/100</span>
-            </div>
-            <div style={{ width:120, marginLeft:'auto', marginTop:4 }}><ScoreBar score={p.score}/></div>
-          </div>
-        </div>
-        <div style={{ background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:10, padding:'10px 14px', marginTop:16, fontSize:12, color:'#b45309', fontFamily:'DM Sans,sans-serif' }}>
-          ⏳ Análise em andamento — equipe EQPI revisando documentos. Prazo estimado: 3 dias úteis.
-        </div>
-      </Card>
-      <Card style={{ borderRadius:16, padding:'20px 24px' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e', marginBottom:16 }}>Documentos do Processo</div>
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {p.docs.map((doc, i) => {
-            const sc = STATUS_C[doc.status] || '#9B9B9B'
-            const sl = STATUS_L[doc.status] || doc.status
-            const bg = STATUS_BG[doc.status] || '#f8fffe'
-            return (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderRadius:12, background:bg, border:`1px solid ${sc}25` }}>
-                <StatusDot status={doc.status}/>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{doc.label}</div>
-                  <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>{doc.source === 'AUTO' ? '🤖 automático' : '📎 manual'}</div>
-                </div>
-                <span style={{ fontSize:11, fontWeight:700, color:sc, background:`${sc}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{sl}</span>
-              </div>
-            )
-          })}
-        </div>
-      </Card>
-    </div>
-  )
-}
-
 // ── Screen routing ────────────────────────────────────────────────────────────
 function renderScreen(profile, screen, navigate) {
   if (profile === 'SUPPLIER') {
-    if (screen === 'documentos')   return <DemoSupplierDocumentos navigate={navigate}/>
-    if (screen === 'processo')     return <DemoSupplierProcesso   navigate={navigate}/>
+    if (screen === 'documentos')   return <DemoSupplierDocumentosFicha/>
+    if (screen === 'processo')     return <DemoSupplierProcessoFicha navigate={navigate}/>
     if (screen === 'certificado')  return <DemoSupplierCertificado navigate={navigate}/>
     if (screen === 'questionario') return <DemoSupplierQuestionario/>
     if (screen === 'planos')       return <DemoPlano role="SUPPLIER"/>
@@ -248,7 +188,7 @@ function renderScreen(profile, screen, navigate) {
   }
   if (profile === 'BUYER') {
     if (screen === 'convites') return <DemoConvites profile="BUYER" navigate={navigate}/>
-    if (screen === 'perfil')   return <DemoBuyerPerfil navigate={navigate}/>
+    if (screen === 'perfil')   return <DemoBuyerFicha navigate={navigate}/>
     if (screen === 'rfq')      return <DemoRFQ profile="BUYER" navigate={navigate}/>
     if (screen === 'plano')    return <DemoPlano role="BUYER"/>
     return <DemoBuyerMarketplace navigate={navigate}/>
@@ -262,7 +202,7 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'compliance')    return <DemoClientCompliance/>
     if (screen === 'configuracoes') return <DemoClientConfig navigate={navigate}/>
     if (screen === 'equipe')        return <DemoTeam role="CLIENT"/>
-    if (screen === 'processo')      return <DemoBuyerPerfil navigate={navigate}/>
+    if (screen === 'processo')      return <DemoClientProcesso navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
   }
   if (profile === 'ADMIN') {

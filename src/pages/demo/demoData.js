@@ -20,36 +20,6 @@ export const DEMO_SEALS = [
   { id: 'seal-2', name: 'Horizonte — Suprimentos', clientName: 'Horizonte Mineração',  status: 'PENDING', score: 72, issued_at: null,          expires_at: null,         color: '#F47E2F', icon: '⭐' },
 ]
 
-export const DEMO_DOCS = [
-  { id:1,  label:'Cartão CNPJ',            status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:2,  label:'CND Federal',             status:'VALID',    source:'MANUAL', expires_at:'2027-03-30' },
-  { id:3,  label:'CRF / FGTS',             status:'VALID',    source:'MANUAL', expires_at:'2027-01-31' },
-  { id:4,  label:'Certidão Municipal',      status:'EXPIRING', source:'MANUAL', expires_at:'2026-10-20' },
-  { id:5,  label:'Análise CNAEs',           status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:6,  label:'Simples Nacional',        status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:7,  label:'Apólice de Seguro',       status:'PENDING',  source:'MANUAL', expires_at:null },
-  { id:8,  label:'Certidão Trabalhista',    status:'VALID',    source:'MANUAL', expires_at:'2027-02-15' },
-  { id:9,  label:'Alvará de Funcionamento', status:'REJECTED', source:'MANUAL', expires_at:null, review_note:'Documento vencido — envie o alvará do exercício atual' },
-  { id:10, label:'Relatório Assertiva 360', status:'VALID',    source:'AUTO',   expires_at:'2027-06-11' },
-]
-
-export const DEMO_PROCESSO = {
-  id: 'seal-2',
-  clientName: 'Horizonte Mineração S/A',
-  sealName: 'Horizonte — Suprimentos',
-  status: 'PENDING',
-  score: 72,
-  docs: [
-    { label:'Cartão CNPJ',          status:'VALID',    source:'AUTO'   },
-    { label:'CND Federal',           status:'VALID',    source:'MANUAL' },
-    { label:'CRF / FGTS',           status:'VALID',    source:'MANUAL' },
-    { label:'Certidão Municipal',    status:'EXPIRING', source:'MANUAL' },
-    { label:'Apólice de Seguro',     status:'PENDING',  source:'MANUAL' },
-    { label:'Alvará de Funcionamento', status:'MISSING', source:'MANUAL' },
-    { label:'Certidão Trabalhista',  status:'VALID',    source:'MANUAL' },
-  ],
-}
-
 // ── Marketplace ─────────────────────────────────────────────────────────────
 export const DEMO_MARKETPLACE = [
   { id:1, razao_social:'Primatus Serviços Técnicos Ltda', city:'São Paulo',       state:'SP', cnae:'Serv. Manutenção Industrial', score:92, sealType:'homologado', porte:'Médio',    simples:true,  capital:850000  },
@@ -210,13 +180,5 @@ export const DEMO_COMPLIANCE = [
   { fornecedor: 'Metalmax Ind. Ltda', cnpj: '12.408.771/0001-09', pergunta: 'A empresa possui processos judiciais trabalhistas em andamento?', resposta: 'Sim — 3 processos', regra: 'Resposta "Sim" exige avaliação' },
   { fornecedor: 'Norte Industrial Ltda', cnpj: '28.119.340/0001-55', pergunta: 'Algum sócio é pessoa politicamente exposta (PEP)?', resposta: 'Sim', regra: 'PEP exige avaliação de compliance' },
   { fornecedor: 'TechFix Industrial', cnpj: '07.332.910/0001-41', pergunta: 'Possui programa de integridade (compliance) formalizado?', resposta: 'Não', regra: 'Ausência de programa de integridade' },
-]
-
-// Fornecedor · Mobilidade (documentos de pessoa física por posto)
-export const DEMO_MOBILIDADE = [
-  { posto: 'PORTARIA — Itabira/MG', pessoas: [
-    { nome: 'João P. Silva', docs: [ { label: 'ASO', status: 'VALID' }, { label: 'CNV (vigilante)', status: 'VALID' }, { label: 'Curso de reciclagem', status: 'PENDING' } ] },
-    { nome: 'Carla M. Souza', docs: [ { label: 'ASO', status: 'VALID' }, { label: 'CNV (vigilante)', status: 'EXPIRING' }, { label: 'Curso de reciclagem', status: 'VALID' } ] },
-  ], docsPosto: [ { label: 'PGR do posto', status: 'VALID' }, { label: 'PCMSO do posto', status: 'MISSING' } ] },
 ]
 

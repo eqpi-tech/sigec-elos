@@ -1,5 +1,9 @@
 import { Card, KpiCard, ScoreBar, StatusDot, Button, SectionTitle } from '../../components/ui.jsx'
-import { DEMO_SUPPLIER, DEMO_SEALS, DEMO_DOCS } from './demoData.js'
+import { DEMO_SUPPLIER, DEMO_SEALS } from './demoData.js'
+import { FICHA } from './DemoFichaKit.jsx'
+
+// mesma lista de documentos da ficha do processo (as telas contam a mesma história)
+const DEMO_DOCS = FICHA.docs.map(d => ({ ...d, expires_at: d.expires }))
 
 const STATUS_C = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#f59e0b', EXPIRED:'#9B9B9B' }
 const STATUS_L = { ACTIVE:'Ativo', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }

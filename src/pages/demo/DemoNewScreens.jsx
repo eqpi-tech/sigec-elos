@@ -1,9 +1,9 @@
 // Demo · telas novas do refresh (30/09) para cliente e fornecedor:
-// Relatórios (dashboard executivo), Compliance, Carta de Exceção e
-// Documentos de Mobilidade (PF por posto/pessoa). Dados fictícios.
+// Relatórios (dashboard executivo), Compliance e Carta de Exceção.
+// Dados fictícios.
 import { useState } from 'react'
-import { Card, Button, KpiCard, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
-import { DEMO_CLIENT_REPORTS, DEMO_COMPLIANCE, DEMO_MOBILIDADE } from './demoData.js'
+import { Card, Button, KpiCard, PageHeader, SectionTitle } from '../../components/ui.jsx'
+import { DEMO_CLIENT_REPORTS, DEMO_COMPLIANCE } from './demoData.js'
 
 const M = 'Montserrat,sans-serif'
 const D = 'DM Sans,sans-serif'
@@ -133,38 +133,5 @@ export function CartaExcecaoModal({ fornecedor, onClose }) {
         )}
       </div>
     </div>
-  )
-}
-
-// ── Fornecedor · Documentos de Mobilidade (bloco da tela Documentos) ───────
-export function DemoMobilidadeBloco() {
-  const LBL = { VALID: 'Válido', PENDING: 'Em análise', EXPIRING: 'Vencendo', MISSING: 'Pendente' }
-  const linha = (d, k) => (
-    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: '#fafbff', border: '1px solid #eef0f6', marginBottom: 6 }}>
-      <StatusDot status={d.status}/>
-      <span style={{ flex: 1, fontFamily: D, fontSize: 12.5, color: '#1a1c5e' }}>{d.label}</span>
-      <span style={{ fontFamily: D, fontSize: 11, color: '#6b7280' }}>{LBL[d.status]}</span>
-      {['MISSING', 'EXPIRING'].includes(d.status) && <Button variant="primary" size="sm">📎 Enviar</Button>}
-    </div>
-  )
-  return (
-    <Card style={{ borderRadius: 16, padding: '20px 24px', marginTop: 16 }}>
-      <div style={{ fontFamily: M, fontWeight: 800, fontSize: 15, color: '#1a1c5e', marginBottom: 4 }}>👷 Documentos de Mobilidade</div>
-      <div style={{ fontFamily: D, fontSize: 12, color: '#6b7280', marginBottom: 14 }}>
-        Para contratos com equipe alocada no cliente: documentos de cada posto e de cada colaborador (ASO, CNV, cursos…), com validade controlada.
-      </div>
-      {DEMO_MOBILIDADE.map((p) => (
-        <div key={p.posto}>
-          <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#2E3192', marginBottom: 8 }}>📍 {p.posto}</div>
-          {p.docsPosto.map((d, i) => linha(d, `posto-${i}`))}
-          {p.pessoas.map((pe) => (
-            <div key={pe.nome} style={{ marginLeft: 14, marginTop: 8 }}>
-              <div style={{ fontFamily: D, fontWeight: 700, fontSize: 12.5, color: '#374151', marginBottom: 6 }}>👤 {pe.nome}</div>
-              {pe.docs.map((d, i) => linha(d, `${pe.nome}-${i}`))}
-            </div>
-          ))}
-        </div>
-      ))}
-    </Card>
   )
 }
