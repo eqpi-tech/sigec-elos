@@ -122,8 +122,11 @@ exports.handler = async (event) => {
       }
     }
 
-    // CASO 2a: Cliente subsidia — sem Stripe, ativa plano direto
+    // CASO 2a: Cliente subsidia — sem Stripe, ativa plano direto e libera o
+    // processo (patch_112: subsidiado não espera pagamento — quem paga é o cliente)
     if (isInvitedSupplier && clientPayer === 'client') {
+      await supabaseAdmin.from('seals').update({ released_at: new Date().toISOString() })
+        .eq('supplier_id', supplierId).eq('client_id', clientId).is('released_at', null)
       await supabaseAdmin.from('plans').upsert({
         supplier_id:  supplierId,
         type:         'homologado',

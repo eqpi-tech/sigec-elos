@@ -80,7 +80,7 @@ export const supplierApi = {
     // Queries separadas para evitar problema de RLS em joins embutidos
     const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
+      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, released_at, hoc_process_id, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
       supabase.from('plans').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
     ])
@@ -520,6 +520,25 @@ export const marketplaceApi = {
 
 // ── Payments (Stripe via Netlify Function) ───────────────────────────────────
 export const paymentsApi = {
+  // Trava de pagamento (patch_112): situação de liberação do fornecedor —
+  // released = algum processo liberado (pago, subsidiado, HOC ou homologado);
+  // pendentes = processos ainda sem pagamento confirmado; boleto = plano
+  // PENDING (boleto emitido, aguardando compensação)
+  paymentStatus: async (supplierId) => {
+    if (!supplierId) return { released: true, pendentes: [], boleto: false }
+    const [{ data: seals }, { data: plan }] = await Promise.all([
+      supabase.from('seals').select('id, status, released_at, hoc_process_id, client_id, seal_name, clients(razao_social, nome_fantasia)').eq('supplier_id', supplierId),
+      supabase.from('plans').select('status, type').eq('supplier_id', supplierId).maybeSingle(),
+    ])
+    const lista = seals || []
+    return {
+      released: lista.some(x => x.released_at),
+      pendentes: lista.filter(x => !x.released_at && x.status === 'PENDING'),
+      boleto: plan?.status === 'PENDING',
+      plan: plan || null,
+    }
+  },
+
   createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly }) => {
     const res = await fetch('/.netlify/functions/create-checkout', {
       method: 'POST',

@@ -295,6 +295,17 @@ export default function SupplierDashboard() {
                 <div style={{ cursor:'pointer' }} onClick={() => navigate(`/fornecedor/processo/${seal.id}`)}>
                   <SealBadge seal={seal} size={mobile ? 'sm' : 'md'} showClient showScore />
                 </div>
+                {/* trava de pagamento (patch_112): processo sem pagamento confirmado */}
+                {seal.effStatus === 'PENDING' && !seal.released_at && !seal.hoc_process_id && (
+                  <button onClick={() => navigate('/fornecedor/pagamento')}
+                    title="O processo começa depois da confirmação do pagamento"
+                    style={{ display:'flex', alignItems:'center', gap:5, background:'#fff7ed',
+                      border:'1px solid #fed7aa', borderRadius:20, padding:'4px 12px',
+                      cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10.5,
+                      color:'#c2410c', whiteSpace:'nowrap' }}>
+                    💳 Aguardando pagamento · Pagar
+                  </button>
+                )}
                 {seal.effStatus === 'ACTIVE' && (
                   <button onClick={() => navigate(`/fornecedor/certificado/${seal.id}`)}
                     title="Abrir certificado de homologação para impressão"

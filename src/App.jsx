@@ -1,4 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { paymentsApi } from './services/api.js'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { can } from './lib/permissions.js'
 import { hasModule } from './lib/modules.js'
@@ -15,6 +17,7 @@ import SupplierDashboard  from './pages/supplier/Dashboard.jsx'
 import SupplierDocuments  from './pages/supplier/Documents.jsx'
 import SupplierPlans      from './pages/supplier/Plans.jsx'
 import PlanSuccess        from './pages/supplier/PlanSuccess.jsx'
+import SupplierPayment    from './pages/supplier/Payment.jsx'
 import SupplierCategories from './pages/supplier/Categories.jsx'
 import SupplierProcess    from './pages/supplier/Process.jsx'
 import SupplierCertificate from './pages/supplier/Certificate.jsx'
@@ -93,7 +96,26 @@ function AppLayout({ children }) {
 }
 
 function Protect({ roles, perm, module, children }) {
-  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm} module={module}>{children}</PermGate></AppLayout></ProtectedRoute>
+  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm} module={module}><PaymentGate>{children}</PaymentGate></PermGate></AppLayout></ProtectedRoute>
+}
+
+// Trava de pagamento (01/10, patch_112): fornecedor sem processo liberado
+// (pago, subsidiado, HOC ou homologado) só acessa pagamento, planos e Minha
+// Conta. O banco também trava o envio de documentos (RLS) e o selo.
+const PAY_FREE = ['/fornecedor/pagamento', '/fornecedor/planos', '/fornecedor/plano-ativo', '/conta']
+function PaymentGate({ children }) {
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+  const sid = user?.role === 'SUPPLIER' ? (user.supplierId || user.supplier_id) : null
+  const [st, setSt] = useState(null)
+  useEffect(() => {
+    if (!sid) return
+    paymentsApi.paymentStatus(sid).then(setSt).catch(() => setSt({ released: true }))
+  }, [sid, pathname])
+  if (!sid || PAY_FREE.some(p => pathname.startsWith(p))) return children
+  if (!st) return null
+  if (!st.released) return <Navigate to="/fornecedor/pagamento" replace/>
+  return children
 }
 
 // Gates: permissão granular (patch_030) + módulos do perfil (patch_038)
@@ -123,6 +145,7 @@ function AppRoutes() {
       <Route path="/fornecedor/documentos"  element={<Protect roles={['SUPPLIER']} module="documentos"><SupplierDocuments/></Protect>} />
       <Route path="/fornecedor/planos"      element={<Protect roles={['SUPPLIER']} module="plano"><SupplierPlans/></Protect>} />
       <Route path="/fornecedor/plano-ativo"    element={<Protect roles={['SUPPLIER']}><PlanSuccess/></Protect>} />
+      <Route path="/fornecedor/pagamento"      element={<Protect roles={['SUPPLIER']}><SupplierPayment/></Protect>} />
       <Route path="/fornecedor/categorias"    element={<Protect roles={['SUPPLIER']} module="categorias"><SupplierCategories/></Protect>} />
       <Route path="/fornecedor/questionario"  element={<Protect roles={['SUPPLIER']} module="questionario"><SupplierQuestionnaire/></Protect>} />
       <Route path="/fornecedor/processo/:sealId" element={<Protect roles={['SUPPLIER']}><SupplierProcess/></Protect>} />

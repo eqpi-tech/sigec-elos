@@ -454,19 +454,28 @@ export function BackofficeAnalysis() {
       d.source === 'REQUIRED' && d.status === 'MISSING' && !['37','61','62'].includes(String(d.type)))
     const nothingSent = !docsAll.some(d => d.status && d.status !== 'MISSING')
     if (requiredMissing || nothingSent) return
+    // 01/10: só há "entrou em análise" se existe processo EM ANÁLISE de
+    // verdade — pendente, não suspenso e liberado (pago ou subsidiado,
+    // patch_112). Homologado abrindo a ficha não recebe (caso VP Treinamento)
+    const procAberto = (supplierData.seals || [])
+      .filter(x => x.status === 'PENDING' && !x.client_suspended_at && x.released_at)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+    if (!procAberto) return
     try {
-      // Verifica se já enviamos este email hoje (audit_log)
+      // uma vez POR PROCESSO (antes: uma vez a cada 24 h — reenviava ao abrir
+      // a ficha em outro dia). Registros antigos sem seal_id: vale o envio
+      // feito depois da abertura deste processo
       const { data: existing } = await supabase
         .from('audit_log')
-        .select('id')
+        .select('id, metadata, created_at')
         .eq('entity_id', id)
         .eq('action', 'ANALYSIS_STARTED')
-        .gte('created_at', new Date(Date.now() - 86400000).toISOString())
-        .limit(1)
-      if (existing?.length > 0) return
+        .gte('created_at', procAberto.created_at || '1970-01-01')
+        .limit(20)
+      if ((existing || []).some(e => !e.metadata?.seal_id || e.metadata.seal_id === procAberto.id)) return
       await supabase.from('audit_log').insert({
         action: 'ANALYSIS_STARTED', entity_type: 'supplier', entity_id: id,
-        metadata: { razao_social: supplierData.razao_social },
+        metadata: { razao_social: supplierData.razao_social, seal_id: procAberto.id },
       })
       // Envia email
       await fetch('/.netlify/functions/send-email', {
@@ -625,6 +634,12 @@ export function BackofficeAnalysis() {
   }
 
   const handleApprove = async () => {
+    // Trava de pagamento (patch_112): processo sem pagamento confirmado nem
+    // subsídio não recebe selo — o banco também recusa
+    if (processSeal && !processSeal.released_at && !processSeal.hoc_process_id) {
+      alert('Este processo ainda não teve o pagamento confirmado (boleto em compensação ou plano não contratado). O selo só pode ser emitido depois da confirmação.')
+      return
+    }
     if (hardBlocked.length > 0) {
       alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
       return
@@ -979,7 +994,9 @@ export function BackofficeAnalysis() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:20 }}>
+      {/* minmax(0,…): texto longo sem quebra (nome de selo/cliente) não pode
+          esticar as colunas — o painel da direita deslocava a tela (01/10) */}
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,2fr) minmax(0,1fr)', gap:20 }}>
         <div>
           {/* Header do fornecedor */}
           <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16 }}>
@@ -1801,7 +1818,7 @@ export function BackofficeAnalysis() {
         </div>
 
         {/* Painel de decisão */}
-        <div style={{ position:'sticky',top:80,alignSelf:'flex-start' }}>
+        <div style={{ position:'sticky',top:80,alignSelf:'flex-start',minWidth:0,overflowWrap:'anywhere' }}>
           <Card style={{ borderRadius:16,padding:'20px 24px',border:'2px solid #e2e4ef' }}>
             <SectionTitle>Decisão de Homologação</SectionTitle>
 
@@ -1925,6 +1942,11 @@ export function BackofficeAnalysis() {
                     ↩ Reverter Análise
                   </Button>
                 </>
+              ) : processSeal && !processSeal.released_at && !processSeal.hoc_process_id ? (
+                <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'12px 14px', fontSize:12.5, color:'#9a3412', fontFamily:'DM Sans,sans-serif' }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, marginBottom:4 }}>💳 Aguardando pagamento</div>
+                  O fornecedor ainda não confirmou o pagamento deste processo (plano não contratado ou boleto em compensação). Ele não entra na fila e o selo não pode ser emitido até a confirmação.
+                </div>
               ) : (
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
                   {processing ? '⏳...'

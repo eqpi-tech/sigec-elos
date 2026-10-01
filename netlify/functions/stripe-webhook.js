@@ -170,6 +170,15 @@ exports.handler = async (event) => {
 
       if (sealErr) console.error('Seal upsert error:', sealErr)
 
+      // Trava de pagamento (patch_112): pagamento CONFIRMADO (cartão/PIX na
+      // hora; boleto só na compensação — chega aqui por async_payment_succeeded)
+      // libera os processos do fornecedor: envio de documentos, fila de
+      // análise e, depois da análise, o selo
+      const { error: relErr } = await supabase.from('seals')
+        .update({ released_at: new Date().toISOString() })
+        .eq('supplier_id', supplierId).is('released_at', null)
+      if (relErr) console.error('[trava-pagamento] liberação:', relErr.message)
+
       // Verificado: atualizar status do supplier diretamente
       if (sealType === 'verificado') {
         await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
@@ -231,6 +240,20 @@ exports.handler = async (event) => {
           paid_at:           new Date((invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
           status:            amount > 0 ? 'PENDING' : 'SKIPPED_ZERO',
         }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true })
+        // Renovação (01/10): a fatura paga estende o plano e o selo ELOS até o
+        // fim do período cobrado — sem isto o selo vencia com a assinatura em
+        // dia (e o seals-expire o daria por vencido). Selo vencido volta a valer.
+        const periodEnd = invoice.lines?.data?.[0]?.period?.end
+        if (subId && supplierId && periodEnd) {
+          const fim = new Date(periodEnd * 1000).toISOString()
+          const { error: pe } = await supabase.from('plans').update({ ends_at: fim, status: 'ACTIVE' })
+            .eq('stripe_sub_id', subId).or(`ends_at.is.null,ends_at.lt.${fim}`)
+          if (pe) console.error('[renovacao] plano:', pe.message)
+          const { error: se } = await supabase.from('seals').update({ expires_at: fim, status: 'ACTIVE' })
+            .eq('supplier_id', supplierId).is('client_id', null).is('hoc_process_id', null)
+            .in('status', ['ACTIVE', 'EXPIRED']).or(`expires_at.is.null,expires_at.lt.${fim}`)
+          if (se) console.error('[renovacao] selo:', se.message)
+        }
         if (qErr) console.error('[nfe-queue]', qErr.message)
         else if (amount > 0) {
           // tentativa imediata de emissão (o cron diário é a rede de segurança)

@@ -75,8 +75,11 @@ const ELOS_PSEUDO_CLIENT = { id: '__ELOS__', razao_social: '⭐ ELOS (processo p
 
 // Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
 // só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)' }
-const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1' }
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)', PAGAMENTO:'💳 Aguardando pagamento' }
+// trava de pagamento (patch_112): pendente sem pagamento confirmado não é análise
+const sealStatusOf = (seal) => !seal ? 'CADASTRO'
+  : (seal.status === 'PENDING' && !seal.released_at && !seal.hoc_process_id) ? 'PAGAMENTO' : seal.status
+const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1', PAGAMENTO:'#ea580c' }
 // convite que ainda não virou cadastro (28/09: cliente recém-chegado só tem
 // convites — a busca voltava vazia e parecia defeito)
 const INVITE_LABEL = { SENT:'Enviado', VIEWED:'Visualizado — ainda não cadastrou', EXPIRED:'Expirado', CANCELLED:'Cancelado' }
@@ -139,7 +142,7 @@ export default function BackofficeProcessSearch() {
     if (filterClient) {
       const isElos = filterClient === ELOS_PSEUDO_CLIENT.id
       let sealQ = supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id')
         .range(0, 4999)
       sealQ = isElos ? sealQ.is('client_id', null) : sealQ.eq('client_id', filterClient)
       const [sealRes, invRes] = await Promise.allSettled([
@@ -195,7 +198,7 @@ export default function BackofficeProcessSearch() {
         ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
       }))
       if (filterType !== 'Todos')
-        enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
+        enriched = enriched.filter(s => sealStatusOf(s.seal) === filterType)
 
       // convite de CNPJ que já aparece como fornecedor não se repete
       const cnpjsListados = new Set(suppliers.map(x => digitos(x.cnpj)))
@@ -218,7 +221,7 @@ export default function BackofficeProcessSearch() {
     const ids = suppliers.map(s => s.id)
     const [sealsRes, invitesRes] = await Promise.allSettled([
       supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id')
         .in('supplier_id', ids),
       supabase.from('invitations')
         .select('supplier_id, client_id')
@@ -235,7 +238,7 @@ export default function BackofficeProcessSearch() {
       ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
     }))
     if (filterType !== 'Todos')
-      enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
+      enriched = enriched.filter(s => sealStatusOf(s.seal) === filterType)
 
     setResults(enriched)
     setLoading(false)
@@ -269,7 +272,7 @@ export default function BackofficeProcessSearch() {
 
         <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
           <div style={{ display:'flex', gap:6 }}>
-            {['Todos','ACTIVE','PENDING','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
+            {['Todos','ACTIVE','PENDING','PAGAMENTO','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
               <button key={f} onClick={() => setFilterType(f)}
                 style={{ padding:'6px 12px', borderRadius:20, border:`1px solid ${filterType===f?SEAL_COLOR[f]||'#2E3192':'#e2e4ef'}`, background:filterType===f?`${SEAL_COLOR[f]||'#2E3192'}12`:'#fff', color:filterType===f?SEAL_COLOR[f]||'#2E3192':'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {f === 'Todos' ? 'Todos' : SEAL_LABEL[f]}
@@ -334,7 +337,7 @@ export default function BackofficeProcessSearch() {
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {results.map((s, i) => {
-              const sealStatus = s.seal?.status || 'CADASTRO'
+              const sealStatus = sealStatusOf(s.seal)
               const sealColor  = SEAL_COLOR[sealStatus] || '#9B9B9B'
               const isInactive = s.status === 'INACTIVE'
               return (
