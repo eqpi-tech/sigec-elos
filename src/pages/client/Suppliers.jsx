@@ -68,15 +68,14 @@ export default function ClientSuppliers() {
   const [fNivel, setFNivel] = useState([])   // nível/pacote (múltipla)
   const [fCust,  setFCust]  = useState([])   // custeio (uma)
   const [fDest,  setFDest]  = useState([])   // destaques (múltipla)
-  const [fUf,    setFUf]    = useState([])   // UF (múltipla)
   const [flowNames, setFlowNames] = useState({})
   useEffect(() => {
     if (!user?.clientId) return
     supabase.from('client_flows').select('id, name').eq('client_id', user.clientId)
       .then(({ data }) => setFlowNames(Object.fromEntries((data || []).map(f => [f.id, f.name]))))
   }, [user?.clientId])
-  const filtrosAtivos = fSit.length + fNivel.length + fCust.length + fDest.length + fUf.length > 0 || !!mySearch
-  const limparFiltros = () => { setFSit([]); setFNivel([]); setFCust([]); setFDest([]); setFUf([]); setMySearch('') }
+  const filtrosAtivos = fSit.length + fNivel.length + fCust.length + fDest.length > 0 || !!mySearch
+  const limparFiltros = () => { setFSit([]); setFNivel([]); setFCust([]); setFDest([]); setMySearch('') }
 
   // Mini-wizard aba "todos"
   const [vStage,    setVStage]    = useState(1)
@@ -174,11 +173,9 @@ export default function ClientSuppliers() {
     if (fDest.includes('prio') && !(item.seal?.status === 'PENDING' && item.seal?.priority_requested_at)) return false
     if (fDest.includes('carta') && !item.cartaExcecao) return false
     if (fDest.includes('vence') && !venceEm60(item)) return false
-    if (fUf.length && !fUf.includes(item.supplier?.state || '—')) return false
     return true
   })
   const conta = (fn) => mySuppliers.filter(fn).length
-  const ufs = [...new Set(mySuppliers.map(i => i.supplier?.state || '—'))].sort()
   const niveis = [...new Set(mySuppliers.map(i => i.flowId || 'sem'))]
 
   const myIds = new Set(mySuppliers.map(s => s.supplierId).filter(Boolean))
@@ -290,10 +287,6 @@ export default function ClientSuppliers() {
                 { value: 'carta', label: '📜 Com carta de exceção', color: '#b45309', count: conta(i => i.cartaExcecao) },
                 { value: 'vence', label: '⏰ Vence em até 60 dias', color: '#dc2626', count: conta(venceEm60) },
               ].filter(o => o.count > 0)}/>
-            {ufs.length > 1 && (
-              <MultiChips label="UF" value={fUf} onChange={setFUf}
-                options={ufs.map(u => ({ value: u, label: u, count: conta(i => (i.supplier?.state || '—') === u) }))}/>
-            )}
           </FilterPanel>
 
           {filteredMine.length === 0 ? (
