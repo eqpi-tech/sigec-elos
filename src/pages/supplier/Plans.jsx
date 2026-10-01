@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { paymentsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -38,6 +39,16 @@ const SEALS = [
 
 export default function SupplierPlans() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  // processo de CLIENTE aguardando pagamento: vale o preço combinado com o
+  // cliente (tela Pagamento) — os planos ELOS são só para entrada direta
+  useEffect(() => {
+    const sid = user?.supplierId || user?.supplier_id
+    if (!sid) return
+    paymentsApi.paymentStatus(sid).then(r => {
+      if (r.pendentes.some(x => x.client_id)) navigate('/fornecedor/pagamento', { replace: true })
+    }).catch(() => {})
+  }, [user])   // eslint-disable-line react-hooks/exhaustive-deps
   const [loading, setLoading] = useState(null)
   const [error,   setError]   = useState('')
   const [billing, setBilling] = useState({ verificado: 'anual' })

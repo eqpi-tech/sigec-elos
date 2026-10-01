@@ -524,6 +524,17 @@ export const paymentsApi = {
   // released = algum processo liberado (pago, subsidiado, HOC ou homologado);
   // pendentes = processos ainda sem pagamento confirmado; boleto = plano
   // PENDING (boleto emitido, aguardando compensação)
+  // cotação: { modo: 'cliente', cliente, fluxo, preco, pagador } ou { modo: 'elos' }
+  quote: async ({ supplierId, inviteToken, refSlug, refFlowId } = {}) => {
+    const res = await fetch('/.netlify/functions/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'quote', supplierId, inviteToken, refSlug, refFlowId }),
+    })
+    if (!res.ok) return { modo: 'elos' }
+    return res.json()
+  },
+
   paymentStatus: async (supplierId) => {
     if (!supplierId) return { released: true, pendentes: [], boleto: false }
     const [{ data: seals }, { data: plan }] = await Promise.all([
@@ -539,11 +550,14 @@ export const paymentsApi = {
     }
   },
 
-  createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly }) => {
+  // convite (inviteToken) e portal (refSlug/refFlowId) são tagueados: o
+  // servidor aplica o PREÇO COMBINADO com o cliente (01/10 — antes o token se
+  // perdia aqui e o convidado pagava o valor ELOS)
+  createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly, inviteToken, refSlug, refFlowId }) => {
     const res = await fetch('/.netlify/functions/create-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planType, cnaeCount, supplierId, userEmail, priceYearly }),
+      body: JSON.stringify({ planType, cnaeCount, supplierId, userEmail, priceYearly, inviteToken, refSlug, refFlowId }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))

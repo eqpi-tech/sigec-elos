@@ -18,12 +18,31 @@ export default function SupplierPayment() {
   const navigate = useNavigate()
   const [st, setSt] = useState(null)
   const [verificando, setVerificando] = useState(false)
+  const [cotacao, setCotacao] = useState(null)     // processo de cliente: preço combinado
+  const [pagando, setPagando] = useState(false)
+  const [erro, setErro] = useState('')
   const sid = user?.supplierId || user?.supplier_id
 
   const carregar = useCallback(async () => {
     setVerificando(true)
-    try { setSt(await paymentsApi.paymentStatus(sid)) } finally { setVerificando(false) }
+    try {
+      const r = await paymentsApi.paymentStatus(sid)
+      setSt(r)
+      // processo de cliente pendente: vale o preço combinado com o cliente
+      if (r.pendentes.some(x => x.client_id)) {
+        const q = await paymentsApi.quote({ supplierId: sid })
+        setCotacao(q?.modo === 'cliente' ? q : null)
+      }
+    } finally { setVerificando(false) }
   }, [sid])
+  const pagarCliente = async () => {
+    setPagando(true); setErro('')
+    try {
+      const { url } = await paymentsApi.createCheckout({ planType: 'homologado_anual', supplierId: sid, userEmail: user?.email })
+      window.location.href = url
+    } catch (e) { setErro(e.message); setPagando(false) }
+  }
+  const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   useEffect(() => { carregar() }, [carregar])
 
   if (!st) return <div style={{ padding: 60, textAlign: 'center' }}><Spinner/></div>
@@ -60,7 +79,18 @@ export default function SupplierPayment() {
               ? <>Aguardando pagamento: {st.pendentes.map(nomeProcesso).join(', ')}. Depois da confirmação você envia os documentos e o processo entra na fila de análise da EQPI.</>
               : 'Escolha o seu plano para iniciar a homologação.'}
           </div>
-          <Button variant="orange" onClick={() => navigate('/fornecedor/planos')}>Escolher o plano e pagar →</Button>
+          {cotacao ? (<>
+            <div style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontFamily: D, fontSize: 13.5, color: '#1a1c5e' }}>
+              🏅 Homologado — <strong>{cotacao.cliente}</strong>{cotacao.fluxo ? ` · pacote ${cotacao.fluxo}` : ''}<br/>
+              <span style={{ fontFamily: M, fontWeight: 900, fontSize: 18, color: '#c2410c' }}>R$ {brl(cotacao.preco)}/ano</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}> · valor combinado com {cotacao.cliente}</span>
+            </div>
+            {(erro || cotacao.erro) && <div style={{ fontFamily: D, fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{erro || cotacao.erro}</div>}
+            <Button variant="orange" disabled={pagando || !!cotacao.erro} onClick={pagarCliente}>{pagando ? 'Abrindo pagamento…' : `🔐 Pagar R$ ${brl(cotacao.preco)} via Stripe →`}</Button>
+            <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 6 }}>Boleto, PIX ou cartão de crédito</div>
+          </>) : (
+            <Button variant="orange" onClick={() => navigate('/fornecedor/planos')}>Escolher o plano e pagar →</Button>
+          )}
         </div>
       )}
 

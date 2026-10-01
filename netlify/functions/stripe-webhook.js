@@ -45,7 +45,7 @@ exports.handler = async (event) => {
     // async_payment_succeeded = boleto COMPENSOU: mesma ativação do completed
     if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
       const session = data.object
-      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId } = session.metadata
+      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId, clientId } = session.metadata
 
       // BOLETO (21/09): completed dispara na EMISSÃO do voucher com
       // payment_status='unpaid' — sem esta guarda o plano ativava sem
@@ -162,11 +162,17 @@ exports.handler = async (event) => {
         status:         sealStatus,
         ...(sealStatus === 'ACTIVE' ? { issued_at: new Date().toISOString(), expires_at: endsAt } : {}),
       }
-      const { data: existingSeal } = await supabase.from('seals')
-        .select('id').eq('supplier_id', supplierId).is('client_id', null).limit(1).maybeSingle()
-      const { error: sealErr } = existingSeal
-        ? await supabase.from('seals').update(sealPayload).eq('id', existingSeal.id)
-        : await supabase.from('seals').insert({ ...sealPayload, supplier_id: supplierId, score: 0 })
+      // Pagamento do processo de um CLIENTE (preço combinado — metadata.clientId):
+      // o processo é o do cliente; não cria o selo ELOS genérico (antes surgia
+      // um "ELOS Homologado" duplicado ao lado do processo do cliente)
+      let sealErr = null
+      if (!clientId) {
+        const { data: existingSeal } = await supabase.from('seals')
+          .select('id').eq('supplier_id', supplierId).is('client_id', null).limit(1).maybeSingle()
+        ;({ error: sealErr } = existingSeal
+          ? await supabase.from('seals').update(sealPayload).eq('id', existingSeal.id)
+          : await supabase.from('seals').insert({ ...sealPayload, supplier_id: supplierId, score: 0 }))
+      }
 
       if (sealErr) console.error('Seal upsert error:', sealErr)
 
