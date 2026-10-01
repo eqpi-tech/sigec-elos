@@ -216,7 +216,7 @@ export default function ClientInvitations() {
             options={niveisInv.map(v => ({ value: v, label: v === 'sem' ? 'Sem nível definido' : (flowNames[v] || 'Nível'), count: conta(i => (i.flow_id || 'sem') === v) }))}/>
         )}
         <MultiChips label="Custeio" single value={fCust} onChange={setFCust}
-          options={[{ value: 'sim', label: '💰 Subsidiado', count: conta(i => i.subsidiado) }, { value: 'nao', label: 'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }]}/>
+          options={[{ value: 'sim', label: '💰 Subsidiado', count: conta(i => i.subsidiado) }, { value: 'nao', label: 'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }].filter(o => o.count > 0)}/>
         <MultiChips label="Destaques" value={fDest} onChange={setFDest}
           options={[
             { value: 'parado',   label: '⏳ Parados há +7 dias (sem cadastro)', color: '#b45309', count: conta(parado) },
