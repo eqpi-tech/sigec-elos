@@ -343,8 +343,11 @@ exports.handler = async (event) => {
 
     // Garante o processo do cliente (seal com client_id) já vinculado ao FLUXO
     // do convite — é o flow_id que dá o preço da homologação no relatório.
-    async function ensureClientSeal(clientId, flowId) {
+    // subsidiado (o cliente paga): processo LIBERADO na hora (patch_112);
+    // quem paga a própria homologação só é liberado no pagamento confirmado
+    async function ensureClientSeal(clientId, flowId, subsidiado = false) {
       if (!clientId) return
+      const liberacao = subsidiado ? { released_at: new Date().toISOString() } : {}
       try {
         let fid = flowId || null
         if (!fid) {
@@ -354,13 +357,17 @@ exports.handler = async (event) => {
           fid = def?.id || null
         }
         const { data: existing } = await supabaseAdmin.from('seals')
-          .select('id, flow_id').eq('supplier_id', supplier.id).eq('client_id', clientId).limit(1)
+          .select('id, flow_id, released_at').eq('supplier_id', supplier.id).eq('client_id', clientId).limit(1)
         if (existing?.length) {
-          if (!existing[0].flow_id && fid)
-            await supabaseAdmin.from('seals').update({ flow_id: fid }).eq('id', existing[0].id)
+          const upd = {
+            ...(!existing[0].flow_id && fid ? { flow_id: fid } : {}),
+            ...(!existing[0].released_at ? liberacao : {}),
+          }
+          if (Object.keys(upd).length)
+            await supabaseAdmin.from('seals').update(upd).eq('id', existing[0].id)
         } else {
           const { error: csErr } = await supabaseAdmin.from('seals')
-            .insert({ supplier_id: supplier.id, client_id: clientId, flow_id: fid, status: 'PENDING', score: 0 })
+            .insert({ supplier_id: supplier.id, client_id: clientId, flow_id: fid, status: 'PENDING', score: 0, ...liberacao })
           if (csErr && csErr.code !== '23505') console.warn('client seal create warn:', csErr.message)
         }
       } catch (e) { console.warn('ensureClientSeal (não crítico):', e.message) }
@@ -376,8 +383,8 @@ exports.handler = async (event) => {
           .update({ status: 'REGISTERED', supplier_id: supplier.id })
           .eq('token', invitation_token)
           .not('status', 'in', '(REGISTERED,CANCELLED)')   // cancelado (patch_103) não vincula
-          .select('id, client_id, flow_id')
-        if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id)
+          .select('id, client_id, flow_id, subsidiado')
+        if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id, linkedInv[0].subsidiado === true)
 
         // Trilha de aceite da coleção de termos (patch_073): grava quem
         // aceitou o quê, em qual versão, quando e de qual IP
@@ -408,7 +415,7 @@ exports.handler = async (event) => {
         // Busca convites pendentes que combinam com e-mail ou CNPJ
         const { data: matchingInvites } = await supabaseAdmin
           .from('invitations')
-          .select('id, client_id, flow_id')
+          .select('id, client_id, flow_id, subsidiado')
           .not('status', 'in', '(REGISTERED,CANCELLED,SUPERSEDED)')   // só convites vigentes
           .or(userEmail
             ? `supplier_email.eq.${userEmail},supplier_cnpj.eq.${cleanCnpj}`
@@ -420,7 +427,7 @@ exports.handler = async (event) => {
             .update({ status: 'REGISTERED', supplier_id: supplier.id })
             .in('id', ids)
           for (const inv of matchingInvites)
-            if (inv.client_id) await ensureClientSeal(inv.client_id, inv.flow_id)
+            if (inv.client_id) await ensureClientSeal(inv.client_id, inv.flow_id, inv.subsidiado === true)
         }
       }
     } catch (e) { console.warn('invitation link (não crítico):', e.message) }

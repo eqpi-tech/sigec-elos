@@ -80,7 +80,7 @@ export const supplierApi = {
     // Queries separadas para evitar problema de RLS em joins embutidos
     const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
+      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, released_at, hoc_process_id, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
       supabase.from('plans').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
     ])
@@ -549,11 +549,44 @@ export const marketplaceApi = {
 
 // ── Payments (Stripe via Netlify Function) ───────────────────────────────────
 export const paymentsApi = {
-  createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly }) => {
+  // Trava de pagamento (patch_112): situação de liberação do fornecedor —
+  // released = algum processo liberado (pago, subsidiado, HOC ou homologado);
+  // pendentes = processos ainda sem pagamento confirmado; boleto = plano
+  // PENDING (boleto emitido, aguardando compensação)
+  // cotação: { modo: 'cliente', cliente, fluxo, preco, pagador } ou { modo: 'elos' }
+  quote: async ({ supplierId, inviteToken, refSlug, refFlowId } = {}) => {
     const res = await fetch('/.netlify/functions/create-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planType, cnaeCount, supplierId, userEmail, priceYearly }),
+      body: JSON.stringify({ action: 'quote', supplierId, inviteToken, refSlug, refFlowId }),
+    })
+    if (!res.ok) return { modo: 'elos' }
+    return res.json()
+  },
+
+  paymentStatus: async (supplierId) => {
+    if (!supplierId) return { released: true, pendentes: [], boleto: false }
+    const [{ data: seals }, { data: plan }] = await Promise.all([
+      supabase.from('seals').select('id, status, released_at, hoc_process_id, client_id, seal_name, clients(razao_social, nome_fantasia)').eq('supplier_id', supplierId),
+      supabase.from('plans').select('status, type').eq('supplier_id', supplierId).maybeSingle(),
+    ])
+    const lista = seals || []
+    return {
+      released: lista.some(x => x.released_at),
+      pendentes: lista.filter(x => !x.released_at && x.status === 'PENDING'),
+      boleto: plan?.status === 'PENDING',
+      plan: plan || null,
+    }
+  },
+
+  // convite (inviteToken) e portal (refSlug/refFlowId) são tagueados: o
+  // servidor aplica o PREÇO COMBINADO com o cliente (01/10 — antes o token se
+  // perdia aqui e o convidado pagava o valor ELOS)
+  createCheckout: async ({ planType, cnaeCount, supplierId, userEmail, priceYearly, inviteToken, refSlug, refFlowId }) => {
+    const res = await fetch('/.netlify/functions/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planType, cnaeCount, supplierId, userEmail, priceYearly, inviteToken, refSlug, refFlowId }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -930,6 +963,19 @@ export const adminApi = {
     return { success: true }
   },
 
+  // Reverter a decisão de UM documento (aprovado/reprovado/não se aplica) —
+  // volta para análise; só o backoffice (admin-update-document valida ADMIN)
+  revertDocumentDecision: async (documentId, motivo) => {
+    const res = await authFetch('/.netlify/functions/admin-update-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId, action: 'revert_decision', note: motivo }),
+    })
+    const out = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(out.error || `Erro ${res.status}`)
+    return out
+  },
+
   revertSeal: async (supplierId, reason) => {
     const { error: sealErr } = await supabase
       .from('seals')
@@ -990,7 +1036,7 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
-  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sugestao, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sugestao, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
     // RPC admin_list_documents (patch_069): a fila só traz documentos de
     // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
     // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
@@ -1007,6 +1053,7 @@ export const adminApi = {
       // filtro por sugestão da automação (patch_111) — só enviado quando usado,
       // para não quebrar a RPC onde o patch ainda não foi aplicado
       ...(sugestao ? { p_sugestao: sugestao } : {}),
+      ...(prioritario ? { p_prioritario: true } : {}),   // patch_113
     })
     if (error) throw new Error(error.message)
     return { rows: data?.rows || [], total: data?.total || 0, page, pageSize }
@@ -1526,14 +1573,29 @@ export const clientApi = {
       i.status === 'REGISTERED' && i.seal?.status !== 'ACTIVE'
     ).length
 
+    // carta de exceção VIGENTE (patch_101): fornecedores homologados sob regime de exceção
+    const hoje = new Date().toISOString().slice(0, 10)
+    const { data: cartas } = await supabase.from('supplier_category_approvals')
+      .select('supplier_id').eq('client_id', clientId).eq('status', 'EXCEPTION_APPROVED').gte('letter_valid_until', hoje)
+    const cartasExcecao = new Set((cartas || []).map(c => c.supplier_id)).size
+
     return {
       invites: enriched,
+      cartasExcecao,
       total:       all.length,
       registered:  all.filter(i => i.status === 'REGISTERED').length,
       emAnalise,
       homologados,
       subsidiados: all.filter(i => i.subsidiado).length,
     }
+  },
+
+  // Análise prioritária (patch_113): o cliente pede urgência num processo em
+  // análise — antes era chamado no HOC. Fica no log do processo.
+  requestPriority: async (sealId, note) => {
+    const { data, error } = await supabase.rpc('request_priority_analysis', { p_seal: sealId, p_note: note || null })
+    if (error) throw new Error(error.message)
+    return data
   },
 
   // Lista fornecedores do cliente (via invitations)
@@ -1595,7 +1657,7 @@ export const clientApi = {
     // e fornecedores do fluxo novo (também têm seal.client_id após aceite do convite)
     const { data: sealsData, error: sealsErr } = await supabase
       .from('seals')
-      .select('supplier_id, level, status, score, seal_name, client_suspended_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
+      .select('id, supplier_id, level, status, score, seal_name, client_suspended_at, released_at, hoc_process_id, priority_requested_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
       .eq('client_id', clientId)
     if (sealsErr) throw new Error(sealsErr.message)
 
@@ -1603,8 +1665,9 @@ export const clientApi = {
     const supplierFromSeal = {}
     for (const seal of (sealsData || [])) {
       sealMap[seal.supplier_id] = {
-        supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
+        id: seal.id, supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
         score: seal.score, seal_name: seal.seal_name, client_suspended_at: seal.client_suspended_at,
+        released_at: seal.released_at, hoc_process_id: seal.hoc_process_id, priority_requested_at: seal.priority_requested_at,
       }
       if (seal.suppliers) supplierFromSeal[seal.supplier_id] = seal.suppliers
     }

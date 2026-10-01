@@ -66,6 +66,9 @@ async function contexto(supplierId) {
 }
 
 async function processar(job, catalogo, prefOverrides) {
+  // trava de pagamento (patch_112): nunca paga consulta de processo não liberado
+  const { data: selo } = await sb.from('seals').select('released_at').eq('id', job.seal_id).maybeSingle()
+  if (!selo?.released_at) return { status: 'fallback', last_error: 'processo sem pagamento confirmado — consulta não realizada' }
   const { sup, company, cnpjData } = await contexto(job.supplier_id)
   if (!sup) return { status: 'fallback', last_error: 'fornecedor não encontrado' }
 

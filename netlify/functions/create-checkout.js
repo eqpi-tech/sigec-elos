@@ -3,7 +3,8 @@
 //
 // Casos atendidos:
 //  1. Fornecedor espontâneo (Verificado/Homologado)  → subscription Stripe com priceId fixo
-//  2. Fornecedor convidado / tagueado (inviteToken)  → one-time payment com preço do cliente
+//  2. Fornecedor convidado / tagueado (convite, portal do cliente ou processo
+//     de cliente pendente — resolveClientDeal) → preço COMBINADO com o cliente
 //     2a. homologation_payer = 'client'             → sem Stripe, plano ativado direto
 //     2b. homologation_payer = 'supplier'           → Stripe one-time com effectivePrice
 //  3. Comprador Pro (planFor = 'buyer')             → subscription Stripe com priceId comprador
@@ -48,6 +49,9 @@ exports.handler = async (event) => {
       userEmail,
       priceYearly,
       inviteToken,
+      refSlug,       // portal do cliente (/portal/:slug)
+      refFlowId,     // pacote escolhido no portal
+      action,        // 'quote' = só a cotação
       // Para comprador Pro:
       planFor,       // 'buyer'
       buyerUserId,   // auth user UUID
@@ -84,47 +88,41 @@ exports.handler = async (event) => {
     }
 
     // ── CASOS 1 e 2: Fornecedor ───────────────────────────────────────────────
-
-    // Resolver preço e pagador via inviteToken (fornecedor convidado ou tagueado)
-    // Default: preço do ELOS Homologado em app_settings (Preços ELOS no backoffice)
+    // Regra comercial (01/10): valores ELOS são SÓ para quem entra direto no
+    // sistema, sem convite (inclusive por e-mail marketing). Convite e portal
+    // do cliente são tagueados justamente para valer o PREÇO COMBINADO com o
+    // cliente — o do nível/pacote escolhido ou o do fluxo padrão do cliente.
+    // O preço é decidido AQUI, no servidor (o navegador não manda no valor).
     let defaultHomologado = 690
+    let elosPrices = {}
     try {
       const { data: st } = await supabaseAdmin.from('app_settings')
         .select('value').eq('key', 'elos_prices').maybeSingle()
-      if (st?.value?.homologado_anual != null) defaultHomologado = Number(st.value.homologado_anual)
+      elosPrices = st?.value || {}
+      if (elosPrices.homologado_anual != null) defaultHomologado = Number(elosPrices.homologado_anual)
     } catch { /* mantém fallback */ }
-    let effectivePrice = priceYearly || defaultHomologado
-    let clientPayer    = 'supplier'
-    let clientId       = null
-    let isInvitedSupplier = false
+    // valor ELOS (entrada direta): Preços ELOS do backoffice, nunca o do navegador
+    const elosPrice = Number(elosPrices[planType] ?? (String(planType).startsWith('verificado') ? elosPrices.verificado_anual : defaultHomologado) ?? defaultHomologado)
 
-    if (inviteToken) {
-      const { data: inv } = await supabaseAdmin
-        .from('invitations')
-        .select('client_id, subsidiado, flow_id, client_flows(price, price_subsidized), clients(homologation_price, homologation_payer)')
-        .eq('token', inviteToken)
-        .maybeSingle()
+    const deal = await resolveClientDeal({ inviteToken, refSlug, refFlowId, supplierId })
 
-      if (inv?.client_id) {
-        isInvitedSupplier = true
-        clientId    = inv.client_id
-        // Pagador: o convite manda (subsidiado true/false); sem info, config do cliente
-        clientPayer = inv.subsidiado === true ? 'client'
-                    : inv.subsidiado === false ? 'supplier'
-                    : (inv.clients?.homologation_payer || 'supplier')
-        // Preço: fluxo do convite > preço legado do cliente > default.
-        // Subsidiado usa price_subsidized (registro p/ relatório); quem paga
-        // no Stripe usa sempre o preço NÃO subsidiado.
-        const flowPrice = clientPayer === 'client'
-          ? (inv.client_flows?.price_subsidized ?? inv.client_flows?.price)
-          : (inv.client_flows?.price ?? inv.client_flows?.price_subsidized)
-        if (flowPrice != null) effectivePrice = Number(flowPrice)
-        else if (inv.clients?.homologation_price) effectivePrice = Number(inv.clients.homologation_price)
-      }
+    // cotação: o que a tela deve mostrar antes de pagar (sem criar sessão)
+    if (action === 'quote') {
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify(deal
+        ? { modo: 'cliente', cliente: deal.clientName, fluxo: deal.flowName, preco: deal.price, pagador: deal.payer, erro: deal.erro || null }
+        : { modo: 'elos' }) }
     }
+    if (deal?.erro) return { statusCode: 422, headers: HEADERS, body: JSON.stringify({ error: deal.erro }) }
 
-    // CASO 2a: Cliente subsidia — sem Stripe, ativa plano direto
+    const isInvitedSupplier = !!deal
+    const clientId     = deal?.clientId || null
+    const clientPayer  = deal?.payer || 'supplier'
+    const effectivePrice = deal?.price ?? defaultHomologado
+    // CASO 2a: Cliente subsidia — sem Stripe, ativa plano direto e libera o
+    // processo (patch_112: subsidiado não espera pagamento — quem paga é o cliente)
     if (isInvitedSupplier && clientPayer === 'client') {
+      await supabaseAdmin.from('seals').update({ released_at: new Date().toISOString() })
+        .eq('supplier_id', supplierId).eq('client_id', clientId).is('released_at', null)
       await supabaseAdmin.from('plans').upsert({
         supplier_id:  supplierId,
         type:         'homologado',
@@ -153,8 +151,8 @@ exports.handler = async (event) => {
             currency:     'brl',
             unit_amount:  Math.round(effectivePrice * 100),
             product_data: {
-              name:        'SIGEC-ELOS Homologação',
-              description: 'Processo de homologação anual',
+              name:        `Homologação ${deal?.clientName || 'SIGEC-ELOS'}${deal?.flowName ? ` — ${deal.flowName}` : ''}`,
+              description: 'Processo de homologação anual — valor combinado com o cliente',
             },
           },
           quantity: 1,
@@ -167,6 +165,7 @@ exports.handler = async (event) => {
           cnaeCount:   String(cnaeCount || 1),
           priceYearly: String(effectivePrice),
           clientId:    clientId || '',
+          flowId:      deal?.flowId || '',
         },
       })
 
@@ -189,7 +188,7 @@ exports.handler = async (event) => {
         supplierId,
         planType,
         cnaeCount:   String(cnaeCount || 1),
-        priceYearly: String(priceYearly || effectivePrice),
+        priceYearly: String(elosPrice),
       },
     }
 
@@ -203,7 +202,7 @@ exports.handler = async (event) => {
         line_items: [{
           price_data: {
             currency:     'brl',
-            unit_amount:  Math.round((priceYearly || effectivePrice) * 100),
+            unit_amount:  Math.round(elosPrice * 100),
             product_data: { name: `SIGEC-ELOS ${planType}`, description: `Plano anual · ${cnaeCount} CNAEs` },
           },
           quantity: 1,
@@ -218,4 +217,74 @@ exports.handler = async (event) => {
     console.error('create-checkout error:', err)
     return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) }
   }
+}
+
+// Acordo comercial com o cliente para este fornecedor, ou null (= valores ELOS).
+// Ordem: convite (token) → portal do cliente (slug + pacote) → processo do
+// cliente ainda não pago do fornecedor (convite sem token, portal já cadastrado
+// e quem volta para pagar depois). Preço de quem paga: o do fluxo; sem preço no
+// fluxo, o do fluxo padrão do cliente; depois o preço legado do cliente.
+async function resolveClientDeal({ inviteToken, refSlug, refFlowId, supplierId }) {
+  let clientId = null, flowId = null, payer = null
+  if (inviteToken) {
+    const { data: inv } = await supabaseAdmin.from('invitations')
+      .select('client_id, subsidiado, flow_id, status').eq('token', inviteToken).maybeSingle()
+    if (inv?.client_id && inv.status !== 'CANCELLED') {
+      clientId = inv.client_id; flowId = inv.flow_id || null
+      payer = inv.subsidiado === true ? 'client' : inv.subsidiado === false ? 'supplier' : null
+    }
+  }
+  if (!clientId && refSlug) {
+    const { data: lp } = await supabaseAdmin.from('client_landing_pages')
+      .select('client_id').eq('slug', refSlug).eq('is_active', true).maybeSingle()
+    if (lp?.client_id) {
+      clientId = lp.client_id
+      if (refFlowId) {
+        const { data: fl } = await supabaseAdmin.from('client_flows').select('id')
+          .eq('id', refFlowId).eq('client_id', clientId).eq('active', true).maybeSingle()
+        flowId = fl?.id || null
+      }
+      payer = 'supplier'
+    }
+  }
+  if (!clientId && supplierId) {
+    const { data: seal } = await supabaseAdmin.from('seals')
+      .select('client_id, flow_id').eq('supplier_id', supplierId).not('client_id', 'is', null)
+      .eq('status', 'PENDING').is('released_at', null)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (seal?.client_id) {
+      clientId = seal.client_id; flowId = seal.flow_id || null
+      const { data: inv } = await supabaseAdmin.from('invitations').select('subsidiado')
+        .eq('supplier_id', supplierId).eq('client_id', clientId).not('status', 'in', '(CANCELLED,SUPERSEDED)')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      payer = inv?.subsidiado === true ? 'client' : 'supplier'
+    }
+  }
+  if (!clientId) return null
+
+  const { data: cli } = await supabaseAdmin.from('clients')
+    .select('razao_social, nome_fantasia, homologation_price, homologation_payer').eq('id', clientId).maybeSingle()
+  if (!payer) payer = cli?.homologation_payer === 'client' ? 'client' : 'supplier'
+  let flow = null
+  if (flowId) {
+    const { data } = await supabaseAdmin.from('client_flows').select('id, name, price, price_subsidized').eq('id', flowId).maybeSingle()
+    flow = data
+  }
+  const { data: def } = await supabaseAdmin.from('client_flows').select('id, name, price, price_subsidized')
+    .eq('client_id', clientId).eq('is_default', true).eq('active', true).maybeSingle()
+  if (!flow) flow = def || null
+  // subsidiado: registra o preço subsidiado (relatório ao cliente); quem paga
+  // no Stripe paga o preço NÃO subsidiado do fluxo
+  const price = payer === 'client'
+    ? (flow?.price_subsidized ?? flow?.price ?? def?.price_subsidized ?? def?.price ?? cli?.homologation_price ?? null)
+    : (flow?.price ?? def?.price ?? cli?.homologation_price ?? null)
+  const deal = {
+    clientId, flowId: flow?.id || null, flowName: flow?.name || null, payer,
+    clientName: cli?.nome_fantasia || cli?.razao_social || 'Cliente',
+    price: price != null ? Number(price) : null,
+  }
+  if (payer === 'supplier' && !(deal.price > 0)) {
+    deal.erro = `O valor da homologação com ${deal.clientName} não está configurado. Fale com o cliente ou com a EQPI.`
+  }
+  return deal
 }

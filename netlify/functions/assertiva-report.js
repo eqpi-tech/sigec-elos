@@ -305,6 +305,13 @@ exports.handler = async (event) => {
   }
   if (!targetSupplierId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'supplierId ausente' }) }
 
+  // Trava de pagamento (patch_112): a consulta tem custo — o fornecedor só
+  // emite depois do pagamento confirmado (ou subsídio). Backoffice não trava.
+  if (!isAdmin) {
+    const { data: liberado } = await supabaseAdmin.rpc('supplier_access_released', { p_supplier: targetSupplierId })
+    if (!liberado) return { statusCode: 402, headers, body: JSON.stringify({ error: 'O relatório fica disponível depois da confirmação do pagamento da sua homologação.' }) }
+  }
+
   const { data: supplier, error: supErr } = await supabaseAdmin
     .from('suppliers').select('cnpj, razao_social').eq('id', targetSupplierId).maybeSingle()
   if (supErr || !supplier?.cnpj) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Fornecedor ou CNPJ não encontrado' }) }

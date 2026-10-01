@@ -164,9 +164,12 @@ function custo(c, raw) {
 // Chamado ao fim do cadastro. Processos do HOC nunca entram (CLAUDE.md §7.2).
 async function enqueueRouteA(sb, supplierId) {
   if (!enabled()) return 0
+  // trava de pagamento (patch_112): consulta paga só para processo LIBERADO
+  // (pagamento confirmado ou subsidiado) — o webhook enfileira na liberação
   const { data: seals } = await sb.from('seals')
     .select('id, client_id, flow_id, status, hoc_process_id')
     .eq('supplier_id', supplierId).eq('status', 'PENDING').is('hoc_process_id', null)
+    .not('released_at', 'is', null)
   let n = 0
   for (const seal of seals || []) {
     const exigidos = (await requiredDocsForSeal(sb, supplierId, seal)).map(String)

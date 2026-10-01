@@ -2,6 +2,9 @@
 // Ações do backoffice sobre documentos já enviados (paridade com o HOC):
 //   action 'set_expiry'    — altera a data de vencimento (renova doc vencido)
 //   action 'replace_file'  — substitui o arquivo (base64) e opcionalmente a data
+//   action 'revert_decision' — desfaz a aprovação/reprovação/"não se aplica"
+//                            e devolve o documento para análise (29/09 — ex.:
+//                            reprovação por engano). Só ADMIN; motivo obrigatório.
 // Ambas recalculam o score dos selos. O trigger de document_history registra
 // o snapshot automaticamente.
 //
@@ -43,8 +46,10 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) }
   }
   const { documentId, action, expiresAt, note, file } = body
-  if (!documentId || !['set_expiry', 'replace_file'].includes(action))
-    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "documentId e action ('set_expiry'|'replace_file') são obrigatórios" }) }
+  if (!documentId || !['set_expiry', 'replace_file', 'revert_decision'].includes(action))
+    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "documentId e action ('set_expiry'|'replace_file'|'revert_decision') são obrigatórios" }) }
+  if (action === 'revert_decision' && !String(note || '').trim())
+    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Informe o motivo da reversão' }) }
   if (action === 'set_expiry' && !expiresAt)
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'expiresAt é obrigatório para set_expiry' }) }
   if (action === 'replace_file' && !file?.base64)
@@ -53,9 +58,11 @@ exports.handler = async (event) => {
   try {
     const { data: doc, error: docErr } = await supabaseAdmin
       .from('documents')
-      .select('id, supplier_id, type, label, status, storage_path, suppliers(user_id)')
+      .select('id, supplier_id, type, label, status, storage_path, review_note, reviewed_by, reviewed_at, expires_at, suppliers(user_id)')
       .eq('id', documentId).single()
     if (docErr || !doc) throw new Error(docErr?.message || 'Documento não encontrado')
+
+    if (action === 'revert_decision') return await reverterDecisao(supabaseAdmin, user, doc, String(note).trim())
 
     const nowIso = new Date().toISOString()
     const updatePayload = {
@@ -119,13 +126,66 @@ exports.handler = async (event) => {
       entity_type: 'supplier',
       entity_id: doc.supplier_id,
       metadata: { document_id: documentId, label: doc.label, expiresAt: expiresAt || null, note: note || null },
-    }).catch(() => {})
+    }).then(null, () => {})   // o builder do Supabase não tem .catch() (29/09)
 
     return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ updated: true, document: updated }) }
   } catch (err) {
     console.error('[admin-update-document]', err)
     return { statusCode: 500, headers: HEADERS, body: JSON.stringify({ error: err.message }) }
   }
+}
+
+// ── Reverter decisão (29/09) ────────────────────────────────────────────
+// Documento aprovado/reprovado/"não se aplica" volta para análise (PENDING),
+// sem o motivo anterior (o fornecedor deixa de ver a reprovação). A decisão
+// desfeita fica no log do processo e no histórico do documento (trigger do
+// patch_029). Se a reprovação tinha encerrado o processo automaticamente
+// (SEAL_AUTO_REJECTED), o processo é reaberto. Homologação já concedida
+// NÃO é mexida aqui — para isso existe "Reverter Análise" do processo.
+async function reverterDecisao(sb, user, doc, motivo) {
+  if (!['VALID', 'REJECTED', 'NOT_APPLICABLE'].includes(doc.status)) {
+    return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'Só é possível reverter um documento aprovado, reprovado ou "não se aplica".' }) }
+  }
+  const { data: updated, error: updErr } = await sb.from('documents')
+    .update({ status: 'PENDING', review_note: null, reviewed_by: null, reviewed_at: null })
+    .eq('id', doc.id)
+    .select('id, status, expires_at, storage_path, review_note')
+    .single()
+  if (updErr) throw new Error(updErr.message)
+
+  // processo encerrado automaticamente por reprovação: reabre
+  let processoReaberto = false
+  if (doc.status === 'REJECTED') {
+    const { data: suspensos } = await sb.from('seals').select('id')
+      .eq('supplier_id', doc.supplier_id).eq('status', 'SUSPENDED')
+      .like('suspended_reason', 'Homologação reprovada automaticamente%')
+    if (suspensos?.length) {
+      await sb.from('seals').update({ status: 'PENDING', suspended_reason: null }).in('id', suspensos.map((x) => x.id))
+      processoReaberto = true
+    }
+  }
+  const { data: ativo } = await sb.from('seals').select('id')
+    .eq('supplier_id', doc.supplier_id).eq('status', 'ACTIVE').limit(1)
+
+  await recalcSealScores(sb, doc.supplier_id).catch((e) =>
+    console.warn('[admin-update-document] recalc scores:', e.message))
+
+  await sb.from('audit_log').insert({
+    user_id: user.id,
+    action: 'DOCUMENT_DECISION_REVERTED',
+    entity_type: 'supplier',
+    entity_id: doc.supplier_id,
+    metadata: {
+      document_id: doc.id, label: doc.label, motivo,
+      decisao_desfeita: doc.status, nota_anterior: doc.review_note || null,
+      analisado_por: doc.reviewed_by || null, analisado_em: doc.reviewed_at || null,
+      processo_reaberto: processoReaberto,
+    },
+  }).then(null, () => {})   // o builder do Supabase não tem .catch() (29/09)
+
+  return { statusCode: 200, headers: HEADERS, body: JSON.stringify({
+    updated: true, document: updated, processoReaberto, homologacaoAtiva: !!ativo?.length,
+  }) }
 }
 
 // Mesmo cálculo do admin-approve-document: denominador por selo

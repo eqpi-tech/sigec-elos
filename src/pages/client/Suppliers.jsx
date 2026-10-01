@@ -57,6 +57,19 @@ export default function ClientSuppliers() {
 
   // Modal inativar
   const [inactivateModal,  setInactivateModal]  = useState(null)
+  // Análise prioritária (patch_113): { sealId, razaoSocial } + nota opcional
+  const [prioModal, setPrioModal] = useState(null)
+  const [prioNote,  setPrioNote]  = useState('')
+  const [prioSaving, setPrioSaving] = useState(false)
+  const confirmPriority = async () => {
+    setPrioSaving(true)
+    try {
+      const em = await clientApi.requestPriority(prioModal.sealId, prioNote.trim())
+      setMySuppliers(prev => prev.map(x => x.seal?.id === prioModal.sealId ? { ...x, seal: { ...x.seal, priority_requested_at: em } } : x))
+      setPrioModal(null)
+    } catch (e) { alert('Não foi possível priorizar: ' + e.message) }
+    finally { setPrioSaving(false) }
+  }
   const [inactivateReason, setInactivateReason] = useState('')
   const [inactivating,     setInactivating]     = useState(false)
 
@@ -265,6 +278,12 @@ export default function ClientSuppliers() {
                               {isSusp ? 'Inativado por mim' : SEAL_LABEL[seal.status] || seal.status}
                             </span>
                           )}
+                          {seal?.status === 'PENDING' && seal?.priority_requested_at && (
+                            <span title={`Pedido em ${new Date(seal.priority_requested_at).toLocaleString('pt-BR')}`}
+                              style={{ fontSize:10, background:'#fef3c7', color:'#b45309', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                              ⚡ Análise prioritária solicitada
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:6 }}>
                           {(sup?.cnpj || item.inviteCnpj) && `CNPJ ${sup?.cnpj || item.inviteCnpj}`}
@@ -286,6 +305,14 @@ export default function ClientSuppliers() {
                         <Button variant="primary" size="sm" onClick={() => navigate(`/cliente/fornecedor/${item.supplierId}`)}>
                           Ver Processo →
                         </Button>
+                        {/* só processo EM ANÁLISE de verdade (pago/subsidiado ou HOC) */}
+                        {seal?.id && seal.status === 'PENDING' && !isSusp && !seal.priority_requested_at
+                          && (seal.released_at || seal.hoc_process_id) && hasAction(user, 'acao:priorizar_analise') && (
+                          <Button variant="orange" size="sm"
+                            onClick={() => { setPrioModal({ sealId: seal.id, razaoSocial: sup?.razao_social || item.inviteRazaoSocial }); setPrioNote('') }}>
+                            ⚡ Priorizar Análise
+                          </Button>
+                        )}
                         {seal?.status === 'ACTIVE' && !isSusp && (
                           <Button variant="danger" size="sm"
                             onClick={() => { setInactivateModal({ supplierId:item.supplierId, razaoSocial:sup?.razao_social||item.inviteRazaoSocial }); setInactivateReason('') }}>
@@ -320,6 +347,25 @@ export default function ClientSuppliers() {
       )}
 
       {/* Modal Inativar */}
+      {prioModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:470, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#b45309', marginBottom:6 }}>⚡ Priorizar Análise</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', marginBottom:14, lineHeight:1.6 }}>
+              Confirma o pedido de <strong>análise prioritária</strong> para <strong>{prioModal.razaoSocial}</strong>? A equipe EQPI passa a analisar este processo à frente da fila. Use em caso de urgência.
+            </div>
+            <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', letterSpacing:.5, textTransform:'uppercase', marginBottom:5 }}>Motivo da urgência (opcional)</label>
+            <textarea value={prioNote} onChange={e => setPrioNote(e.target.value)} rows={2}
+              placeholder="Ex.: contrato começa na próxima semana"
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box', resize:'vertical', marginBottom:16 }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => setPrioModal(null)}>Cancelar</Button>
+              <Button variant="orange" full disabled={prioSaving} onClick={confirmPriority}>{prioSaving ? 'Enviando…' : '⚡ Confirmar prioridade'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {inactivateModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:'#fff', borderRadius:16, padding:32, maxWidth:460, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>

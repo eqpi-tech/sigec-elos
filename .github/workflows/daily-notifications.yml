@@ -69,6 +69,21 @@ jobs:
             exit 1
           fi
 
+  selos-vencimento:
+    name: Vencimento dos selos ELOS (plano encerrado)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/seals-expire")
+          echo "seals-expire: $response"
+          if [ "$(echo "$response" | tail -1)" != "200" ]; then
+            echo "❌ Falha no vencimento dos selos"
+            exit 1
+          fi
+
   nfe-emissao:
     name: Emissão de NFSe pendentes (varredura)
     runs-on: ubuntu-latest

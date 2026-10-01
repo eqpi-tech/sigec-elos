@@ -68,6 +68,15 @@ export default function SupplierOnboarding() {
   const [existingSupplier, setExistingSupplier] = useState(null)
 
   const isSubsidiado     = !!invitation?.subsidiado
+  // Preço COMBINADO com o cliente (01/10): convite e portal são tagueados —
+  // valem o pacote/fluxo do cliente; valores ELOS só para entrada direta
+  const [clientQuote, setClientQuote] = useState(null)   // { modo, cliente, fluxo, preco, erro }
+  useEffect(() => {
+    if (isSubsidiado || (!inviteToken && !refSlug)) { setClientQuote(null); return }
+    paymentsApi.quote({ inviteToken: inviteToken || undefined, refSlug: refSlug || undefined, refFlowId: refFlowId || undefined })
+      .then(q => setClientQuote(q?.modo === 'cliente' ? q : null)).catch(() => setClientQuote(null))
+  }, [inviteToken, refSlug, refFlowId, isSubsidiado])
+  const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const isExistingActive = existingSeal?.status === 'ACTIVE'
 
   const STEPS = isExistingActive
@@ -269,11 +278,11 @@ export default function SupplierOnboarding() {
     setLoading(true); setError('')
     try {
       const { supplier, sessionToken } = await createAuthAndSupplier()
-      const priceValue = isMensal ? mensalPrice : (invitation?.client_price || planPrice(planType))
-      const stripeType = isMensal ? 'verificado_mensal' : `${planType}_anual`
+      // processo de cliente: o servidor aplica o preço combinado (convite/portal)
+      const stripeType = clientQuote ? 'homologado_anual' : (isMensal ? 'verificado_mensal' : `${planType}_anual`)
       const { url } = await paymentsApi.createCheckout({
-        planType: stripeType, cnaeCount: 3, supplierId: supplier.id,
-        userEmail: email, priceYearly: priceValue, inviteToken: inviteToken || undefined,
+        planType: stripeType, cnaeCount: 3, supplierId: supplier.id, userEmail: email,
+        inviteToken: inviteToken || undefined, refSlug: refSlug || undefined, refFlowId: refFlowId || undefined,
       })
       window.location.href = url
     } catch (err) { setError(err.message); setLoading(false) }
@@ -573,7 +582,30 @@ export default function SupplierOnboarding() {
               )}
 
               {/* Step 4 — Plano */}
-              {step === 4 && (
+              {step === 4 && clientQuote && (
+                <div>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Sua homologação com {clientQuote.cliente}</div>
+                  <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>Valor combinado entre a EQPI e {clientQuote.cliente} para este processo.</div>
+                  <div style={{ padding:'18px', borderRadius:14, border:'2px solid #F47E2F', background:'rgba(244,126,47,.05)', marginBottom:20 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                      <span style={{ fontSize:28 }}>🏅</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>Homologado — {clientQuote.cliente}</div>
+                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>{clientQuote.fluxo ? `Pacote ${clientQuote.fluxo} · ` : ''}Análise documental pela EQPI · Selo com o nome do cliente</div>
+                      </div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ {brl(clientQuote.preco)}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  {clientQuote.erro && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{clientQuote.erro}</div>}
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Button variant="neutral" full onClick={() => setStep(3)}>← Voltar</Button>
+                    <Button variant="orange" full size="lg" style={{ borderRadius:12 }} disabled={!!clientQuote.erro} onClick={() => setStep(5)}>Ir para pagamento →</Button>
+                  </div>
+                </div>
+              )}
+              {step === 4 && !clientQuote && (
                 <div>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Escolha seu Selo ELOS</div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>Selecione o nível de homologação desejado.</div>
@@ -585,13 +617,13 @@ export default function SupplierOnboarding() {
                         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Pré-homologação automática · Vitrine imediata no marketplace · Perfil Comprador incluso</div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#2E3192' }}>R$ 199<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
-                        <div style={{ fontSize:11, color:'#64748b' }}>ou R$ 29/mês</div>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#2E3192' }}>R$ {planPrice('verificado')}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                        <div style={{ fontSize:11, color:'#64748b' }}>ou R$ {mensalPrice}/mês</div>
                       </div>
                     </div>
                     {planType === 'verificado' && (
                       <div style={{ display:'flex', gap:8, marginTop:12, paddingTop:12, borderTop:'1px solid rgba(46,49,146,.12)' }}>
-                        {[['anual','R$ 199/ano (~R$ 17/mês)'],['mensal','R$ 29/mês']].map(([cycle, label]) => (
+                        {[['anual',`R$ ${planPrice('verificado')}/ano (~R$ ${Math.round(planPrice('verificado') / 12)}/mês)`],['mensal',`R$ ${mensalPrice}/mês`]].map(([cycle, label]) => (
                           <button key={cycle} onClick={e => { e.stopPropagation(); setBilling(cycle) }}
                             style={{ flex:1, padding:'8px', borderRadius:10, border:`1.5px solid ${billingCycle===cycle?'#2E3192':'#e2e4ef'}`, background:billingCycle===cycle?'rgba(46,49,146,.08)':'#fff', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:12, color:billingCycle===cycle?'#2E3192':'#9B9B9B', fontWeight:billingCycle===cycle?700:400 }}>
                             {label}
@@ -611,7 +643,7 @@ export default function SupplierOnboarding() {
                         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Homologação profissional com análise humana · Selo de reputação Bronze/Prata/Ouro · Prioridade no ranking</div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ 690<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ {planPrice('homologado')}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
                       </div>
                     </div>
                   </button>
@@ -630,9 +662,16 @@ export default function SupplierOnboarding() {
                     {[
                       ['Empresa', cnpjData?.razao_social || name],
                       ['CNPJ', cnpj],
-                      ['Selo', planType === 'verificado' ? 'ELOS Verificado' : 'ELOS Homologado'],
-                      ['Periodicidade', isMensal ? 'Mensal' : 'Anual'],
-                      ['Valor', isMensal ? `R$ ${price}/mês` : `R$ ${price.toLocaleString('pt-BR')}/ano`],
+                      ...(clientQuote ? [
+                        ['Selo', `Homologado — ${clientQuote.cliente}`],
+                        ...(clientQuote.fluxo ? [['Pacote', clientQuote.fluxo]] : []),
+                        ['Periodicidade', 'Anual'],
+                        ['Valor', `R$ ${brl(clientQuote.preco)}/ano (combinado com ${clientQuote.cliente})`],
+                      ] : [
+                        ['Selo', planType === 'verificado' ? 'ELOS Verificado' : 'ELOS Homologado'],
+                        ['Periodicidade', isMensal ? 'Mensal' : 'Anual'],
+                        ['Valor', isMensal ? `R$ ${price}/mês` : `R$ ${price.toLocaleString('pt-BR')}/ano`],
+                      ]),
                       ['E-mail', email],
                     ].map(([l,v]) => (
                       <div key={l} style={{ display:'flex', justifyContent:'space-between', marginBottom:8, fontSize:13, fontFamily:'DM Sans,sans-serif' }}>
@@ -646,7 +685,7 @@ export default function SupplierOnboarding() {
                     {loading ? <><Spinner size={16} /> Aguarde...</> : '🔐 Pagar com segurança via Stripe →'}
                   </Button>
                   <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Boleto, PIX ou Cartão de crédito · Parcelamento em até 12x</div>
-                  <button onClick={() => setStep(4)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>← Alterar plano</button>
+                  <button onClick={() => setStep(4)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>{clientQuote ? '← Voltar' : '← Alterar plano'}</button>
                 </div>
               )}
             </div>

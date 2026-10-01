@@ -75,8 +75,11 @@ const ELOS_PSEUDO_CLIENT = { id: '__ELOS__', razao_social: '⭐ ELOS (processo p
 
 // Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
 // só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)' }
-const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1' }
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)', PAGAMENTO:'💳 Aguardando pagamento', PRIORIDADE:'⚡ Prioritários' }
+// trava de pagamento (patch_112): pendente sem pagamento confirmado não é análise
+const sealStatusOf = (seal) => !seal ? 'CADASTRO'
+  : (seal.status === 'PENDING' && !seal.released_at && !seal.hoc_process_id) ? 'PAGAMENTO' : seal.status
+const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1', PAGAMENTO:'#ea580c', PRIORIDADE:'#b45309' }
 // convite que ainda não virou cadastro (28/09: cliente recém-chegado só tem
 // convites — a busca voltava vazia e parecia defeito)
 const INVITE_LABEL = { SENT:'Enviado', VIEWED:'Visualizado — ainda não cadastrou', EXPIRED:'Expirado', CANCELLED:'Cancelado' }
@@ -110,6 +113,17 @@ export default function BackofficeProcessSearch() {
     const qNums = qTrim.replace(/\D/g, '')
     const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = clientLabel(c); return acc }, {})
 
+    // análise prioritária pedida pelo cliente (patch_113): processo em análise
+    const buildPrioMap = (seals) => {
+      const m = {}
+      seals.forEach(s => {
+        if (s.status === 'PENDING' && s.priority_requested_at && (!m[s.supplier_id] || s.priority_requested_at < m[s.supplier_id]))
+          m[s.supplier_id] = s.priority_requested_at
+      })
+      return m
+    }
+    const prioFirst = (list) => [...list].sort((a, b) => (a.prio ? 0 : 1) - (b.prio ? 0 : 1) || String(a.prio || '').localeCompare(String(b.prio || '')))
+
     const buildSealMap = (seals) => {
       const m = {}
       seals.forEach(s => {
@@ -139,7 +153,7 @@ export default function BackofficeProcessSearch() {
     if (filterClient) {
       const isElos = filterClient === ELOS_PSEUDO_CLIENT.id
       let sealQ = supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at')
         .range(0, 4999)
       sealQ = isElos ? sealQ.is('client_id', null) : sealQ.eq('client_id', filterClient)
       const [sealRes, invRes] = await Promise.allSettled([
@@ -191,11 +205,14 @@ export default function BackofficeProcessSearch() {
       const sealMap   = buildSealMap(clientSeals)
       const clientMap = buildClientMap(clientSeals, clientInvites)
 
+      const prioMap = buildPrioMap(clientSeals)
       let enriched = suppliers.map(s => ({
-        ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
+        ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [], prio: prioMap[s.id] || null,
       }))
-      if (filterType !== 'Todos')
-        enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
+      if (filterType === 'PRIORIDADE') enriched = enriched.filter(s => s.prio)
+      else if (filterType !== 'Todos')
+        enriched = enriched.filter(s => sealStatusOf(s.seal) === filterType)
+      enriched = prioFirst(enriched)
 
       // convite de CNPJ que já aparece como fornecedor não se repete
       const cnpjsListados = new Set(suppliers.map(x => digitos(x.cnpj)))
@@ -209,16 +226,29 @@ export default function BackofficeProcessSearch() {
     // Via RPC admin_search_suppliers (patch_067): ilike não é leakproof e,
     // sob RLS, o planner não usa o índice trigram — a busca direta levava
     // ~12s (timeout) e a tela vinha vazia. SECURITY DEFINER: 3ms com índice.
-    const { data: suppliers, error } = await supabase
-      .rpc('admin_search_suppliers', { q: qTrim || '', show_inactive: !!showInactive })
-    if (error) { console.error(error); setLoading(false); return }
+    let suppliers = null
+    if (filterType === 'PRIORIDADE' && !qTrim) {
+      // ⚡ Prioritários sem busca: lista todos os processos priorizados pelos clientes
+      const { data: ps } = await supabase.from('seals').select('supplier_id')
+        .eq('status', 'PENDING').not('priority_requested_at', 'is', null).limit(500)
+      const pids = [...new Set((ps || []).map(x => x.supplier_id))]
+      const { data: sups } = pids.length
+        ? await supabase.from('suppliers').select('id, razao_social, cnpj, city, state, status, created_at, archived_at').in('id', pids.slice(0, 200))
+        : { data: [] }
+      suppliers = sups || []
+    } else {
+      const { data, error } = await supabase
+        .rpc('admin_search_suppliers', { q: qTrim || '', show_inactive: !!showInactive })
+      if (error) { console.error(error); setLoading(false); return }
+      suppliers = data
+    }
     if (!suppliers?.length) { setResults([]); setLoading(false); return }
 
     // IDs limitados a 200 → URL segura para o IN clause
     const ids = suppliers.map(s => s.id)
     const [sealsRes, invitesRes] = await Promise.allSettled([
       supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at')
         .in('supplier_id', ids),
       supabase.from('invitations')
         .select('supplier_id, client_id')
@@ -231,15 +261,23 @@ export default function BackofficeProcessSearch() {
     const sealMap   = buildSealMap(seals)
     const clientMap = buildClientMap(seals, invites)
 
+    const prioMap = buildPrioMap(seals)
     let enriched = suppliers.map(s => ({
-      ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [],
+      ...s, seal: sealMap[s.id] || null, clients: clientMap[s.id] || [], prio: prioMap[s.id] || null,
     }))
-    if (filterType !== 'Todos')
-      enriched = enriched.filter(s => (s.seal?.status || 'CADASTRO') === filterType)
+    if (filterType === 'PRIORIDADE') enriched = enriched.filter(s => s.prio)
+    else if (filterType !== 'Todos')
+      enriched = enriched.filter(s => sealStatusOf(s.seal) === filterType)
+    enriched = prioFirst(enriched)
 
     setResults(enriched)
     setLoading(false)
   }
+
+  // trocar o filtro de situação refaz a busca (⚡ Prioritários lista na hora)
+  useEffect(() => {
+    if (searched || filterType === 'PRIORIDADE') handleSearch()
+  }, [filterType])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') handleSearch()
@@ -269,7 +307,7 @@ export default function BackofficeProcessSearch() {
 
         <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
           <div style={{ display:'flex', gap:6 }}>
-            {['Todos','ACTIVE','PENDING','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
+            {['Todos','PRIORIDADE','ACTIVE','PENDING','PAGAMENTO','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
               <button key={f} onClick={() => setFilterType(f)}
                 style={{ padding:'6px 12px', borderRadius:20, border:`1px solid ${filterType===f?SEAL_COLOR[f]||'#2E3192':'#e2e4ef'}`, background:filterType===f?`${SEAL_COLOR[f]||'#2E3192'}12`:'#fff', color:filterType===f?SEAL_COLOR[f]||'#2E3192':'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {f === 'Todos' ? 'Todos' : SEAL_LABEL[f]}
@@ -334,7 +372,7 @@ export default function BackofficeProcessSearch() {
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             {results.map((s, i) => {
-              const sealStatus = s.seal?.status || 'CADASTRO'
+              const sealStatus = sealStatusOf(s.seal)
               const sealColor  = SEAL_COLOR[sealStatus] || '#9B9B9B'
               const isInactive = s.status === 'INACTIVE'
               return (
@@ -352,6 +390,10 @@ export default function BackofficeProcessSearch() {
                         </span>
                         {isInactive && (
                           <span style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', background:'#f0f0f0', padding:'2px 8px', borderRadius:20 }}>Inativo</span>
+                        )}
+                        {s.prio && (
+                          <span title={`Prioridade pedida pelo cliente em ${new Date(s.prio).toLocaleString('pt-BR')}`}
+                            style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', padding:'2px 8px', borderRadius:20 }}>⚡ Prioritária</span>
                         )}
                       </div>
 

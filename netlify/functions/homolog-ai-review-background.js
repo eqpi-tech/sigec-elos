@@ -77,6 +77,9 @@ async function fornecedor(supplierId) {
 // Prepara o job: confere se ainda vale analisar e monta os argumentos da IA.
 // Devolve { args } ou { fim } (terminal, sem chamar a IA).
 async function preparar(job, catalogo, motivos) {
+  // trava de pagamento (patch_112): IA só para fornecedor com processo liberado
+  const { data: liberado } = await sb.rpc('supplier_access_released', { p_supplier: job.supplier_id })
+  if (!liberado) return { fim: { status: 'skipped', last_error: 'processo sem pagamento confirmado' } }
   const { data: doc } = await sb.from('documents').select('id, status, storage_path, type').eq('id', job.document_id).maybeSingle()
   if (!doc) return { fim: { status: 'skipped', last_error: 'documento excluído' } }
   if (doc.storage_path !== job.storage_path) return { fim: { status: 'skipped', last_error: 'arquivo substituído pelo fornecedor' } }

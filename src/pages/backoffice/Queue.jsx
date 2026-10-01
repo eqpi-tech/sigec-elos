@@ -231,6 +231,9 @@ export function BackofficeAnalysis() {
   const [docActions, setDocActions] = useState({})
   const [revertModal, setRevertModal] = useState(false)
   const [revertReason, setRevertReason] = useState('')
+  // Reverter a decisão de um documento (29/09): { doc } + motivo
+  const [docRevert, setDocRevert] = useState(null)
+  const [docRevertReason, setDocRevertReason] = useState('')
   const [activeTab, setActiveTab] = useState('docs')  // 'docs' | 'questionario' | 'banco' | 'dre'
   // Processo (cliente) selecionado na ficha — fornecedor multi-cliente tem as
   // pendências separadas por matriz: null = automático (selo em análise),
@@ -478,19 +481,28 @@ export function BackofficeAnalysis() {
       d.source === 'REQUIRED' && d.status === 'MISSING' && !['37','61','62'].includes(String(d.type)))
     const nothingSent = !docsAll.some(d => d.status && d.status !== 'MISSING')
     if (requiredMissing || nothingSent) return
+    // 01/10: só há "entrou em análise" se existe processo EM ANÁLISE de
+    // verdade — pendente, não suspenso e liberado (pago ou subsidiado,
+    // patch_112). Homologado abrindo a ficha não recebe (caso VP Treinamento)
+    const procAberto = (supplierData.seals || [])
+      .filter(x => x.status === 'PENDING' && !x.client_suspended_at && x.released_at)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]
+    if (!procAberto) return
     try {
-      // Verifica se já enviamos este email hoje (audit_log)
+      // uma vez POR PROCESSO (antes: uma vez a cada 24 h — reenviava ao abrir
+      // a ficha em outro dia). Registros antigos sem seal_id: vale o envio
+      // feito depois da abertura deste processo
       const { data: existing } = await supabase
         .from('audit_log')
-        .select('id')
+        .select('id, metadata, created_at')
         .eq('entity_id', id)
         .eq('action', 'ANALYSIS_STARTED')
-        .gte('created_at', new Date(Date.now() - 86400000).toISOString())
-        .limit(1)
-      if (existing?.length > 0) return
+        .gte('created_at', procAberto.created_at || '1970-01-01')
+        .limit(20)
+      if ((existing || []).some(e => !e.metadata?.seal_id || e.metadata.seal_id === procAberto.id)) return
       await supabase.from('audit_log').insert({
         action: 'ANALYSIS_STARTED', entity_type: 'supplier', entity_id: id,
-        metadata: { razao_social: supplierData.razao_social },
+        metadata: { razao_social: supplierData.razao_social, seal_id: procAberto.id },
       })
       // Envia email
       await fetch('/.netlify/functions/send-email', {
@@ -649,6 +661,12 @@ export function BackofficeAnalysis() {
   }
 
   const handleApprove = async () => {
+    // Trava de pagamento (patch_112): processo sem pagamento confirmado nem
+    // subsídio não recebe selo — o banco também recusa
+    if (processSeal && !processSeal.released_at && !processSeal.hoc_process_id) {
+      alert('Este processo ainda não teve o pagamento confirmado (boleto em compensação ou plano não contratado). O selo só pode ser emitido depois da confirmação.')
+      return
+    }
     if (hardBlocked.length > 0) {
       alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
       return
@@ -801,6 +819,28 @@ export function BackofficeAnalysis() {
     } catch (e) {
       alert('Erro ao aprovar: ' + e.message)
       setDocActions(prev => ({ ...prev, [approveModal.docId]: undefined }))
+    }
+  }
+
+  const STATUS_DECISAO = { VALID: 'aprovado', REJECTED: 'reprovado', NOT_APPLICABLE: '"não se aplica"' }
+  const confirmDocRevert = async () => {
+    const { doc } = docRevert
+    const motivo = docRevertReason.trim()
+    if (!motivo) return
+    setDocRevert(null); setDocRevertReason('')
+    setDocActions(prev => ({ ...prev, [doc.id]: 'loading' }))
+    try {
+      const r = await adminApi.revertDocumentDecision(doc.id, motivo)
+      setDocActions(prev => ({ ...prev, [doc.id]: 'PENDING' }))
+      setData(prev => ({
+        ...prev,
+        documents: prev.documents.map(d => d.id === doc.id ? { ...d, status: 'PENDING', review_note: null } : d),
+      }))
+      if (r.processoReaberto) alert('Decisão revertida. A reprovação tinha encerrado o processo — ele foi reaberto e volta para análise.')
+      else if (r.homologacaoAtiva) alert('Decisão revertida — o documento voltou para análise.\n\nA homologação vigente NÃO foi alterada; para reabrir o processo use "Reverter Análise".')
+    } catch (e) {
+      alert('Erro ao reverter: ' + e.message)
+      setDocActions(prev => ({ ...prev, [doc.id]: undefined }))
     }
   }
 
@@ -995,6 +1035,14 @@ export function BackofficeAnalysis() {
         ← Voltar à busca de processos
       </button>
 
+      {/* Análise prioritária pedida pelo cliente (patch_113) */}
+      {(data?.seals || []).filter(x => x.status === 'PENDING' && x.priority_requested_at).map(x => (
+        <div key={`prio-${x.id}`} style={{ background:'#fffbeb',border:'1px solid #fde68a',borderRadius:12,padding:'12px 18px',marginBottom:12,fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#92400e' }}>
+          <strong style={{ fontFamily:'Montserrat,sans-serif' }}>⚡ Análise prioritária</strong> pedida por {x.clients?.razao_social || 'cliente'} em {new Date(x.priority_requested_at).toLocaleString('pt-BR')}
+          {x.priority_note ? <> — “{x.priority_note}”</> : null}
+        </div>
+      ))}
+
       {/* Banner de alerta de sanção no topo */}
       {hasActiveSanctions && (
         <div style={{ background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:12,padding:'12px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:10,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#dc2626' }}>
@@ -1002,7 +1050,9 @@ export function BackofficeAnalysis() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:20 }}>
+      {/* minmax(0,…): texto longo sem quebra (nome de selo/cliente) não pode
+          esticar as colunas — o painel da direita deslocava a tela (01/10) */}
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,2fr) minmax(0,1fr)', gap:20 }}>
         <div>
           {/* Header do fornecedor */}
           <Card style={{ borderRadius:16,padding:'20px 24px',marginBottom:16 }}>
@@ -1492,6 +1542,10 @@ export function BackofficeAnalysis() {
                       </>}
                     </>
                   )}
+                  {actn !== 'loading' && STATUS_DECISAO[status] && (
+                    <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
+                      onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
+                  )}
                 </div>
               )
             })}
@@ -1528,6 +1582,10 @@ export function BackofficeAnalysis() {
                           {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
                         </Button>
                       </>
+                    )}
+                    {doc && actn !== 'loading' && STATUS_DECISAO[status] && (
+                      <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
+                        onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter</Button>
                     )}
                   </div>
                 )
@@ -1752,6 +1810,7 @@ export function BackofficeAnalysis() {
                         SEAL_APPROVED:          { label:'Homologação aprovada',    color:'#22c55e', icon:'✅' },
                         SEAL_REJECTED:          { label:'Homologação rejeitada',   color:'#ef4444', icon:'❌' },
                         SEAL_REVERTED:          { label:'Análise revertida',       color:'#f59e0b', icon:'↩️' },
+                        DOCUMENT_DECISION_REVERTED: { label:'Decisão de documento revertida', color:'#f59e0b', icon:'↩️' },
                         SEAL_AUTO_APPROVED:     { label:'Aprovação automática',    color:'#22c55e', icon:'⚡' },
                         SEAL_AUTO_REJECTED:     { label:'Rejeição automática',     color:'#ef4444', icon:'⚡' },
                         PROCESS_REOPENED:       { label:'Processo reaberto (reenvio)', color:'#2E3192', icon:'↻' },
@@ -1835,7 +1894,7 @@ export function BackofficeAnalysis() {
         </div>
 
         {/* Painel de decisão */}
-        <div style={{ position:'sticky',top:80,alignSelf:'flex-start' }}>
+        <div style={{ position:'sticky',top:80,alignSelf:'flex-start',minWidth:0,overflowWrap:'anywhere' }}>
           <Card style={{ borderRadius:16,padding:'20px 24px',border:'2px solid #e2e4ef' }}>
             <SectionTitle>Decisão de Homologação</SectionTitle>
 
@@ -1959,6 +2018,11 @@ export function BackofficeAnalysis() {
                     ↩ Reverter Análise
                   </Button>
                 </>
+              ) : processSeal && !processSeal.released_at && !processSeal.hoc_process_id ? (
+                <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'12px 14px', fontSize:12.5, color:'#9a3412', fontFamily:'DM Sans,sans-serif' }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, marginBottom:4 }}>💳 Aguardando pagamento</div>
+                  O fornecedor ainda não confirmou o pagamento deste processo (plano não contratado ou boleto em compensação). Ele não entra na fila e o selo não pode ser emitido até a confirmação.
+                </div>
               ) : (
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
                   {processing ? '⏳...'
@@ -1981,6 +2045,29 @@ export function BackofficeAnalysis() {
           </Card>
         </div>
       </div>
+
+      {/* Modal Reverter decisão de documento (29/09) */}
+      {docRevert && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:480, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#b45309', marginBottom:6 }}>↩ Reverter decisão do documento</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:12 }}>{docRevert.doc.label}</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
+              O documento está <strong>{STATUS_DECISAO[docRevert.doc.status]}</strong>
+              {docRevert.doc.review_note ? <> ({docRevert.doc.review_note})</> : null}. Ao reverter, ele volta para <strong>Em análise</strong>
+              {docRevert.doc.status === 'REJECTED' ? ' e o fornecedor deixa de ver o motivo da reprovação' : ''}. A decisão desfeita fica registrada no Log do Processo.
+            </div>
+            <textarea value={docRevertReason} onChange={e => setDocRevertReason(e.target.value)}
+              placeholder="Motivo da reversão (obrigatório) — ex.: reprovado por engano, era o documento correto"
+              rows={3}
+              style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, resize:'vertical', boxSizing:'border-box', marginBottom:16 }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => { setDocRevert(null); setDocRevertReason('') }}>Cancelar</Button>
+              <Button variant="primary" full disabled={!docRevertReason.trim()} onClick={confirmDocRevert}>↩ Confirmar reversão</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Reverter Análise */}
       {revertModal && (

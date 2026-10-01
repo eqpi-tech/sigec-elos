@@ -78,7 +78,7 @@ exports.handler = async (event) => {
       user_id: user.id, action: 'CLIENT_DOC_UPLOADED',
       entity_type: 'supplier', entity_id: supplierId,
       metadata: { doc_type: docTypeId, doc_name: cat.name, file: file.name },
-    }).catch(() => {})
+    }).then(null, () => {})   // o builder do Supabase não tem .catch() (29/09)
 
     return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true, storage_path: path }) }
   } catch (err) {

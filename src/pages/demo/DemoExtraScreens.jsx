@@ -222,12 +222,12 @@ export function DemoPlano({ role }) {
   const isSupplier = role === 'SUPPLIER'
   const plans = isSupplier
     ? [
-        { name:'ELOS Verificado', price:'R$ 79/mês',  current:true,  perks:['Selo ELOS Verificado','Documentos automáticos (CNDs)','Presença no Marketplace','Score público'] },
-        { name:'ELOS Homologado', price:'R$ 189/mês', current:false, perks:['Tudo do Verificado','Análise documental completa','Selo Homologado (maior destaque)','Prioridade em convites de clientes'] },
+        { name:'ELOS Verificado', price:'R$ 199/ano',  sub:'ou R$ 29/mês', current:true,  perks:['Selo ELOS Verificado','Documentos automáticos (CNDs)','Presença no Marketplace','Score público'] },
+        { name:'ELOS Homologado', price:'R$ 690/ano', sub:'ou o valor do fluxo do cliente', current:false, perks:['Tudo do Verificado','Análise documental completa','Selo Homologado (maior destaque)','Prioridade em convites de clientes'] },
       ]
     : [
         { name:'Comprador Free',  price:'Grátis',      current:true,  perks:['Busca no Marketplace','5 fichas completas/mês','Convites ilimitados'] },
-        { name:'Comprador Pro',   price:'R$ 149/mês',  current:false, perks:['Fichas ilimitadas','RFQ (cotações) ilimitadas','Alertas de novos fornecedores','Exportação de relatórios'] },
+        { name:'Comprador Pro',   price:'R$ 199/mês',  sub:'ou R$ 1.990/ano', current:false, perks:['Fichas ilimitadas','RFQ (cotações) ilimitadas','Alertas de novos fornecedores','Exportação de relatórios'] },
       ]
   return (
     <Page title="Meu Plano" sub={isSupplier ? 'Assinatura ativa · renova em 15/01/2027' : 'Escolha o plano ideal para sua operação de compras'}>
@@ -238,7 +238,8 @@ export function DemoPlano({ role }) {
               <span style={{ position:'absolute', top:-11, left:24, fontSize:10, fontWeight:800, fontFamily:M, background:'#22c55e', color:'#fff', padding:'3px 12px', borderRadius:20 }}>PLANO ATUAL</span>
             )}
             <div style={{ fontFamily:M, fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{p.name}</div>
-            <div style={{ fontFamily:M, fontWeight:900, fontSize:26, color: p.current ? '#22c55e' : '#F47E2F', margin:'8px 0 16px' }}>{p.price}</div>
+            <div style={{ fontFamily:M, fontWeight:900, fontSize:26, color: p.current ? '#22c55e' : '#F47E2F', margin: p.sub ? '8px 0 2px' : '8px 0 16px' }}>{p.price}</div>
+            {p.sub && <div style={{ fontFamily:D, fontSize:11.5, color:'#9B9B9B', marginBottom:14 }}>{p.sub}</div>}
             {p.perks.map((perk, j) => (
               <div key={j} style={{ fontFamily:D, fontSize:13, color:'#374151', padding:'5px 0', display:'flex', gap:8 }}>
                 <span style={{ color:'#22c55e' }}>✓</span>{perk}
@@ -424,7 +425,7 @@ export function DemoSupplierCertificado({ navigate }) {
 
             {/* Nota de verificação */}
             <div style={{ textAlign:'center', marginTop:16, fontFamily:D, fontSize:9.5, color:'#a8adc2' }}>
-              A autenticidade deste certificado pode ser verificada junto à EQPI Tech informando o número do certificado ·
+              Verifique a autenticidade e a situação atual deste certificado em <strong>elos.eqpitech.com.br/verificar</strong> — basta informar o número do certificado ·
               A validade está condicionada à manutenção da regularidade documental do fornecedor na plataforma SIGEC-ELOS.
             </div>
           </div>

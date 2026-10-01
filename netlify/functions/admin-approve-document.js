@@ -229,10 +229,22 @@ exports.handler = async (event) => {
     // Ativa o selo do processo. SEM upsert onConflict: o índice único de
     // seals é parcial e o upsert falha SILENCIOSAMENTE (42P10) — era o bug
     // do 'homologou mas continua pendente'. select→update/insert + erro checado
-    let sealQ = supabaseAdmin.from('seals').select('id, seal_name, seal_type, flow_id')
+    let sealQ = supabaseAdmin.from('seals').select('id, seal_name, seal_type, flow_id, released_at')
       .eq('supplier_id', supplierId)
     sealQ = clientId ? sealQ.eq('client_id', clientId) : sealQ.is('client_id', null)
     const { data: sealRow } = await sealQ.limit(1).maybeSingle()
+
+    // Trava de pagamento (patch_112): processo sem pagamento confirmado (nem
+    // subsídio) NÃO recebe selo — os documentos ficam aprovados e a
+    // homologação sai sozinha quando o pagamento for confirmado e o analista
+    // revisar de novo. O gatilho do banco também bloqueia (defesa em dobro).
+    if (!sealRow?.released_at) {
+      console.warn(`[auto-approve] ${supplierId}: processo sem pagamento confirmado — selo não emitido`)
+      return {
+        statusCode: 200, headers: HEADERS,
+        body: JSON.stringify({ updated: true, autoFinalized: false, paymentPending: true }),
+      }
+    }
 
     const activation = {
       status:     'ACTIVE',

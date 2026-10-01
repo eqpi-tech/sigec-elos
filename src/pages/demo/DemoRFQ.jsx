@@ -3,9 +3,9 @@ import { Card, Button, Spinner, PageHeader } from '../../components/ui.jsx'
 
 // ── Dados demo ────────────────────────────────────────────────────────────────
 const DEMO_RFQS = [
-  { id:1, title:'Fornecimento de EPI — T2 2026', category:'Segurança do Trabalho', created:'2026-05-10', deadline:'2026-06-20', sent:8, responded:5, description:'Cotação de equipamentos de proteção individual para operações de campo.' },
-  { id:2, title:'Manutenção Elétrica — Unidade MG', category:'Serviços Elétricos',  created:'2026-04-22', deadline:'2026-05-30', sent:6, responded:6, description:'Serviços de manutenção preventiva e corretiva de painéis elétricos.' },
-  { id:3, title:'Fornecimento de Ferramentas',     category:'Manutenção Industrial', created:'2026-04-05', deadline:null,        sent:4, responded:2, description:'Cotação de ferramentas e consumíveis para manutenção industrial.' },
+  { id:1, title:'Fornecimento de EPI — T4 2026', category:'Segurança do Trabalho', created:'2026-09-22', deadline:'2026-10-20', sent:8, responded:5, description:'Cotação de equipamentos de proteção individual para operações de campo.' },
+  { id:2, title:'Manutenção Elétrica — Unidade MG', category:'Serviços Elétricos',  created:'2026-09-08', deadline:'2026-09-29', sent:6, responded:6, description:'Serviços de manutenção preventiva e corretiva de painéis elétricos.' },
+  { id:3, title:'Fornecimento de Ferramentas',     category:'Manutenção Industrial', created:'2026-09-15', deadline:null,        sent:4, responded:2, description:'Cotação de ferramentas e consumíveis para manutenção industrial.' },
 ]
 
 const DEMO_RESPONSES = [

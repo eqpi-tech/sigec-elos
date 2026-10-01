@@ -173,19 +173,28 @@ node --check netlify/functions/<fn>.js   # fast syntax gate for a function
 11. Dates/money: business-day math uses `src/lib/businessDays.js` + `holidays`
     table (Stripe payout estimate = payment + 3 business days); money parsing is
     pt-BR (`parseMoneyBR`: comma = decimal separator).
-12. `user_roles` has `UNIQUE(user_id, role)` → one SUPPLIER link per user, and a
+12. **Payment lock (patch_112).** Unlike HOC, an ELOS supplier only uses the system
+    after payment is CONFIRMED (card/PIX immediately; boleto only on
+    `checkout.session.async_payment_succeeded`). `seals.released_at` marks a released
+    process: set by the Stripe webhook on confirmed payment, by subsidized invites
+    (DB triggers — the client pays, no waiting), and automatically for HOC seals and
+    ACTIVE seals. A DB trigger refuses `status='ACTIVE'` on an unreleased seal; a
+    restrictive RLS policy blocks supplier document writes; `analysable_supplier_ids()`
+    excludes unreleased suppliers. Anything with a per-call cost (Assertiva, official
+    sources, AI review) must check release first.
+13. `user_roles` has `UNIQUE(user_id, role)` → one SUPPLIER link per user, and a
     trigger caps 4 users per supplier. Multi-company users are a known open issue
     (extra links recorded in `audit_log`).
 
 **Front-end traps:**
 
-13. `onAuthStateChange` fires `TOKEN_REFRESHED` on tab refocus and used to remount
+14. `onAuthStateChange` fires `TOKEN_REFRESHED` on tab refocus and used to remount
     the whole app — `AuthContext.jsx` guards with a last-user-id ref. Don't remove it.
-14. E-mail recipients: many migrated suppliers have **no login user** — always fall
+15. E-mail recipients: many migrated suppliers have **no login user** — always fall
     back to the registration e-mail on `suppliers` (every mailer does this now), and
     sender identity is always the **company** name resolved server-side, never the
     logged-in user's personal name.
-15. Status enums are enforced by CHECK constraints (`documents_status_check` etc.) —
+16. Status enums are enforced by CHECK constraints (`documents_status_check` etc.) —
     introducing a status in JS without a patch throws at insert time.
 
 ## 8. How to work on this repo with Claude Code

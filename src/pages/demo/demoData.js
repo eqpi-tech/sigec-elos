@@ -3,6 +3,7 @@ export const DEMO_USER = {
   SUPPLIER: { name: 'Lucas Andrade', email: 'lucas@primatus.com.br', role: 'SUPPLIER', initials: 'LA' },
   BUYER:    { name: 'Ricardo Mendes', email: 'ricardo@horizonte.com.br', role: 'BUYER', initials: 'RM' },
   CLIENT:   { name: 'Rafael Costa', email: 'rafael@horizonte.com.br', role: 'CLIENT', initials: 'RC' },
+  ADMIN:    { name: 'Ana Ribeiro', email: 'ana.ribeiro@eqpitech.com.br', role: 'ADMIN', initials: 'AR' },
 }
 
 // ── Fornecedor ─────────────────────────────────────────────────────────────
@@ -15,39 +16,9 @@ export const DEMO_SUPPLIER = {
 }
 
 export const DEMO_SEALS = [
-  { id: 'seal-1', name: 'SIGEC Simples', clientName: 'SIGEC-ELOS',          status: 'ACTIVE',  score: 87, issued_at: '2025-01-15', expires_at: '2026-01-15', color: '#2E3192', icon: '✦' },
-  { id: 'seal-2', name: 'Processo HOC',  clientName: 'Horizonte Mineração',  status: 'PENDING', score: 72, issued_at: null,          expires_at: null,         color: '#F47E2F', icon: '⭐' },
+  { id: 'seal-1', name: 'SIGEC Simples', clientName: 'SIGEC-ELOS',          status: 'ACTIVE',  score: 87, issued_at: '2026-01-15', expires_at: '2027-01-15', color: '#2E3192', icon: '✦' },
+  { id: 'seal-2', name: 'Horizonte — Suprimentos', clientName: 'Horizonte Mineração',  status: 'PENDING', score: 72, issued_at: null,          expires_at: null,         color: '#F47E2F', icon: '⭐' },
 ]
-
-export const DEMO_DOCS = [
-  { id:1,  label:'Cartão CNPJ',            status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:2,  label:'CND Federal',             status:'VALID',    source:'MANUAL', expires_at:'2026-06-30' },
-  { id:3,  label:'CRF / FGTS',             status:'VALID',    source:'MANUAL', expires_at:'2026-07-31' },
-  { id:4,  label:'Certidão Municipal',      status:'EXPIRING', source:'MANUAL', expires_at:'2026-06-20' },
-  { id:5,  label:'Análise CNAEs',           status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:6,  label:'Simples Nacional',        status:'VALID',    source:'AUTO',   expires_at:'2099-12-31' },
-  { id:7,  label:'Apólice de Seguro',       status:'PENDING',  source:'MANUAL', expires_at:null },
-  { id:8,  label:'Certidão Trabalhista',    status:'VALID',    source:'MANUAL', expires_at:'2026-08-15' },
-  { id:9,  label:'Alvará de Funcionamento', status:'MISSING',  source:'MANUAL', expires_at:null },
-  { id:10, label:'Relatório Assertiva 360', status:'VALID',    source:'AUTO',   expires_at:'2026-06-11' },
-]
-
-export const DEMO_PROCESSO = {
-  id: 'seal-2',
-  clientName: 'Horizonte Mineração S/A',
-  sealName: 'Processo HOC',
-  status: 'PENDING',
-  score: 72,
-  docs: [
-    { label:'Cartão CNPJ',          status:'VALID',    source:'AUTO'   },
-    { label:'CND Federal',           status:'VALID',    source:'MANUAL' },
-    { label:'CRF / FGTS',           status:'VALID',    source:'MANUAL' },
-    { label:'Certidão Municipal',    status:'EXPIRING', source:'MANUAL' },
-    { label:'Apólice de Seguro',     status:'PENDING',  source:'MANUAL' },
-    { label:'Alvará de Funcionamento', status:'MISSING', source:'MANUAL' },
-    { label:'Certidão Trabalhista',  status:'VALID',    source:'MANUAL' },
-  ],
-}
 
 // ── Marketplace ─────────────────────────────────────────────────────────────
 export const DEMO_MARKETPLACE = [
@@ -84,11 +55,11 @@ export const DEMO_BUYER_SUPPLIER_PROFILE = {
   ],
   docs: [
     { label:'Cartão CNPJ',           status:'VALID',    expires:'—'         },
-    { label:'CND Federal',            status:'VALID',    expires:'Jun/2026'  },
-    { label:'CRF / FGTS',            status:'VALID',    expires:'Jul/2026'  },
-    { label:'Certidão Municipal',     status:'EXPIRING', expires:'Jun/2026'  },
-    { label:'Certidão Trabalhista',   status:'VALID',    expires:'Ago/2026'  },
-    { label:'Relatório Assertiva',    status:'VALID',    expires:'Jun/2026'  },
+    { label:'CND Federal',            status:'VALID',    expires:'Mar/2027'  },
+    { label:'CRF / FGTS',            status:'VALID',    expires:'Jan/2027'  },
+    { label:'Certidão Municipal',     status:'EXPIRING', expires:'Mar/2027'  },
+    { label:'Certidão Trabalhista',   status:'VALID',    expires:'Fev/2027'  },
+    { label:'Relatório Assertiva',    status:'VALID',    expires:'Mar/2027'  },
   ],
   categorias: ['Manutenção Industrial','Serviços Elétricos','Automação & Controle'],
 }
@@ -104,14 +75,14 @@ export const DEMO_CLIENT = {
 }
 
 export const DEMO_CLIENT_SUPPLIERS = [
-  { id:1, razao_social:'Primatus Serviços Técnicos Ltda', initials:'PS', city:'São Paulo',       state:'SP', subsidiado:false, sealStatus:'ACTIVE',  score:92, seal_name:'HOC Homologado' },
-  { id:2, razao_social:'Ômega Engenharia Ltda',           initials:'ÔE', city:'Belo Horizonte',  state:'MG', subsidiado:true,  sealStatus:'ACTIVE',  score:88, seal_name:'HOC Homologado' },
+  { id:1, razao_social:'Primatus Serviços Técnicos Ltda', initials:'PS', city:'São Paulo',       state:'SP', subsidiado:false, sealStatus:'ACTIVE',  score:92, seal_name:'Homologado Horizonte' },
+  { id:2, razao_social:'Ômega Engenharia Ltda',           initials:'ÔE', city:'Belo Horizonte',  state:'MG', subsidiado:true,  sealStatus:'ACTIVE',  score:88, seal_name:'Homologado Horizonte' },
   { id:3, razao_social:'TechFix Industrial',               initials:'TF', city:'Campinas',        state:'SP', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise'  },
-  { id:4, razao_social:'Sulbras Serviços',                 initials:'SS', city:'Porto Alegre',    state:'RS', subsidiado:true,  sealStatus:'ACTIVE',  score:79, seal_name:'HOC Homologado' },
+  { id:4, razao_social:'Sulbras Serviços',                 initials:'SS', city:'Porto Alegre',    state:'RS', subsidiado:true,  sealStatus:'ACTIVE',  score:79, seal_name:'Homologado Horizonte' },
   { id:5, razao_social:'Norte Industrial Ltda',            initials:'NI', city:'Parauapebas',     state:'PA', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise'  },
-  { id:6, razao_social:'BioTech Serviços Ambientais',      initials:'BS', city:'Curitiba',        state:'PR', subsidiado:false, sealStatus:'ACTIVE',  score:81, seal_name:'HOC Homologado' },
+  { id:6, razao_social:'BioTech Serviços Ambientais',      initials:'BS', city:'Curitiba',        state:'PR', subsidiado:false, sealStatus:'ACTIVE',  score:81, seal_name:'Homologado Horizonte' },
   { id:7, razao_social:'Metalmax Ind. Ltda',               initials:'MI', city:'Contagem',        state:'MG', subsidiado:false, sealStatus:'SUSPENDED', score:55, seal_name:'Suspenso'   },
-  { id:8, razao_social:'LogFlex Transportes',              initials:'LF', city:'Santos',          state:'SP', subsidiado:true,  sealStatus:'ACTIVE',  score:90, seal_name:'HOC Homologado' },
+  { id:8, razao_social:'LogFlex Transportes',              initials:'LF', city:'Santos',          state:'SP', subsidiado:true,  sealStatus:'ACTIVE',  score:90, seal_name:'Homologado Horizonte' },
 ]
 
 // ── Questionário do cliente (fornecedor responde) ──────────────────────────
@@ -185,3 +156,29 @@ export const DEMO_INTERESTED_SUPPLIERS = [
   { id:2, razao_social:'ProServ Facilities S.A.',    cidade:'São Paulo/SP', categoria:'Facilities',           selo:'ELOS Homologado', score:91, desde:'28/07/2026' },
   { id:3, razao_social:'Andaimes Rocha ME',          cidade:'Contagem/MG',  categoria:'Acesso e Andaimes',    selo:'ELOS Verificado', score:77, desde:'19/07/2026' },
 ]
+
+// ── Telas novas do refresh (30/09) — tudo fictício ─────────────────────────
+
+// Cliente · Relatórios (dashboard executivo)
+export const DEMO_CLIENT_REPORTS = {
+  kpis: { fornecedores: 128, homologados: 94, emHomologacao: 23, vencidos: 3, docsAVencer30: 17, processosAVencer60: 9 },
+  funil: [
+    { label: '✉️ Enviados', value: 160 }, { label: '👁 Visualizados', value: 141 },
+    { label: '✅ Cadastrados', value: 128 }, { label: '🏅 Homologados vigentes', value: 94 },
+  ],
+  porMes: [ ['Abr', 6], ['Mai', 9], ['Jun', 12], ['Jul', 15], ['Ago', 18], ['Set', 21] ],
+  situacao: [
+    { label: '🏅 Homologados vigentes', value: 94, color: '#22c55e' }, { label: '⏳ Em homologação', value: 23, color: '#f59e0b' },
+    { label: '⛔ Suspensos', value: 8, color: '#ef4444' }, { label: '💤 Vencidos', value: 3, color: '#9B9B9B' },
+  ],
+  questionarios: { responderam: 88, naoResponderam: 6 },
+  rfq: { abertas: 4, respostas: 17 },
+}
+
+// Cliente · Compliance (respostas de questionário que exigem revisão)
+export const DEMO_COMPLIANCE = [
+  { fornecedor: 'Metalmax Ind. Ltda', cnpj: '12.408.771/0001-09', pergunta: 'A empresa possui processos judiciais trabalhistas em andamento?', resposta: 'Sim — 3 processos', regra: 'Resposta "Sim" exige avaliação' },
+  { fornecedor: 'Norte Industrial Ltda', cnpj: '28.119.340/0001-55', pergunta: 'Algum sócio é pessoa politicamente exposta (PEP)?', resposta: 'Sim', regra: 'PEP exige avaliação de compliance' },
+  { fornecedor: 'TechFix Industrial', cnpj: '07.332.910/0001-41', pergunta: 'Possui programa de integridade (compliance) formalizado?', resposta: 'Não', regra: 'Ausência de programa de integridade' },
+]
+

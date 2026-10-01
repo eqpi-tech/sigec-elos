@@ -6,7 +6,8 @@
 //          customer.subscription.deleted, invoice.payment_failed
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
-const { functionsUrl } = require('./lib/runtime_env.js')
+const { functionsUrl, env } = require('./lib/runtime_env.js')
+const routeA = require('./lib/route_a.js')   // Rota A (staging; inerte sem ROUTE_A_ENABLED)
 const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
@@ -46,7 +47,7 @@ exports.handler = async (event) => {
     // async_payment_succeeded = boleto COMPENSOU: mesma ativação do completed
     if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
       const session = data.object
-      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId } = session.metadata
+      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId, clientId } = session.metadata
 
       // BOLETO (21/09): completed dispara na EMISSÃO do voucher com
       // payment_status='unpaid' — sem esta guarda o plano ativava sem
@@ -163,13 +164,43 @@ exports.handler = async (event) => {
         status:         sealStatus,
         ...(sealStatus === 'ACTIVE' ? { issued_at: new Date().toISOString(), expires_at: endsAt } : {}),
       }
-      const { data: existingSeal } = await supabase.from('seals')
-        .select('id').eq('supplier_id', supplierId).is('client_id', null).limit(1).maybeSingle()
-      const { error: sealErr } = existingSeal
-        ? await supabase.from('seals').update(sealPayload).eq('id', existingSeal.id)
-        : await supabase.from('seals').insert({ ...sealPayload, supplier_id: supplierId, score: 0 })
+      // Pagamento do processo de um CLIENTE (preço combinado — metadata.clientId):
+      // o processo é o do cliente; não cria o selo ELOS genérico (antes surgia
+      // um "ELOS Homologado" duplicado ao lado do processo do cliente)
+      let sealErr = null
+      if (!clientId) {
+        const { data: existingSeal } = await supabase.from('seals')
+          .select('id').eq('supplier_id', supplierId).is('client_id', null).limit(1).maybeSingle()
+        ;({ error: sealErr } = existingSeal
+          ? await supabase.from('seals').update(sealPayload).eq('id', existingSeal.id)
+          : await supabase.from('seals').insert({ ...sealPayload, supplier_id: supplierId, score: 0 }))
+      }
 
       if (sealErr) console.error('Seal upsert error:', sealErr)
+
+      // Trava de pagamento (patch_112): pagamento CONFIRMADO (cartão/PIX na
+      // hora; boleto só na compensação — chega aqui por async_payment_succeeded)
+      // libera os processos do fornecedor: envio de documentos, fila de
+      // análise e, depois da análise, o selo
+      const { error: relErr } = await supabase.from('seals')
+        .update({ released_at: new Date().toISOString() })
+        .eq('supplier_id', supplierId).is('released_at', null)
+      if (relErr) console.error('[trava-pagamento] liberação:', relErr.message)
+
+      // Rota A (staging): a coleta nas fontes oficiais começa na LIBERAÇÃO —
+      // nunca no cadastro de quem ainda não pagou (tem custo por consulta)
+      if (routeA.enabled()) {
+        try {
+          const n = await routeA.enqueueRouteA(supabase, supplierId)
+          const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
+          if (n && site && process.env.CRON_SECRET) {
+            await fetch(`${site}/.netlify/functions/homolog-collect-background`, {
+              method: 'POST', headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, body: '{}',
+            })
+          }
+          console.log(`[rota-a] ${n} consulta(s) enfileirada(s) após o pagamento de ${supplierId}`)
+        } catch (e) { console.warn('[rota-a] enfileirar no pagamento:', e.message) }
+      }
 
       // Verificado: atualizar status do supplier diretamente
       if (sealType === 'verificado') {
@@ -232,6 +263,20 @@ exports.handler = async (event) => {
           paid_at:           new Date((invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
           status:            amount > 0 ? 'PENDING' : 'SKIPPED_ZERO',
         }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true })
+        // Renovação (01/10): a fatura paga estende o plano e o selo ELOS até o
+        // fim do período cobrado — sem isto o selo vencia com a assinatura em
+        // dia (e o seals-expire o daria por vencido). Selo vencido volta a valer.
+        const periodEnd = invoice.lines?.data?.[0]?.period?.end
+        if (subId && supplierId && periodEnd) {
+          const fim = new Date(periodEnd * 1000).toISOString()
+          const { error: pe } = await supabase.from('plans').update({ ends_at: fim, status: 'ACTIVE' })
+            .eq('stripe_sub_id', subId).or(`ends_at.is.null,ends_at.lt.${fim}`)
+          if (pe) console.error('[renovacao] plano:', pe.message)
+          const { error: se } = await supabase.from('seals').update({ expires_at: fim, status: 'ACTIVE' })
+            .eq('supplier_id', supplierId).is('client_id', null).is('hoc_process_id', null)
+            .in('status', ['ACTIVE', 'EXPIRED']).or(`expires_at.is.null,expires_at.lt.${fim}`)
+          if (se) console.error('[renovacao] selo:', se.message)
+        }
         if (qErr) console.error('[nfe-queue]', qErr.message)
         else if (amount > 0) {
           // tentativa imediata de emissão (o cron diário é a rede de segurança)

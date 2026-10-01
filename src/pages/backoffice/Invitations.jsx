@@ -8,6 +8,15 @@ import { supabase } from '../../lib/supabase.js'
 import { invitationsApi } from '../../services/api.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 
+// telefone informado pelo cliente no convite (29/09) — formata quando dá, senão mostra como veio
+const fone = (v) => {
+  let d = String(v || '').replace(/\D/g, '')
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2)
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return String(v).trim()
+}
+
 const STATUS = {
   SENT:       { label:'Enviado',      color:'#f59e0b' },
   VIEWED:     { label:'Visualizado',  color:'#2563eb' },
@@ -154,6 +163,7 @@ export default function BackofficeInvitations() {
                       </div>
                       <div style={{ fontSize:12, color:'#6b7280', fontFamily:'DM Sans,sans-serif', marginTop:3 }}>
                         {inv.supplier_cnpj ? `CNPJ ${inv.supplier_cnpj} · ` : ''}{inv.supplier_email}
+                        {inv.telefone?.trim() && ` · 📞 ${fone(inv.telefone)}`}
                       </div>
                       <div style={{ fontSize:11.5, color:'#2E3192', fontFamily:'DM Sans,sans-serif', fontWeight:600, marginTop:3 }}>
                         🏢 {nomeCliente(inv.clients)}{inv.client_flows?.name ? ` · ${inv.client_flows.name}` : ''}
@@ -199,7 +209,7 @@ export default function BackofficeInvitations() {
                   ['Situação', STATUS[detalhe.status]?.label || detalhe.status],
                   ['CNPJ', detalhe.supplier_cnpj || '—'],
                   ['E-mail convidado', detalhe.supplier_email],
-                  ['Contato / telefone', [detalhe.contato, detalhe.telefone].filter(Boolean).join(' · ') || '—'],
+                  ['Contato / telefone', [detalhe.contato, detalhe.telefone?.trim() && fone(detalhe.telefone)].filter(Boolean).join(' · ') || '—'],
                   ['Cliente', nomeCliente(detalhe.clients)],
                   ['Fluxo', detalhe.client_flows?.name || '—'],
                   ['Subsidiado', detalhe.subsidiado ? 'Sim' : 'Não'],

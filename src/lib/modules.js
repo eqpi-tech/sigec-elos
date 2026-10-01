@@ -54,6 +54,7 @@ export const ACTIONS = {
     { key: 'acao:interessados',      module: 'fornecedores', label: 'Interessados',                 icon: '💡', desc: 'Ver fornecedores que declararam intenção de atender' },
     { key: 'acao:ver_documentos',    module: 'fornecedores', label: 'Ver documentos do fornecedor', icon: '👁', desc: 'Abrir/baixar arquivos no processo do fornecedor' },
     { key: 'acao:carta_excecao',     module: 'fornecedores', label: 'Enviar Carta de Exceção',      icon: '📜', desc: 'Anexar carta aprovando categoria com pendência' },
+    { key: 'acao:priorizar_analise', module: 'fornecedores', label: 'Priorizar Análise',            icon: '⚡', desc: 'Pedir à EQPI análise prioritária de um processo em análise (urgência)' },
     { key: 'acao:enviar_doc_cliente',module: 'fornecedores', label: 'Enviar documentos do cliente', icon: '📎', desc: 'Anexar documentos de responsabilidade do cliente no processo (ex.: Laudo GETEC — VIX)' },
     { key: 'acao:novo_convite',      module: 'convites',     label: 'Enviar convites',              icon: '✉️', desc: 'Convidar fornecedores (individual e em massa)' },
     { key: 'acao:nova_cotacao',      module: 'rfq',          label: 'Criar cotações (RFQ)',         icon: '📝', desc: 'Abrir novas solicitações de cotação' },

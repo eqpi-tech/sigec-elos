@@ -53,6 +53,22 @@ function buildHtml(clientName, missingDocs, questPending) {
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
 }
 
+// Trava de pagamento (01/10, patch_112): processo sem pagamento confirmado
+// nem subsídio recebe o aviso para concluir o pagamento, não a lista de docs
+function buildPaymentHtml(razao, clientName) {
+  return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
+    <p>Olá, <strong>${razao}</strong>.</p>
+    <p>Seu cadastro no SIGEC-ELOS está feito, mas a sua homologação${clientName ? ` com <strong>${clientName}</strong>` : ''} ainda não começou: <strong>falta confirmar o pagamento do plano</strong>.</p>
+    <p>Pagamentos com cartão ou PIX liberam o acesso na hora; com boleto, a liberação acontece assim que o banco confirma a compensação.</p>
+    <p>Depois da confirmação você envia os documentos e o processo entra na fila de análise da EQPI.</p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor/pagamento" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Escolher o plano e pagar</a></p>
+  </div>
+  <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
+}
+
 exports.handler = async (event) => {
   const bearer = (event.headers?.authorization || '').replace('Bearer ', '')
   if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return { statusCode: 401 }
@@ -63,7 +79,7 @@ exports.handler = async (event) => {
     // processos ELOS em aberto de clientes ativos
     const { data: seals } = await supabase
       .from('seals')
-      .select('id, supplier_id, client_id, flow_id, created_at, clients(active, nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
+      .select('id, supplier_id, client_id, flow_id, created_at, released_at, clients(active, nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
       .eq('status', 'PENDING')
       .is('hoc_process_id', null)
       .limit(500)
@@ -81,6 +97,30 @@ exports.handler = async (event) => {
       if (seal.clients && seal.clients.active === false) { skipped++; continue }
       const to = emailMap[seal.suppliers?.user_id] || seal.suppliers?.email
       if (!to) { skipped++; continue }
+
+      // processo sem pagamento confirmado: aviso de pagamento (mesma cadência)
+      if (!seal.released_at) {
+        const { data: plano } = await supabase.from('plans').select('status').eq('supplier_id', seal.supplier_id).maybeSingle()
+        if (plano?.status === 'PENDING') { skipped++; continue }   // boleto emitido, aguardando compensação
+        const { data: ph } = await supabase
+          .from('audit_log').select('created_at')
+          .eq('action', 'PAYMENT_PENDING_REMINDER').eq('entity_id', seal.id)
+          .order('created_at', { ascending: false }).limit(MAX_REMINDERS)
+        if (ph?.length >= MAX_REMINDERS) { skipped++; continue }
+        const ultimo = ph?.[0]?.created_at || seal.created_at
+        if (ultimo && Date.now() - new Date(ultimo).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
+        const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
+        try {
+          await sendEmail(to, '💳 Falta confirmar o pagamento da sua homologação — SIGEC-ELOS',
+            buildPaymentHtml(seal.suppliers?.razao_social || '', clientName))
+          await supabase.from('audit_log').insert({
+            action: 'PAYMENT_PENDING_REMINDER', entity_type: 'seal', entity_id: seal.id,
+            metadata: { to, lembrete_n: (ph?.length || 0) + 1 },
+          })
+          sent++
+        } catch (e) { console.warn(`[payment-reminders] ${seal.id}: ${e.message}`) }
+        continue
+      }
 
       // cadência: ≥3 dias desde o último, máx. 5 por processo (audit_log)
       const { data: hist } = await supabase
