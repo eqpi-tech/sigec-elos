@@ -373,6 +373,7 @@ export default function DocumentAnalysis() {
     ['VALID','REJECTED','EXPIRING','EXPIRED','NOT_APPLICABLE','MISSING','PENDING'].includes(saved.statusFilter)
       ? saved.statusFilter : 'todos')
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
+  const [prioFilter,    setPrioFilter]    = useState(!!saved.prioFilter)   // ⚡ só prioritários (patch_113)
   const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'due_asc')
 
   // Dados
@@ -425,6 +426,7 @@ export default function DocumentAnalysis() {
         status: statusFilter !== 'todos' ? statusFilter : undefined,
         queue: queueFilter,
         expiresUntil: expiresUntil || undefined,
+        prioritario: prioFilter || undefined,
         sortBy,
         page: pg,
         pageSize: PAGE_SIZE,
@@ -432,13 +434,13 @@ export default function DocumentAnalysis() {
       setRows(result.rows)
       setTotal(result.total)
       setPage(pg)
-      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy, page: pg }))
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy, page: pg }))
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy])
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy])
 
   // Primeira carga restaura também a PÁGINA salva (voltar da visualização
   // de um documento mantém o analista onde estava)
@@ -451,8 +453,8 @@ export default function DocumentAnalysis() {
 
   // Salva os filtros a cada mudança
   useEffect(() => {
-    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy, page }))
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sortBy])
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy, page }))
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy])
 
   async function handleApprove(docId, expiry, status = 'VALID', note, inscriptionNumber) {
     setSaving(p => new Set([...p, docId]))
@@ -604,6 +606,7 @@ export default function DocumentAnalysis() {
           status: statusFilter !== 'todos' ? statusFilter : undefined,
           queue: queueFilter,
           expiresUntil: expiresUntil || undefined,
+        prioritario: prioFilter || undefined,
           sortBy: 'expires_asc',
           page: 0,
           pageSize: 9999,
@@ -724,6 +727,13 @@ export default function DocumentAnalysis() {
               {QUEUE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          <div>
+            <span style={lbl}>Prioridade</span>
+            <select value={prioFilter ? 'prio' : ''} onChange={e => setPrioFilter(e.target.value === 'prio')} style={inp}>
+              <option value="">Todos os processos</option>
+              <option value="prio">⚡ Só prioritários (pedido do cliente)</option>
+            </select>
+          </div>
           {/* Filtro STATUS omitido por ora (pedido 18/09) — a fila cobre o
               dia a dia; reativar exibindo o select de STATUS_OPTIONS */}
           {false && (
@@ -745,7 +755,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setExpiresUntil(''); setSortBy('due_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setPrioFilter(false); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>
@@ -886,6 +896,12 @@ export default function DocumentAnalysis() {
                       {String(doc.type).startsWith('mob:') && ' · 👷 Mobilidade'}
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
+                    {doc.prioridade_em && (
+                      <div title={`Prioridade pedida pelo cliente em ${new Date(doc.prioridade_em).toLocaleString('pt-BR')}`}
+                        style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', display:'inline-block', padding:'1px 7px', borderRadius:20, marginTop:3, fontFamily:'Montserrat,sans-serif' }}>
+                        ⚡ Prioritária
+                      </div>
+                    )}
                   </div>
 
                   {/* Status */}

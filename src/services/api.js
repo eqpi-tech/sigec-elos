@@ -1007,7 +1007,7 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
-  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
     // RPC admin_list_documents (patch_069): a fila só traz documentos de
     // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
     // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
@@ -1021,6 +1021,7 @@ export const adminApi = {
       p_sort:          sortBy,
       p_page:          page,
       p_size:          pageSize,
+      ...(prioritario ? { p_prioritario: true } : {}),   // patch_113
     })
     if (error) throw new Error(error.message)
     return { rows: data?.rows || [], total: data?.total || 0, page, pageSize }
@@ -1460,14 +1461,29 @@ export const clientApi = {
       i.status === 'REGISTERED' && i.seal?.status !== 'ACTIVE'
     ).length
 
+    // carta de exceção VIGENTE (patch_101): fornecedores homologados sob regime de exceção
+    const hoje = new Date().toISOString().slice(0, 10)
+    const { data: cartas } = await supabase.from('supplier_category_approvals')
+      .select('supplier_id').eq('client_id', clientId).eq('status', 'EXCEPTION_APPROVED').gte('letter_valid_until', hoje)
+    const cartasExcecao = new Set((cartas || []).map(c => c.supplier_id)).size
+
     return {
       invites: enriched,
+      cartasExcecao,
       total:       all.length,
       registered:  all.filter(i => i.status === 'REGISTERED').length,
       emAnalise,
       homologados,
       subsidiados: all.filter(i => i.subsidiado).length,
     }
+  },
+
+  // Análise prioritária (patch_113): o cliente pede urgência num processo em
+  // análise — antes era chamado no HOC. Fica no log do processo.
+  requestPriority: async (sealId, note) => {
+    const { data, error } = await supabase.rpc('request_priority_analysis', { p_seal: sealId, p_note: note || null })
+    if (error) throw new Error(error.message)
+    return data
   },
 
   // Lista fornecedores do cliente (via invitations)
@@ -1529,7 +1545,7 @@ export const clientApi = {
     // e fornecedores do fluxo novo (também têm seal.client_id após aceite do convite)
     const { data: sealsData, error: sealsErr } = await supabase
       .from('seals')
-      .select('supplier_id, level, status, score, seal_name, client_suspended_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
+      .select('id, supplier_id, level, status, score, seal_name, client_suspended_at, released_at, hoc_process_id, priority_requested_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
       .eq('client_id', clientId)
     if (sealsErr) throw new Error(sealsErr.message)
 
@@ -1537,8 +1553,9 @@ export const clientApi = {
     const supplierFromSeal = {}
     for (const seal of (sealsData || [])) {
       sealMap[seal.supplier_id] = {
-        supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
+        id: seal.id, supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
         score: seal.score, seal_name: seal.seal_name, client_suspended_at: seal.client_suspended_at,
+        released_at: seal.released_at, hoc_process_id: seal.hoc_process_id, priority_requested_at: seal.priority_requested_at,
       }
       if (seal.suppliers) supplierFromSeal[seal.supplier_id] = seal.suppliers
     }

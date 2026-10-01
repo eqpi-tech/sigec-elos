@@ -41,6 +41,7 @@ export default function ClientDashboard() {
         <KpiCard label="Homologados"            value={data?.homologados ?? 0} icon="✅" subtext="Selo ELOS ativo" />
         <KpiCard label="Em Análise"             value={data?.emAnalise ?? 0} icon="⏳" subtext="Aguardando revisão EQPI" />
         <KpiCard label="Subsidiados"            value={data?.subsidiados ?? 0} icon="💰" subtext="Custo assumido por você" />
+        <KpiCard label="Carta de Exceção"       value={data?.cartasExcecao ?? 0} icon="📜" subtext="Fornecedores com carta vigente" />
       </div>
 
       {/* Lista recente */}

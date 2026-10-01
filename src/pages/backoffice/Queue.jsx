@@ -987,6 +987,14 @@ export function BackofficeAnalysis() {
         ← Voltar à busca de processos
       </button>
 
+      {/* Análise prioritária pedida pelo cliente (patch_113) */}
+      {(data?.seals || []).filter(x => x.status === 'PENDING' && x.priority_requested_at).map(x => (
+        <div key={`prio-${x.id}`} style={{ background:'#fffbeb',border:'1px solid #fde68a',borderRadius:12,padding:'12px 18px',marginBottom:12,fontFamily:'DM Sans,sans-serif',fontSize:13,color:'#92400e' }}>
+          <strong style={{ fontFamily:'Montserrat,sans-serif' }}>⚡ Análise prioritária</strong> pedida por {x.clients?.razao_social || 'cliente'} em {new Date(x.priority_requested_at).toLocaleString('pt-BR')}
+          {x.priority_note ? <> — “{x.priority_note}”</> : null}
+        </div>
+      ))}
+
       {/* Banner de alerta de sanção no topo */}
       {hasActiveSanctions && (
         <div style={{ background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:12,padding:'12px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:10,fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:'#dc2626' }}>
