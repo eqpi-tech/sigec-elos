@@ -44,7 +44,6 @@ export default function ClientInvitations() {
   const [fNivel,  setFNivel]  = useState([])
   const [fCust,   setFCust]   = useState([])
   const [fDest,   setFDest]   = useState([])
-  const [fPor,    setFPor]    = useState([])
   const [fDe,     setFDe]     = useState('')
   const [fAte,    setFAte]    = useState('')
   const [flowNames, setFlowNames] = useState({})   // inclui fluxos inativos (convites antigos)
@@ -117,7 +116,6 @@ export default function ClientInvitations() {
     if (fCust.length && !fCust.includes(inv.subsidiado ? 'sim' : 'nao')) return false
     if (fDest.includes('parado') && !parado(inv)) return false
     if (fDest.includes('lembrete') && !(inv.reminder_count > 0)) return false
-    if (fPor.length && !fPor.includes(inv.buyer_email || '—')) return false
     const dia = String(inv.created_at || '').slice(0, 10)
     if (fDe && dia < fDe) return false
     if (fAte && dia > fAte) return false
@@ -125,9 +123,8 @@ export default function ClientInvitations() {
   })
   const conta = (fn) => invites.filter(fn).length
   const niveisInv = [...new Set(invites.map(i => i.flow_id || 'sem'))]
-  const remetentes = [...new Set(invites.map(i => i.buyer_email || '—'))].sort()
-  const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length + fPor.length > 0
-  const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFPor([]); setFDe(''); setFAte('') }
+  const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length > 0
+  const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFDe(''); setFAte('') }
 
   const handleResend = async (inviteId) => {
     setError(''); setSuccess('')
@@ -222,10 +219,6 @@ export default function ClientInvitations() {
             { value: 'parado',   label: '⏳ Parados há +7 dias (sem cadastro)', color: '#b45309', count: conta(parado) },
             { value: 'lembrete', label: '🔁 Com lembretes enviados', color: '#2563eb', count: conta(i => i.reminder_count > 0) },
           ].filter(o => o.count > 0)}/>
-        {remetentes.length > 1 && (
-          <MultiChips label="Enviado por" value={fPor} onChange={setFPor}
-            options={remetentes.map(r => ({ value: r, label: r, count: conta(i => (i.buyer_email || '—') === r) }))}/>
-        )}
         <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
           <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', minWidth:74 }}>Enviado</span>
           <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b' }}>de</span>
