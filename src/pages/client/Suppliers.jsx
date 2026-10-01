@@ -310,7 +310,7 @@ export default function ClientSuppliers() {
                           && (seal.released_at || seal.hoc_process_id) && hasAction(user, 'acao:priorizar_analise') && (
                           <Button variant="orange" size="sm"
                             onClick={() => { setPrioModal({ sealId: seal.id, razaoSocial: sup?.razao_social || item.inviteRazaoSocial }); setPrioNote('') }}>
-                            ⚡ Priorizar Análise
+                            ⚡ Priorizar
                           </Button>
                         )}
                         {seal?.status === 'ACTIVE' && !isSusp && (
