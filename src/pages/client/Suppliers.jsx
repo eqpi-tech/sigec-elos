@@ -6,6 +6,24 @@ import { clientApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 import BuyerMarketplace from '../buyer/Marketplace.jsx'
+import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
+
+// situação do processo na visão do cliente (01/10: filtros de múltipla escolha)
+const SITUACAO = [
+  { value: 'ACTIVE',    label: 'Homologado',           color: '#15803d' },
+  { value: 'PENDING',   label: 'Em análise',           color: '#b45309' },
+  { value: 'PAGAMENTO', label: 'Aguardando pagamento', color: '#ea580c' },
+  { value: 'SUSPENDED', label: 'Suspenso / inativado', color: '#dc2626' },
+  { value: 'EXPIRED',   label: 'Vencido',              color: '#64748b' },
+]
+const situacaoDe = (item) => {
+  const s = item.seal
+  if (s?.client_suspended_at || s?.status === 'SUSPENDED') return 'SUSPENDED'
+  if (s?.status === 'PENDING' && s?.id && !s.released_at && !s.hoc_process_id) return 'PAGAMENTO'
+  return s?.status || 'PENDING'
+}
+const venceEm60 = (item) => item.seal?.status === 'ACTIVE' && item.seal?.expires_at
+  && new Date(item.seal.expires_at) - Date.now() < 60 * 86400000
 
 const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
 const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B' }
@@ -46,7 +64,19 @@ export default function ClientSuppliers() {
 
   // Filtros aba "meus"
   const [mySearch,  setMySearch]  = useState('')
-  const [myStatus,  setMyStatus]  = useState('Todos')
+  const [fSit,   setFSit]   = useState([])   // situação (múltipla)
+  const [fNivel, setFNivel] = useState([])   // nível/pacote (múltipla)
+  const [fCust,  setFCust]  = useState([])   // custeio (uma)
+  const [fDest,  setFDest]  = useState([])   // destaques (múltipla)
+  const [fUf,    setFUf]    = useState([])   // UF (múltipla)
+  const [flowNames, setFlowNames] = useState({})
+  useEffect(() => {
+    if (!user?.clientId) return
+    supabase.from('client_flows').select('id, name').eq('client_id', user.clientId)
+      .then(({ data }) => setFlowNames(Object.fromEntries((data || []).map(f => [f.id, f.name]))))
+  }, [user?.clientId])
+  const filtrosAtivos = fSit.length + fNivel.length + fCust.length + fDest.length + fUf.length > 0 || !!mySearch
+  const limparFiltros = () => { setFSit([]); setFNivel([]); setFCust([]); setFDest([]); setFUf([]); setMySearch('') }
 
   // Mini-wizard aba "todos"
   const [vStage,    setVStage]    = useState(1)
@@ -138,11 +168,18 @@ export default function ClientSuppliers() {
     const name = (item.supplier?.razao_social || item.inviteRazaoSocial || '').toLowerCase()
     const cnpj = item.supplier?.cnpj || item.inviteCnpj || ''
     if (q && !name.includes(q) && !cnpj.includes(q.replace(/\D/g,''))) return false
-    const isSusp = !!item.seal?.client_suspended_at
-    const sealSt = isSusp ? 'SUSPENDED' : item.seal?.status
-    if (myStatus !== 'Todos' && sealSt !== myStatus) return false
+    if (fSit.length && !fSit.includes(situacaoDe(item))) return false
+    if (fNivel.length && !fNivel.includes(item.flowId || 'sem')) return false
+    if (fCust.length && !fCust.includes(item.subsidiado ? 'sim' : 'nao')) return false
+    if (fDest.includes('prio') && !(item.seal?.status === 'PENDING' && item.seal?.priority_requested_at)) return false
+    if (fDest.includes('carta') && !item.cartaExcecao) return false
+    if (fDest.includes('vence') && !venceEm60(item)) return false
+    if (fUf.length && !fUf.includes(item.supplier?.state || '—')) return false
     return true
   })
+  const conta = (fn) => mySuppliers.filter(fn).length
+  const ufs = [...new Set(mySuppliers.map(i => i.supplier?.state || '—'))].sort()
+  const niveis = [...new Set(mySuppliers.map(i => i.flowId || 'sem'))]
 
   const myIds = new Set(mySuppliers.map(s => s.supplierId).filter(Boolean))
 
@@ -235,22 +272,33 @@ export default function ClientSuppliers() {
       {/* ── Tab: Meus Fornecedores ── */}
       {activeTab === 'meus' && (
         <>
-          <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap', alignItems:'center' }}>
+          <FilterPanel total={mySuppliers.length} shown={filteredMine.length} active={filtrosAtivos} onClear={limparFiltros}>
             <input value={mySearch} onChange={e => setMySearch(e.target.value)}
               placeholder="Buscar por nome ou CNPJ..."
-              style={{ ...inp, flex:1, minWidth:220 }} />
-            <div style={{ display:'flex', gap:6 }}>
-              {['Todos','ACTIVE','PENDING','SUSPENDED'].map(s => (
-                <button key={s} onClick={() => setMyStatus(s)} style={chip(myStatus === s)}>
-                  {s === 'Todos' ? 'Todos' : SEAL_LABEL[s]}
-                </button>
-              ))}
-            </div>
-          </div>
+              style={{ ...inp, width:'100%', boxSizing:'border-box' }} />
+            <MultiChips label="Situação" value={fSit} onChange={setFSit}
+              options={SITUACAO.map(o => ({ ...o, count: conta(i => situacaoDe(i) === o.value) })).filter(o => o.count > 0)}/>
+            {niveis.length > 1 && (
+              <MultiChips label="Nível" value={fNivel} onChange={setFNivel}
+                options={niveis.map(v => ({ value: v, label: v === 'sem' ? 'Sem nível definido' : (flowNames[v] || 'Nível'), count: conta(i => (i.flowId || 'sem') === v) }))}/>
+            )}
+            <MultiChips label="Custeio" single value={fCust} onChange={setFCust}
+              options={[{ value: 'sim', label: '💰 Subsidiado', count: conta(i => i.subsidiado) }, { value: 'nao', label: 'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }]}/>
+            <MultiChips label="Destaques" value={fDest} onChange={setFDest}
+              options={[
+                { value: 'prio',  label: '⚡ Prioritários', color: '#b45309', count: conta(i => i.seal?.status === 'PENDING' && i.seal?.priority_requested_at) },
+                { value: 'carta', label: '📜 Com carta de exceção', color: '#b45309', count: conta(i => i.cartaExcecao) },
+                { value: 'vence', label: '⏰ Vence em até 60 dias', color: '#dc2626', count: conta(venceEm60) },
+              ].filter(o => o.count > 0)}/>
+            {ufs.length > 1 && (
+              <MultiChips label="UF" value={fUf} onChange={setFUf}
+                options={ufs.map(u => ({ value: u, label: u, count: conta(i => (i.supplier?.state || '—') === u) }))}/>
+            )}
+          </FilterPanel>
 
           {filteredMine.length === 0 ? (
             <EmptyState icon="🏭" title="Nenhum fornecedor encontrado"
-              subtitle={mySearch || myStatus !== 'Todos' ? 'Ajuste os filtros.' : 'Seus fornecedores aparecem aqui após o vínculo de homologação.'} />
+              subtitle={filtrosAtivos ? 'Ajuste os filtros.' : 'Seus fornecedores aparecem aqui após o vínculo de homologação.'} />
           ) : (
             <div style={{ display:'grid', gap:12 }}>
               {filteredMine.map(item => {
@@ -275,8 +323,14 @@ export default function ClientSuppliers() {
                           )}
                           {seal && (
                             <span style={{ fontSize:10, background:`${SEAL_COLOR[sealSt]||'#9B9B9B'}22`, color:SEAL_COLOR[sealSt]||'#9B9B9B', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
-                              {isSusp ? 'Inativado por mim' : SEAL_LABEL[seal.status] || seal.status}
+                              {isSusp ? 'Inativado por mim' : situacaoDe(item) === 'PAGAMENTO' ? '💳 Aguardando pagamento' : SEAL_LABEL[seal.status] || seal.status}
                             </span>
+                          )}
+                          {item.flowId && flowNames[item.flowId] && (
+                            <span style={{ fontSize:10, background:'rgba(46,49,146,.08)', color:'#2E3192', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>{flowNames[item.flowId]}</span>
+                          )}
+                          {item.cartaExcecao && (
+                            <span style={{ fontSize:10, background:'#fff7ed', color:'#c2410c', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>📜 Carta de exceção</span>
                           )}
                           {seal?.status === 'PENDING' && seal?.priority_requested_at && (
                             <span title={`Pedido em ${new Date(seal.priority_requested_at).toLocaleString('pt-BR')}`}

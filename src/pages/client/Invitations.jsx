@@ -6,6 +6,7 @@ import { invitationsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 import { can } from '../../lib/permissions.js'
+import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 
 const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado' }
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B' }
@@ -38,6 +39,15 @@ export default function ClientInvitations() {
   const [error, setError]         = useState('')
   const [success, setSuccess]     = useState('')
   const [search, setSearch]       = useState('')
+  // filtros (01/10): múltipla escolha + período
+  const [fStatus, setFStatus] = useState([])
+  const [fNivel,  setFNivel]  = useState([])
+  const [fCust,   setFCust]   = useState([])
+  const [fDest,   setFDest]   = useState([])
+  const [fPor,    setFPor]    = useState([])
+  const [fDe,     setFDe]     = useState('')
+  const [fAte,    setFAte]    = useState('')
+  const [flowNames, setFlowNames] = useState({})   // inclui fluxos inativos (convites antigos)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm]           = useState(EMPTY_FORM)
   const [clientName, setClientName] = useState('')
@@ -51,6 +61,8 @@ export default function ClientInvitations() {
     if (!user?.clientId) return
     supabase.from('clients').select('razao_social').eq('id', user.clientId).maybeSingle()
       .then(({ data }) => setClientName(data?.razao_social || ''))
+    supabase.from('client_flows').select('id, name').eq('client_id', user.clientId)
+      .then(({ data }) => setFlowNames(Object.fromEntries((data || []).map(f => [f.id, f.name]))))
     supabase.from('client_flows')
       .select('id, name, price, price_subsidized, is_default')
       .eq('client_id', user.clientId).eq('active', true).order('name')
@@ -93,12 +105,29 @@ export default function ClientInvitations() {
 
   useEffect(() => { load() }, [load])
 
+  const SETE_DIAS = 7 * 86400000
+  const parado = (inv) => ['SENT', 'VIEWED'].includes(inv.status) && Date.now() - new Date(inv.created_at) > SETE_DIAS
   const filtered = invites.filter(inv => {
-    const q = search.toLowerCase()
-    return !q
-      || inv.supplier_razao_social?.toLowerCase().includes(q)
-      || inv.supplier_cnpj?.includes(q)
+    const q = search.toLowerCase().trim()
+    if (q && !(inv.supplier_razao_social?.toLowerCase().includes(q)
+      || (q.replace(/\D/g, '') && inv.supplier_cnpj?.includes(q.replace(/\D/g, '')))
+      || inv.supplier_email?.toLowerCase().includes(q))) return false
+    if (fStatus.length && !fStatus.includes(inv.status)) return false
+    if (fNivel.length && !fNivel.includes(inv.flow_id || 'sem')) return false
+    if (fCust.length && !fCust.includes(inv.subsidiado ? 'sim' : 'nao')) return false
+    if (fDest.includes('parado') && !parado(inv)) return false
+    if (fDest.includes('lembrete') && !(inv.reminder_count > 0)) return false
+    if (fPor.length && !fPor.includes(inv.buyer_email || '—')) return false
+    const dia = String(inv.created_at || '').slice(0, 10)
+    if (fDe && dia < fDe) return false
+    if (fAte && dia > fAte) return false
+    return true
   })
+  const conta = (fn) => invites.filter(fn).length
+  const niveisInv = [...new Set(invites.map(i => i.flow_id || 'sem'))]
+  const remetentes = [...new Set(invites.map(i => i.buyer_email || '—'))].sort()
+  const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length + fPor.length > 0
+  const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFPor([]); setFDe(''); setFAte('') }
 
   const handleResend = async (inviteId) => {
     setError(''); setSuccess('')
@@ -175,12 +204,36 @@ export default function ClientInvitations() {
         </div>
       )}
 
-      {/* Busca */}
-      <input
-        value={search} onChange={e => setSearch(e.target.value)}
-        placeholder="Buscar por razão social ou CNPJ..."
-        style={{ ...inp, marginBottom:20 }}
-      />
+      {/* Busca e filtros (01/10) */}
+      <FilterPanel total={invites.length} shown={filtered.length} active={filtrosAtivos} onClear={limparFiltros}>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por razão social, CNPJ ou e-mail..."
+          style={{ ...inp, width:'100%', boxSizing:'border-box' }}/>
+        <MultiChips label="Status" value={fStatus} onChange={setFStatus}
+          options={['SENT', 'VIEWED', 'REGISTERED', 'CANCELLED'].map(st => ({ value: st, label: STATUS_LABEL[st], color: STATUS_COLOR[st], count: conta(i => i.status === st) })).filter(o => o.count > 0)}/>
+        {niveisInv.length > 1 && (
+          <MultiChips label="Nível" value={fNivel} onChange={setFNivel}
+            options={niveisInv.map(v => ({ value: v, label: v === 'sem' ? 'Sem nível definido' : (flowNames[v] || 'Nível'), count: conta(i => (i.flow_id || 'sem') === v) }))}/>
+        )}
+        <MultiChips label="Custeio" single value={fCust} onChange={setFCust}
+          options={[{ value: 'sim', label: '💰 Subsidiado', count: conta(i => i.subsidiado) }, { value: 'nao', label: 'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }]}/>
+        <MultiChips label="Destaques" value={fDest} onChange={setFDest}
+          options={[
+            { value: 'parado',   label: '⏳ Parados há +7 dias (sem cadastro)', color: '#b45309', count: conta(parado) },
+            { value: 'lembrete', label: '🔁 Com lembretes enviados', color: '#2563eb', count: conta(i => i.reminder_count > 0) },
+          ].filter(o => o.count > 0)}/>
+        {remetentes.length > 1 && (
+          <MultiChips label="Enviado por" value={fPor} onChange={setFPor}
+            options={remetentes.map(r => ({ value: r, label: r, count: conta(i => (i.buyer_email || '—') === r) }))}/>
+        )}
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', minWidth:74 }}>Enviado</span>
+          <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b' }}>de</span>
+          <input type="date" value={fDe} onChange={e => setFDe(e.target.value)} style={{ ...inp, width:160, padding:'6px 10px' }}/>
+          <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b' }}>até</span>
+          <input type="date" value={fAte} onChange={e => setFAte(e.target.value)} style={{ ...inp, width:160, padding:'6px 10px' }}/>
+        </div>
+      </FilterPanel>
 
       {loading ? (
         <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={36}/></div>
@@ -188,8 +241,8 @@ export default function ClientInvitations() {
         <EmptyState
           icon="📨"
           title="Nenhum convite encontrado"
-          subtitle={search ? 'Tente outros termos.' : 'Clique em "+ Novo Convite" para começar.'}
-          action={!search ? { label:'Enviar primeiro convite', onClick: () => setShowModal(true) } : undefined}
+          subtitle={filtrosAtivos ? 'Ajuste os filtros.' : 'Clique em "+ Novo Convite" para começar.'}
+          action={!filtrosAtivos ? { label:'Enviar primeiro convite', onClick: () => setShowModal(true) } : undefined}
         />
       ) : (
         <div style={{ display:'grid', gap:10 }}>
@@ -200,8 +253,11 @@ export default function ClientInvitations() {
                   {inv.supplier_razao_social?.slice(0,2).toUpperCase() || '??'}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                     {inv.supplier_razao_social}
+                    {inv.flow_id && flowNames[inv.flow_id] && (
+                      <span style={{ fontSize:10, background:'rgba(46,49,146,.08)', color:'#2E3192', borderRadius:20, padding:'2px 8px', fontWeight:700 }}>{flowNames[inv.flow_id]}</span>
+                    )}
                   </div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B', marginTop:2 }}>
                     {inv.supplier_cnpj && `CNPJ ${inv.supplier_cnpj} · `}{inv.supplier_email}

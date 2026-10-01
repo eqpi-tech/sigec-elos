@@ -1543,11 +1543,21 @@ export const clientApi = {
   getSuppliers: async (clientId) => {
     // Passo 1: busca via seals — inclui fornecedores migrados do HOC (seals.client_id)
     // e fornecedores do fluxo novo (também têm seal.client_id após aceite do convite)
-    const { data: sealsData, error: sealsErr } = await supabase
+    // paginado (01/10): o banco devolve no máx. 1000 linhas por consulta —
+    // cliente grande (migrado do HOC) via a lista cortada
+    const todas = async (build) => {
+      const out = []
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await build().range(from, from + 999)
+        if (error) throw new Error(error.message)
+        out.push(...(data || []))
+        if (!data || data.length < 1000) return out
+      }
+    }
+    const sealsData = await todas(() => supabase
       .from('seals')
-      .select('id, supplier_id, level, status, score, seal_name, client_suspended_at, released_at, hoc_process_id, priority_requested_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
-      .eq('client_id', clientId)
-    if (sealsErr) throw new Error(sealsErr.message)
+      .select('id, supplier_id, level, status, score, seal_name, flow_id, issued_at, expires_at, client_suspended_at, released_at, hoc_process_id, priority_requested_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
+      .eq('client_id', clientId).order('id'))
 
     const sealMap = {}
     const supplierFromSeal = {}
@@ -1556,15 +1566,21 @@ export const clientApi = {
         id: seal.id, supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
         score: seal.score, seal_name: seal.seal_name, client_suspended_at: seal.client_suspended_at,
         released_at: seal.released_at, hoc_process_id: seal.hoc_process_id, priority_requested_at: seal.priority_requested_at,
+        flow_id: seal.flow_id, issued_at: seal.issued_at, expires_at: seal.expires_at,
       }
       if (seal.suppliers) supplierFromSeal[seal.supplier_id] = seal.suppliers
     }
 
     // Passo 2: convites para dados extras (subsidiado, tipo, escopo, data)
-    const { data: invites } = await supabase
+    const invites = await todas(() => supabase
       .from('invitations')
-      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj')
-      .eq('client_id', clientId)
+      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, flow_id')
+      .eq('client_id', clientId).order('id'))
+    // carta de exceção VIGENTE por fornecedor (filtro e selo na lista)
+    const hoje = new Date().toISOString().slice(0, 10)
+    const { data: cartas } = await supabase.from('supplier_category_approvals')
+      .select('supplier_id').eq('client_id', clientId).eq('status', 'EXCEPTION_APPROVED').gte('letter_valid_until', hoje)
+    const comCarta = new Set((cartas || []).map(c => c.supplier_id))
     const inviteMap = {}
     for (const inv of (invites || [])) {
       // Mantém o convite REGISTERED quando há múltiplos
@@ -1594,6 +1610,8 @@ export const clientApi = {
         inviteCnpj:        invite?.supplier_cnpj || null,
         supplier:          sup,
         seal:              seal || { status: 'PENDING', score: 0 },
+        flowId:            seal?.flow_id || invite?.flow_id || null,   // nível/pacote do cliente
+        cartaExcecao:      comCarta.has(sid),
       }
     })
   },
@@ -1858,14 +1876,20 @@ export const invitationsApi = {
 
   // Lista convites de um cliente
   listByClient: async (clientId) => {
-    const { data, error } = await supabase
-      .from('invitations')
-      .select('*')
-      .eq('client_id', clientId)
-      .neq('status', 'SUPERSEDED')   // reconvite substitui o anterior (21/09)
-      .order('created_at', { ascending: false })
-    if (error) throw new Error(error.message)
-    return data || []
+    // paginado (01/10): sem isso a lista parava em 1000 convites
+    const out = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('client_id', clientId)
+        .neq('status', 'SUPERSEDED')   // reconvite substitui o anterior (21/09)
+        .order('created_at', { ascending: false })
+        .range(from, from + 999)
+      if (error) throw new Error(error.message)
+      out.push(...(data || []))
+      if (!data || data.length < 1000) return out
+    }
   },
 
   // Envia convite (BUYER: simples | CLIENT/ADMIN: enriquecido)
