@@ -24,23 +24,39 @@ Reconciliação: postos já importados que não estão mais na planilha são
 INATIVADOS (nunca apagados); os que têm pessoas/documentos anexados são
 preservados e listados para conferência manual.
 
-Uso: PYTHONPATH=<pylibs> arch -x86_64 python3 scripts/import_mobility_posts.py [--apply]
+v3 (02/10): Souza Lima — portaria/controlador passam da Segurança Patrimonial
+(64.911.290) p/ a Terceirizações (07.210.221); a Localidade passou a trazer o
+nome do local junto da cidade — padronizado como "Cidade (Local)" em
+LOCALIDADE_PADRONIZADA (mesmo padrão de "Araraquara (Lets)"), confirmado pelo
+cliente.
+
+Uso: PYTHONPATH=<pylibs> arch -x86_64 python3 scripts/import_mobility_posts.py [--apply] [--env SUPABASE_DB_URL_PREVIEW]
 """
 import os, re, sys, unicodedata
+from urllib.parse import unquote
 import pg8000.native
 import openpyxl
 
 APPLY = '--apply' in sys.argv
+DB_ENV = sys.argv[sys.argv.index('--env') + 1] if '--env' in sys.argv else 'SUPABASE_DB_URL'
 
 CLIENT_CNPJ = '32681371000172'   # cliente dono dos postos na plataforma
 
-VIGILANCIA = os.path.expanduser('~/Downloads/Relatório Vigilância Patrimonial_v2.xlsx')
-LIMPEZA    = os.path.expanduser('~/Downloads/Relatório Limpeza Predial e Veicular_v2.xlsx')
+VIGILANCIA = os.path.expanduser('~/Downloads/Relatório Vigilância Patrimonial_V3.xlsx')
+LIMPEZA    = os.path.expanduser('~/Downloads/Relatório Limpeza Predial e Veicular_V3.xlsx')
 
 # Linhas que vieram com CNPJ zerado na planilha e tiveram o CNPJ informado pelo
 # cliente depois: (fornecedor normalizado, cidade normalizada) → CNPJ
 CNPJ_CORRIGIDO = {
     ('INOVA', 'IGARAPE'): '04079177000186',   # cliente, 28/09
+}
+
+# Localidade com nome do local (planilhas v3) → "Cidade (Local)"; chave = cidade normalizada
+LOCALIDADE_PADRONIZADA = {
+    'AUTOPORT-CARIACICA':          'Cariacica (Autoport)',
+    'VIANA (CONTORNO_R. GALDINO)': 'Viana (Contorno R. Galdino)',
+    'POLI MACAE':                  'Macaé (POLI)',
+    'BUTANTA (LETS)':              'São Paulo (Butantã – LETS)',
 }
 
 CAT_VIG_ARMADA        = 500027
@@ -111,6 +127,7 @@ for path, kind in [(VIGILANCIA, 'vigilancia'), (LIMPEZA, 'limpeza')]:
         funcao = str(row.get('FUNCAO') or '').strip()
         uf = norm(row.get('ESTADO') or row.get('ESTADO '))[:2]
         cidade = clean_city(row.get('LOCALIDADE'), uf)
+        cidade = LOCALIDADE_PADRONIZADA.get(norm(cidade), cidade)
         if cnpj == '0' * 14:
             cnpj = CNPJ_CORRIGIDO.get((norm(forn), norm(cidade)), cnpj)
         if not valid_cnpj(cnpj):
@@ -151,7 +168,7 @@ CAT_NOME = {CAT_VIG_ARMADA:'VIG.ARMADA', CAT_VIG_QUARTEIRIZADA:'VIG.QUARTEIRIZAD
             CAT_PORTARIA:'PORTARIA', CAT_LIMPEZA:'LIMPEZA', CAT_LAVAGEM:'LAVAGEM'}
 print(f"{len(posts)} postos · {sum(p['qp'] for p in posts)} vagas de posto · "
       f"{sum(p['qpe'] for p in posts)} pessoas · {len(rejects)} rejeitados · "
-      f"modo {'APPLY' if APPLY else 'DRY-RUN'}\n")
+      f"modo {'APPLY' if APPLY else 'DRY-RUN'} · banco {DB_ENV}\n")
 for p in sorted(posts, key=lambda x: (x['cnpj'], x['cidade'], x['label'])):
     print(f"  {p['cnpj']} · {CAT_NOME[p['cat']]:18s} · {p['cidade']}/{p['uf']:2s} · "
           f"{'ARMADO' if p['armado'] else '  --  '} · {p['qp']}p/{p['qpe']}pe · {p['label']}")
@@ -164,10 +181,10 @@ if not APPLY:
     print('\nDry-run — rode com --apply para gravar.')
     sys.exit(0)
 
-url = [l.split('=', 1)[1].strip().strip('"') for l in open('.env') if l.startswith('SUPABASE_DB_URL=')][0]
+url = [l.split('=', 1)[1].strip().strip('"') for l in open('.env') if l.startswith(DB_ENV + '=')][0]
 m = re.match(r'postgres(?:ql)?://([^:]+):([^@]+)@([^:/]+):?(\d+)?/(.+)', url)
 pg = pg8000.native.Connection(m.group(1), host=m.group(3), port=int(m.group(4) or 5432),
-                              database=m.group(5), password=m.group(2), ssl_context=True)
+                              database=m.group(5), password=unquote(m.group(2)), ssl_context=True)
 client_id = pg.run('select id from clients where cnpj=:c', c=CLIENT_CNPJ)[0][0]
 
 ins = upd = 0
