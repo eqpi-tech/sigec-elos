@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js'
 import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 import { planLabel } from '../lib/planLabels.js'
 import { authFetch } from '../lib/authFetch.js'
+import { clientSealStatus } from '../lib/clientSituacao.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const DOC_LABELS = {
@@ -1424,57 +1425,49 @@ export const mobilityApi = {
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
 export const clientApi = {
-  // Dashboard KPIs: fornecedores convidados por este cliente
+  // Dashboard KPIs (05/10): mesma base de "Meus Fornecedores" — processos
+  // (selos do cliente, inclusive os migrados do HOC, que não têm convite) +
+  // convites. Antes contava só convites: MVV/Appian, com 500+ homologados
+  // vindos do HOC, viam tudo zerado.
   getDashboard: async (clientId) => {
-    const { data: invites, error } = await supabase
+    const items = await clientApi.getSuppliers(clientId)
+
+    // convites ainda sem cadastro (não viram item em getSuppliers)
+    const { data: abertos, error } = await supabase
       .from('invitations')
-      .select('id, supplier_id, status, subsidiado, supplier_razao_social, supplier_cnpj, suppliers(id, razao_social, cnpj, city, state, status)')
+      .select('id, status, subsidiado, supplier_razao_social, supplier_cnpj, created_at')
       .eq('client_id', clientId)
+      .in('status', ['SENT', 'VIEWED'])
       .order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
 
-    const all = invites || []
-    const supplierIds = all.map(i => i.supplier_id).filter(Boolean)
+    const situacao = clientSealStatus
+    const conta = st => items.filter(i => situacao(i.seal) === st).length
 
-    let seals = []
-    if (supplierIds.length) {
-      // SÓ selos do processo com ESTE cliente — sem o filtro, o selo do
-      // fornecedor com QUALQUER cliente contava como homologação nossa
-      // (26 convites novos apareciam como 22 homologados + 4 em análise)
-      const { data: sealsData } = await supabase
-        .from('seals')
-        .select('supplier_id, level, status, score')
-        .in('supplier_id', supplierIds)
-        .eq('client_id', clientId)
-      seals = sealsData || []
-    }
-    const sealMap = seals.reduce((acc, s) => { acc[s.supplier_id] = s; return acc }, {})
-
-    const enriched = all.map(i => ({
-      ...i,
-      seal: sealMap[i.supplier_id] || null,
-    }))
-
-    const homologados = enriched.filter(i => i.seal?.status === 'ACTIVE').length
-    // emAnalise: REGISTERED sem seal ACTIVE (fallback seguro se RLS bloquear seals)
-    const emAnalise = enriched.filter(i =>
-      i.status === 'REGISTERED' && i.seal?.status !== 'ACTIVE'
-    ).length
-
-    // carta de exceção VIGENTE (patch_101): fornecedores homologados sob regime de exceção
-    const hoje = new Date().toISOString().slice(0, 10)
-    const { data: cartas } = await supabase.from('supplier_category_approvals')
-      .select('supplier_id').eq('client_id', clientId).eq('status', 'EXCEPTION_APPROVED').gte('letter_valid_until', hoje)
-    const cartasExcecao = new Set((cartas || []).map(c => c.supplier_id)).size
+    // recentes: convites abertos e processos, do mais novo para o mais antigo
+    const recentes = [
+      ...(abertos || []).map(inv => ({
+        key: `inv-${inv.id}`, name: inv.supplier_razao_social, cnpj: inv.supplier_cnpj,
+        subsidiado: !!inv.subsidiado, quando: inv.created_at,
+        status: inv.status === 'VIEWED' ? 'VIEWED' : 'SENT',
+      })),
+      ...items.map(i => ({
+        key: `sup-${i.supplierId}`, name: i.supplier?.razao_social || i.inviteRazaoSocial,
+        cnpj: i.supplier?.cnpj || i.inviteCnpj, city: i.supplier?.city, state: i.supplier?.state,
+        subsidiado: i.subsidiado, quando: i.invitedAt || i.seal?.issued_at || null,
+        status: situacao(i.seal), score: i.seal?.score,
+      })),
+    ].sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || ''))).slice(0, 5)
 
     return {
-      invites: enriched,
-      cartasExcecao,
-      total:       all.length,
-      registered:  all.filter(i => i.status === 'REGISTERED').length,
-      emAnalise,
-      homologados,
-      subsidiados: all.filter(i => i.subsidiado).length,
+      recentes,
+      total:          items.length,
+      convitesAbertos: (abertos || []).length,
+      homologados:    conta('ACTIVE'),
+      emAnalise:      conta('PENDING'),
+      aguardandoPagamento: conta('PAGAMENTO'),
+      subsidiados:    items.filter(i => i.subsidiado).length + (abertos || []).filter(i => i.subsidiado).length,
+      cartasExcecao:  items.filter(i => i.cartaExcecao).length,
     }
   },
 
