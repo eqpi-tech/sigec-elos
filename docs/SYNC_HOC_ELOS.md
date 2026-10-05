@@ -43,7 +43,8 @@
 ## O que o sync NÃO faz
 
 - Não replica `historico_status_homologacao` (12,8M — decisão adiada).
-- Não mexe em selos ELOS (client_id NULL), planos Stripe, convites, interesses, perfis de usuário, LPs.
+- Não mexe em selos ELOS (client_id NULL), planos Stripe, convites do ELOS (hoc_id NULL), interesses, perfis de usuário, LPs.
+- **Convites do HOC** (entidade `invitations`, desde 05/10/2026): espelha a tabela `convite` em `invitations` com `hoc_id`, **só como histórico** — F→REGISTERED (com `supplier_id` pelo CNPJ), C→CANCELLED, P→SENT (últimos 12 meses) ou EXPIRED. Diff completo a cada noite, sem DELETE. Convite com `hoc_id` nunca dispara lembrete/reenvio/cancelamento/vínculo pelo ELOS: o HOC tem processo próprio (patch_116/117).
 - Não deleta nada, nunca.
 
 ## Passos de implementação (após aprovação)
