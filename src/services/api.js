@@ -1850,9 +1850,14 @@ export const invitationsApi = {
 
   // Envia convite (BUYER: simples | CLIENT/ADMIN: enriquecido)
   send: async (payload, token) => {
-    const res = await fetch('/.netlify/functions/send-invitation', {
+    // authFetch (05/10): renova a sessão antes e repete 1x se o servidor recusar
+    // (401, nada foi gravado) — tela aberta há mais de 1 h mandava token vencido
+    // e o convite falhava com "Token inválido" sem deixar rastro. `token` fica
+    // na assinatura só por compatibilidade com quem chama.
+    void token
+    const res = await authFetch('/.netlify/functions/send-invitation', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
     const data = await res.json()
@@ -1862,9 +1867,14 @@ export const invitationsApi = {
 
   // Reenvia e-mail de convite existente
   resend: async (inviteId, token) => {
-    const res = await fetch('/.netlify/functions/send-invitation', {
+    // authFetch (05/10): renova a sessão antes e repete 1x se o servidor recusar
+    // (401, nada foi gravado) — tela aberta há mais de 1 h mandava token vencido
+    // e o convite falhava com "Token inválido" sem deixar rastro. `token` fica
+    // na assinatura só por compatibilidade com quem chama.
+    void token
+    const res = await authFetch('/.netlify/functions/send-invitation', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resendId: inviteId }),
     })
     const data = await res.json()
