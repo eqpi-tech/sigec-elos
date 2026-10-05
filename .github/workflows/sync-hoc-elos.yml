@@ -12,11 +12,15 @@ on:
         description: 'Dry-run (não escreve no ELOS)'
         type: boolean
         default: true
+      fase_details:
+        description: 'Rodar a fase details (semanal) em vez do sync diário'
+        type: boolean
+        default: false
 
 jobs:
   sync-daily:
     name: Sync incremental diário
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 * * *'
+    if: (github.event_name == 'workflow_dispatch' && !inputs.fase_details) || github.event.schedule == '0 6 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -43,7 +47,7 @@ jobs:
 
   sync-details-semanal:
     name: Fase details (semanal)
-    if: github.event.schedule == '0 7 * * 0'
+    if: github.event.schedule == '0 7 * * 0' || (github.event_name == 'workflow_dispatch' && inputs.fase_details)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -60,4 +64,7 @@ jobs:
         working-directory: scripts
         # Fase longa (~6min): 1 retry cobre queda transitória de conexão
         # com o RDS do HOC (caso de 06/09 — 'Lost connection to MySQL server')
-        run: python migrate_hoc_v2.py --phase details || (echo '⚠️ retry em 60s...' && sleep 60 && python migrate_hoc_v2.py --phase details)
+        # 05/10: reconexão (somente leitura) dentro do script; disparo manual aceita dry-run
+        run: |
+          DRY="${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}"
+          python migrate_hoc_v2.py --phase details $DRY || (echo '⚠️ retry em 60s...' && sleep 60 && python migrate_hoc_v2.py --phase details $DRY)
