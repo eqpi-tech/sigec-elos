@@ -1544,15 +1544,15 @@ export const clientApi = {
   // convites. Antes contava só convites: MVV/Appian, com 500+ homologados
   // vindos do HOC, viam tudo zerado.
   getDashboard: async (clientId) => {
-    const items = await clientApi.getSuppliers(clientId)
-
-    // convites ainda sem cadastro (não viram item em getSuppliers)
-    const { data: abertos, error } = await supabase
-      .from('invitations')
-      .select('id, status, subsidiado, supplier_razao_social, supplier_cnpj, created_at')
-      .eq('client_id', clientId)
-      .in('status', ['SENT', 'VIEWED'])
-      .order('created_at', { ascending: false })
+    // em paralelo: lista (RPC, patch_118) e convites ainda sem cadastro
+    const [items, { data: abertos, error }] = await Promise.all([
+      clientApi.getSuppliers(clientId),
+      supabase.from('invitations')
+        .select('id, status, subsidiado, supplier_razao_social, supplier_cnpj, created_at')
+        .eq('client_id', clientId)
+        .in('status', ['SENT', 'VIEWED'])
+        .order('created_at', { ascending: false }),
+    ])
     if (error) throw new Error(error.message)
 
     const situacao = clientSealStatus
@@ -1649,82 +1649,30 @@ export const clientApi = {
   },
 
   getSuppliers: async (clientId) => {
-    // Passo 1: busca via seals — inclui fornecedores migrados do HOC (seals.client_id)
-    // e fornecedores do fluxo novo (também têm seal.client_id após aceite do convite)
-    // paginado (01/10): o banco devolve no máx. 1000 linhas por consulta —
-    // cliente grande (migrado do HOC) via a lista cortada
-    const todas = async (build) => {
-      const out = []
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await build().range(from, from + 999)
-        if (error) throw new Error(error.message)
-        out.push(...(data || []))
-        if (!data || data.length < 1000) return out
-      }
-    }
-    const sealsData = await todas(() => supabase
-      .from('seals')
-      .select('id, supplier_id, level, status, score, seal_name, flow_id, issued_at, expires_at, client_suspended_at, released_at, hoc_process_id, priority_requested_at, suppliers(id, razao_social, cnpj, city, state, status, employee_range)')
-      .eq('client_id', clientId).order('id'))
-
-    const sealMap = {}
-    const supplierFromSeal = {}
-    for (const seal of (sealsData || [])) {
-      sealMap[seal.supplier_id] = {
-        id: seal.id, supplier_id: seal.supplier_id, level: seal.level, status: seal.status,
-        score: seal.score, seal_name: seal.seal_name, client_suspended_at: seal.client_suspended_at,
-        released_at: seal.released_at, hoc_process_id: seal.hoc_process_id, priority_requested_at: seal.priority_requested_at,
-        flow_id: seal.flow_id, issued_at: seal.issued_at, expires_at: seal.expires_at,
-      }
-      if (seal.suppliers) supplierFromSeal[seal.supplier_id] = seal.suppliers
-    }
-
-    // Passo 2: convites para dados extras (subsidiado, tipo, escopo, data)
-    const invites = await todas(() => supabase
-      .from('invitations')
-      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, flow_id, hoc_id')
-      .eq('client_id', clientId).order('id'))
-    // carta de exceção VIGENTE por fornecedor (filtro e selo na lista)
-    const hoje = new Date().toISOString().slice(0, 10)
-    const { data: cartas } = await supabase.from('supplier_category_approvals')
-      .select('supplier_id').eq('client_id', clientId).eq('status', 'EXCEPTION_APPROVED').gte('letter_valid_until', hoje)
-    const comCarta = new Set((cartas || []).map(c => c.supplier_id))
-    const inviteMap = {}
-    for (const inv of (invites || [])) {
-      // Mantém o convite REGISTERED quando há múltiplos — e, entre eles, o mais
-      // recente (o histórico do HOC traz vários por fornecedor, patch_116)
-      const atual = inviteMap[inv.supplier_id]
-      if (!atual || (inv.status === 'REGISTERED' && (atual.status !== 'REGISTERED'
-          || String(inv.created_at) > String(atual.created_at)))) {
-        inviteMap[inv.supplier_id] = inv
-      }
-    }
-
-    // Passo 3: todos os supplier_ids únicos (via seal ou convite REGISTERED)
-    // só convite do ELOS cria item sem processo: o do HOC finalizado há anos sem
-    // processo vigente não é "em análise" (os processos do HOC vêm pelos selos)
-    const registeredViaInvite = new Set(
-      (invites || []).filter(i => i.status === 'REGISTERED' && i.supplier_id && !i.hoc_id).map(i => i.supplier_id)
-    )
-    const allIds = new Set([...Object.keys(sealMap), ...registeredViaInvite])
-
-    return [...allIds].map(sid => {
-      const seal   = sealMap[sid]
-      const invite = inviteMap[sid]
-      const sup    = supplierFromSeal[sid] || null
+    // Uma chamada (patch_118, 05/10): a RPC client_suppliers_overview cruza no
+    // banco selos do cliente (inclui os migrados do HOC) + convite de referência
+    // + carta de exceção. Antes a lista era montada aqui baixando TODOS os
+    // convites em páginas de 1.000 em série — com o histórico do HOC a Appian
+    // tem 10,8 mil convites e a tela levava segundos. O cliente vem da sessão
+    // (auth.uid()); clientId fica na assinatura por compatibilidade.
+    void clientId
+    const { data, error } = await supabase.rpc('client_suppliers_overview')
+    if (error) throw new Error(error.message)
+    return (data || []).map(r => {
+      const seal = r.seal, invite = r.invite
       return {
         inviteId:          invite?.id || null,
-        supplierId:        sid,
+        supplierId:        r.supplier_id,
         subsidiado:        invite?.subsidiado || false,
         tipo:              invite?.tipo_fornecedor || null,
         escopo:            invite?.escopo || null,
         invitedAt:         invite?.created_at || null,
         inviteRazaoSocial: invite?.supplier_razao_social || null,
         inviteCnpj:        invite?.supplier_cnpj || null,
-        supplier:          sup,
+        supplier:          r.supplier || null,
         seal:              seal || { status: 'PENDING', score: 0 },
         flowId:            seal?.flow_id || invite?.flow_id || null,   // nível/pacote do cliente
-        cartaExcecao:      comCarta.has(sid),
+        cartaExcecao:      !!r.carta,
       }
     })
   },
@@ -1990,20 +1938,26 @@ export const invitationsApi = {
 
   // Lista convites de um cliente
   listByClient: async (clientId) => {
-    // paginado (01/10): sem isso a lista parava em 1000 convites
-    const out = []
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase
-        .from('invitations')
-        .select('*')
-        .eq('client_id', clientId)
-        .neq('status', 'SUPERSEDED')   // reconvite substitui o anterior (21/09)
-        .order('created_at', { ascending: false })
-        .range(from, from + 999)
-      if (error) throw new Error(error.message)
+    // paginado (01/10): sem isso a lista parava em 1000 convites. 05/10: com o
+    // histórico do HOC (Appian 10,8 mil) as páginas vêm EM PARALELO — a 1ª traz
+    // o total; desempate por id deixa a paginação estável (sem repetir/omitir)
+    const pagina = (from, count) => supabase
+      .from('invitations')
+      .select('*', count ? { count: 'exact' } : undefined)
+      .eq('client_id', clientId)
+      .neq('status', 'SUPERSEDED')   // reconvite substitui o anterior (21/09)
+      .order('created_at', { ascending: false }).order('id')
+      .range(from, from + 999)
+    const { data: primeira, count, error } = await pagina(0, true)
+    if (error) throw new Error(error.message)
+    const resto = []
+    for (let from = 1000; from < (count || 0); from += 1000) resto.push(pagina(from))
+    const out = [...(primeira || [])]
+    for (const { data, error: e } of await Promise.all(resto)) {
+      if (e) throw new Error(e.message)
       out.push(...(data || []))
-      if (!data || data.length < 1000) return out
     }
+    return out
   },
 
   // Envia convite (BUYER: simples | CLIENT/ADMIN: enriquecido)
