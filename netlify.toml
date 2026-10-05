@@ -46,6 +46,17 @@
   from = "/redefinir-senha"
   to   = "/index.html"
   status = 200
+# Portal da Appian Capital mudou de endereço (05/10/2026): link antigo continua funcionando
+[[redirects]]
+  from = "/portal/atlantic-nickel"
+  to   = "/portal/appian"
+  status = 301
+  force  = true
+[[redirects]]
+  from = "/portal/atlantic-nickel/*"
+  to   = "/portal/appian/:splat"
+  status = 301
+  force  = true
 [[redirects]]
   from = "/*"
   to   = "/index.html"
