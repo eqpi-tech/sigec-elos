@@ -8,8 +8,10 @@ import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/
 import { can } from '../../lib/permissions.js'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 
-const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado' }
-const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B' }
+const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado', EXPIRED:'Expirado' }
+const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B', EXPIRED:'#64748b' }
+// convite com hoc_id = histórico espelhado do HOC (patch_116): o ELOS não
+// reenvia nem cancela — os lembretes dele são do HOC
 
 function formatCnpj(v) {
   const n = v.replace(/\D/g,'').slice(0,14)
@@ -44,6 +46,7 @@ export default function ClientInvitations() {
   const [fNivel,  setFNivel]  = useState([])
   const [fCust,   setFCust]   = useState([])
   const [fDest,   setFDest]   = useState([])
+  const [fOrig,   setFOrig]   = useState([])
   const [fDe,     setFDe]     = useState('')
   const [fAte,    setFAte]    = useState('')
   const [flowNames, setFlowNames] = useState({})   // inclui fluxos inativos (convites antigos)
@@ -105,7 +108,7 @@ export default function ClientInvitations() {
   useEffect(() => { load() }, [load])
 
   const SETE_DIAS = 7 * 86400000
-  const parado = (inv) => ['SENT', 'VIEWED'].includes(inv.status) && Date.now() - new Date(inv.created_at) > SETE_DIAS
+  const parado = (inv) => !inv.hoc_id && ['SENT', 'VIEWED'].includes(inv.status) && Date.now() - new Date(inv.created_at) > SETE_DIAS
   const filtered = invites.filter(inv => {
     const q = search.toLowerCase().trim()
     if (q && !(inv.supplier_razao_social?.toLowerCase().includes(q)
@@ -114,6 +117,7 @@ export default function ClientInvitations() {
     if (fStatus.length && !fStatus.includes(inv.status)) return false
     if (fNivel.length && !fNivel.includes(inv.flow_id || 'sem')) return false
     if (fCust.length && !fCust.includes(inv.subsidiado ? 'sim' : 'nao')) return false
+    if (fOrig.length && !fOrig.includes(inv.hoc_id ? 'hoc' : 'elos')) return false
     if (fDest.includes('parado') && !parado(inv)) return false
     if (fDest.includes('lembrete') && !(inv.reminder_count > 0)) return false
     const dia = String(inv.created_at || '').slice(0, 10)
@@ -123,8 +127,8 @@ export default function ClientInvitations() {
   })
   const conta = (fn) => invites.filter(fn).length
   const niveisInv = [...new Set(invites.map(i => i.flow_id || 'sem'))]
-  const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length > 0
-  const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFDe(''); setFAte('') }
+  const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length + fOrig.length > 0
+  const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFOrig([]); setFDe(''); setFAte('') }
 
   const handleResend = async (inviteId) => {
     setError(''); setSuccess('')
@@ -207,13 +211,15 @@ export default function ClientInvitations() {
           placeholder="Buscar por razão social, CNPJ ou e-mail..."
           style={{ ...inp, width:'100%', boxSizing:'border-box' }}/>
         <MultiChips label="Status" value={fStatus} onChange={setFStatus}
-          options={['SENT', 'VIEWED', 'REGISTERED', 'CANCELLED'].map(st => ({ value: st, label: STATUS_LABEL[st], color: STATUS_COLOR[st], count: conta(i => i.status === st) })).filter(o => o.count > 0)}/>
+          options={['SENT', 'VIEWED', 'REGISTERED', 'CANCELLED', 'EXPIRED'].map(st => ({ value: st, label: STATUS_LABEL[st], color: STATUS_COLOR[st], count: conta(i => i.status === st) })).filter(o => o.count > 0)}/>
         {niveisInv.length > 1 && (
           <MultiChips label="Nível" value={fNivel} onChange={setFNivel}
             options={niveisInv.map(v => ({ value: v, label: v === 'sem' ? 'Sem nível definido' : (flowNames[v] || 'Nível'), count: conta(i => (i.flow_id || 'sem') === v) }))}/>
         )}
         <MultiChips label="Custeio" single value={fCust} onChange={setFCust}
           options={[{ value: 'sim', label: '💰 Subsidiado', count: conta(i => i.subsidiado) }, { value: 'nao', label: 'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }].filter(o => o.count > 0)}/>
+        <MultiChips label="Origem" value={fOrig} onChange={setFOrig}
+          options={[{ value: 'elos', label: 'Enviado pelo ELOS', count: conta(i => !i.hoc_id) }, { value: 'hoc', label: 'Histórico do HOC', color: '#64748b', count: conta(i => !!i.hoc_id) }].filter(o => o.count > 0)}/>
         <MultiChips label="Destaques" value={fDest} onChange={setFDest}
           options={[
             { value: 'parado',   label: '⏳ Parados há +7 dias (sem cadastro)', color: '#b45309', count: conta(parado) },
@@ -248,6 +254,10 @@ export default function ClientInvitations() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                     {inv.supplier_razao_social}
+                    {inv.hoc_id && (
+                      <span title="Convite feito no HOC — histórico; os lembretes são enviados pelo HOC"
+                        style={{ fontSize:10, background:'#f1f5f9', color:'#475569', borderRadius:20, padding:'2px 8px', fontWeight:700 }}>HOC</span>
+                    )}
                     {inv.flow_id && flowNames[inv.flow_id] && (
                       <span style={{ fontSize:10, background:'rgba(46,49,146,.08)', color:'#2E3192', borderRadius:20, padding:'2px 8px', fontWeight:700 }}>{flowNames[inv.flow_id]}</span>
                     )}
@@ -279,7 +289,7 @@ export default function ClientInvitations() {
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(inv.created_at).toLocaleDateString('pt-BR')}
                   </div>
-                  {!['REGISTERED', 'CANCELLED'].includes(inv.status) && (
+                  {!inv.hoc_id && !['REGISTERED', 'CANCELLED', 'EXPIRED'].includes(inv.status) && (
                     <div style={{ display:'flex', gap:6 }}>
                       <button
                         onClick={() => handleResend(inv.id)}

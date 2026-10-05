@@ -45,14 +45,15 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Motivo obrigatório para suspensão' }) }
   }
 
-  // Verifica se o fornecedor foi convidado por este cliente
-  const { data: invite } = await supabase
-    .from('invitations')
-    .select('id')
-    .eq('supplier_id', supplierId)
-    .eq('client_id', roleRow.client_id)
-    .maybeSingle()
-  if (!invite) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Fornecedor não vinculado a este cliente' }) }
+  // Vínculo com este cliente: convite OU processo (selo) — os migrados do HOC
+  // não têm convite do ELOS, e vários convites quebravam o maybeSingle (05/10)
+  const [{ data: invite }, { data: proc }] = await Promise.all([
+    supabase.from('invitations').select('id')
+      .eq('supplier_id', supplierId).eq('client_id', roleRow.client_id).limit(1),
+    supabase.from('seals').select('id')
+      .eq('supplier_id', supplierId).eq('client_id', roleRow.client_id).limit(1),
+  ])
+  if (!invite?.length && !proc?.length) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Fornecedor não vinculado a este cliente' }) }
 
   // Atualiza o selo deste cliente para este fornecedor
   const update = action === 'suspend'

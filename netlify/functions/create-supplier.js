@@ -234,6 +234,7 @@ exports.handler = async (event) => {
       const { data: openInv } = await supabaseAdmin
         .from('invitations').select('id')
         .eq('supplier_cnpj', cnpj).in('status', ['SENT', 'VIEWED'])
+        .is('hoc_id', null)   // pendência do HOC não suprime nem vincula nada no ELOS (patch_116)
         .limit(1)
       hasOpenInvite = !!openInv?.length
       if (hasOpenInvite) console.log(`convite aberto p/ ${cnpj} — selo ELOS suprimido`)
@@ -379,6 +380,7 @@ exports.handler = async (event) => {
         const { data: linkedInv } = await supabaseAdmin.from('invitations')
           .update({ status: 'REGISTERED', supplier_id: supplier.id })
           .eq('token', invitation_token)
+          .is('hoc_id', null)
           .not('status', 'in', '(REGISTERED,CANCELLED)')   // cancelado (patch_103) não vincula
           .select('id, client_id, flow_id, subsidiado')
         if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id, linkedInv[0].subsidiado === true)
@@ -414,6 +416,7 @@ exports.handler = async (event) => {
           .from('invitations')
           .select('id, client_id, flow_id, subsidiado')
           .not('status', 'in', '(REGISTERED,CANCELLED,SUPERSEDED)')   // só convites vigentes
+          .is('hoc_id', null)   // espelho do HOC nunca é vinculado pelo ELOS (patch_116)
           .or(userEmail
             ? `supplier_email.eq.${userEmail},supplier_cnpj.eq.${cleanCnpj}`
             : `supplier_cnpj.eq.${cleanCnpj}`)
@@ -443,7 +446,7 @@ exports.handler = async (event) => {
         // existe — não cria um 2º convite "espontâneo" nem troca o fluxo
         const { data: jaConvidado } = lp?.client_id
           ? await supabaseAdmin.from('invitations').select('id')
-              .eq('supplier_id', supplier.id).eq('client_id', lp.client_id).limit(1)
+              .eq('supplier_id', supplier.id).eq('client_id', lp.client_id).is('hoc_id', null).limit(1)
           : { data: null }
         if (lp?.client_id && !jaConvidado?.length) {
           // Espontâneo via LP: fluxo escolhido no portal (validado) ou o PADRÃO

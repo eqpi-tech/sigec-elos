@@ -31,7 +31,7 @@ async function handleBuyerInvitation(body, h) {
   // (selo) com ele → não reenvia; responde ok+skipped p/ o lote contar
   if (clientId) {
     const { data: dupInv } = await supabaseAdmin.from('invitations')
-      .select('id').eq('client_id', clientId).eq('supplier_id', supplierId).limit(1)
+      .select('id').eq('client_id', clientId).eq('supplier_id', supplierId).is('hoc_id', null).limit(1)
     if (dupInv?.length)
       return { statusCode: 200, headers: h, body: JSON.stringify({ ok: true, skipped: 'already_invited' }) }
     const { data: dupSeal } = await supabaseAdmin.from('seals')
@@ -182,6 +182,7 @@ async function handleClientInvitation(body, callerUser, h) {
   if (client_id) {
     const { data: existentes } = await supabaseAdmin.from('invitations')
       .select('id, status, supplier_cnpj').eq('client_id', client_id).eq('supplier_email', email)
+      .is('hoc_id', null)   // histórico do HOC não bloqueia nem é substituído (patch_116)
     const cnpjNovo = String(cnpj || '').replace(/\D/g, '')
     if ((existentes || []).some(e => e.status === 'REGISTERED' && String(e.supplier_cnpj || '').replace(/\D/g, '') === cnpjNovo))
       return { statusCode:409, headers:h, body: JSON.stringify({ error:'Este fornecedor já se cadastrou por um convite enviado para este e-mail.' }) }
@@ -240,6 +241,7 @@ async function handleClientInvitation(body, callerUser, h) {
       .eq('client_id', invitePayload.client_id)
       .eq('supplier_cnpj', invitePayload.supplier_cnpj)
       .in('status', ['SENT', 'VIEWED'])
+      .is('hoc_id', null)
   }
 
   if (abertosMesmoEmail.length) {
@@ -353,7 +355,7 @@ exports.handler = async (event) => {
     // Primeiro fetch com campos básicos (sempre existem)
     const { data: inv, error: invErr } = await supabaseAdmin
       .from('invitations')
-      .select('id, supplier_razao_social, supplier_email, supplier_cnpj, buyer_name, status, client_id, buyer_id')
+      .select('id, supplier_razao_social, supplier_email, supplier_cnpj, buyer_name, status, client_id, buyer_id, hoc_id')
       .eq('id', body.resendId)
       .maybeSingle()
     if (invErr || !inv) return { statusCode:404, headers:h, body: JSON.stringify({ error:'Convite não encontrado' }) }
@@ -366,6 +368,7 @@ exports.handler = async (event) => {
         || (r.role === 'BUYER' && inv.buyer_id && r.buyer_id === inv.buyer_id))
       if (!pode) return { statusCode:403, headers:h, body: JSON.stringify({ error:'Sem permissão para reenviar este convite' }) }
     }
+    if (inv.hoc_id) return { statusCode:409, headers:h, body: JSON.stringify({ error:'Convite do HOC — os lembretes são enviados pelo HOC. Para reconvidar pelo ELOS, envie um novo convite.' }) }
     if (inv.status === 'CANCELLED') return { statusCode:409, headers:h, body: JSON.stringify({ error:'Convite cancelado não pode ser reenviado — envie um novo convite' }) }
 
     // Fetch dos campos opcionais (adicionados pelos patches — podem não existir ainda)

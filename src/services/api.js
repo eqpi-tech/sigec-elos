@@ -135,6 +135,8 @@ export const supplierApi = {
             .select('escopo, contato, tipo_fornecedor, subsidiado, created_at, status')
             .eq('supplier_id', supplierId)
             .eq('client_id', seal.client_id)
+            // vários convites (histórico do HOC, reconvites): o mais recente
+            .order('created_at', { ascending: false }).limit(1)
             .maybeSingle()
         : { data: null },
     ])
@@ -1491,7 +1493,8 @@ export const clientApi = {
         .eq('supplier_id', supplierId).order('consulted_at', { ascending: false }).limit(1),
       supabase.from('supplier_categories').select('category_id').eq('supplier_id', supplierId),
       supabase.from('invitations').select('escopo, tipo_fornecedor, subsidiado, contato, created_at')
-        .eq('supplier_id', supplierId).eq('client_id', clientId).maybeSingle(),
+        .eq('supplier_id', supplierId).eq('client_id', clientId)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle(),   // vários convites (histórico do HOC)
     ])
 
     const supplier = supplierRes.status === 'fulfilled' ? supplierRes.value.data : null
@@ -1808,6 +1811,7 @@ export const questionnaireApi = {
       .from('invitations')
       .select('client_id')
       .eq('supplier_id', supplierId)
+      .or('hoc_id.is.null,status.eq.REGISTERED')   // do HOC, só o que virou processo (patch_116)
     if (!invites?.length) return []
 
     const clientIds = [...new Set(invites.map(i => i.client_id).filter(Boolean))]

@@ -35,6 +35,7 @@ exports.handler = async (event) => {
       .select('id, token, supplier_razao_social, supplier_email, client_id, buyer_name, created_at, last_reminder_at, reminder_count, objetivo, clients(razao_social)')
       .eq('invited_by_role', 'CLIENT')
       .in('status', ['SENT', 'VIEWED'])
+      .is('hoc_id', null)   // só convite feito pelo ELOS — o HOC lembra os dele (patch_116)
       .gte('created_at', windowStart)
       .lte('created_at', intervalCut)
     if (error) throw new Error(error.message)
