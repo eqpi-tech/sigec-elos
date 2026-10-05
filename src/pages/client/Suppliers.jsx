@@ -7,21 +7,11 @@ import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 import BuyerMarketplace from '../buyer/Marketplace.jsx'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
+import { SITUACAO, clientSealStatus } from '../../lib/clientSituacao.js'
 
 // situação do processo na visão do cliente (01/10: filtros de múltipla escolha)
-const SITUACAO = [
-  { value: 'ACTIVE',    label: 'Homologado',           color: '#15803d' },
-  { value: 'PENDING',   label: 'Em análise',           color: '#b45309' },
-  { value: 'PAGAMENTO', label: 'Aguardando pagamento', color: '#ea580c' },
-  { value: 'SUSPENDED', label: 'Suspenso / inativado', color: '#dc2626' },
-  { value: 'EXPIRED',   label: 'Vencido',              color: '#64748b' },
-]
-const situacaoDe = (item) => {
-  const s = item.seal
-  if (s?.client_suspended_at || s?.status === 'SUSPENDED') return 'SUSPENDED'
-  if (s?.status === 'PENDING' && s?.id && !s.released_at && !s.hoc_process_id) return 'PAGAMENTO'
-  return s?.status || 'PENDING'
-}
+// — regra compartilhada com o Dashboard em lib/clientSituacao.js
+const situacaoDe = (item) => clientSealStatus(item.seal)
 const venceEm60 = (item) => item.seal?.status === 'ACTIVE' && item.seal?.expires_at
   && new Date(item.seal.expires_at) - Date.now() < 60 * 86400000
 

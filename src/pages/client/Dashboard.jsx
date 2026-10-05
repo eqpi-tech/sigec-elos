@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
 import { KpiCard, Card, PageHeader, Spinner, Badge, ScoreBar } from '../../components/ui.jsx'
+import { SITUACAO } from '../../lib/clientSituacao.js'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -22,10 +23,11 @@ export default function ClientDashboard() {
   if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:80 }}><Spinner size={40}/></div>
   if (error)   return <div style={{ padding:32, color:'#dc2626' }}>{error}</div>
 
-  const recentes = (data?.invites || []).slice(0, 5)
+  const recentes = data?.recentes || []
 
-  const sealColor = s => s === 'ACTIVE' ? '#22c55e' : s === 'PENDING' ? '#f59e0b' : '#9B9B9B'
-  const sealLabel = s => s === 'ACTIVE' ? 'Homologado' : s === 'PENDING' ? 'Em análise' : 'Pendente'
+  // situação: convite sem cadastro ou situação do processo (mesma regra de Meus Fornecedores)
+  const CONVITE = { SENT: { label: 'Convite enviado', color: '#f59e0b' }, VIEWED: { label: 'Visualizado', color: '#f59e0b' } }
+  const sit = st => CONVITE[st] || SITUACAO.find(o => o.value === st) || { label: st, color: '#9B9B9B' }
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
@@ -37,9 +39,11 @@ export default function ClientDashboard() {
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:28 }}>
-        <KpiCard label="Fornecedores Convidados" value={data?.total ?? 0} icon="🤝" />
+        <KpiCard label="Fornecedores"           value={data?.total ?? 0} icon="🤝"
+          subtext={data?.convitesAbertos ? `+ ${data.convitesAbertos} convite(s) em aberto` : 'Com processo de homologação'} />
         <KpiCard label="Homologados"            value={data?.homologados ?? 0} icon="✅" subtext="Selo ELOS ativo" />
-        <KpiCard label="Em Análise"             value={data?.emAnalise ?? 0} icon="⏳" subtext="Aguardando revisão EQPI" />
+        <KpiCard label="Em Análise"             value={data?.emAnalise ?? 0} icon="⏳"
+          subtext={data?.aguardandoPagamento ? `+ ${data.aguardandoPagamento} aguardando pagamento` : 'Aguardando revisão EQPI'} />
         <KpiCard label="Subsidiados"            value={data?.subsidiados ?? 0} icon="💰" subtext="Custo assumido por você" />
         <KpiCard label="Carta de Exceção"       value={data?.cartasExcecao ?? 0} icon="📜" subtext="Fornecedores com carta vigente" />
       </div>
@@ -59,7 +63,7 @@ export default function ClientDashboard() {
         {recentes.length === 0 ? (
           <div style={{ textAlign:'center', padding:'32px 0', color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
-            <div>Nenhum fornecedor convidado ainda.</div>
+            <div>Nenhum fornecedor ainda.</div>
             <button onClick={() => navigate('/cliente/convites')}
               style={{ marginTop:12, background:'#2E3192', color:'#fff', border:'none', borderRadius:8, padding:'8px 20px', fontFamily:'DM Sans,sans-serif', fontSize:13, cursor:'pointer' }}>
               Enviar primeiro convite
@@ -67,41 +71,34 @@ export default function ClientDashboard() {
           </div>
         ) : (
           <div style={{ display:'grid', gap:10 }}>
-            {recentes.map(invite => {
-              const sup = invite.suppliers
-              const seal = invite.seal
+            {recentes.map(item => {
+              const st = sit(item.status)
               return (
-                <div key={invite.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', background:'#f8faff', borderRadius:12, border:'1px solid #e2e4ef' }}>
+                <div key={item.key} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', background:'#f8faff', borderRadius:12, border:'1px solid #e2e4ef' }}>
                   <div style={{ width:40, height:40, borderRadius:10, background:'#EEF0FF', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:14, color:'#2E3192', flexShrink:0 }}>
-                    {(sup?.razao_social || invite.supplier_razao_social)?.slice(0,2).toUpperCase() || '??'}
+                    {item.name?.slice(0,2).toUpperCase() || '??'}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                      {sup?.razao_social || invite.supplier_razao_social || '—'}
+                      {item.name || '—'}
                     </div>
                     <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>
-                      {sup?.city && sup?.state ? `${sup.city} / ${sup.state}` : (sup?.cnpj || invite.supplier_cnpj || '')}
+                      {item.city && item.state ? `${item.city} / ${item.state}` : (item.cnpj || '')}
                     </div>
                   </div>
-                  {invite.subsidiado && (
+                  {item.subsidiado && (
                     <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700, flexShrink:0 }}>
                       SUBSIDIADO
                     </span>
                   )}
-                  {invite.status === 'REGISTERED' && seal ? (
-                    <div style={{ textAlign:'right', flexShrink:0 }}>
-                      <div style={{ fontSize:11, fontWeight:700, color: sealColor(seal.status), fontFamily:'DM Sans,sans-serif' }}>
-                        {sealLabel(seal.status)}
-                      </div>
-                      {seal.status === 'ACTIVE' && (
-                        <div style={{ fontSize:11, color:'#9B9B9B' }}>Score {seal.score}%</div>
-                      )}
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:700, color: st.color, fontFamily:'DM Sans,sans-serif' }}>
+                      {st.label}
                     </div>
-                  ) : (
-                    <span style={{ fontSize:11, color:'#f59e0b', fontFamily:'DM Sans,sans-serif', fontWeight:600, flexShrink:0 }}>
-                      {invite.status === 'SENT' ? 'Convite enviado' : invite.status === 'VIEWED' ? 'Visualizado' : 'Cadastrado'}
-                    </span>
-                  )}
+                    {item.status === 'ACTIVE' && item.score != null && (
+                      <div style={{ fontSize:11, color:'#9B9B9B' }}>Score {item.score}%</div>
+                    )}
+                  </div>
                 </div>
               )
             })}
