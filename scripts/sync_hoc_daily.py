@@ -15,7 +15,7 @@ Uso:
                             [--config hoc_migration_config.json]
 
 Entidades: clients, catalog, categories, category_documents, suppliers,
-           supplier_categories, seals, documents, hoc_log
+           supplier_categories, seals, documents, hoc_log, invitations
 (details — sócios/bancários/balanços/questionários — roda semanal via
  migrate_hoc_v2.py --phase details, já idempotente.)
 """
@@ -33,7 +33,8 @@ from migrate_hoc_v2 import (
 )
 
 ALL_ENTITIES = ["clients", "catalog", "categories", "category_documents",
-                "suppliers", "supplier_categories", "seals", "documents", "hoc_log"]
+                "suppliers", "supplier_categories", "seals", "documents", "hoc_log",
+                "invitations"]
 
 # Primeira execução: tabelas GRANDES começam da data da migração v2;
 # as pequenas fazem passada completa (idempotente e barata)
@@ -588,6 +589,94 @@ def sync_hoc_log(my, sb, dry, last_id):
     return len(rows), written, None, max_id
 
 
+def sync_invitations(my, sb, dry):
+    """Convites do HOC (tabela convite) → invitations, SÓ COMO HISTÓRICO (patch_116).
+
+    Regra do Luiz (05/10/2026): convite com hoc_id NUNCA dispara nada pelo ELOS
+    (lembrete, reenvio, cancelamento, vínculo, liberação de processo) — o HOC
+    tem processo ativo próprio. As travas estão no código e nos gatilhos.
+      F → REGISTERED (com supplier_id pelo CNPJ, como o convite do ELOS)
+      C → CANCELLED · P → SENT se criado nos últimos 12 meses, senão EXPIRED
+    Pendente/cancelado ficam sem supplier_id: o cliente não passa a enxergar
+    dados de quem não concluiu o cadastro. token NULL: link nunca existiu aqui.
+    Sem watermark (convite não tem data de alteração) → diff completo; só
+    grava o que mudou. Sem DELETE.
+    """
+    cur = my.cursor(dictionary=True)
+    cur.execute("""SELECT id, cnpj, razao_social, email, contato, telefone, id_cliente,
+                          origem, status, subsidiado, id_processo, escopo_fornecedor,
+                          data_criacao, data_finalizacao, create_date
+                   FROM convite ORDER BY id""")
+    rows = cur.fetchall(); cur.close()
+
+    client_map = load_client_map(sb)
+    supplier_map = load_supplier_map_ordered(sb)
+    flows = fetch_all(sb, "client_flows", "id,client_id,is_default,active")
+    default_flow = {}
+    for fl in flows:
+        if fl.get("active") and (fl.get("is_default") or fl["client_id"] not in default_flow):
+            default_flow[fl["client_id"]] = fl["id"]
+
+    corte = datetime.now() - _dt.timedelta(days=365)
+    def iso(v):
+        return v.isoformat() if v else None
+
+    alvo, sem_cliente = {}, 0
+    for r in rows:
+        cid = client_map.get(r["id_cliente"])
+        if not cid:
+            sem_cliente += 1
+            continue
+        criado = r["data_criacao"] or r["create_date"]
+        st = r["status"]
+        status = ("REGISTERED" if st == "F" else "CANCELLED" if st == "C"
+                  else ("SENT" if criado and criado >= corte else "EXPIRED"))
+        cnpj = clean_cnpj(r["cnpj"]) or ""
+        rec = {
+            "hoc_id": r["id"], "client_id": cid, "status": status,
+            "hoc_status": st, "hoc_origem": safe_str(r["origem"]),
+            "hoc_processo_id": r["id_processo"],
+            "supplier_cnpj": cnpj,
+            "supplier_razao_social": safe_str(r["razao_social"]) or "",
+            "supplier_email": (safe_str(r["email"]) or "").lower() or None,
+            "contato": safe_str(r["contato"]), "telefone": safe_str(r["telefone"]),
+            "escopo": safe_str(r["escopo_fornecedor"]),
+            "subsidiado": bool(r["subsidiado"]),
+            "supplier_id": supplier_map.get(cnpj) if status == "REGISTERED" else None,
+            "flow_id": default_flow.get(cid),
+            "cancelled_at": iso(r["data_finalizacao"]) if status == "CANCELLED" else None,
+            "cancel_reason": "Cancelado no HOC" if status == "CANCELLED" else None,
+        }
+        alvo[r["id"]] = (rec, iso(criado), iso(r["data_finalizacao"] or criado))
+
+    COMP = ["client_id", "status", "hoc_status", "hoc_origem", "hoc_processo_id", "supplier_cnpj",
+            "supplier_razao_social", "supplier_email", "contato", "telefone", "escopo",
+            "subsidiado", "supplier_id", "flow_id", "cancel_reason"]
+    elos = {e["hoc_id"]: e for e in fetch_all(sb, "invitations", "id," + ",".join(["hoc_id"] + COMP),
+                                              order="hoc_id") if e.get("hoc_id") is not None}
+
+    novos, mudou = [], []
+    for hid, (rec, criado, atualizado) in alvo.items():
+        cur_ = elos.get(hid)
+        if cur_ is None:
+            novos.append({**rec, "token": None, "invited_by_role": "CLIENT", "objetivo": "homologacao",
+                          "created_at": criado, "updated_at": atualizado})
+        elif any((cur_.get(k) or None) != (rec.get(k) or None) for k in COMP):
+            mudou.append((cur_["id"], {**rec, "updated_at": datetime.now(timezone.utc).isoformat()}))
+
+    por_status = {}
+    for rec, _, _ in alvo.values():
+        por_status[rec["status"]] = por_status.get(rec["status"], 0) + 1
+    log.info(f"  convites HOC: {len(rows)} lidos · {sem_cliente} sem cliente mapeado · "
+             f"alvo {por_status} · novos {len(novos)} · alterados {len(mudou)}")
+    if not dry:
+        for chunk in chunks(novos, 500):
+            sb.table("invitations").insert(chunk).execute()
+        for iid, rec in mudou:
+            sb.table("invitations").update(rec).eq("id", iid).not_.is_("hoc_id", "null").execute()
+    return len(rows), len(novos) + len(mudou), None, None
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 
 def main():
@@ -619,6 +708,7 @@ def main():
             "seals":               lambda: sync_seals(my, sb, args.dry_run, wm),
             "documents":           lambda: sync_documents(my, sb, args.dry_run, wm),
             "hoc_log":             lambda: sync_hoc_log(my, sb, args.dry_run, last_id),
+            "invitations":         lambda: sync_invitations(my, sb, args.dry_run),
         }[entity]
         ok = run_entity(sb, entity, fn, args.dry_run) and ok
 

@@ -1682,7 +1682,7 @@ export const clientApi = {
     // Passo 2: convites para dados extras (subsidiado, tipo, escopo, data)
     const invites = await todas(() => supabase
       .from('invitations')
-      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, flow_id')
+      .select('id, supplier_id, status, subsidiado, tipo_fornecedor, escopo, created_at, supplier_razao_social, supplier_cnpj, flow_id, hoc_id')
       .eq('client_id', clientId).order('id'))
     // carta de exceção VIGENTE por fornecedor (filtro e selo na lista)
     const hoje = new Date().toISOString().slice(0, 10)
@@ -1691,15 +1691,20 @@ export const clientApi = {
     const comCarta = new Set((cartas || []).map(c => c.supplier_id))
     const inviteMap = {}
     for (const inv of (invites || [])) {
-      // Mantém o convite REGISTERED quando há múltiplos
-      if (!inviteMap[inv.supplier_id] || inv.status === 'REGISTERED') {
+      // Mantém o convite REGISTERED quando há múltiplos — e, entre eles, o mais
+      // recente (o histórico do HOC traz vários por fornecedor, patch_116)
+      const atual = inviteMap[inv.supplier_id]
+      if (!atual || (inv.status === 'REGISTERED' && (atual.status !== 'REGISTERED'
+          || String(inv.created_at) > String(atual.created_at)))) {
         inviteMap[inv.supplier_id] = inv
       }
     }
 
     // Passo 3: todos os supplier_ids únicos (via seal ou convite REGISTERED)
+    // só convite do ELOS cria item sem processo: o do HOC finalizado há anos sem
+    // processo vigente não é "em análise" (os processos do HOC vêm pelos selos)
     const registeredViaInvite = new Set(
-      (invites || []).filter(i => i.status === 'REGISTERED' && i.supplier_id).map(i => i.supplier_id)
+      (invites || []).filter(i => i.status === 'REGISTERED' && i.supplier_id && !i.hoc_id).map(i => i.supplier_id)
     )
     const allIds = new Set([...Object.keys(sealMap), ...registeredViaInvite])
 
