@@ -781,6 +781,20 @@ def _fetch_grouped(cur, sql, key="id_fornecedor"):
     return grouped
 
 
+def ensure_mysql_ro(mysql_conn):
+    """Reconecta ao HOC se a conexão caiu (RDS derruba conexão parada enquanto o
+    script grava no ELOS — falhas de 27/09 e 04/10) e REATIVA o modo somente
+    leitura: a sessão nova não herda o SET SESSION. Confere antes de seguir."""
+    mysql_conn.ping(reconnect=True, attempts=3, delay=5)
+    cur = mysql_conn.cursor()
+    cur.execute("SET SESSION transaction_read_only = 1")
+    cur.execute("SELECT @@session.transaction_read_only")
+    ro = cur.fetchone()[0]
+    cur.close()
+    if ro != 1:
+        raise RuntimeError("sessão MySQL do HOC não ficou somente leitura — abortando")
+
+
 def phase_details(mysql_conn, sb: Client, dry_run: bool):
     log.info("=== FASE details (dados completos, sem perda) ===")
     cur = mysql_conn.cursor()
@@ -789,7 +803,7 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
     hoc_to_uuid = {}
     offset = 0
     while True:
-        res = sb.table("suppliers").select("id,hoc_id").not_.is_("hoc_id", "null").range(offset, offset + 999).execute()
+        res = sb.table("suppliers").select("id,hoc_id").not_.is_("hoc_id", "null").order("id").range(offset, offset + 999).execute()
         if not res.data:
             break
         for s in res.data:
@@ -939,7 +953,9 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
         stat("details_bank", hoc_count=len(bank_batch), written=len(bank_batch))
         stat("details_financials", hoc_count=len(fin_rows), written=len(fin_rows))
     else:
-        for chunk in chunks(sup_batch, 100):
+        # lotes de 25 (05/10): com 100, o upsert de hoc_extra estourava o
+        # statement timeout do banco e caía no fallback um a um (fase de 6 → 54 min)
+        for chunk in chunks(sup_batch, 25):
             try:
                 sb.table("suppliers").upsert(chunk, on_conflict="id").execute()
                 stat("details_suppliers", written=len(chunk))
@@ -1032,7 +1048,7 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
     seal_by_proc = {}
     offset = 0
     while True:
-        res = sb.table("seals").select("id,hoc_process_id").not_.is_("hoc_process_id", "null").range(offset, offset + 999).execute()
+        res = sb.table("seals").select("id,hoc_process_id").not_.is_("hoc_process_id", "null").order("id").range(offset, offset + 999).execute()
         if not res.data:
             break
         for s in res.data:
@@ -1044,10 +1060,10 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
 
     by_proc = {}
     proc_ids = list(seal_by_proc.keys())
+    # a conexão com o HOC ficou parada durante as gravações acima: confere/reconecta
+    ensure_mysql_ro(mysql_conn)
     cur2 = mysql_conn.cursor(dictionary=True)
-    for idx, chunk in enumerate(chunks(proc_ids, 200)):
-        placeholders = ",".join(["%s"] * len(chunk))
-        cur2.execute(f"""
+    Q_SQL = """
             SELECT qr.id_processo, q.pergunta AS questao,
                    COALESCE(r.descricao, qr.resposta_tipo_texto,
                             CAST(qr.resposta_tipo_numero AS CHAR),
@@ -1056,11 +1072,22 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
             FROM questionario_resposta qr
             LEFT JOIN questao q ON q.id = qr.id_questao
             LEFT JOIN resposta r ON r.id = qr.id_resposta_tipo_unica
-            WHERE qr.id_processo IN ({placeholders})
+            WHERE qr.id_processo IN ({ph})
               AND (qr.ultima_resposta = 1 OR qr.ultima_resposta IS NULL)
             ORDER BY qr.id_processo, qr.ordem
-        """, tuple(chunk))
-        for r in cur2.fetchall():
+        """
+    for idx, chunk in enumerate(chunks(proc_ids, 200)):
+        placeholders = ",".join(["%s"] * len(chunk))
+        try:
+            cur2.execute(Q_SQL.format(ph=placeholders), tuple(chunk))
+            rows_q = cur2.fetchall()
+        except (mysql.connector.errors.OperationalError, mysql.connector.errors.InterfaceError) as e:
+            log.warning(f"  conexão HOC caiu no lote {idx + 1} ({e}) — reconectando (somente leitura) e repetindo")
+            ensure_mysql_ro(mysql_conn)
+            cur2 = mysql_conn.cursor(dictionary=True)
+            cur2.execute(Q_SQL.format(ph=placeholders), tuple(chunk))
+            rows_q = cur2.fetchall()
+        for r in rows_q:
             if r["questao"] or r["resposta"]:
                 by_proc.setdefault(r["id_processo"], []).append(
                     {"questao": safe_str(r["questao"]), "resposta": safe_str(r["resposta"])})
