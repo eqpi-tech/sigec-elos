@@ -162,7 +162,8 @@ export default function BackofficeProcessSearch() {
           ? Promise.resolve({ data: [] })
           : supabase.from('invitations')
               .select('id, supplier_id, client_id, supplier_cnpj, supplier_razao_social, supplier_email, status, created_at')
-              .eq('client_id', filterClient),
+              .eq('client_id', filterClient)
+              .is('hoc_id', null),   // histórico do HOC fica em Convites; processos do HOC vêm pelos selos (patch_116)
       ])
 
       const clientSeals   = sealRes.status === 'fulfilled' ? (sealRes.value.data   || []) : []
@@ -177,7 +178,7 @@ export default function BackofficeProcessSearch() {
       // convites aguardando cadastro (reenvio substituído não conta de novo)
       const digitos = (v) => String(v || '').replace(/\D/g, '')
       const pend = clientInvites
-        .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED', 'CANCELLED'].includes(i.status))
+        .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED', 'CANCELLED', 'EXPIRED'].includes(i.status))
         .filter(i => !qTrim || (qNums.length >= 8 ? digitos(i.supplier_cnpj).includes(qNums)
           : `${i.supplier_razao_social || ''} ${i.supplier_email || ''}`.toLowerCase().includes(qTrim.toLowerCase())))
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
@@ -252,7 +253,8 @@ export default function BackofficeProcessSearch() {
         .in('supplier_id', ids),
       supabase.from('invitations')
         .select('supplier_id, client_id')
-        .in('supplier_id', ids),
+        .in('supplier_id', ids)
+        .is('hoc_id', null),
     ])
 
     const seals   = sealsRes.status   === 'fulfilled' ? (sealsRes.value.data   || []) : []

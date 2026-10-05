@@ -197,6 +197,7 @@ exports.handler = async (event) => {
     .select('client_id, flow_id, clients(razao_social)')
     .eq('supplier_id', supplierId)
     .not('client_id', 'is', null)
+    .is('hoc_id', null)   // processo do HOC é decidido no HOC (patch_116)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

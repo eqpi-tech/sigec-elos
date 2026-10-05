@@ -23,8 +23,12 @@ const STATUS = {
   REGISTERED: { label:'Cadastrado',   color:'#22c55e' },
   SUPERSEDED: { label:'Substituído',  color:'#94a3b8' },
   CANCELLED:  { label:'Cancelado',    color:'#9B9B9B' },
+  EXPIRED:    { label:'Expirado',     color:'#64748b' },
 }
-const FILTROS = ['Todos', 'SENT', 'VIEWED', 'REGISTERED', 'CANCELLED', 'SUPERSEDED']
+const FILTROS = ['Todos', 'SENT', 'VIEWED', 'REGISTERED', 'CANCELLED', 'SUPERSEDED', 'EXPIRED']
+// origem (patch_116): convite com hoc_id é histórico espelhado do HOC — sem
+// reenvio/cancelamento/link pelo ELOS; padrão da tela = só os do ELOS
+const ORIGENS = [['elos', 'Enviados pelo ELOS'], ['hoc', 'Histórico do HOC'], ['todas', 'Todas as origens']]
 const POR_PAGINA = 50
 const dt = (v) => (v ? new Date(v).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—')
 const nomeCliente = (c) => (c?.nome_fantasia && c.nome_fantasia.toLowerCase() !== (c.razao_social || '').toLowerCase()
@@ -35,6 +39,7 @@ export default function BackofficeInvitations() {
   const [clientes, setClientes] = useState([])
   const [cliente, setCliente]   = useState('')
   const [status, setStatus]     = useState('Todos')
+  const [origem, setOrigem]     = useState('elos')
   const [busca, setBusca]       = useState('')
   const [pagina, setPagina]     = useState(0)
   const [lista, setLista]       = useState([])
@@ -59,6 +64,8 @@ export default function BackofficeInvitations() {
       .range(pagina * POR_PAGINA, pagina * POR_PAGINA + POR_PAGINA - 1)
     if (cliente) q = q.eq('client_id', cliente)
     if (status !== 'Todos') q = q.eq('status', status)
+    if (origem === 'elos') q = q.is('hoc_id', null)
+    if (origem === 'hoc')  q = q.not('hoc_id', 'is', null)
     const b = busca.trim()
     if (b) {
       const dig = b.replace(/\D/g, '')
@@ -70,9 +77,9 @@ export default function BackofficeInvitations() {
     const { data, count, error } = await q
     if (error) setMsg({ ok:'', err: error.message })
     setLista(data || []); setTotal(count || 0); setLoading(false)
-  }, [cliente, status, busca, pagina])
+  }, [cliente, status, origem, busca, pagina])
 
-  useEffect(() => { carregar() }, [cliente, status, pagina])   // busca: botão/Enter
+  useEffect(() => { carregar() }, [cliente, status, origem, pagina])   // busca: botão/Enter
 
   const avisar = (ok, err = '') => { setMsg({ ok, err }); if (ok) setTimeout(() => setMsg({ ok:'', err:'' }), 5000) }
 
@@ -104,7 +111,8 @@ export default function BackofficeInvitations() {
     catch { window.prompt('Copie o link do convite:', link) }
   }
 
-  const aberto = (s) => ['SENT', 'VIEWED'].includes(s)
+  // ações (link/reenviar/cancelar) só para convite do ELOS em aberto
+  const aberto = (s, inv) => !inv?.hoc_id && ['SENT', 'VIEWED'].includes(s)
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA))
   const inp = { padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', outline:'none', background:'#fff' }
   const btn = (cor) => ({ fontSize:11, color:cor, background:'none', border:`1px solid ${cor}55`, borderRadius:7, padding:'4px 10px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' })
@@ -120,6 +128,9 @@ export default function BackofficeInvitations() {
           <select value={cliente} onChange={e => { setPagina(0); setCliente(e.target.value) }} style={{ ...inp, minWidth:240 }}>
             <option value="">Todos os clientes</option>
             {clientes.map(c => <option key={c.id} value={c.id}>{nomeCliente(c)}</option>)}
+          </select>
+          <select value={origem} onChange={e => { setPagina(0); setOrigem(e.target.value) }} style={{ ...inp, minWidth:180 }}>
+            {ORIGENS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <Button variant="primary" onClick={() => { setPagina(0); carregar() }}>Pesquisar</Button>
         </div>
@@ -158,6 +169,7 @@ export default function BackofficeInvitations() {
                       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                         <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{inv.supplier_razao_social || '(sem razão social)'}</span>
                         <span style={{ fontSize:10, fontWeight:700, color:st.color, background:`${st.color}18`, padding:'2px 8px', borderRadius:20 }}>{st.label}</span>
+                        {inv.hoc_id && <span title={`Convite ${inv.hoc_id} do HOC — histórico; lembretes são do HOC`} style={{ fontSize:10, fontWeight:700, color:'#475569', background:'#f1f5f9', padding:'2px 8px', borderRadius:20 }}>HOC</span>}
                         {inv.subsidiado && <span style={{ fontSize:10, fontWeight:700, color:'#065f46', background:'#d1fae5', padding:'2px 8px', borderRadius:20 }}>SUBSIDIADO</span>}
                         {inv.objetivo === 'contato' && <span style={{ fontSize:10, fontWeight:700, color:'#6b7280', background:'#f3f4f6', padding:'2px 8px', borderRadius:20 }}>CONTATO</span>}
                       </div>
@@ -177,9 +189,9 @@ export default function BackofficeInvitations() {
                     </div>
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end', maxWidth:330 }}>
                       <button onClick={() => setDetalhe(inv)} style={btn('#2E3192')}>Detalhes</button>
-                      {aberto(inv.status) && <button onClick={() => copiarLink(inv)} style={btn('#2E3192')}>Copiar link</button>}
-                      {aberto(inv.status) && <button disabled={ocupado === inv.id} onClick={() => reenviar(inv)} style={btn('#2E3192')}>{ocupado === inv.id ? 'Enviando…' : 'Reenviar'}</button>}
-                      {aberto(inv.status) && <button onClick={() => setCancelando({ inv, reason:'', busy:false })} style={btn('#b91c1c')}>Cancelar</button>}
+                      {aberto(inv.status, inv) && <button onClick={() => copiarLink(inv)} style={btn('#2E3192')}>Copiar link</button>}
+                      {aberto(inv.status, inv) && <button disabled={ocupado === inv.id} onClick={() => reenviar(inv)} style={btn('#2E3192')}>{ocupado === inv.id ? 'Enviando…' : 'Reenviar'}</button>}
+                      {aberto(inv.status, inv) && <button onClick={() => setCancelando({ inv, reason:'', busy:false })} style={btn('#b91c1c')}>Cancelar</button>}
                       {inv.supplier_id && <button onClick={() => navigate(`/backoffice/analise/${inv.supplier_id}`)} style={btn('#15803d')}>Ver processo →</button>}
                     </div>
                   </div>

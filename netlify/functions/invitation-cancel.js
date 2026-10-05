@@ -23,8 +23,9 @@ exports.handler = async (event) => {
   if (reason.length < 3) return res(400, { error: 'Informe o motivo do cancelamento' })
 
   const { data: inv } = await sb.from('invitations')
-    .select('id, client_id, status, token, supplier_email, supplier_cnpj, supplier_razao_social').eq('id', body.inviteId).maybeSingle()
+    .select('id, client_id, status, token, supplier_email, supplier_cnpj, supplier_razao_social, hoc_id').eq('id', body.inviteId).maybeSingle()
   if (!inv) return res(404, { error: 'Convite não encontrado' })
+  if (inv.hoc_id) return res(409, { error: 'Convite do HOC — é gerenciado no HOC e não pode ser cancelado pelo ELOS' })
 
   const { data: roles } = await sb.from('user_roles').select('role, client_id, access_profile').eq('user_id', user.id)
   const isAdmin = (roles || []).some((r) => r.role === 'ADMIN')

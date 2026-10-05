@@ -255,7 +255,7 @@ async function resolveClientDeal({ inviteToken, refSlug, refFlowId, supplierId }
     if (seal?.client_id) {
       clientId = seal.client_id; flowId = seal.flow_id || null
       const { data: inv } = await supabaseAdmin.from('invitations').select('subsidiado')
-        .eq('supplier_id', supplierId).eq('client_id', clientId).not('status', 'in', '(CANCELLED,SUPERSEDED)')
+        .eq('supplier_id', supplierId).eq('client_id', clientId).not('status', 'in', '(CANCELLED,SUPERSEDED)').is('hoc_id', null)
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       payer = inv?.subsidiado === true ? 'client' : 'supplier'
     }
