@@ -6,6 +6,8 @@
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 const umAno = () => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10) }
+// reprovado: nova checagem do documento em 4 meses (Luiz, 05/10)
+const quatroMeses = () => { const d = new Date(); d.setMonth(d.getMonth() + 4); return d.toISOString().slice(0, 10) }
 const dataValida = (v) => (v && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null)
 
 // ia = pré-análise mais recente do documento (ai_review_jobs) ou undefined
@@ -38,7 +40,8 @@ export function motivoSugerido(sug, reasons = []) {
 
 // Decisão preenchida a partir da sugestão. null quando a sugestão é "revisar".
 // Validade na aprovação: a da fonte/documento, se ainda futura; senão a regra
-// do sistema (análise + 1 ano — regra 09/09).
+// do sistema (análise + 1 ano — regra 09/09). Na reprovação: análise + 4 meses,
+// prazo para rechecar o documento rejeitado (05/10).
 export function decisaoSugerida(sug, reasons = []) {
   if (!sug || !['aprovar', 'reprovar'].includes(sug.veredito)) return null
   if (sug.veredito === 'aprovar') {
@@ -51,5 +54,6 @@ export function decisaoSugerida(sug, reasons = []) {
       note: `Aprovado conforme sugestão da ${ORIGEM[sug.origem]}`,
     }
   }
-  return { status: 'REJECTED', note: motivoSugerido(sug, reasons) }
+  return { status: 'REJECTED', note: motivoSugerido(sug, reasons),
+           expiry: quatroMeses(), expiryOrigem: 'reprovado — nova checagem em 4 meses' }
 }

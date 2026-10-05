@@ -227,7 +227,8 @@ function EditDocModal({ doc, reasons, rule, ia, aceitar = false, onView, onSubmi
   const aplicarSugestao = () => {
     if (!dec) return
     setStatus(dec.status)
-    if (dec.status === 'VALID') { setExpiry(dec.expiry); setCustomNote(dec.note) } else setReasonText(dec.note)
+    setExpiry(dec.expiry)   // aprovado: validade sugerida · reprovado: rechecagem em 4 meses
+    if (dec.status === 'VALID') setCustomNote(dec.note); else setReasonText(dec.note)
     setAplicada(true)
   }
   // Validade sugerida na aprovação: análise (hoje) + 1 ano — regra 09/09
@@ -290,7 +291,7 @@ function EditDocModal({ doc, reasons, rule, ia, aceitar = false, onView, onSubmi
                     {dec.status === 'VALID' ? '✓ Aceitar sugestão: aprovar' : '✕ Aceitar sugestão: reprovar'}
                   </Button>
                   <span style={{ fontSize:10.5, color:'#6b7280', fontFamily:'DM Sans,sans-serif' }}>
-                    {dec.status === 'VALID' ? `validade ${dec.expiry.split('-').reverse().join('/')} (${dec.expiryOrigem})` : 'preenche o motivo da recusa'}
+                    {dec.status === 'VALID' ? `validade ${dec.expiry.split('-').reverse().join('/')} (${dec.expiryOrigem})` : `preenche o motivo da recusa e o vencimento ${dec.expiry.split('-').reverse().join('/')} (nova checagem em 4 meses)`}
                   </span>
                 </div>
               ) : (
@@ -1022,7 +1023,7 @@ export default function DocumentAnalysis() {
                         const dec = decisaoSugerida(sugestaoDoc(doc, aiMap[doc.id]), reasons)
                         return dec && (
                           <Button variant={dec.status === 'VALID' ? 'success' : 'danger'} size="sm"
-                            title="Abre a decisão já preenchida pela sugestão (validade ou motivo) para você conferir e salvar"
+                            style={{ padding:'4px 9px', fontSize:11, whiteSpace:'nowrap' }}
                             onClick={() => openEdit(doc, true)}>
                             {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
                           </Button>

@@ -759,7 +759,8 @@ export function BackofficeAnalysis() {
     const sug = sugestaoDoc(doc, aiPorDoc[doc.id])
     const dec = decisaoSugerida(sug, rejectReasons)
     if (!dec) return
-    if (dec.status === 'REJECTED') { handleDocReject(doc.id, doc.label); return }
+    // reprovação aceita: motivo da sugestão + vencimento em 4 meses (rechecagem, 05/10)
+    if (dec.status === 'REJECTED') { handleDocReject(doc.id, doc.label, dec.expiry); return }
     openApproveModal(doc)
     setApproveExpiry(dec.expiry)
     setApproveNote(dec.note)
@@ -844,7 +845,7 @@ export function BackofficeAnalysis() {
     }
   }
 
-  const handleDocReject = (docId, docLabel) => {
+  const handleDocReject = (docId, docLabel, recheckExpiry = null) => {
     // Rota B: a IA sugeriu reprovar este arquivo → motivo já preenchido
     // (o analista confere e pode trocar)
     const doc = (data?.documents || []).find(d => d.id === docId)
@@ -852,13 +853,13 @@ export function BackofficeAnalysis() {
     const reprova = sug?.veredito === 'reprovar' ? sug : null
     setRejectCode(reprova ? motivoSugerido(reprova, rejectReasons) : '')
     setRejectCustom('')
-    setRejectDocModal({ docId, docLabel, sug: reprova })
+    setRejectDocModal({ docId, docLabel, sug: reprova, recheckExpiry })
   }
 
   const confirmDocReject = async () => {
     // rejectCode agora carrega o TEXTO do motivo (datalist com busca — 18/09)
     if (!rejectDocModal || !rejectCode.trim()) return
-    const { docId } = rejectDocModal
+    const { docId, recheckExpiry } = rejectDocModal
     const motivo = rejectCode.trim()
     setRejectDocModal(null)
     setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
@@ -867,7 +868,8 @@ export function BackofficeAnalysis() {
       const post = (extra = {}) => fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo, ...extra }),
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo,
+          ...(recheckExpiry ? { expiresAt: recheckExpiry } : {}), ...extra }),
       })
       let res = await post()
       let result = await res.json()
@@ -1474,9 +1476,12 @@ export function BackofficeAnalysis() {
               const colors  = { VALID:'#f8fffe',PENDING:'#fff7ed',MISSING:'#fff5f5',REJECTED:'#fff5f5' }
               const borders = { VALID:'#dcfce7',PENDING:'#fed7aa',MISSING:'#fee2e2',REJECTED:'#fee2e2' }
               return (
-                <div key={i} style={{ display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,marginBottom:8,background:colors[status]||'#f4f5f9',border:`1px solid ${borders[status]||'#e2e4ef'}` }}>
+                // 2 níveis (05/10): nome/status/sugestões na largura toda e os botões
+                // numa barra única abaixo — em linha só, até 6 botões espremiam o nome
+                <div key={i} style={{ display:'flex',flexDirection:'column',gap:8,padding:'12px 14px',borderRadius:12,marginBottom:8,background:colors[status]||'#f4f5f9',border:`1px solid ${borders[status]||'#e2e4ef'}` }}>
+                  <div style={{ display:'flex',alignItems:'flex-start',gap:12 }}>
                   <StatusDot status={status}/>
-                  <div style={{ flex:1 }}>
+                  <div style={{ flex:1,minWidth:0,overflowWrap:'anywhere' }}>
                     <div style={{ fontSize:13,fontWeight:700,color:'#1a1c5e',fontFamily:'Montserrat,sans-serif' }}>{doc.label}</div>
                     <div style={{ fontSize:11,color:'#9B9B9B' }}>
                       {doc.source==='AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}
@@ -1493,6 +1498,8 @@ export function BackofficeAnalysis() {
                       ))}
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
+                  </div>
+                  <div style={{ display:'flex',gap:6,justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap' }}>
                   {(() => {
                     const aiType = getDocAiType(doc)
                     if (aiType && doc.storage_path) {
@@ -1546,6 +1553,7 @@ export function BackofficeAnalysis() {
                     <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
                       onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
                   )}
+                  </div>
                 </div>
               )
             })}
@@ -1837,9 +1845,10 @@ export function BackofficeAnalysis() {
                           <div style={{ width:32,height:32,borderRadius:8,background:`${info.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,marginTop:2 }}>
                             {info.icon}
                           </div>
-                          <div style={{ flex:1 }}>
+                          {/* minWidth 0 + overflowWrap: descrição longa do HOC (ex.: DRE) não sai da caixa (05/10) */}
+                          <div style={{ flex:1,minWidth:0,overflowWrap:'anywhere' }}>
                             <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:info.color }}>{info.label}</div>
-                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2 }}>{detail}</div>}
+                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2,whiteSpace:'pre-wrap' }}>{detail}</div>}
                             <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}{autor ? ` · por ${autor}` : ''}</div>
                           </div>
                         </div>
@@ -2255,6 +2264,7 @@ export function BackofficeAnalysis() {
             {rejectDocModal.sug && (
               <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:10, padding:'8px 12px', marginTop:-10, marginBottom:16 }}>
                 {rejectDocModal.sug.origem === 'A' ? '🏛' : '🤖'} Motivo preenchido pela sugestão da {ORIGEM[rejectDocModal.sug.origem]} — confira antes de confirmar.
+                {rejectDocModal.recheckExpiry && <> Vencimento: <strong>{rejectDocModal.recheckExpiry.split('-').reverse().join('/')}</strong> (nova checagem em 4 meses).</>}
               </div>
             )}
 
