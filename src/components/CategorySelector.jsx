@@ -207,7 +207,11 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
     await loadTree(parent)
   }
 
+  // categoria GERAL (raiz, ex.: "SERVIÇOS"/"MATERIAL") nunca é marcada: só
+  // agrupa — marcada sozinha, o processo cobrava a matriz de todas as
+  // categorias do nível (caso Baterge no staging, 05/10)
   const toggleLeaf = (leafId) => {
+    if (parents.some(p => p.id === leafId) && (trees[leafId]?.children?.length ?? 1) > 0) return
     const next = new Set(selectedIds)
     if (next.has(leafId)) next.delete(leafId); else next.add(leafId)
     onChange(next)
@@ -345,10 +349,12 @@ export default function CategorySelector({ selectedIds = new Set(), onChange, sh
           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             {aiSugs.map((sug, i) => {
               const sugN = norm(sug)
-              const allNodes = [
-                ...parents,
-                ...Object.values(trees).flatMap(t => [...(t.children||[]), ...(t.grandchildren||[])])
-              ]
+              // só categorias selecionáveis: sem as gerais (raiz) e sem as que
+              // têm subcategorias — a sugestão "Serviços…" casava com "SERVIÇOS"
+              const allNodes = Object.values(trees).flatMap(t => {
+                const comFilhos = new Set((t.grandchildren || []).map(g => g.parent_id))
+                return [...(t.children || []).filter(c => !comFilhos.has(c.id)), ...(t.grandchildren || [])]
+              })
               // Match: exato → começa com → contém
               const match = allNodes.find(c => norm(c.name) === sugN)
                          || allNodes.find(c => norm(c.name).includes(sugN))
