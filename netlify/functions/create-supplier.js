@@ -333,7 +333,21 @@ exports.handler = async (event) => {
     } catch (e) { console.warn('BUYER role setup (não crítico):', e.message) }
 
     // 4. Salva categorias selecionadas
-    const categoryIds = body.category_ids || []
+    let categoryIds = body.category_ids || []
+    // categoria GERAL (raiz COM subcategorias) nunca é gravada: marcada
+    // sozinha, o processo cobrava a matriz inteira do nível (caso Baterge,
+    // 05/10). Raiz SEM subcategorias (9 no HOC, 30 fornecedores) é escolha válida.
+    if (categoryIds.length > 0) {
+      const { data: raizes } = await supabaseAdmin.from('categories').select('id')
+        .in('id', categoryIds).is('parent_id', null)
+      const ids = (raizes || []).map(r => r.id)
+      const { data: filhos } = ids.length
+        ? await supabaseAdmin.from('categories').select('parent_id').in('parent_id', ids)
+        : { data: [] }
+      const fora = new Set((filhos || []).map(f => f.parent_id))
+      if (fora.size) console.warn(`categorias gerais descartadas no cadastro: ${[...fora].join(',')}`)
+      categoryIds = categoryIds.filter(c => !fora.has(Number(c)) && !fora.has(c))
+    }
     if (categoryIds.length > 0) {
       const catRows = categoryIds.map(cid => ({ supplier_id: supplier.id, category_id: cid }))
       const { error: catErr } = await supabaseAdmin

@@ -1319,6 +1319,16 @@ export const categoriesApi = {
     // Remove as antigas
     await supabase.from('supplier_categories').delete().eq('supplier_id', supplierId)
     if (!categoryIds.length) return []
+    // categoria GERAL (raiz com subcategorias) não é gravada — só agrupa
+    // (05/10, ver create-supplier); raiz sem subcategorias é escolha válida
+    const { data: raizes } = await supabase.from('categories').select('id').in('id', categoryIds).is('parent_id', null)
+    const ids = (raizes || []).map(r => r.id)
+    const { data: filhos } = ids.length
+      ? await supabase.from('categories').select('parent_id').in('parent_id', ids)
+      : { data: [] }
+    const fora = new Set((filhos || []).map(f => f.parent_id))
+    categoryIds = categoryIds.filter(c => !fora.has(Number(c)) && !fora.has(c))
+    if (!categoryIds.length) return []
     const rows = categoryIds.map(cid => ({ supplier_id: supplierId, category_id: cid }))
     const { data, error } = await supabase.from('supplier_categories').insert(rows).select()
     if (error) throw new Error(error.message)
