@@ -182,19 +182,27 @@ node --check netlify/functions/<fn>.js   # fast syntax gate for a function
     restrictive RLS policy blocks supplier document writes; `analysable_supplier_ids()`
     excludes unreleased suppliers. Anything with a per-call cost (Assertiva, official
     sources, AI review) must check release first.
-13. `user_roles` has `UNIQUE(user_id, role)` → one SUPPLIER link per user, and a
+13. **HOC invitations are history only (patch_116/117).** The nightly sync mirrors
+    the HOC `convite` table into `invitations` with `hoc_id` set. A row with
+    `hoc_id` must NEVER trigger anything from ELOS — no reminder, resend, cancel,
+    auto-link on signup, SUPERSEDED marking, duplicate-check block, seal creation,
+    payment release or ELOS usage metric. HOC runs its own reminder process; doing
+    it here would duplicate. Any new code that reads `invitations` to *act* must
+    filter `hoc_id IS NULL`. Pending/cancelled HOC invites have no `supplier_id`
+    (the client must not see suppliers who never finished signing up) and no token.
+14. `user_roles` has `UNIQUE(user_id, role)` → one SUPPLIER link per user, and a
     trigger caps 4 users per supplier. Multi-company users are a known open issue
     (extra links recorded in `audit_log`).
 
 **Front-end traps:**
 
-14. `onAuthStateChange` fires `TOKEN_REFRESHED` on tab refocus and used to remount
+15. `onAuthStateChange` fires `TOKEN_REFRESHED` on tab refocus and used to remount
     the whole app — `AuthContext.jsx` guards with a last-user-id ref. Don't remove it.
-15. E-mail recipients: many migrated suppliers have **no login user** — always fall
+16. E-mail recipients: many migrated suppliers have **no login user** — always fall
     back to the registration e-mail on `suppliers` (every mailer does this now), and
     sender identity is always the **company** name resolved server-side, never the
     logged-in user's personal name.
-16. Status enums are enforced by CHECK constraints (`documents_status_check` etc.) —
+17. Status enums are enforced by CHECK constraints (`documents_status_check` etc.) —
     introducing a status in JS without a patch throws at insert time.
 
 ## 8. How to work on this repo with Claude Code
