@@ -1882,14 +1882,18 @@ export const questionnaireApi = {
 
   // Supplier: busca questionários dos clientes que o convidaram
   getForSupplier: async (supplierId) => {
-    const { data: invites } = await supabase
-      .from('invitations')
-      .select('client_id')
-      .eq('supplier_id', supplierId)
-      .or('hoc_id.is.null,status.eq.REGISTERED')   // do HOC, só o que virou processo (patch_116)
-    if (!invites?.length) return []
-
-    const clientIds = [...new Set(invites.map(i => i.client_id).filter(Boolean))]
+    // clientes do fornecedor = convites + PROCESSOS (06/10): quem entra pelo
+    // portal do cliente não tem convite e não via o questionário — e sem ele
+    // respondido o processo nunca entra na fila de análise
+    const [{ data: invites }, { data: procs }] = await Promise.all([
+      supabase.from('invitations').select('client_id')
+        .eq('supplier_id', supplierId)
+        .or('hoc_id.is.null,status.eq.REGISTERED'),   // do HOC, só o que virou processo (patch_116)
+      supabase.from('seals').select('client_id')
+        .eq('supplier_id', supplierId).not('client_id', 'is', null),
+    ])
+    const clientIds = [...new Set([...(invites || []), ...(procs || [])].map(i => i.client_id).filter(Boolean))]
+    if (!clientIds.length) return []
     const { data, error } = await supabase
       .from('questionnaires')
       .select('*, clients(razao_social), questionnaire_questions(id, text, type, options, required, order_index)')
