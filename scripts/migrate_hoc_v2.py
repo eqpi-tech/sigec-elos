@@ -969,7 +969,8 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
                         stat("details_suppliers", discard={"phase": "details", "supplier": r["id"], "motivo": str(e2)})
 
         stat("details_partners", hoc_count=len(partner_batch))
-        for chunk in chunks(partner_batch, 500):
+        # lotes de 200 (06/10): com 500 estourava o statement timeout e caía no um a um
+        for chunk in chunks(partner_batch, 200):
             try:
                 sb.table("supplier_partners").upsert(chunk, on_conflict="hoc_id").execute()
                 stat("details_partners", written=len(chunk))
@@ -1011,6 +1012,10 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
                         stat("details_financials", discard={"phase": "details_financials", "supplier": r["supplier_id"], "motivo": str(e2)})
 
     # ── 2. Clientes: linha completa → clients.hoc_extra ──
+    # ~25 min gravando no ELOS acima: o RDS derruba a conexão parada (falha
+    # de 05/10 nesta linha) — confere/reconecta em modo leitura e cursor novo
+    ensure_mysql_ro(mysql_conn)
+    cur = mysql_conn.cursor()
     cur.execute("SELECT * FROM cliente")
     ccols = [d[0] for d in cur.description]
     cli_batch = []
