@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
+import RouteABadge from '../../components/RouteABadge.jsx'
+import AutoCollectPanel from '../../components/AutoCollectPanel.jsx'
+import RouteBReview from '../../components/RouteBReview.jsx'
+import AiReviewPanel from '../../components/AiReviewPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
+import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
+import { siteUrl } from '../../lib/siteUrl.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -261,6 +267,9 @@ export function BackofficeAnalysis() {
   const [rejectReasons,  setRejectReasons]  = useState([])
   const [rejectCode,     setRejectCode]     = useState('')
   const [rejectCustom,   setRejectCustom]   = useState('')
+  // Rota B: pré-análises por IA do fornecedor (mais recente primeiro) e tipos habilitados
+  const [aiReviews,      setAiReviews]      = useState([])
+  const [aiTypes,        setAiTypes]        = useState(new Set())
   // Número de inscrição (Municipal/Estadual)
   const [approveInscription, setApproveInscription] = useState('')
   // Cartas de exceção do processo (patch_051)
@@ -339,6 +348,9 @@ export function BackofficeAnalysis() {
     assertivaApi.getLast(id)
       .then(setAssertivaReport)
       .catch(() => setAssertivaReport(null))
+    // Rota B: pré-análises por IA
+    routeBApi.reviews(id).then(setAiReviews)
+    routeBApi.enabledTypes().then(setAiTypes)
     // Carrega motivos de recusa parametrizados
     adminApi.getRejectionReasons()
       .then(setRejectReasons)
@@ -373,6 +385,21 @@ export function BackofficeAnalysis() {
       })
       .catch(() => {})
   }, [data])
+
+  // Rota B: enquanto houver pré-análise em andamento, atualiza a cada 15 s
+  const aiPendente = aiReviews.some(r => ['queued', 'running', 'retry'].includes(r.status))
+  useEffect(() => {
+    if (!aiPendente) return
+    const t = setInterval(() => routeBApi.reviews(id).then(setAiReviews), 15000)
+    return () => clearInterval(t)
+  }, [aiPendente, id])
+  // pré-análise mais recente de cada documento
+  const aiPorDoc = {}
+  for (const r of aiReviews) if (!aiPorDoc[r.document_id]) aiPorDoc[r.document_id] = r
+  const pedirPreAnalise = async (docId) => {
+    try { await routeBApi.request(docId); setAiReviews(await routeBApi.reviews(id)) }
+    catch (e) { alert('Pré-análise por IA: ' + e.message) }
+  }
 
   const savePartner = async () => {
     if (!partnerForm.nome.trim()) return
@@ -499,7 +526,7 @@ export function BackofficeAnalysis() {
                   <li>Ao final, voce recebe o resultado por email</li>
                 </ul>
               </div>
-              <a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
+              <a href="${siteUrl()}/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
             </div>
             <div style="background:#f8fafc;padding:14px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
           </div>`,
@@ -676,7 +703,7 @@ export function BackofficeAnalysis() {
                 <p style="margin:0;font-size:13px;color:#15803d">✅ <strong>Sua empresa já está visível no marketplace</strong> para compradores qualificados da plataforma.</p>
               </div>
               <div style="text-align:center">
-                <a href="https://elos.eqpitech.com.br/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
+                <a href="${siteUrl()}/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
               </div>
             </div>
             <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div>
@@ -717,10 +744,27 @@ export function BackofficeAnalysis() {
     setApproveInscription('')
     // validade: sugestão do load (fim do plano) ou análise + 1 ano (18/09 —
     // o campo vinha vazio p/ fornecedor sem plano, ex.: subsidiado)
-    if (!approveExpiry) {
+    // Rota A: a certidão da fonte oficial já traz a validade — ela prevalece
+    if (doc.metadata?.route === 'A' && doc.expires_at) {
+      setApproveExpiry(doc.expires_at.slice(0, 10))
+    } else if (!approveExpiry) {
       const d = new Date(); d.setFullYear(d.getFullYear() + 1)
       setApproveExpiry(d.toISOString().slice(0, 10))
     }
+  }
+
+  // "Aceitar sugestão" (29/09): abre a decisão já preenchida — aprovação com a
+  // validade da fonte/documento, ou rejeição com o motivo — para conferir
+  const aceitarSugestao = (doc) => {
+    const sug = sugestaoDoc(doc, aiPorDoc[doc.id])
+    const dec = decisaoSugerida(sug, rejectReasons)
+    if (!dec) return
+    // reprovação aceita: motivo da sugestão + vencimento em 4 meses (rechecagem, 05/10)
+    if (dec.status === 'REJECTED') { handleDocReject(doc.id, doc.label, dec.expiry); return }
+    openApproveModal(doc)
+    setApproveExpiry(dec.expiry)
+    setApproveNote(dec.note)
+    setApproveModal(m => m && { ...m, sug, expiryOrigem: dec.expiryOrigem })
   }
 
   // ── Validação do CNAE = vínculo categoria×CNAE (18/09) ──────────────────
@@ -801,16 +845,21 @@ export function BackofficeAnalysis() {
     }
   }
 
-  const handleDocReject = (docId, docLabel) => {
-    setRejectCode('')
+  const handleDocReject = (docId, docLabel, recheckExpiry = null) => {
+    // Rota B: a IA sugeriu reprovar este arquivo → motivo já preenchido
+    // (o analista confere e pode trocar)
+    const doc = (data?.documents || []).find(d => d.id === docId)
+    const sug = sugestaoDoc(doc, aiPorDoc[docId])
+    const reprova = sug?.veredito === 'reprovar' ? sug : null
+    setRejectCode(reprova ? motivoSugerido(reprova, rejectReasons) : '')
     setRejectCustom('')
-    setRejectDocModal({ docId, docLabel })
+    setRejectDocModal({ docId, docLabel, sug: reprova, recheckExpiry })
   }
 
   const confirmDocReject = async () => {
     // rejectCode agora carrega o TEXTO do motivo (datalist com busca — 18/09)
     if (!rejectDocModal || !rejectCode.trim()) return
-    const { docId } = rejectDocModal
+    const { docId, recheckExpiry } = rejectDocModal
     const motivo = rejectCode.trim()
     setRejectDocModal(null)
     setDocActions(prev => ({ ...prev, [docId]: 'loading' }))
@@ -819,7 +868,8 @@ export function BackofficeAnalysis() {
       const post = (extra = {}) => fetch('/.netlify/functions/admin-approve-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo, ...extra }),
+        body: JSON.stringify({ documentId: docId, status: 'REJECTED', note: motivo,
+          ...(recheckExpiry ? { expiresAt: recheckExpiry } : {}), ...extra }),
       })
       let res = await post()
       let result = await res.json()
@@ -1418,22 +1468,38 @@ export function BackofficeAnalysis() {
                 </button>
               </div>
             )}
+            <AutoCollectPanel supplierId={id} sealId={procSelKey === 'ALL' ? null : processSeal?.id} docs={docs}/>
+            <AiReviewPanel reviews={aiReviews.filter(r => docs.some(d => d.id === r.document_id))}/>
             {docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
               const status = actn && actn!=='loading' ? actn : doc.status
               const colors  = { VALID:'#f8fffe',PENDING:'#fff7ed',MISSING:'#fff5f5',REJECTED:'#fff5f5' }
               const borders = { VALID:'#dcfce7',PENDING:'#fed7aa',MISSING:'#fee2e2',REJECTED:'#fee2e2' }
               return (
-                <div key={i} style={{ display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,marginBottom:8,background:colors[status]||'#f4f5f9',border:`1px solid ${borders[status]||'#e2e4ef'}` }}>
+                // 2 níveis (05/10): nome/status/sugestões na largura toda e os botões
+                // numa barra única abaixo — em linha só, até 6 botões espremiam o nome
+                <div key={i} style={{ display:'flex',flexDirection:'column',gap:8,padding:'12px 14px',borderRadius:12,marginBottom:8,background:colors[status]||'#f4f5f9',border:`1px solid ${borders[status]||'#e2e4ef'}` }}>
+                  <div style={{ display:'flex',alignItems:'flex-start',gap:12 }}>
                   <StatusDot status={status}/>
-                  <div style={{ flex:1 }}>
+                  <div style={{ flex:1,minWidth:0,overflowWrap:'anywhere' }}>
                     <div style={{ fontSize:13,fontWeight:700,color:'#1a1c5e',fontFamily:'Montserrat,sans-serif' }}>{doc.label}</div>
                     <div style={{ fontSize:11,color:'#9B9B9B' }}>
                       {doc.source==='AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}
                       {doc.expires_at ? ` · vence ${doc.expires_at.slice(0,10)}` : ''}
                     </div>
+                    <RouteABadge doc={doc}/>
+                    {ROUTE_B_ENABLED && (aiPorDoc[doc.id]
+                      ? <RouteBReview review={aiPorDoc[doc.id]} onReanalyze={() => pedirPreAnalise(doc.id)}/>
+                      : doc.storage_path && !doc.hoc_arquivo_id && aiTypes.has(String(doc.type)) && (
+                        <button onClick={() => pedirPreAnalise(doc.id)}
+                          style={{ marginTop:3, fontSize:9.5, border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:20, padding:'1px 8px', cursor:'pointer' }}>
+                          🤖 Pré-analisar com IA
+                        </button>
+                      ))}
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
+                  </div>
+                  <div style={{ display:'flex',gap:6,justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap' }}>
                   {(() => {
                     const aiType = getDocAiType(doc)
                     if (aiType && doc.storage_path) {
@@ -1450,7 +1516,7 @@ export function BackofficeAnalysis() {
                     }
                     // Docs normais: botão Ver (Storage próprio ou S3 do HOC via URL pré-assinada)
                     if (doc.storage_path) return (
-                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
                     )
                     if (doc.hoc_arquivo_id) return (
                       <Button variant="neutral" size="sm" onClick={async()=>{
@@ -1465,6 +1531,15 @@ export function BackofficeAnalysis() {
                   {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
                     <>
                       {actn==='loading' ? <Spinner size={16}/> : <>
+                        {status === 'PENDING' && (() => {
+                          const dec = decisaoSugerida(sugestaoDoc(doc, aiPorDoc[doc.id]), rejectReasons)
+                          return dec && (
+                            <Button variant="neutral" size="sm" onClick={() => aceitarSugestao(doc)}
+                              title="Abre a decisão já preenchida pela sugestão (validade ou motivo) para você conferir">
+                              {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
+                            </Button>
+                          )
+                        })()}
                         {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
                           <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
                         )}
@@ -1478,6 +1553,7 @@ export function BackofficeAnalysis() {
                     <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
                       onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
                   )}
+                  </div>
                 </div>
               )
             })}
@@ -1503,7 +1579,7 @@ export function BackofficeAnalysis() {
                       {missing && <div style={{ fontSize:10.5,color:'#9B9B9B' }}>não enviado pelo fornecedor</div>}
                     </div>
                     {doc?.storage_path && (
-                      <Button variant="neutral" size="sm" onClick={async()=>{ const url=await documentApi.getSignedUrl(doc.storage_path); window.open(url,'_blank') }}>👁 Ver</Button>
+                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
                     )}
                     {doc && ['PENDING','VALID','EXPIRING','EXPIRED'].includes(status) && (
                       actn==='loading' ? <Spinner size={16}/> : <>
@@ -1769,9 +1845,10 @@ export function BackofficeAnalysis() {
                           <div style={{ width:32,height:32,borderRadius:8,background:`${info.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,marginTop:2 }}>
                             {info.icon}
                           </div>
-                          <div style={{ flex:1 }}>
+                          {/* minWidth 0 + overflowWrap: descrição longa do HOC (ex.: DRE) não sai da caixa (05/10) */}
+                          <div style={{ flex:1,minWidth:0,overflowWrap:'anywhere' }}>
                             <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:info.color }}>{info.label}</div>
-                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2 }}>{detail}</div>}
+                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2,whiteSpace:'pre-wrap' }}>{detail}</div>}
                             <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}{autor ? ` · por ${autor}` : ''}</div>
                           </div>
                         </div>
@@ -2064,7 +2141,11 @@ export function BackofficeAnalysis() {
                 onChange={e => setApproveExpiry(e.target.value)}
                 style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, boxSizing:'border-box' }}
               />
-              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Sugestão: data de vencimento da assinatura do fornecedor</div>
+              <div style={{ fontSize:11, color: approveModal.sug ? '#92400e' : '#9B9B9B', marginTop:4 }}>
+                {approveModal.sug
+                  ? `${approveModal.sug.origem === 'A' ? '🏛' : '🤖'} Preenchida pela sugestão da ${ORIGEM[approveModal.sug.origem]}: ${approveModal.expiryOrigem} — confira`
+                  : 'Sugestão: data de vencimento da assinatura do fornecedor'}
+              </div>
             </div>
 
             {approveModal && (approveModal.docLabelLower?.includes('inscrição municipal') || approveModal.docLabelLower?.includes('inscricao municipal') || approveModal.docLabelLower?.includes('inscrição estadual') || approveModal.docLabelLower?.includes('inscricao estadual')) && (
@@ -2180,6 +2261,12 @@ export function BackofficeAnalysis() {
           <div style={{ background:'#fff', borderRadius:16, padding:28, maxWidth:460, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#dc2626', marginBottom:6 }}>✕ Rejeitar Documento</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:20 }}>{rejectDocModal.docLabel}</div>
+            {rejectDocModal.sug && (
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', background:'#fef3c7', borderRadius:10, padding:'8px 12px', marginTop:-10, marginBottom:16 }}>
+                {rejectDocModal.sug.origem === 'A' ? '🏛' : '🤖'} Motivo preenchido pela sugestão da {ORIGEM[rejectDocModal.sug.origem]} — confira antes de confirmar.
+                {rejectDocModal.recheckExpiry && <> Vencimento: <strong>{rejectDocModal.recheckExpiry.split('-').reverse().join('/')}</strong> (nova checagem em 4 meses).</>}
+              </div>
+            )}
 
             <div style={{ marginBottom:16 }}>
               <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', marginBottom:6 }}>

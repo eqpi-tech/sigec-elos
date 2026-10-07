@@ -317,6 +317,35 @@ export const documentApi = {
     return data
   },
 
+  // Abre o arquivo de um documento numa aba nova — Storage do ELOS ou S3
+  // legado do HOC. Comprovante oficial em HTML (Rota A: FGTS, Sintegra…): o
+  // Storage o entrega como texto puro (mostrava o código); aqui ele é exibido
+  // dentro de um iframe SANDBOX — sem scripts e sem acesso à sessão do ELOS.
+  view: async (doc) => {
+    const path = doc?.storage_path || doc?.letter_path || null
+    const isHtml = /\.html?$/i.test(path || '')
+    const w = isHtml ? window.open('', '_blank') : null   // abre já no clique (bloqueio de pop-up)
+    try {
+      if (!path) { window.open(await documentApi.getHocFileUrl(doc.id), '_blank'); return }
+      const url = await documentApi.getSignedUrl(path)
+      if (!isHtml) { window.open(url, '_blank'); return }
+      const html = await (await fetch(url)).text()
+      const titulo = String(doc.label || 'Comprovante').replace(/[<>&"]/g, '')
+      const srcdoc = html.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      if (!w) throw new Error('O navegador bloqueou a nova aba — permita pop-ups para este site')
+      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${titulo}</title>
+<style>html,body{margin:0;height:100%;background:#f4f5fa;font-family:Arial,sans-serif}
+.bar{background:#2E3192;color:#fff;padding:8px 14px;font-size:13px}
+iframe{border:0;width:100%;height:calc(100% - 34px);background:#fff}</style></head>
+<body><div class="bar">SIGEC-ELOS · ${titulo} · comprovante oficial (visualização segura)</div>
+<iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${srcdoc}"></iframe></body></html>`)
+      w.document.close()
+    } catch (e) {
+      if (w) w.close()
+      throw e
+    }
+  },
+
   getSignedUrl: async (storagePath) => {
     const { data, error } = await supabase.storage
       .from('documents')
@@ -1010,7 +1039,7 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
-  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sugestao, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
     // RPC admin_list_documents (patch_069): a fila só traz documentos de
     // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
     // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
@@ -1024,6 +1053,9 @@ export const adminApi = {
       p_sort:          sortBy,
       p_page:          page,
       p_size:          pageSize,
+      // filtro por sugestão da automação (patch_111) — só enviado quando usado,
+      // para não quebrar a RPC onde o patch ainda não foi aplicado
+      ...(sugestao ? { p_sugestao: sugestao } : {}),
       ...(prioritario ? { p_prioritario: true } : {}),   // patch_113
     })
     if (error) throw new Error(error.message)
@@ -1300,6 +1332,12 @@ export const categoriesApi = {
     const rows = categoryIds.map(cid => ({ supplier_id: supplierId, category_id: cid }))
     const { data, error } = await supabase.from('supplier_categories').insert(rows).select()
     if (error) throw new Error(error.message)
+    // categoria nova pode exigir documento que a Rota A coleta (07/10, caso
+    // Presmet): refaz a fila de coleta — sem custo duplicado; melhor esforço
+    authFetch('/.netlify/functions/homolog-collect-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supplierId }),
+    }).catch(() => {})
     return data
   },
 
@@ -1432,6 +1470,86 @@ export const mobilityApi = {
       posts: posts.length, peopleShortfall, docsMissing,
       complete: peopleShortfall === 0 && docsMissing === 0,
     }
+  },
+}
+
+// ── Homologação automática — Rota A (SPEC_HOMOLOGACAO_AUTOMATICA.md) ─────────
+// Fila da coleta nas fontes oficiais. Só leitura no browser: quem enfileira e
+// processa é o servidor (create-supplier + homolog-collect-background).
+export const ROUTE_A_ENABLED = import.meta.env.VITE_ROUTE_A_ENABLED === 'true'
+
+export const routeAApi = {
+  // doc_type → { status, attempts, last_error } (o job mais recente por tipo)
+  jobsFor: async (supplierId) => {
+    if (!ROUTE_A_ENABLED || !supplierId) return {}
+    const { data, error } = await supabase.from('auto_collect_jobs')
+      .select('doc_type, status, attempts, last_error, created_at')
+      .eq('supplier_id', supplierId).order('created_at', { ascending: true })
+    if (error) { console.warn('auto_collect_jobs:', error.message); return {} }
+    return Object.fromEntries((data || []).map(j => [j.doc_type, j]))
+  },
+
+  // Backoffice: fila completa da coleta de um fornecedor (quadro "Coleta
+  // automática" — evidência da Rota A: fonte, situação, tentativas, custo)
+  collectJobs: async (supplierId) => {
+    if (!ROUTE_A_ENABLED || !supplierId) return []
+    const { data, error } = await supabase.from('auto_collect_jobs')
+      .select('id, seal_id, doc_type, fonte, status, attempts, next_attempt_at, last_error, cost_brl, history, created_at, finished_at')
+      .eq('supplier_id', supplierId).order('doc_type')
+    if (error) { console.warn('auto_collect_jobs:', error.message); return [] }
+    const ids = [...new Set((data || []).map(j => Number(j.doc_type)).filter(Boolean))]
+    const { data: cat } = ids.length ? await supabase.from('documents_catalog').select('id, name').in('id', ids) : { data: [] }
+    const nome = Object.fromEntries((cat || []).map(c => [String(c.id), c.name]))
+    return (data || []).map(j => ({ ...j, doc_name: nome[j.doc_type] || null }))
+  },
+}
+
+// ── Rota B — pré-análise por IA (SPEC_ROTA_B.md, patch_109) ─────────────────
+// Só o backoffice lê (RLS: is_admin). O fornecedor não vê a sugestão da IA.
+export const ROUTE_B_ENABLED = import.meta.env.VITE_ROUTE_B_ENABLED === 'true'
+
+export const routeBApi = {
+  // todas as pré-análises do fornecedor (a mais recente primeiro), com o nome do tipo
+  reviews: async (supplierId) => {
+    if (!ROUTE_B_ENABLED || !supplierId) return []
+    const { data, error } = await supabase.from('ai_review_jobs')
+      .select('id, document_id, doc_type, storage_path, status, attempts, last_error, verdict, confidence, result, input_mode, pages, model, prompt_version, cost_brl, requested_by, created_at, finished_at, analyst_decision, analyst_note, decided_at')
+      .eq('supplier_id', supplierId).order('created_at', { ascending: false })
+    if (error) { console.warn('ai_review_jobs:', error.message); return [] }
+    const ids = [...new Set((data || []).map(j => Number(j.doc_type)).filter(Boolean))]
+    const { data: cat } = ids.length ? await supabase.from('documents_catalog').select('id, name').in('id', ids) : { data: [] }
+    const nome = Object.fromEntries((cat || []).map(c => [String(c.id), c.name]))
+    return (data || []).map(j => ({ ...j, doc_name: nome[j.doc_type] || null }))
+  },
+
+  // pré-análise mais recente de cada documento (fila de análise)
+  latestByDocument: async (documentIds) => {
+    if (!ROUTE_B_ENABLED || !documentIds?.length) return {}
+    const { data, error } = await supabase.from('ai_review_jobs')
+      .select('id, document_id, storage_path, status, verdict, confidence, result, last_error, created_at')
+      .in('document_id', documentIds).order('created_at', { ascending: true })
+    if (error) { console.warn('ai_review_jobs:', error.message); return {} }
+    return Object.fromEntries((data || []).map(j => [j.document_id, j]))
+  },
+
+  // tipos de documento com pré-análise ligada (route B e fora do modo manual)
+  enabledTypes: async () => {
+    if (!ROUTE_B_ENABLED) return new Set()
+    const { data } = await supabase.from('documents_catalog').select('id')
+      .eq('route', 'B').neq('validation_mode', 'manual')
+    return new Set((data || []).map(d => String(d.id)))
+  },
+
+  // analista pede (re)análise de um documento — dispara o processador na hora
+  request: async (documentId) => {
+    const res = await authFetch('/.netlify/functions/homolog-ai-review-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentId }),
+    })
+    const out = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(out.error || `Erro ${res.status}`)
+    return out
   },
 }
 

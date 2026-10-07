@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminApi, documentApi } from '../../services/api.js'
+import { adminApi, documentApi, routeBApi, ROUTE_A_ENABLED, ROUTE_B_ENABLED } from '../../services/api.js'
+import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { supabase } from '../../lib/supabase.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
+import RouteABadge from '../../components/RouteABadge.jsx'
+import RouteBReview from '../../components/RouteBReview.jsx'
 import { parseMoneyBR } from '../../lib/money.js'
 
 // Dois filtros INDEPENDENTES (patch_075):
@@ -28,6 +31,18 @@ const STATUS_OPTIONS = [
   { value: 'NOT_APPLICABLE', label: 'Não se aplica' },
   { value: 'MISSING',  label: 'Não enviado' },
 ]
+
+// Sugestão da automação (29/09) — só onde as Rotas A/B estão ligadas
+const SUGESTAO_OPTIONS = [
+  { value: '',         label: 'Todas' },
+  { value: 'A',        label: '🏛 Rota A — fonte oficial' },
+  { value: 'B',        label: '🤖 Rota B — IA' },
+  { value: 'aprovar',  label: '✓ Sugere aprovar' },
+  { value: 'reprovar', label: '✕ Sugere reprovar' },
+  { value: 'revisar',  label: '? Revisar' },
+  { value: 'nenhuma',  label: 'Sem sugestão' },
+]
+const SUGESTAO_ON = ROUTE_A_ENABLED || ROUTE_B_ENABLED
 
 const SORT_OPTIONS = [
   { value: 'due_asc',      label: 'Data limite da análise ↑' },
@@ -124,8 +139,7 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
 
         <div style={{ display:'flex', gap:8, marginBottom:20 }}>
           <Button variant="neutral" size="sm" onClick={async () => {
-            const url = await documentApi.getSignedUrl(doc.storage_path)
-            window.open(url, '_blank')
+            try { await documentApi.view(doc) } catch (e) { alert(e.message) }
           }}>👁 Ver documento</Button>
           <Button variant="primary" size="sm" disabled={aiLoading} onClick={extractWithAI}>
             {aiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
@@ -197,16 +211,30 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
 
 // Modal ÚNICO de edição (paridade HOC): ver, substituir arquivo, vencimento,
 // status (Aprovado/Reprovado/Não se aplica) e motivo — tudo em um lugar.
-function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
+function EditDocModal({ doc, reasons, rule, ia, aceitar = false, onView, onSubmit, onClose }) {
+  // Sugestão da automação (Rota A ou B) e a decisão que ela preenche (29/09)
+  const sug = sugestaoDoc(doc, ia)
+  const dec = decisaoSugerida(sug, reasons)
+  const iaMotivo = sug?.veredito === 'reprovar' ? motivoSugerido(sug, reasons) : ''
+  const pre = aceitar && dec ? dec : null     // "Aceitar sugestão": abre já preenchido
   const [file, setFile]           = useState(null)
-  const [expiry, setExpiry]       = useState(doc.expires_at ? doc.expires_at.slice(0, 10) : '')
-  const [status, setStatus]       = useState('')       // '' = manter atual
+  const [expiry, setExpiry]       = useState(pre?.expiry || (doc.expires_at ? doc.expires_at.slice(0, 10) : ''))
+  const [status, setStatus]       = useState(pre?.status || '')       // '' = manter atual
   const [inscription, setInscription] = useState(doc.inscription_number || '')
-  const [reasonText, setReasonText] = useState('')   // motivo (datalist com busca por digitação)
+  const [reasonText, setReasonText] = useState(pre?.status === 'REJECTED' ? pre.note : '')   // motivo (datalist com busca por digitação)
+  const [aplicada, setAplicada]   = useState(!!pre)   // os campos vieram da sugestão
+  const [regraAberta, setRegraAberta] = useState(!pre)  // regra longa recolhida ao aceitar sugestão: a decisão fica à vista
+  const aplicarSugestao = () => {
+    if (!dec) return
+    setStatus(dec.status)
+    setExpiry(dec.expiry)   // aprovado: validade sugerida · reprovado: rechecagem em 4 meses
+    if (dec.status === 'VALID') setCustomNote(dec.note); else setReasonText(dec.note)
+    setAplicada(true)
+  }
   // Validade sugerida na aprovação: análise (hoje) + 1 ano — regra 09/09
   const umAnoDaAnalise = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10) })()
   const hojeISO = new Date().toISOString().slice(0, 10)
-  const [customNote, setCustomNote] = useState('')
+  const [customNote, setCustomNote] = useState(pre?.status === 'VALID' ? pre.note : '')
   const [saving, setSaving]       = useState(false)
 
   const note = status === 'REJECTED' ? reasonText.trim() : customNote.trim()
@@ -234,7 +262,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16 }}>
-      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth:480,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)',maxHeight:'92vh',overflowY:'auto' }}>
+      <div style={{ background:'#fff',borderRadius:16,padding:24,maxWidth: sug ? 640 : 480,width:'100%',boxShadow:'0 24px 60px rgba(0,0,0,.3)',maxHeight:'92vh',overflowY:'auto' }}>
         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4 }}>
           <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:800,fontSize:16,color:'#1a1c5e' }}>✏️ Editar Documento</div>
           <button onClick={onClose} style={{ background:'none',border:'none',cursor:'pointer',color:'#9B9B9B',fontSize:18,lineHeight:1 }}>✕</button>
@@ -247,18 +275,47 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
           {doc.expires_at && ` · vence em ${doc.expires_at.slice(0,10)}`}
         </div>
 
-        {rule && (
-          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1e40af', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:14, whiteSpace:'pre-line' }}>
-            <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom:4 }}>📋 Como validar este documento</strong>
-            {rule}
+        <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexWrap:'wrap', marginBottom:14 }}>
+          {(doc.storage_path || doc.hoc_arquivo_id) && (
+            <Button variant="neutral" size="sm" onClick={() => onView(doc)}>👁 Ver documento atual</Button>
+          )}
+          {sug && (
+            <div style={{ flex:1, minWidth:260, border:'1px solid rgba(46,49,146,.18)', background:'#fafbff', borderRadius:10, padding:'8px 12px' }}>
+              <strong style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', color:'#2E3192' }}>
+                {sug.origem === 'A' ? '🏛' : '🤖'} Sugestão — {ORIGEM[sug.origem]}
+              </strong>
+              {sug.origem === 'A' ? <RouteABadge doc={doc}/> : <RouteBReview review={ia}/>}
+              {dec ? (
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, flexWrap:'wrap' }}>
+                  <Button variant={dec.status === 'VALID' ? 'success' : 'danger'} size="sm" onClick={aplicarSugestao}>
+                    {dec.status === 'VALID' ? '✓ Aceitar sugestão: aprovar' : '✕ Aceitar sugestão: reprovar'}
+                  </Button>
+                  <span style={{ fontSize:10.5, color:'#6b7280', fontFamily:'DM Sans,sans-serif' }}>
+                    {dec.status === 'VALID' ? `validade ${dec.expiry.split('-').reverse().join('/')} (${dec.expiryOrigem})` : `preenche o motivo da recusa e o vencimento ${dec.expiry.split('-').reverse().join('/')} (nova checagem em 4 meses)`}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ fontSize:10.5, color:'#b45309', marginTop:4, fontFamily:'DM Sans,sans-serif' }}>Sugestão "revisar": a decisão é do analista.</div>
+              )}
+            </div>
+          )}
+        </div>
+        {aplicada && (
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'6px 10px', marginBottom:14 }}>
+            {sug?.origem === 'A' ? '🏛' : '🤖'} Status, {status === 'VALID' ? 'validade' : 'motivo'} e observação preenchidos pela sugestão — confira e clique em salvar.
           </div>
         )}
 
-        {(doc.storage_path || doc.hoc_arquivo_id) && (
-          <Button variant="neutral" size="sm" style={{ marginBottom:16 }} onClick={() => onView(doc)}>
-            👁 Ver documento atual
-          </Button>
+        {rule && (
+          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#1e40af', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:14, whiteSpace:'pre-line' }}>
+            <strong onClick={() => setRegraAberta(a => !a)}
+              style={{ fontFamily:'Montserrat,sans-serif', fontSize:10, letterSpacing:.5, textTransform:'uppercase', display:'block', marginBottom: regraAberta ? 4 : 0, cursor:'pointer' }}>
+              📋 Como validar este documento {regraAberta ? '▲' : '▼ (clique para ver a regra)'}
+            </strong>
+            {regraAberta && rule}
+          </div>
         )}
+
 
         <span style={lbl}>Substituir documento</span>
         <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={e => setFile(e.target.files?.[0] || null)}
@@ -287,7 +344,7 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         <span style={lbl}>Status</span>
         <select value={status} onChange={e => {
             const v = e.target.value
-            setStatus(v); setReasonText(''); setCustomNote('')
+            setStatus(v); setReasonText(v === 'REJECTED' && iaMotivo ? iaMotivo : ''); setCustomNote(''); setAplicada(false)
             // Regra (09/09, ampliada 25/09): aprovar sem validade informada OU
             // com validade já vencida → sugere análise + 1 ano
             if (v === 'VALID' && (!expiry || expiry < hojeISO)) setExpiry(umAnoDaAnalise)
@@ -302,6 +359,11 @@ function EditDocModal({ doc, reasons, rule, onView, onSubmit, onClose }) {
         {status === 'REJECTED' ? (
           <>
             <span style={lbl}>Motivo da reprovação * <span style={{ fontWeight:400, color:'#9B9B9B' }}>(digite para buscar — motivos do HOC)</span></span>
+            {iaMotivo && reasonText === iaMotivo && (
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'6px 10px', marginBottom:8 }}>
+                {sug?.origem === 'A' ? '🏛' : '🤖'} Motivo preenchido pela sugestão da {ORIGEM[sug?.origem]} — confira antes de salvar.
+              </div>
+            )}
             <input list="motivos-reprovacao-doc" value={reasonText}
               onChange={e => setReasonText(e.target.value)}
               placeholder="Digite para buscar ou escreva um motivo..."
@@ -373,6 +435,7 @@ export default function DocumentAnalysis() {
     ['VALID','REJECTED','EXPIRING','EXPIRED','NOT_APPLICABLE','MISSING','PENDING'].includes(saved.statusFilter)
       ? saved.statusFilter : 'todos')
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
+  const [sugFilter,     setSugFilter]     = useState(SUGESTAO_ON ? (saved.sugFilter ?? '') : '')
   const [prioFilter,    setPrioFilter]    = useState(!!saved.prioFilter)   // ⚡ só prioritários (patch_113)
   const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'due_asc')
 
@@ -395,11 +458,14 @@ export default function DocumentAnalysis() {
   const [mobOpen,     setMobOpen]     = useState(false)
   const mobPendIds = new Set(mobPend.map(m => m.supplier_id))
   const [histModal,   setHistModal]   = useState(null) // doc — histórico de versões/decisões
+  const [aiMap,       setAiMap]       = useState({})   // Rota B: documentId → pré-análise por IA mais recente
 
   // Doc 61 (Análise CNAEs): a validação É o de/para categoria×CNAE — mesma
   // regra da ficha do processo (paridade corrigida em 25/09)
-  const openEdit = (doc) => {
+  const [editAceitar, setEditAceitar] = useState(false)   // modal aberto por "Aceitar sugestão"
+  const openEdit = (doc, aceitar = false) => {
     if (String(doc.type) === '61') { setCnaeModal({ doc }); return }
+    setEditAceitar(aceitar)
     setEditModal(doc)
   }
 
@@ -426,6 +492,7 @@ export default function DocumentAnalysis() {
         status: statusFilter !== 'todos' ? statusFilter : undefined,
         queue: queueFilter,
         expiresUntil: expiresUntil || undefined,
+        sugestao: sugFilter || undefined,
         prioritario: prioFilter || undefined,
         sortBy,
         page: pg,
@@ -433,14 +500,15 @@ export default function DocumentAnalysis() {
       })
       setRows(result.rows)
       setTotal(result.total)
+      if (ROUTE_B_ENABLED) routeBApi.latestByDocument(result.rows.map(d => d.id)).then(setAiMap)
       setPage(pg)
-      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy, page: pg }))
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy, page: pg }))
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy])
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy])
 
   // Primeira carga restaura também a PÁGINA salva (voltar da visualização
   // de um documento mantém o analista onde estava)
@@ -453,8 +521,8 @@ export default function DocumentAnalysis() {
 
   // Salva os filtros a cada mudança
   useEffect(() => {
-    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy, page }))
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, prioFilter, sortBy])
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy, page }))
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy])
 
   async function handleApprove(docId, expiry, status = 'VALID', note, inscriptionNumber) {
     setSaving(p => new Set([...p, docId]))
@@ -485,10 +553,7 @@ export default function DocumentAnalysis() {
   // Abre o arquivo (Storage ELOS ou S3 legado do HOC)
   async function viewDoc(doc) {
     try {
-      const url = doc.storage_path
-        ? await documentApi.getSignedUrl(doc.storage_path)
-        : await documentApi.getHocFileUrl(doc.id)
-      window.open(url, '_blank')
+      await documentApi.view(doc)
     } catch (e) { alert(e.message) }
   }
 
@@ -606,6 +671,7 @@ export default function DocumentAnalysis() {
           status: statusFilter !== 'todos' ? statusFilter : undefined,
           queue: queueFilter,
           expiresUntil: expiresUntil || undefined,
+        sugestao: sugFilter || undefined,
         prioritario: prioFilter || undefined,
           sortBy: 'expires_asc',
           page: 0,
@@ -734,13 +800,18 @@ export default function DocumentAnalysis() {
               <option value="prio">⚡ Só prioritários (pedido do cliente)</option>
             </select>
           </div>
-          {/* Filtro STATUS omitido por ora (pedido 18/09) — a fila cobre o
-              dia a dia; reativar exibindo o select de STATUS_OPTIONS */}
-          {false && (
+          {/* Filtro STATUS reativado em 29/09 (estava omitido desde 18/09) */}
+          <div>
+            <span style={lbl}>Status</span>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inp}>
+              {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          {SUGESTAO_ON && (
             <div>
-              <span style={lbl}>Status</span>
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inp}>
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              <span style={lbl}>Sugestão</span>
+              <select value={sugFilter} onChange={e => setSugFilter(e.target.value)} style={inp}>
+                {SUGESTAO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           )}
@@ -755,7 +826,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setPrioFilter(false); setExpiresUntil(''); setSortBy('due_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setSugFilter(''); setPrioFilter(false); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>
@@ -896,6 +967,8 @@ export default function DocumentAnalysis() {
                       {String(doc.type).startsWith('mob:') && ' · 👷 Mobilidade'}
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
+                    <RouteABadge doc={doc} compact/>
+                    <RouteBReview review={aiMap[doc.id]} compact/>
                     {doc.prioridade_em && (
                       <div title={`Prioridade pedida pelo cliente em ${new Date(doc.prioridade_em).toLocaleString('pt-BR')}`}
                         style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', display:'inline-block', padding:'1px 7px', borderRadius:20, marginTop:3, fontFamily:'Montserrat,sans-serif' }}>
@@ -945,9 +1018,19 @@ export default function DocumentAnalysis() {
                     )}
                     <Button variant="neutral" size="sm" title="Histórico do documento"
                       onClick={() => setHistModal(doc)}>🕓</Button>
-                    {isSaving ? <Spinner size={16}/> : (
+                    {isSaving ? <Spinner size={16}/> : (<>
+                      {status === 'PENDING' && (() => {
+                        const dec = decisaoSugerida(sugestaoDoc(doc, aiMap[doc.id]), reasons)
+                        return dec && (
+                          <Button variant={dec.status === 'VALID' ? 'success' : 'danger'} size="sm"
+                            style={{ padding:'4px 9px', fontSize:11, whiteSpace:'nowrap' }}
+                            onClick={() => openEdit(doc, true)}>
+                            {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
+                          </Button>
+                        )
+                      })()}
                       <Button variant="primary" size="sm" onClick={() => openEdit(doc)}>✏️ Editar</Button>
-                    )}
+                    </>)}
                   </div>
                 </div>
               </Card>
@@ -974,6 +1057,7 @@ export default function DocumentAnalysis() {
         <EditDocModal doc={editModal} reasons={reasons}
           rule={catalog.find(c => String(c.id) === (String(editModal.type).startsWith('mob:')
             ? String(editModal.type).split(':')[1] : String(editModal.type)))?.validation_rule}
+          ia={aiMap[editModal.id]} aceitar={editAceitar}
           onView={viewDoc} onSubmit={handleEditSubmit} onClose={() => setEditModal(null)}/>
       )}
       {histModal && <DocHistoryModal doc={histModal} onClose={() => setHistModal(null)}/>}

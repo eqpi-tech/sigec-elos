@@ -5,6 +5,7 @@
 // Depois disso, para de lembrar. Convites de "contato" não recebem lembrete.
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
@@ -47,17 +48,17 @@ exports.handler = async (event) => {
     )
 
     let sent = 0
-    const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+    const siteBase = frontendUrl()
 
     for (const inv of due) {
       const clientName = inv.clients?.razao_social || inv.buyer_name || 'a empresa contratante'
       // Link de cadastro: portal do cliente quando houver LP ativa
-      let cadastroLink = `${frontendUrl}/cadastro?token=${inv.token}`
+      let cadastroLink = `${siteBase}/cadastro?token=${inv.token}`
       try {
         const { data: lp } = await supabaseAdmin
           .from('client_landing_pages').select('slug')
           .eq('client_id', inv.client_id).eq('is_active', true).maybeSingle()
-        if (lp?.slug) cadastroLink = `${frontendUrl}/portal/${lp.slug}?token=${inv.token}`  // rota /portal/:slug (fix 18/09)
+        if (lp?.slug) cadastroLink = `${siteBase}/portal/${lp.slug}?token=${inv.token}`  // rota /portal/:slug (fix 18/09)
       } catch { /* segue com link padrão */ }
 
       const daysAgo = Math.round((now - new Date(inv.created_at).getTime()) / DAY)

@@ -4,6 +4,7 @@
 // POST { title, description?, categoryId, deadline? 'AAAA-MM-DD', scope 'own'|'elos' }
 const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const HEADERS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' }
@@ -57,7 +58,7 @@ exports.handler = async (event) => {
     let enviados = 0
     if (process.env.RESEND_API_KEY) {
       const { data: sups } = await sb.from('suppliers').select('id, razao_social, email, user_id').in('id', ids)
-      const site = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const site = frontendUrl()
       const prazo = body.deadline ? body.deadline.split('-').reverse().join('/') : null
       const msgs = []
       for (const s of sups || []) {

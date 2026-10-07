@@ -7,6 +7,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { hojeBR, fmtBR } = require('./lib/exception_cover.js')
 const { guardMail } = require('./lib/mail_guard.js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
 const EM_DIA = ['VALID', 'NOT_APPLICABLE', 'EXPIRING']
@@ -22,7 +23,7 @@ async function destinatario(supplierId) {
 async function enviar(to, subject, corpo) {
   const g = guardMail(to, subject)
   if (g.skip || !process.env.RESEND_API_KEY) return false
-  const site = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+  const site = frontendUrl()
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },

@@ -6,6 +6,8 @@
 //          customer.subscription.deleted, invoice.payment_failed
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const { functionsUrl, env } = require('./lib/runtime_env.js')
+const routeA = require('./lib/route_a.js')   // Rota A (staging; inerte sem ROUTE_A_ENABLED)
 const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
@@ -185,6 +187,21 @@ exports.handler = async (event) => {
         .eq('supplier_id', supplierId).is('released_at', null)
       if (relErr) console.error('[trava-pagamento] liberação:', relErr.message)
 
+      // Rota A (staging): a coleta nas fontes oficiais começa na LIBERAÇÃO —
+      // nunca no cadastro de quem ainda não pagou (tem custo por consulta)
+      if (routeA.enabled()) {
+        try {
+          const n = await routeA.enqueueRouteA(supabase, supplierId)
+          const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
+          if (n && site && process.env.CRON_SECRET) {
+            await fetch(`${site}/.netlify/functions/homolog-collect-background`, {
+              method: 'POST', headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, body: '{}',
+            })
+          }
+          console.log(`[rota-a] ${n} consulta(s) enfileirada(s) após o pagamento de ${supplierId}`)
+        } catch (e) { console.warn('[rota-a] enfileirar no pagamento:', e.message) }
+      }
+
       // Verificado: atualizar status do supplier diretamente
       if (sealType === 'verificado') {
         await supabase.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
@@ -197,7 +214,7 @@ exports.handler = async (event) => {
       const { data: supplierData } = await supabase
         .from('suppliers').select('razao_social').eq('id', supplierId).single()
       if (supplierData && session.customer_email) {
-        await fetch(`${process.env.FRONTEND_URL}/.netlify/functions/send-email`, {
+        await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -263,7 +280,7 @@ exports.handler = async (event) => {
         if (qErr) console.error('[nfe-queue]', qErr.message)
         else if (amount > 0) {
           // tentativa imediata de emissão (o cron diário é a rede de segurança)
-          fetch(`${process.env.URL}/.netlify/functions/nfe-emit-pending`, {
+          fetch(`${functionsUrl()}/.netlify/functions/nfe-emit-pending`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
           }).catch(() => {})

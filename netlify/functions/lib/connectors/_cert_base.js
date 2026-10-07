@@ -62,7 +62,8 @@ function makeCertConnector(cfg) {
       const d = raw.data?.[0] || {}
       let core
       if (status === 'ok') core = (cfg.classify || defaultClassify)(cfg.nome, d)
-      else if (status === 'not_found') core = { result_flag: cfg.notFoundFlag || 'nada_consta', headline: `${cfg.nome}: sem registros para o CNPJ` }
+      else if (status === 'not_found') core = { result_flag: cfg.notFoundFlag || 'nada_consta',
+        headline: cfg.notFoundFlag === 'verificar' ? `${cfg.nome}: sem registros para o CNPJ — verificar (ex.: empresa sem inscrição/isenta)` : `${cfg.nome}: sem registros para o CNPJ` }
       else core = { result_flag: 'indisponivel', headline: `${cfg.nome}: fonte indisponível na data da consulta` }
       return {
         ...core,

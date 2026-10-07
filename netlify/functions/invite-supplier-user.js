@@ -3,6 +3,7 @@
 // Validações: domínio corporativo, limite de 4 usuários, email único
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -139,7 +140,7 @@ exports.handler = async (event) => {
 
   // Enviar e-mail com credenciais
   try {
-    const baseUrl = process.env.URL || 'https://elos.eqpitech.com.br'
+    const baseUrl = frontendUrl()
     await fetch(`${baseUrl}/.netlify/functions/send-email`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

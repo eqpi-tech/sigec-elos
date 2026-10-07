@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal } from '../../services/api.js'
+import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal, routeAApi, ROUTE_A_ENABLED } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { hasAction } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
@@ -32,6 +32,22 @@ const DOC_LINKS = {
   19: null, // Licença ambiental — emitida pelo órgão estadual
 }
 
+// Legenda dos ícones da lista (28/09): com a Rota A, a coleta nas fontes
+// oficiais é o caminho principal — a legenda acompanha o que a tela mostra.
+// Limites de envio = os reais do upload (20 MB; PDF, JPG, PNG, DOCX).
+function DocLegend() {
+  const itens = ROUTE_A_ENABLED
+    ? ['🏛 Fonte oficial = obtido por nós na fonte oficial (a equipe EQPI confere)',
+       '🔎 Consultando = estamos buscando — não precisa enviar',
+       '⚡ Auto = gerado com os dados da Receita',
+       '🌐 Emitir = abre o site oficial para você baixar',
+       '📊 Emitir = gera o relatório na hora']
+    : ['⚡ Auto = coletado automaticamente',
+       '🌐 Emitir = abre o site oficial',
+       '📊 Emitir = gera relatório automático']
+  return <span style={{ display:'block', marginTop:4 }}>{itens.join(' · ')} · Envio: PDF, JPG, PNG ou DOCX, até 20 MB</span>
+}
+
 const STATUS_CONFIG = {
   VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
   EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vencendo' },
@@ -60,6 +76,8 @@ export default function SupplierDocuments() {
   const [uploadingPresentation, setUploadingPresentation] = useState(false)
 
   const [collecting, setCollecting] = useState(null)
+  // Rota A: doc_type → job da coleta nas fontes oficiais (vazio sem a flag)
+  const [autoJobs, setAutoJobs] = useState({})
 
   // ── Mobilidade (SPEC_MOBILIDADE.md): postos abertos para o CNPJ ──
   const [mobPosts, setMobPosts]   = useState([])
@@ -165,8 +183,9 @@ export default function SupplierDocuments() {
       setDocGroups(groups)
 
       // 3. Documentos já enviados
-      const d = await documentApi.list(user.supplierId)
+      const [d, jobs] = await Promise.all([documentApi.list(user.supplierId), routeAApi.jobsFor(user.supplierId)])
       setUploaded(d)
+      setAutoJobs(jobs)
 
       // 3b. Mobilidade: postos abertos para o CNPJ deste fornecedor
       try {
@@ -189,7 +208,12 @@ export default function SupplierDocuments() {
       // 4. Auto-validar CNPJ (doc_id 37) se ainda não estiver no banco
       const alreadyHasCnpj = d.some(u => u.type === '37' || u.type === 'CNPJ_CARD')
       const cnpjInReqs = docs.find(r => r.id === 37)
-      if (cnpjInReqs && !alreadyHasCnpj) {
+      // Rota A: aqui só resta o 61 (CNAE) — dispara enquanto ELE faltar, para
+      // nunca regravar um 61 já analisado
+      const precisaAuto = ROUTE_A_ENABLED
+        ? docs.some(r => r.id === 61) && !d.some(u => u.type === '61')
+        : cnpjInReqs && !alreadyHasCnpj
+      if (precisaAuto) {
         await autoValidateDocs(user.supplierId, docs)
         // Recarrega após auto-validar
         const d2 = await documentApi.list(user.supplierId)
@@ -211,8 +235,9 @@ export default function SupplierDocuments() {
       const cnpj = consult?.cnpj_data
       const docsToCreate = []
 
-      // Doc 37 — Cartão CNPJ
-      if (allReqDocs.find(d => d.id === 37)) {
+      // Doc 37 — Cartão CNPJ (com a Rota A ligada, 37 e 62 vêm da fonte
+      // oficial pelo coletor do servidor, com comprovante — não daqui)
+      if (allReqDocs.find(d => d.id === 37) && !ROUTE_A_ENABLED) {
         docsToCreate.push({
           supplier_id:  supplierId,
           type:         '37',
@@ -224,7 +249,7 @@ export default function SupplierDocuments() {
         })
       }
       // Doc 62 — Simples Nacional (VALID sempre que a consulta foi feita)
-      if (allReqDocs.find(d => d.id === 62)) {
+      if (allReqDocs.find(d => d.id === 62) && !ROUTE_A_ENABLED) {
         const isOptante = cnpj?.opcao_pelo_simples === true && !cnpj?.data_exclusao_do_simples
         docsToCreate.push({
           supplier_id:  supplierId,
@@ -336,11 +361,8 @@ export default function SupplierDocuments() {
   // Abre arquivo do storage novo OU migrado do HOC (S3, via get-hoc-file)
   const handleViewDoc = async (doc) => {
     try {
-      const url = doc?.storage_path
-        ? await documentApi.getSignedUrl(doc.storage_path)
-        : await documentApi.getHocFileUrl(doc.id)
-      window.open(url, '_blank')
-    } catch (e) { showToast('Erro ao abrir documento', 'error') }
+      await documentApi.view(doc)
+    } catch (e) { showToast(e.message || 'Erro ao abrir documento', 'error') }
   }
 
   const handlePresentationUpload = async (file) => {
@@ -435,8 +457,14 @@ export default function SupplierDocuments() {
     const status  = up?.status || 'MISSING'
     const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
     const autoType   = AUTO_COLLECT[doc.id]      // 'INSTANT' | undefined
-    const isInstant  = autoType === 'INSTANT'
+    // com a Rota A, 37 e 62 viram documentos da fonte oficial (e aceitam upload se a fonte falhar)
+    const isInstant  = autoType === 'INSTANT' && !(ROUTE_A_ENABLED && [37, 62].includes(doc.id))
     const isOnDemand = doc.id === ASSERTIVA_DOC_ID // emissão via API interna
+    // Rota A: consulta em andamento / obtido da fonte oficial / fonte falhou
+    const job        = autoJobs[String(doc.id)]
+    const coletando  = job && ['queued','running','retry'].includes(job.status) && status === 'MISSING'
+    const daFonte    = up?.metadata?.route === 'A'
+    const fonteFalhou = job?.status === 'fallback' && ['MISSING','REJECTED','EXPIRED'].includes(status)
     const busy       = uploading === doc.id
     const busyCollect = collecting === doc.id
     // Inscrição Estadual / Municipal: aceita declaração de ISENÇÃO
@@ -452,9 +480,20 @@ export default function SupplierDocuments() {
             <span style={{ fontSize:10, fontWeight:700, color:cfg.color, background:`${cfg.color}18`, padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{cfg.label}</span>
             {isInstant   && <span style={{ fontSize:9, color:'#22c55e', background:'rgba(34,197,94,.1)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>⚡ Auto</span>}
             {isOnDemand  && <span style={{ fontSize:9, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>🤖 Automático</span>}
+            {daFonte     && <span title="Obtido automaticamente na fonte oficial — a equipe EQPI confere antes de aprovar" style={{ fontSize:9, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>🏛 Fonte oficial</span>}
+            {coletando   && <span style={{ fontSize:9, color:'#0369a1', background:'#e0f2fe', padding:'1px 6px', borderRadius:20, fontWeight:700 }}>🔎 Consultando fonte oficial…</span>}
             {up?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>vence {up.expires_at.slice(0,10)}</span>}
           </div>
           {up?.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {up.review_note}</div>}
+          {coletando && (
+            <div style={{ fontSize:10, color:'#0369a1', marginTop:2 }}>Estamos buscando este documento para você — não precisa enviar.</div>
+          )}
+          {fonteFalhou && (
+            <div style={{ fontSize:10, color:'#b45309', marginTop:2 }}>
+              Não conseguimos obter este documento na fonte oficial — envie o arquivo, por favor.
+              {/^A fonte /.test(job.last_error || '') && <div style={{ color:'#6b7280', marginTop:1 }}>{job.last_error}</div>}
+            </div>
+          )}
           {/* Indicador de reaproveitamento: documento aprovado previamente e reusado neste processo */}
           {up?.reviewed_by && up?.status === 'VALID' && (
             <div style={{ fontSize:10, color:'#0369a1', marginTop:2 }}>♻ Validado — aproveitado neste processo</div>
@@ -474,7 +513,7 @@ export default function SupplierDocuments() {
         </div>
 
         {/* Link direto para emissão (documentos com site externo) */}
-        {DOC_LINKS[doc.id] && (
+        {DOC_LINKS[doc.id] && !daFonte && !coletando && (
           <a href={DOC_LINKS[doc.id]} target="_blank" rel="noopener noreferrer"
             style={{ textDecoration:'none' }}
             title="Abrir site emissor para baixar o documento">
@@ -496,7 +535,7 @@ export default function SupplierDocuments() {
         )}
 
         {/* Ver documento enviado (qualquer doc com arquivo) */}
-        {(up?.storage_path || up?.hoc_arquivo_id) && !isInstant && (
+        {(up?.storage_path || up?.hoc_arquivo_id) && (!isInstant || daFonte) && (
           <Button variant="neutral" size="sm"
             title="Visualizar documento enviado"
             onClick={() => handleViewDoc(up)}>
@@ -505,7 +544,7 @@ export default function SupplierDocuments() {
         )}
 
         {/* Upload manual (só para docs não automáticos) */}
-        {!isInstant && !isOnDemand && (
+        {!isInstant && !isOnDemand && !coletando && (
           <div style={{ display:'flex', gap:6, alignItems:'center' }}>
             {/* Botão ISENTO para Inscrição Estadual/Municipal */}
             {isIsentoEligible && (
@@ -851,7 +890,7 @@ export default function SupplierDocuments() {
           })}
           <div style={{ padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             Documentos compartilhados entre processos são enviados uma única vez.
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · Máx 10MB
+            <DocLegend/>
           </div>
         </>
       ) : (
@@ -866,7 +905,7 @@ export default function SupplierDocuments() {
           </div>
           {reqDocs.map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-            ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
+            <DocLegend/>
           </div>
           {renderMobilitySection(docGroups[0]?.key)}
         </Card>

@@ -265,10 +265,7 @@ export default function SupplierProcess() {
                 {(doc.storage_path || doc.hoc_arquivo_id) && (
                   <button onClick={async () => {
                       try {
-                        const url = doc.storage_path
-                          ? await documentApi.getSignedUrl(doc.storage_path)
-                          : await documentApi.getHocFileUrl(doc.id)
-                        window.open(url, '_blank')
+                        await documentApi.view(doc)
                       } catch { alert('Erro ao abrir documento') }
                     }}
                     style={{ background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, padding:'6px 12px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#2E3192', fontWeight:600, flexShrink:0 }}>

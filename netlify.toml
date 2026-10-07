@@ -19,6 +19,18 @@
 
 [context."staging".environment]
   ELOS_ENV = "staging"
+  # homologação automática, fase 1 (SPEC_HOMOLOGACAO_AUTOMATICA.md) — só staging
+  ROUTE_A_ENABLED = "true"
+  VITE_ROUTE_A_ENABLED = "true"
+  # Rota B — pré-análise por IA dos documentos enviados (SPEC_ROTA_B.md) — só staging.
+  # Econômica desde 29/09: modo lote (50% do preço), esforço 'low', regra do
+  # cliente em cache e teto de R$ 5/dia. Pausar: ROUTE_B_ENABLED = "false".
+  ROUTE_B_ENABLED = "true"
+  VITE_ROUTE_B_ENABLED = "true"
+  ROUTE_B_DAILY_LIMIT_BRL = "5"
+  # MFA desligado para os testes no staging (28/09). NUNCA copiar para
+  # [context.production] — e o código ignora a flag no domínio de produção.
+  VITE_MFA_DISABLED = "true"
 
 [context.deploy-preview.environment]
   ELOS_ENV = "preview"
@@ -29,6 +41,10 @@
 # branch deploys não executam schedules)
 [functions."bc-report-cron"]
   schedule = "* * * * *"
+
+# Rota A: novas tentativas da coleta automática (inerte sem ROUTE_A_ENABLED)
+[functions."homolog-collect-cron"]
+  schedule = "*/15 * * * *"
 
 # O worker background gera o PDF (Playwright): o binário do chromium lambda
 # não pode ser bundlado pelo esbuild — vai como módulo externo + arquivos

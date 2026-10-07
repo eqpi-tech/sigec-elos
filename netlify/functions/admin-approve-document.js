@@ -10,6 +10,7 @@
 //   note        string  Observação do analista
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl, functionsUrl } = require('./lib/runtime_env.js')
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -147,7 +148,7 @@ exports.handler = async (event) => {
         const { data: sup } = await supabaseAdmin
           .from('suppliers').select('razao_social, user_id').eq('id', supplierId).single()
         if (sup?.user_id) {
-          await fetch(`${process.env.URL}/.netlify/functions/send-email`, {
+          await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -162,7 +163,7 @@ exports.handler = async (event) => {
       ${note}
     </div>
     <p>Corrija o apontamento e reenvie o documento pela plataforma — o restante do seu processo continua normalmente.</p>
-    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Reenviar documento</a></p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Reenviar documento</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`,
             }),
@@ -309,7 +310,7 @@ exports.handler = async (event) => {
 
     // Email de aprovação
     if (supplier?.user_id) {
-      await fetch(`${process.env.URL}/.netlify/functions/send-email`, {
+      await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -350,7 +351,7 @@ exports.handler = async (event) => {
 
     // Email de rejeição
     if (supplier?.user_id) {
-      await fetch(`${process.env.URL}/.netlify/functions/send-email`, {
+      await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -457,7 +458,7 @@ async function recalcSealScores(sb, supplierId) {
 // de verificação (seals.cert_code = ELOS- + 12 primeiros hex do id do selo),
 // consultável em /verificar.
 function buildApprovalEmail(supplier, { sealId, clientName, expiresAt }) {
-  const site    = (process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br').replace(/\/$/, '')
+  const site    = frontendUrl().replace(/\/$/, '')   // staging aponta para o próprio staging (runtime_env)
   const code    = sealId ? `ELOS-${String(sealId).replace(/-/g, '').slice(0, 12).toUpperCase()}` : null
   const certUrl = sealId ? `${site}/fornecedor/certificado/${sealId}` : `${site}/fornecedor/dashboard`
   const verUrl  = code ? `${site}/verificar?code=${code}` : `${site}/verificar`
@@ -515,7 +516,7 @@ function buildRejectionEmail(supplier, rejectedDocs) {
       <ul style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:16px 16px 16px 32px;color:#dc2626">${list}</ul>
       <p>Corrija os documentos e solicite uma nova analise pelo painel do fornecedor.</p>
       <div style="text-align:center;margin-top:24px">
-        <a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Corrigir documentos →</a>
+        <a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Corrigir documentos →</a>
       </div>
     </div>
     <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>

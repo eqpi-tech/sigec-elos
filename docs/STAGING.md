@@ -70,6 +70,16 @@ No painel do site → *Environment variables* → cada variável com
 `ELOS_ENV` **não** precisa ser criada no painel: vem de `netlify.toml`
 (`production` / `staging` / `preview`).
 
+> ⚠️ **Aprendido em 28/09:** as variáveis de `[context.*.environment]` do
+> `netlify.toml` existem só **durante o build** — as functions não as enxergam
+> em runtime. Por isso o build roda `scripts/write_build_env.cjs`, que grava as
+> variáveis NÃO sensíveis (`ELOS_ENV`, `ROUTE_A_ENABLED`, `URL`,
+> `DEPLOY_PRIME_URL`…) em `netlify/functions/lib/_build_env.json`, lido por
+> `lib/runtime_env.js`. Nas functions, leia essas variáveis com `env('X')`,
+> nunca com `process.env.X`. Para conferir o que o staging enxerga:
+> `GET /.netlify/functions/homolog-collect-status` com `Bearer CRON_SECRET`
+> (só booleanos, nunca valores).
+
 ## 4. Trava de e-mails (importante)
 
 `netlify/functions/lib/mail_guard.js`: fora de produção
@@ -79,11 +89,11 @@ No painel do site → *Environment variables* → cada variável com
   o prefixo `[staging → destinatário@original]`.
 - Sem `MAIL_TEST_INBOX`: o envio é descartado com log.
 
-Aplicada hoje em `send-email.js` (caminho usado pela maioria dos fluxos) e nos
-três disparos em lote: lembretes de convite, lembretes de pendências e avisos
-de documentos vencendo. Os demais mailers dependem de `RESEND_API_KEY` — por
-isso a recomendação de **não** definir a chave no staging enquanto não
-estiverem todos cobertos.
+Desde 28/09 cobre **todos** os mailers: os que montam a mensagem usam
+`guardMail()`, os demais trocam `fetch()` por `guardedResend()` (mesma
+assinatura). Mailer novo deve usar um dos dois. Antes dessa data a trava não
+funcionava no staging (ver o aviso da seção 3): com `RESEND_API_KEY` definida,
+e-mails de teste podiam sair para destinatários reais.
 
 ## 5. Usuários de teste no staging
 

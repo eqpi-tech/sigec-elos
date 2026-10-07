@@ -8,6 +8,8 @@
 //   action='update'         → { userId, name } atualiza nome
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -199,20 +201,20 @@ exports.handler = async (event) => {
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
       if (!authUser?.user?.email) return { statusCode:404, headers, body: JSON.stringify({ error:'Usuário não encontrado' }) }
 
-      const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const siteBase = frontendUrl()
 
       // Gera link de reset de senha (válido por 24h)
       const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
         type:  'recovery',
         email: authUser.user.email,
-        options: { redirectTo: `${frontendUrl}/redefinir-senha` }
+        options: { redirectTo: `${siteBase}/redefinir-senha` }
       })
       if (linkErr) throw new Error(linkErr.message)
 
       const resetLink = linkData?.properties?.action_link || linkData?.action_link
 
       if (process.env.RESEND_API_KEY && resetLink) {
-        await fetch('https://api.resend.com/emails', {
+        await guardedResend('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
           body: JSON.stringify({

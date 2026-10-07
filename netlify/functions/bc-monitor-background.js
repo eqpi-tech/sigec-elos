@@ -11,6 +11,7 @@
 //     'monitor_alert_email' estiver configurado, envia alerta via Resend.
 
 const { createClient } = require('@supabase/supabase-js')
+const { guardedResend } = require('./lib/mail_guard.js')
 const registry = require('./lib/connectors/index.js')
 
 const sb = createClient(
@@ -24,7 +25,7 @@ const REVALIDA = ['ceis', 'cnep', 'cepim', 'trabalho_escravo', 'ofac', 'onu']
 async function sendAlert(to, subject, html) {
   const apiKey = process.env.RESEND_API_KEY
   if (!apiKey || !to) return false
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await guardedResend('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to: [to], subject, html }),

@@ -3,6 +3,7 @@ import { clientApi } from '../../services/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
+import { siteUrl } from '../../lib/siteUrl.js'
 
 function FieldLabel({ children, required }) {
   return (
@@ -139,7 +140,7 @@ export default function ClientSettings() {
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" size="sm"
-                onClick={() => { navigator.clipboard.writeText(`https://elos.eqpitech.com.br/portal/${lp.slug}/login`) }}>
+                onClick={() => { navigator.clipboard.writeText(`${siteUrl()}/portal/${lp.slug}/login`) }}>
                 📋 Copiar link
               </Button>
               <a href={`/portal/${lp.slug}/login`} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>

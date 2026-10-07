@@ -5,6 +5,8 @@
 //                                           subsidiado?, escopo?, client_id, invited_by_role:'CLIENT' }
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -104,7 +106,7 @@ async function handleBuyerInvitation(body, h) {
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
 
   if (emails.length > 0 && process.env.RESEND_API_KEY) {
-    const HOC_LINK = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
+    const HOC_LINK = frontendUrl()
     const cadastroLink = `${HOC_LINK}/cadastro?token=${invite.token}`
     const isContato = objective === 'contato'
 
@@ -141,7 +143,7 @@ async function handleBuyerInvitation(body, h) {
       : `Convite de ${senderName} — SIGEC-ELOS`
 
     await Promise.allSettled(emails.map(to =>
-      fetch('https://api.resend.com/emails', {
+      guardedResend('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
         body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[to], reply_to: buyerEmail||undefined, subject, html })
@@ -258,12 +260,12 @@ async function handleClientInvitation(body, callerUser, h) {
 
 async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo = 'homologacao', message }) {
   if (!process.env.RESEND_API_KEY) return
-  const frontendUrl = process.env.FRONTEND_URL || 'https://sigec-elos.netlify.app'
+  const siteBase = frontendUrl()
 
   // Convites de cliente caem na landing page personalizada do cliente
   let cadastroLink = invite.token
-    ? `${frontendUrl}/cadastro?token=${invite.token}`
-    : `${frontendUrl}/cadastro`
+    ? `${siteBase}/cadastro?token=${invite.token}`
+    : `${siteBase}/cadastro`
 
   if (invited_by_role === 'CLIENT' && (client_id || invite.client_id)) {
     const cid = client_id || invite.client_id
@@ -278,8 +280,8 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
         // rota correta do portal white-label é /portal/:slug (18/09 — o link
         // sem o prefixo caía no catch-all do SPA e abria a home)
         cadastroLink = invite.token
-          ? `${frontendUrl}/portal/${lp.slug}?token=${invite.token}`
-          : `${frontendUrl}/portal/${lp.slug}`
+          ? `${siteBase}/portal/${lp.slug}?token=${invite.token}`
+          : `${siteBase}/portal/${lp.slug}`
       }
     } catch (e) { console.warn('[send-invitation] landing page lookup failed:', e.message) }
   }
@@ -326,7 +328,7 @@ async function sendClientEmail({ invite, email, senderName, razao_social, tipo_f
     </div>`
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    await guardedResend('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
       body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to:[email], reply_to: undefined, subject, html: emailHtml })

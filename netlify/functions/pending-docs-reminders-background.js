@@ -12,6 +12,7 @@
 // function (15 min) com teto de e-mails por execução.
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 
@@ -47,7 +48,7 @@ function buildHtml(clientName, missingDocs, questPending) {
     ${missingDocs.length ? `<p><strong>Documentos pendentes:</strong></p><ul style="padding-left:18px">${docsLis}</ul>` : ''}
     ${questPending ? `<p>❓ <strong>Questionário do cliente</strong> aguardando suas respostas.</p>` : ''}
     <p>Assim que tudo estiver enviado, o processo entra automaticamente na fila de análise.</p>
-    <p style="text-align:center;margin:24px 0 8px"><a href="https://elos.eqpitech.com.br/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Completar agora</a></p>
+    <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Completar agora</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
 }

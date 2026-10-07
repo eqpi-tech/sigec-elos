@@ -37,6 +37,12 @@ module.exports = {
   gov_contratos:    require('./gov_contratos.js'),
   pgfn_devedores:   require('./pgfn_devedores.js'),
   falencia_rj:      require('./falencia_rj.js'),
+  // homologação automática, fase 1b (28/09) — só Rota A, fora do plano do BC
+  ibama_cr:         require('./ibama_cr.js'),
+  pf_seguranca:     require('./pf_seguranca.js'),
+  // gratuitos da Rota A (28/09): base pública da Receita já gravada no cadastro
+  receita_cadastro: require('./receita_publica.js').receita_cadastro,
+  receita_simples:  require('./receita_publica.js').receita_simples,
 }
 
 // dependem do cnpj_base resolvido antes (QSA p/ nomes, UF/município p/ rota)

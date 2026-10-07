@@ -5,6 +5,8 @@
 // ao mesmo client_id, com o perfil de módulos escolhido (default: Acesso Total).
 
 const { createClient } = require('@supabase/supabase-js')
+const { frontendUrl } = require('./lib/runtime_env.js')
+const { guardedResend } = require('./lib/mail_guard.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -112,13 +114,13 @@ exports.handler = async (event) => {
     const { data: clientRow } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()
     const clientName = clientRow?.razao_social || 'sua empresa'
     if (process.env.RESEND_API_KEY) {
-      const frontendUrl = process.env.FRONTEND_URL || 'https://elos.eqpitech.com.br'
+      const siteBase = frontendUrl()
       // o acesso vai direto ao login do PORTAL do cliente quando ele tem um
       // (ex.: /portal/vixpar/login — marca e termos dele); senão, o login geral
       const { data: lp } = await supabaseAdmin.from('client_landing_pages')
         .select('slug').eq('client_id', clientId).eq('is_active', true).limit(1).maybeSingle()
-      const loginUrl = lp?.slug ? `${frontendUrl}/portal/${lp.slug}/login` : `${frontendUrl}/login`
-      await fetch('https://api.resend.com/emails', {
+      const loginUrl = lp?.slug ? `${siteBase}/portal/${lp.slug}/login` : `${siteBase}/login`
+      await guardedResend('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
         body: JSON.stringify({
