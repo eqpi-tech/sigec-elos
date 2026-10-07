@@ -74,7 +74,10 @@ async function processar(job, catalogo, prefOverrides) {
 
   // já tem documento válido deste tipo, com folga de validade: não paga a consulta
   const { data: atual } = await sb.from('documents')
-    .select('id, status, expires_at, source, storage_path, metadata').eq('supplier_id', sup.id).eq('type', job.doc_type).maybeSingle()
+    .select('id, status, expires_at, source, storage_path, metadata, hoc_arquivo_id').eq('supplier_id', sup.id).eq('type', job.doc_type).maybeSingle()
+  // documento espelhado do HOC (fornecedor com processo no HOC e no ELOS): nunca
+  // sobrescrever — o HOC é dono dele enquanto opera (patch_121, 07/10)
+  if (atual?.hoc_arquivo_id) return { status: 'done', last_error: 'documento do HOC — mantido, fora da automação' }
   if (atual?.status === 'VALID' && atual.expires_at && new Date(atual.expires_at) > new Date(Date.now() + 30 * 864e5)) {
     return { status: 'done', last_error: 'documento válido já existente — reaproveitado' }
   }

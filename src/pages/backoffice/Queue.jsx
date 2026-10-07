@@ -1490,7 +1490,7 @@ export function BackofficeAnalysis() {
                     <RouteABadge doc={doc}/>
                     {ROUTE_B_ENABLED && (aiPorDoc[doc.id]
                       ? <RouteBReview review={aiPorDoc[doc.id]} onReanalyze={() => pedirPreAnalise(doc.id)}/>
-                      : doc.storage_path && aiTypes.has(String(doc.type)) && (
+                      : doc.storage_path && !doc.hoc_arquivo_id && aiTypes.has(String(doc.type)) && (
                         <button onClick={() => pedirPreAnalise(doc.id)}
                           style={{ marginTop:3, fontSize:9.5, border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:20, padding:'1px 8px', cursor:'pointer' }}>
                           🤖 Pré-analisar com IA

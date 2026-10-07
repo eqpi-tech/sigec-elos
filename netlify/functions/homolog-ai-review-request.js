@@ -29,8 +29,12 @@ exports.handler = async (event) => {
 
   let body
   try { body = JSON.parse(event.body || '{}') } catch { return res(400, { error: 'JSON inválido' }) }
-  const { data: doc } = await sb.from('documents').select('id, supplier_id, type, storage_path').eq('id', body.documentId).maybeSingle()
+  const { data: doc } = await sb.from('documents').select('id, supplier_id, type, storage_path, hoc_arquivo_id').eq('id', body.documentId).maybeSingle()
   if (!doc) return res(404, { error: 'Documento não encontrado' })
+  // automação só em processo originado no ELOS (patch_121)
+  if (doc.hoc_arquivo_id) return res(422, { error: 'Documento do HOC — a pré-análise por IA vale só para processos do ELOS' })
+  const { data: elos } = await sb.rpc('supplier_has_open_elos_process', { p_supplier: doc.supplier_id })
+  if (!elos) return res(422, { error: 'Fornecedor sem processo do ELOS aberto e liberado' })
   if (!doc.storage_path) return res(422, { error: 'Documento sem arquivo enviado' })
   const { data: tipo } = /^\d+$/.test(doc.type)
     ? await sb.from('documents_catalog').select('route, validation_rule').eq('id', Number(doc.type)).maybeSingle()

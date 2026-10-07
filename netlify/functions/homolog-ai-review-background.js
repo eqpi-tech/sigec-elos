@@ -77,11 +77,13 @@ async function fornecedor(supplierId) {
 // Prepara o job: confere se ainda vale analisar e monta os argumentos da IA.
 // Devolve { args } ou { fim } (terminal, sem chamar a IA).
 async function preparar(job, catalogo, motivos) {
-  // trava de pagamento (patch_112): IA só para fornecedor com processo liberado
-  const { data: liberado } = await sb.rpc('supplier_access_released', { p_supplier: job.supplier_id })
-  if (!liberado) return { fim: { status: 'skipped', last_error: 'processo sem pagamento confirmado' } }
-  const { data: doc } = await sb.from('documents').select('id, status, storage_path, type').eq('id', job.document_id).maybeSingle()
+  // só processo ORIGINADO NO ELOS, aberto e liberado (patch_121; inclui a trava
+  // de pagamento do patch_112) — processo do HOC nunca passa pela IA
+  const { data: liberado } = await sb.rpc('supplier_has_open_elos_process', { p_supplier: job.supplier_id })
+  if (!liberado) return { fim: { status: 'skipped', last_error: 'sem processo do ELOS aberto e liberado' } }
+  const { data: doc } = await sb.from('documents').select('id, status, storage_path, type, hoc_arquivo_id').eq('id', job.document_id).maybeSingle()
   if (!doc) return { fim: { status: 'skipped', last_error: 'documento excluído' } }
+  if (doc.hoc_arquivo_id) return { fim: { status: 'skipped', last_error: 'documento do HOC — fora da automação' } }
   if (doc.storage_path !== job.storage_path) return { fim: { status: 'skipped', last_error: 'arquivo substituído pelo fornecedor' } }
   if (doc.status !== 'PENDING' && !job.requested_by) return { fim: { status: 'skipped', last_error: `documento já analisado (${doc.status})` } }
 
