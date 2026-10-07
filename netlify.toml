@@ -16,6 +16,15 @@
 # executam funções agendadas, então o cron do BC Report só roda em produção.
 [context.production.environment]
   ELOS_ENV = "production"
+  # Automação em produção (promoção de 07/10/2026) — só processos ORIGINADOS NO
+  # ELOS (patch_121: processo/documento do HOC nunca entra). Nasce DESLIGADA;
+  # ligar é trocar "false" por "true" aqui (commit + deploy). Rota A = coleta
+  # nas fontes oficiais; Rota B = pré-análise por IA (Alvará/Licença).
+  ROUTE_A_ENABLED = "false"
+  VITE_ROUTE_A_ENABLED = "false"
+  ROUTE_B_ENABLED = "false"
+  VITE_ROUTE_B_ENABLED = "false"
+  ROUTE_B_DAILY_LIMIT_BRL = "10"
 
 [context."staging".environment]
   ELOS_ENV = "staging"
