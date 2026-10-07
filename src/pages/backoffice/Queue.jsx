@@ -1031,8 +1031,9 @@ export function BackofficeAnalysis() {
     )
   }
 
+  // 1280 (08/10): com a coluna de Decisão, 980px deixava ~590px para as abas
   return (
-    <div style={{ maxWidth:980,margin:'0 auto',padding:'24px' }}>
+    <div style={{ maxWidth:1280,margin:'0 auto',padding:'24px' }}>
       <button onClick={()=>navigate('/backoffice/processos')} style={{ background:'none',border:'none',cursor:'pointer',color:'#2E3192',fontSize:14,fontFamily:'DM Sans,sans-serif',fontWeight:600,marginBottom:16,display:'flex',alignItems:'center',gap:6,padding:0 }}>
         ← Voltar à busca de processos
       </button>
@@ -1383,7 +1384,9 @@ export function BackofficeAnalysis() {
 
           {/* Abas: Documentos | Questionário */}
           <Card style={{ borderRadius:16,padding:'20px 24px' }}>
-            <div style={{ display:'flex',gap:0,marginBottom:20,borderBottom:'1px solid #e2e4ef' }}>
+            {/* flexWrap: aba que não cabe desce de linha em vez de sumir (o Log
+                ficava fora da tela — 08/10) */}
+            <div style={{ display:'flex',flexWrap:'wrap',gap:0,marginBottom:20,borderBottom:'1px solid #e2e4ef' }}>
               {[
                 ['docs','Documentos'],
                 ['questionario','Questionário'],
