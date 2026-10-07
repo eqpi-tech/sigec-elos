@@ -19,7 +19,9 @@ Uso:
 """
 
 import argparse
+import hashlib
 import json
+import time
 import logging
 import sys
 from datetime import datetime, date, timezone
@@ -795,6 +797,52 @@ def ensure_mysql_ro(mysql_conn):
         raise RuntimeError("sessão MySQL do HOC não ficou somente leitura — abortando")
 
 
+# ── Fase details: grava só o que mudou (patch_120, 07/10/2026) ───────────────
+# Antes regravava tudo a cada semana (55,9 mil fornecedores com hoc_extra + ~59,5
+# mil sócios), o que ajudou a derrubar o banco em 07/10. Cada linha guarda o hash
+# do conteúdo gravado; só regrava quando o hash do HOC difere.
+
+def _canon(v):
+    """Forma canônica p/ hash: listas do HOC vêm sem ORDER BY (ordem instável)."""
+    if isinstance(v, dict):
+        return {k: _canon(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        itens = [_canon(x) for x in v]
+        return sorted(itens, key=lambda x: json.dumps(x, sort_keys=True, default=str, ensure_ascii=False))
+    return v
+
+
+def _rec_hash(rec: dict) -> str:
+    return hashlib.sha1(json.dumps(_canon(rec), sort_keys=True, default=str,
+                                   ensure_ascii=False).encode()).hexdigest()
+
+
+def _hashes_atuais(sb: Client, table: str, keys: list, hashcol: str, not_null: Optional[str] = None) -> dict:
+    """chave → hash gravado (leitura leve: só chave + hash, paginação ORDENADA)."""
+    out, offset = {}, 0
+    while True:
+        q = sb.table(table).select(",".join(keys + [hashcol]))
+        if not_null:
+            q = q.not_.is_(not_null, "null")
+        for k in keys:
+            q = q.order(k)
+        res = q.range(offset, offset + 999).execute()
+        for r in (res.data or []):
+            out[tuple(str(r[k]) for k in keys)] = r.get(hashcol)
+        if not res.data or len(res.data) < 1000:
+            return out
+        offset += 1000
+
+
+def _so_mudou(recs: list, keys: list, atuais: dict, hashcol: str) -> list:
+    novos = []
+    for r in recs:
+        h = _rec_hash(r)
+        if atuais.get(tuple(str(r[k]) for k in keys)) != h:
+            novos.append({**r, hashcol: h})
+    return novos
+
+
 def phase_details(mysql_conn, sb: Client, dry_run: bool):
     log.info("=== FASE details (dados completos, sem perda) ===")
     cur = mysql_conn.cursor()
@@ -947,6 +995,17 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
 
     log.info(f"  Preparado: {len(sup_batch)} suppliers, {len(partner_batch)} sócios, {len(bank_batch)} bancários, {len(fin_rows)} balanços")
 
+    # só o que mudou desde a última gravação (patch_120)
+    total_sup, total_part, total_bank, total_fin = len(sup_batch), len(partner_batch), len(bank_batch), len(fin_rows)
+    sup_batch = _so_mudou(sup_batch, ["id"], _hashes_atuais(sb, "suppliers", ["id"], "hoc_details_hash", "hoc_id"), "hoc_details_hash")
+    partner_batch = _so_mudou(partner_batch, ["hoc_id"], _hashes_atuais(sb, "supplier_partners", ["hoc_id"], "hoc_hash", "hoc_id"), "hoc_hash")
+    bank_batch = _so_mudou(bank_batch, ["supplier_id"], _hashes_atuais(sb, "supplier_bank_accounts", ["supplier_id"], "hoc_hash"), "hoc_hash")
+    fin_rows = {(r["supplier_id"], r["year"]): r for r in _so_mudou(
+        list(fin_rows.values()), ["supplier_id", "year"],
+        _hashes_atuais(sb, "supplier_financials", ["supplier_id", "year"], "hoc_hash"), "hoc_hash")}
+    log.info(f"  A gravar (mudou no HOC): {len(sup_batch)}/{total_sup} suppliers, {len(partner_batch)}/{total_part} sócios, "
+             f"{len(bank_batch)}/{total_bank} bancários, {len(fin_rows)}/{total_fin} balanços")
+
     if dry_run:
         stat("details_suppliers", written=len(sup_batch))
         stat("details_partners", hoc_count=len(partner_batch), written=len(partner_batch))
@@ -956,6 +1015,7 @@ def phase_details(mysql_conn, sb: Client, dry_run: bool):
         # lotes de 25 (05/10): com 100, o upsert de hoc_extra estourava o
         # statement timeout do banco e caía no fallback um a um (fase de 6 → 54 min)
         for chunk in chunks(sup_batch, 25):
+            time.sleep(0.1)   # espalha a carga de disco (07/10)
             try:
                 sb.table("suppliers").upsert(chunk, on_conflict="id").execute()
                 stat("details_suppliers", written=len(chunk))
