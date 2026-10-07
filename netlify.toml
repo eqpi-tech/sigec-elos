@@ -22,8 +22,8 @@
   # nas fontes oficiais; Rota B = pré-análise por IA (Alvará/Licença).
   ROUTE_A_ENABLED = "true"        # ligada em 07/10/2026 (Luiz)
   VITE_ROUTE_A_ENABLED = "true"
-  ROUTE_B_ENABLED = "false"
-  VITE_ROUTE_B_ENABLED = "false"
+  ROUTE_B_ENABLED = "true"        # ligada em 07/10/2026 (Luiz) — teto R$ 10/dia
+  VITE_ROUTE_B_ENABLED = "true"
   ROUTE_B_DAILY_LIMIT_BRL = "10"
 
 [context."staging".environment]
