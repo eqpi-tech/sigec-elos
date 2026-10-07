@@ -194,7 +194,7 @@ exports.handler = async (event) => {
   // Busca convite para descobrir client_id e nome do cliente
   const { data: invite } = await supabaseAdmin
     .from('invitations')
-    .select('client_id, flow_id, clients(razao_social)')
+    .select('client_id, flow_id, clients(razao_social, nome_fantasia)')
     .eq('supplier_id', supplierId)
     .not('client_id', 'is', null)
     .is('hoc_id', null)   // processo do HOC é decidido no HOC (patch_116)
@@ -262,13 +262,14 @@ exports.handler = async (event) => {
       // fluxo do convite → selo (dá o preço da homologação nos relatórios)
       ...(!sealRow?.flow_id && invite?.flow_id ? { flow_id: invite.flow_id } : {}),
     }
-    const { error: sealWriteErr } = sealRow
+    const { data: sealIns, error: sealWriteErr } = sealRow
       ? await supabaseAdmin.from('seals').update(activation).eq('id', sealRow.id)
       : await supabaseAdmin.from('seals').insert({
           ...activation, supplier_id: supplierId, client_id: clientId || null,
           seal_name: sealRow?.seal_name || sealName, level: sealLevel,
-        })
+        }).select('id').single()
     if (sealWriteErr) console.error('[auto-approve] seal write:', sealWriteErr.message)
+    const sealIdEmitido = sealRow?.id || sealIns?.id || null   // nº do certificado no e-mail
 
     // Atualiza status do fornecedor
     await supabaseAdmin.from('suppliers').update({ status: 'ACTIVE' }).eq('id', supplierId)
@@ -314,8 +315,8 @@ exports.handler = async (event) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId:  supplier.user_id,
-          subject: `✅ Parabéns! Homologação aprovada — ${supplier.razao_social}`,
-          html: buildApprovalEmail(supplier, sealName, score, endsAt),
+          subject: `✅ Homologação concluída — seu Certificado SIGEC ELOS está disponível`,
+          html: buildApprovalEmail(supplier, { sealId: sealIdEmitido, clientName: invite?.clients?.nome_fantasia || clientName, expiresAt: endsAt }),
         }),
       }).catch(e => console.warn('Email aprovação:', e.message))
     }
@@ -452,32 +453,54 @@ async function recalcSealScores(sb, supplierId) {
   }
 }
 
-function buildApprovalEmail(supplier, sealName, score, expiresAt) {
-  const expStr = expiresAt.toLocaleDateString('pt-BR')
-  return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
-    <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
-      <h1 style="color:#fff;margin:0 0 4px;font-size:24px">SIGEC-ELOS</h1>
-      <p style="color:#C7D2FE;margin:0;font-size:13px">Plataforma de Homologacao de Fornecedores</p>
+// E-mail de homologação concluída (07/10, texto aprovado pelo Luiz): certificado
+// + código de verificação + valor da Vendor List. O nº do certificado É o código
+// de verificação (seals.cert_code = ELOS- + 12 primeiros hex do id do selo),
+// consultável em /verificar.
+function buildApprovalEmail(supplier, { sealId, clientName, expiresAt }) {
+  const site    = frontendUrl().replace(/\/$/, '')   // staging aponta para o próprio staging (runtime_env)
+  const code    = sealId ? `ELOS-${String(sealId).replace(/-/g, '').slice(0, 12).toUpperCase()}` : null
+  const certUrl = sealId ? `${site}/fornecedor/certificado/${sealId}` : `${site}/fornecedor/dashboard`
+  const verUrl  = code ? `${site}/verificar?code=${code}` : `${site}/verificar`
+  const d       = String(supplier.cnpj || '').replace(/\D/g, '')
+  const cnpj    = d.length === 14 ? `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}` : (supplier.cnpj || '')
+  const validade = expiresAt ? expiresAt.toLocaleDateString('pt-BR') : null
+  const row = (k, v) => `<tr><td style="padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:42%;font-size:13px;color:#1a1c5e">${k}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;font-size:13px;color:#374151">${v}</td></tr>`
+  return `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#374151">
+    <div style="background:#2E3192;padding:28px 32px;border-radius:12px 12px 0 0;text-align:center">
+      <h1 style="color:#fff;margin:0 0 4px;font-size:22px">SIGEC ELOS</h1>
+      <p style="color:#C7D2FE;margin:0;font-size:13px">Plataforma de Homologação de Fornecedores</p>
     </div>
-    <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:48px">🏅</div>
-        <h2 style="color:#15803d;margin:8px 0 4px;font-size:20px">Homologacao Aprovada!</h2>
+    <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none;line-height:1.6;font-size:14px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:44px">🏅</div>
+        <h2 style="color:#15803d;margin:6px 0 0;font-size:20px">Homologação concluída!</h2>
       </div>
-      <p style="color:#374151;margin:0 0 16px">Ola, <strong>${supplier.razao_social}</strong>!</p>
-      <p style="color:#374151;margin:0 0 20px">Sua empresa foi <strong>homologada</strong> com sucesso na rede SIGEC-ELOS.</p>
-      <table style="width:100%;border-collapse:collapse;margin:0 0 24px">
-        <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:40%;font-size:13px">Empresa</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">${supplier.razao_social}</td></tr>
-        <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">CNPJ</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px;font-family:monospace">${supplier.cnpj}</td></tr>
-        <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Selo</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:14px;color:#F47E2F;font-weight:bold">${sealName}</td></tr>
-        <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Score</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">${score}/100</td></tr>
-        <tr><td style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;font-size:13px">Validade</td><td style="padding:10px;border:1px solid #e2e8f0;font-size:13px">Ate ${expStr}</td></tr>
+      <p style="margin:0 0 14px">Olá, <strong>${supplier.razao_social}</strong>. Como estão as coisas?</p>
+      <p style="margin:0 0 14px">Gostaríamos de informar que o processo de homologação da sua empresa na plataforma SIGEC ELOS${clientName ? ` para a <strong>${clientName}</strong>` : ''} foi <strong>concluído com sucesso</strong>.</p>
+      <p style="margin:0 0 20px">Seu <strong>Certificado de Homologação</strong> e o <strong>Selo ELOS</strong> já estão disponíveis em nosso portal, onde você também pode consultar a validade e o status da sua documentação a qualquer momento.</p>
+      <div style="text-align:center;margin:0 0 20px">
+        <a href="${certUrl}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 30px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar Certificado de Homologação →</a>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:0 0 22px">
+        ${code ? row('Certificado nº / código de verificação', `<span style="font-family:monospace;font-size:14px;color:#2E3192;font-weight:bold">${code}</span>`) : ''}
+        ${row('CNPJ', `<span style="font-family:monospace">${cnpj}</span>`)}
+        ${validade ? row('Validade', `até ${validade}`) : ''}
+        ${row('Portal', `<a href="${site}" style="color:#2E3192">${site.replace(/^https?:\/\//, '')}</a>`)}
+        ${row('Verificar autenticidade', `<a href="${verUrl}" style="color:#2E3192">${site.replace(/^https?:\/\//, '')}/verificar</a>`)}
       </table>
-      <div style="text-align:center">
-        <a href="${frontendUrl()}/fornecedor/dashboard" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">Acessar meu painel →</a>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 18px;margin:0 0 20px">
+        <p style="margin:0 0 10px"><strong>Sua homologação abre portas:</strong> com ela, sua empresa passa a integrar o <strong>Vendor List SIGEC ELOS</strong> — a lista de fornecedores pré-qualificados consultada por grandes contratantes dos setores de Mineração, Energia e Gás.</p>
+        <p style="margin:0 0 10px">Na prática, quando uma empresa compradora busca fornecedores, o seu cadastro aparece como apto, com documentação validada, reduzindo etapas e acelerando a sua contratação.</p>
+        <p style="margin:0">Ou seja, o investimento na homologação não é só cumprir uma exigência: é ganhar <strong>visibilidade e prioridade</strong> junto a quem compra.</p>
       </div>
+      <p style="margin:0 0 14px">Obrigado pela confiança, ter você com a gente é incrível!</p>
+      <p style="margin:0">Atenciosamente,<br><strong>Equipe SIGEC ELOS | EQPI Tech</strong></p>
     </div>
-    <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">EQPI Tech - SIGEC-ELOS</div>
+    <div style="background:#f8fafc;padding:16px 24px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9B9B9B;line-height:1.6">
+      *Não responda a este e-mail. Em caso de dúvidas, entre em contato com o nosso suporte.<br>
+      EQUIPO INFO SERVIÇOS DE TECNOLOGIA DA INFORMAÇÃO LTDA · CNPJ 21.270.860/0001-15 · São Paulo/SP
+    </div>
   </div>`
 }
 
