@@ -12,6 +12,7 @@ import { getHolidaySet, addBusinessDays } from '../../lib/businessDays.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
 import BcCostsTab from './BcCosts.jsx'
+import { CaptureCostsTab, AiCostsTab } from './AutomationCosts.jsx'
 
 const font   = { fontFamily:'DM Sans,sans-serif' }
 const titleF = { fontFamily:'Montserrat,sans-serif' }
@@ -355,11 +356,15 @@ export default function BackofficeMetrics() {
         <TabBtn active={tab==='assinaturas'} onClick={() => setTab('assinaturas')}>💳 Assinaturas</TabBtn>
         <TabBtn active={tab==='subsidiados'} onClick={() => setTab('subsidiados')}>🤝 Subsidiados</TabBtn>
         {podeCustos && <TabBtn active={tab==='custos'} onClick={() => setTab('custos')}>🕵️ Custos BC</TabBtn>}
+        {podeCustos && <TabBtn active={tab==='custos_captura'} onClick={() => setTab('custos_captura')}>📥 Custos Captura</TabBtn>}
+        {podeCustos && <TabBtn active={tab==='custos_ia'} onClick={() => setTab('custos_ia')}>🤖 Custos IA</TabBtn>}
       </div>
       {tab === 'geral'        && <OverviewTab data={data}/>}
       {tab === 'assinaturas'  && <SubscriptionsTab data={data}/>}
       {tab === 'subsidiados'  && <SubsidizedTab data={data} period={period} setPeriod={setPeriod}/>}
       {tab === 'custos' && podeCustos && <BcCostsTab/>}
+      {tab === 'custos_captura' && podeCustos && <CaptureCostsTab/>}
+      {tab === 'custos_ia' && podeCustos && <AiCostsTab/>}
     </div>
   )
 }
