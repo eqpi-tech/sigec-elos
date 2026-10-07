@@ -1332,6 +1332,12 @@ export const categoriesApi = {
     const rows = categoryIds.map(cid => ({ supplier_id: supplierId, category_id: cid }))
     const { data, error } = await supabase.from('supplier_categories').insert(rows).select()
     if (error) throw new Error(error.message)
+    // categoria nova pode exigir documento que a Rota A coleta (07/10, caso
+    // Presmet): refaz a fila de coleta — sem custo duplicado; melhor esforço
+    authFetch('/.netlify/functions/homolog-collect-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supplierId }),
+    }).catch(() => {})
     return data
   },
 
