@@ -505,7 +505,7 @@ export function BackofficeAnalysis() {
         metadata: { razao_social: supplierData.razao_social, seal_id: procAberto.id },
       })
       // Envia email
-      await fetch('/.netlify/functions/send-email', {
+      await authFetch('/.netlify/functions/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -605,7 +605,7 @@ export function BackofficeAnalysis() {
            d.status==='REJECTED' ? `Rejeitado${d.review_note ? ` — ${d.review_note}` : ''}`
            : d.status==='EXPIRED' ? 'Vencido' : d.status==='EXPIRING' ? 'Vence em breve' : 'Não enviado'
          }</td></tr>`).join('')
-      await fetch('/.netlify/functions/send-email', {
+      await authFetch('/.netlify/functions/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -675,7 +675,7 @@ export function BackofficeAnalysis() {
     await adminApi.approveSeal(id, level, processSeal?.id)
     // Notificação de resultado
     try {
-      await fetch('/.netlify/functions/send-email', {
+      await authFetch('/.netlify/functions/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -719,7 +719,7 @@ export function BackofficeAnalysis() {
     setProcessing(true)
     await adminApi.rejectSeal(id, obs)
     try {
-      await fetch('/.netlify/functions/send-email', {
+      await authFetch('/.netlify/functions/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

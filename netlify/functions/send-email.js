@@ -6,8 +6,24 @@ const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
 
 exports.handler = async (event) => {
-  const headers = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' }
+  const headers = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'Content-Type, Authorization' }
   if (event.httpMethod === 'OPTIONS') return { statusCode:200, headers, body:'' }
+  if (event.httpMethod !== 'POST') return { statusCode:405, headers, body: JSON.stringify({ error:'Method not allowed' }) }
+
+  // Autenticação (07/10/2026): a função era aberta — qualquer um enviava e-mail
+  // em nome do SIGEC-ELOS (domínio eqpitech) para qualquer destinatário.
+  // Aceita só: chamada interna de outra function (Bearer CRON_SECRET) ou o
+  // backoffice logado (JWT de usuário ADMIN — fila de análise no navegador).
+  const tokenAuth = (event.headers.authorization || event.headers.Authorization || '').replace(/^Bearer\s+/i, '')
+  if (!tokenAuth) return { statusCode:401, headers, body: JSON.stringify({ error:'Não autorizado' }) }
+  const interno = !!process.env.CRON_SECRET && tokenAuth === process.env.CRON_SECRET
+  if (!interno) {
+    const sbAuth = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const { data: { user } = {}, error: authErr } = await sbAuth.auth.getUser(tokenAuth)
+    if (authErr || !user) return { statusCode:401, headers, body: JSON.stringify({ error:'Não autorizado' }) }
+    const { data: adm } = await sbAuth.from('user_roles').select('user_id').eq('user_id', user.id).eq('role', 'ADMIN').maybeSingle()
+    if (!adm) return { statusCode:403, headers, body: JSON.stringify({ error:'Sem permissão para enviar e-mail' }) }
+  }
 
   let body
   try { body = JSON.parse(event.body) } catch {

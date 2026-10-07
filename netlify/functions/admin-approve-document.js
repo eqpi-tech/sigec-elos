@@ -150,7 +150,7 @@ exports.handler = async (event) => {
         if (sup?.user_id) {
           await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
             body: JSON.stringify({
               userId: sup.user_id,
               subject: `⚠️ Documento reprovado — reenvio necessário · ${sup.razao_social}`,
@@ -312,7 +312,7 @@ exports.handler = async (event) => {
     if (supplier?.user_id) {
       await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
         body: JSON.stringify({
           userId:  supplier.user_id,
           subject: `✅ Homologação concluída — seu Certificado SIGEC ELOS está disponível`,
@@ -353,7 +353,7 @@ exports.handler = async (event) => {
     if (supplier?.user_id) {
       await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
         body: JSON.stringify({
           userId:  supplier.user_id,
           subject: '❌ Atualização sobre sua homologação SIGEC-ELOS',

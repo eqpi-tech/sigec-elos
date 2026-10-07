@@ -216,7 +216,7 @@ exports.handler = async (event) => {
       if (supplierData && session.customer_email) {
         await fetch(`${functionsUrl()}/.netlify/functions/send-email`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
           body: JSON.stringify({
             to:       session.customer_email,
             template: 'welcome',

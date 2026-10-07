@@ -143,7 +143,7 @@ exports.handler = async (event) => {
     const baseUrl = frontendUrl()
     await fetch(`${baseUrl}/.netlify/functions/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
       body: JSON.stringify({
         to: email,
         subject: `Você foi convidado para acessar o SIGEC-ELOS — ${supplierName}`,
