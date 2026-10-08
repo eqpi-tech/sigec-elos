@@ -1039,7 +1039,7 @@ export const adminApi = {
   updateDocStatus: async (docId, status, note) => documentApi.updateStatus(docId, status, note),
 
   // Tela de Análise em Lote — retorna documentos com filtros dinâmicos
-  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, status: statusFilter, queue, expiresUntil, sugestao, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
+  listDocumentsForAnalysis: async ({ docType, supplierSearch, clientName, client, status: statusFilter, queue, expiresUntil, sugestao, prioritario, sortBy = 'due_asc', page = 0, pageSize = 50 } = {}) => {
     // RPC admin_list_documents (patch_069): a fila só traz documentos de
     // fornecedores com processo OPERÁVEL (selo ACTIVE/PENDING de cliente
     // ATIVO ou selo ELOS) — suspensos e clientes inativos do HOC ficam
@@ -1057,6 +1057,7 @@ export const adminApi = {
       // para não quebrar a RPC onde o patch ainda não foi aplicado
       ...(sugestao ? { p_sugestao: sugestao } : {}),
       ...(prioritario ? { p_prioritario: true } : {}),   // patch_113
+      ...(client ? { p_client: client } : {}),            // patch_123: uuid do cliente ou '__ELOS__'
     })
     if (error) throw new Error(error.message)
     return { rows: data?.rows || [], total: data?.total || 0, page, pageSize }

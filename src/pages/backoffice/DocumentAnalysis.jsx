@@ -437,6 +437,14 @@ export default function DocumentAnalysis() {
   const [expiresUntil,  setExpiresUntil]  = useState(saved.expiresUntil ?? '')
   const [sugFilter,     setSugFilter]     = useState(SUGESTAO_ON ? (saved.sugFilter ?? '') : '')
   const [prioFilter,    setPrioFilter]    = useState(!!saved.prioFilter)   // ⚡ só prioritários (patch_113)
+  const [clientFilter,  setClientFilter]  = useState(saved.clientFilter ?? '')   // cliente do processo (patch_123)
+  const [clientes,      setClientes]      = useState([])
+  useEffect(() => {
+    adminApi.listClients()
+      .then(cs => setClientes(cs.map(c => ({ id: c.id, nome: c.nome_fantasia || c.razao_social }))
+        .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'))))
+      .catch(() => {})
+  }, [])
   const [sortBy,        setSortBy]        = useState(saved.sortBy ?? 'due_asc')
 
   // Dados
@@ -494,6 +502,7 @@ export default function DocumentAnalysis() {
         expiresUntil: expiresUntil || undefined,
         sugestao: sugFilter || undefined,
         prioritario: prioFilter || undefined,
+        client: clientFilter || undefined,
         sortBy,
         page: pg,
         pageSize: PAGE_SIZE,
@@ -502,13 +511,13 @@ export default function DocumentAnalysis() {
       setTotal(result.total)
       if (ROUTE_B_ENABLED) routeBApi.latestByDocument(result.rows.map(d => d.id)).then(setAiMap)
       setPage(pg)
-      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy, page: pg }))
+      sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, clientFilter, sortBy, page: pg }))
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy])
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, clientFilter, sortBy])
 
   // Primeira carga restaura também a PÁGINA salva (voltar da visualização
   // de um documento mantém o analista onde estava)
@@ -521,8 +530,8 @@ export default function DocumentAnalysis() {
 
   // Salva os filtros a cada mudança
   useEffect(() => {
-    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy, page }))
-  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, sortBy])
+    sessionStorage.setItem(FILTERS_KEY, JSON.stringify({ docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, clientFilter, sortBy, page }))
+  }, [docType, supplierSearch, statusFilter, queueFilter, expiresUntil, sugFilter, prioFilter, clientFilter, sortBy])
 
   async function handleApprove(docId, expiry, status = 'VALID', note, inscriptionNumber) {
     setSaving(p => new Set([...p, docId]))
@@ -673,6 +682,7 @@ export default function DocumentAnalysis() {
           expiresUntil: expiresUntil || undefined,
         sugestao: sugFilter || undefined,
         prioritario: prioFilter || undefined,
+        client: clientFilter || undefined,
           sortBy: 'expires_asc',
           page: 0,
           pageSize: 9999,
@@ -788,6 +798,14 @@ export default function DocumentAnalysis() {
               placeholder="Buscar fornecedor..." style={inp}/>
           </div>
           <div>
+            <span style={lbl}>Cliente</span>
+            <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={inp}>
+              <option value="">Todos os clientes</option>
+              <option value="__ELOS__">ELOS (selo próprio, sem cliente)</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
             <span style={lbl}>Limite de análise</span>
             <select value={queueFilter} onChange={e => setQueueFilter(e.target.value)} style={inp}>
               {QUEUE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -826,7 +844,7 @@ export default function DocumentAnalysis() {
             </select>
           </div>
           <div style={{ display:'flex', alignItems:'flex-end' }}>
-            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setSugFilter(''); setPrioFilter(false); setExpiresUntil(''); setSortBy('due_asc') }}>
+            <Button variant="neutral" full onClick={() => { setDocType([]); setSupplierSearch(''); setQueueFilter('fila'); setStatusFilter('todos'); setSugFilter(''); setPrioFilter(false); setClientFilter(''); setExpiresUntil(''); setSortBy('due_asc') }}>
               Limpar filtros
             </Button>
           </div>
