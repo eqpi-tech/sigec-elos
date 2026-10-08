@@ -147,11 +147,12 @@ export default function DemoClientDashboard({ navigate }) {
       />
 
       {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:28 }}>
-        <KpiCard label="Fornecedores Convidados" value={c.totalFornecedores} icon="🤝" />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:28 }}>
+        <KpiCard label="Fornecedores"            value={c.totalFornecedores} icon="🤝" subtext="Com processo de homologação" />
         <KpiCard label="Homologados"             value={c.homologados}       icon="✅" subtext="Selo ELOS ativo"          subColor="#22c55e" iconBg="rgba(34,197,94,.1)" />
         <KpiCard label="Em Análise"              value={c.emAnalise}         icon="⏳" subtext="Aguardando revisão EQPI"  subColor="#f59e0b" iconBg="rgba(139,92,246,.1)" />
         <KpiCard label="Subsidiados"             value={c.subsidiados}       icon="💰" subtext="Custo assumido por você"  subColor="#2E3192" iconBg="rgba(46,49,146,.1)" />
+        <KpiCard label="Carta de Exceção"        value={1}                   icon="📜" subtext="Fornecedores com carta vigente" subColor="#c2410c" iconBg="rgba(194,65,12,.1)" />
       </div>
 
       {/* Saúde da cadeia */}

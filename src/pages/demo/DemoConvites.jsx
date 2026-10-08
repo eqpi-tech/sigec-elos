@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Card, Button, PageHeader, Spinner } from '../../components/ui.jsx'
+import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e' }
 const STATUS_LABEL = { SENT:'📨 Enviado', VIEWED:'👁 Visualizado', REGISTERED:'✅ Cadastrado' }
@@ -32,11 +33,18 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
   const [sending,    setSending]    = useState(false)
   const [success,    setSuccess]    = useState('')
   const [error,      setError]      = useState('')
+  // filtros de múltipla escolha do cliente — mesmo componente da produção (01/10)
+  const [fStatus,    setFStatus]    = useState([])
+  const [fCust,      setFCust]      = useState([])
 
   const filtered = invites.filter(i => {
     const q = search.toLowerCase()
-    return !q || i.supplier_razao_social?.toLowerCase().includes(q) || i.supplier_cnpj?.includes(q)
+    if (q && !(i.supplier_razao_social?.toLowerCase().includes(q) || i.supplier_cnpj?.includes(q))) return false
+    if (fStatus.length && !fStatus.includes(i.status)) return false
+    if (fCust.length && !fCust.includes(i.subsidiado ? 'sim' : 'nao')) return false
+    return true
   })
+  const conta = (fn) => invites.filter(fn).length
 
   const handleSend = (e) => {
     e.preventDefault()
@@ -81,8 +89,17 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
 
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Buscar por razão social ou CNPJ..."
-        style={{ ...inp, marginBottom:20 }}
+        style={{ ...inp, marginBottom: profile === 'BUYER' ? 20 : 12 }}
       />
+      {profile !== 'BUYER' && (
+        <FilterPanel total={invites.length} shown={filtered.length} active={!!search || fStatus.length + fCust.length > 0}
+          onClear={() => { setSearch(''); setFStatus([]); setFCust([]) }}>
+          <MultiChips label="Status" value={fStatus} onChange={setFStatus}
+            options={['SENT','VIEWED','REGISTERED'].map(st => ({ value: st, label: STATUS_LABEL[st], color: STATUS_COLOR[st], count: conta(i => i.status === st) })).filter(o => o.count > 0)}/>
+          <MultiChips label="Custeio" single value={fCust} onChange={setFCust}
+            options={[{ value:'sim', label:'💰 Subsidiado', count: conta(i => i.subsidiado) }, { value:'nao', label:'Pago pelo fornecedor', count: conta(i => !i.subsidiado) }].filter(o => o.count > 0)}/>
+        </FilterPanel>
+      )}
 
       <div style={{ display:'grid', gap:10 }}>
         {filtered.length === 0 ? (

@@ -75,14 +75,14 @@ export const DEMO_CLIENT = {
 }
 
 export const DEMO_CLIENT_SUPPLIERS = [
-  { id:1, razao_social:'Primatus Serviços Técnicos Ltda', initials:'PS', city:'São Paulo',       state:'SP', subsidiado:false, sealStatus:'ACTIVE',  score:92, seal_name:'Homologado Horizonte' },
-  { id:2, razao_social:'Ômega Engenharia Ltda',           initials:'ÔE', city:'Belo Horizonte',  state:'MG', subsidiado:true,  sealStatus:'ACTIVE',  score:88, seal_name:'Homologado Horizonte' },
-  { id:3, razao_social:'TechFix Industrial',               initials:'TF', city:'Campinas',        state:'SP', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise'  },
-  { id:4, razao_social:'Sulbras Serviços',                 initials:'SS', city:'Porto Alegre',    state:'RS', subsidiado:true,  sealStatus:'ACTIVE',  score:79, seal_name:'Homologado Horizonte' },
-  { id:5, razao_social:'Norte Industrial Ltda',            initials:'NI', city:'Parauapebas',     state:'PA', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise'  },
-  { id:6, razao_social:'BioTech Serviços Ambientais',      initials:'BS', city:'Curitiba',        state:'PR', subsidiado:false, sealStatus:'ACTIVE',  score:81, seal_name:'Homologado Horizonte' },
-  { id:7, razao_social:'Metalmax Ind. Ltda',               initials:'MI', city:'Contagem',        state:'MG', subsidiado:false, sealStatus:'SUSPENDED', score:55, seal_name:'Suspenso'   },
-  { id:8, razao_social:'LogFlex Transportes',              initials:'LF', city:'Santos',          state:'SP', subsidiado:true,  sealStatus:'ACTIVE',  score:90, seal_name:'Homologado Horizonte' },
+  { id:1, razao_social:'Primatus Serviços Técnicos Ltda', initials:'PS', city:'São Paulo',       state:'SP', subsidiado:false, sealStatus:'ACTIVE',  score:92, seal_name:'Homologado Horizonte', nivel:'Suprimentos – Nível 2' },
+  { id:2, razao_social:'Ômega Engenharia Ltda',           initials:'ÔE', city:'Belo Horizonte',  state:'MG', subsidiado:true,  sealStatus:'ACTIVE',  score:88, seal_name:'Homologado Horizonte', nivel:'Suprimentos – Nível 3' },
+  { id:3, razao_social:'TechFix Industrial',               initials:'TF', city:'Campinas',        state:'SP', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise', nivel:'Suprimentos – Nível 2', prioridade:true  },
+  { id:4, razao_social:'Sulbras Serviços',                 initials:'SS', city:'Porto Alegre',    state:'RS', subsidiado:true,  sealStatus:'ACTIVE',  score:79, seal_name:'Homologado Horizonte', nivel:'Suprimentos – Nível 3', carta:true },
+  { id:5, razao_social:'Norte Industrial Ltda',            initials:'NI', city:'Parauapebas',     state:'PA', subsidiado:false, sealStatus:'PENDING', score:null, seal_name:'Em análise', nivel:'Suprimentos – Nível 1'  },
+  { id:6, razao_social:'BioTech Serviços Ambientais',      initials:'BS', city:'Curitiba',        state:'PR', subsidiado:false, sealStatus:'ACTIVE',  score:81, seal_name:'Homologado Horizonte', nivel:'Suprimentos – Nível 2' },
+  { id:7, razao_social:'Metalmax Ind. Ltda',               initials:'MI', city:'Contagem',        state:'MG', subsidiado:false, sealStatus:'SUSPENDED', score:55, seal_name:'Suspenso', nivel:'Suprimentos – Nível 1'   },
+  { id:8, razao_social:'LogFlex Transportes',              initials:'LF', city:'Santos',          state:'SP', subsidiado:true,  sealStatus:'ACTIVE',  score:90, seal_name:'Homologado Horizonte', nivel:'Suprimentos – Nível 1' },
 ]
 
 // ── Questionário do cliente (fornecedor responde) ──────────────────────────

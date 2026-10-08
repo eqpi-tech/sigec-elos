@@ -1,7 +1,8 @@
 // Demo · perfil Backoffice EQPI (refresh 30/09): a operação por trás da
 // homologação — Farol, fila de análise, ficha do processo, convites, BC
 // Report e Financeiro. Dados fictícios. A automação (Rota A: certidões nas
-// fontes oficiais; Rota B: pré-análise por IA) aparece marcada "Em breve".
+// fontes oficiais; Rota B: pré-análise por IA) está em produção desde
+// 07/10/2026 e aparece marcada "Novo" (antes: "Em breve").
 //
 // ACESSO RESTRITO (30/09): este arquivo é carregado sob demanda (React.lazy)
 // só depois que o código de acesso é validado no servidor (demo-unlock) —
@@ -54,8 +55,9 @@ const D = 'DM Sans,sans-serif'
 const wrap = { padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }
 const pill = (color, bg) => ({ fontSize: 10, fontWeight: 700, color, background: bg, padding: '2px 8px', borderRadius: 20, fontFamily: M, whiteSpace: 'nowrap' })
 
+// selo da automação: em produção desde 07/10/2026 (nome mantido p/ não mexer nos usos)
 export function EmBreve({ style }) {
-  return <span style={{ ...pill('#7c3aed', '#ede9fe'), ...style }} title="Em lançamento — já em testes, entra em produção em breve">✨ Em breve</span>
+  return <span style={{ ...pill('#15803d', '#dcfce7'), ...style }} title="Novidade — em produção para os processos do ELOS">✨ Novo</span>
 }
 
 const LIMITE = {
@@ -129,7 +131,9 @@ export function DemoAdminAnalise({ navigate }) {
   const [sug, setSug] = useState('')
   const [feito, setFeito] = useState({})
   const [aceitar, setAceitar] = useState(null)
-  const lista = DEMO_ADMIN_FILA.filter((d) => !sug || (sug === 'nenhuma' ? !d.rota : d.rota?.s === sug || d.rota?.r === sug))
+  const [cli, setCli] = useState('')   // filtro de cliente (produção: 08/10)
+  const clientesFila = [...new Set(DEMO_ADMIN_FILA.map((d) => d.cliente))]
+  const lista = DEMO_ADMIN_FILA.filter((d) => (!sug || (sug === 'nenhuma' ? !d.rota : d.rota?.s === sug || d.rota?.r === sug)) && (!cli || d.cliente === cli))
   const sel = { padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 13, width: '100%' }
   const lbl = { display: 'block', fontFamily: M, fontWeight: 700, fontSize: 10, color: '#9B9B9B', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }
   return (
@@ -139,6 +143,13 @@ export function DemoAdminAnalise({ navigate }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
           <div><span style={lbl}>Tipo de documento</span><select style={sel}><option>Todos os tipos</option></select></div>
           <div><span style={lbl}>Fornecedor (nome ou CNPJ)</span><input placeholder="Buscar fornecedor..." style={{ ...sel, boxSizing: 'border-box' }}/></div>
+          <div>
+            <span style={lbl}>Cliente</span>
+            <select value={cli} onChange={(e) => setCli(e.target.value)} style={sel}>
+              <option value="">Todos os clientes</option>
+              {clientesFila.map((c) => <option key={c} value={c}>{c === 'ELOS' ? 'ELOS (selo próprio, sem cliente)' : c}</option>)}
+            </select>
+          </div>
           <div><span style={lbl}>Limite de análise</span><select style={sel}><option>📥 Fila de análise (todos)</option><option>🔴 Data limite ultrapassada</option><option>🟠 Data limite hoje</option><option>🟢 Data limite futura</option></select></div>
           <div>
             <span style={lbl}>Sugestão <EmBreve style={{ marginLeft: 4 }}/></span>
@@ -197,7 +208,7 @@ export function DemoAdminAnalise({ navigate }) {
             <div style={{ fontFamily: D, fontSize: 12, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
               {aceitar.rota.s === 'aprovar'
                 ? 'Status "Aprovado" e validade preenchidos pela sugestão (validade da fonte/documento; sem ela, análise + 1 ano). Confira e salve.'
-                : 'Status "Reprovado" e motivo da recusa preenchidos pela sugestão — o fornecedor recebe o motivo por e-mail. Confira e salve.'}
+                : 'Status "Reprovado", motivo da recusa e vencimento em 4 meses (nova checagem do documento) preenchidos pela sugestão — o fornecedor recebe o motivo por e-mail. Confira e salve.'}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="neutral" full onClick={() => setAceitar(null)}>Cancelar</Button>
@@ -735,6 +746,28 @@ export function DemoAdminFinanceiro() {
         ))}
         <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
           Cada pagamento gera a nota fiscal de serviço automaticamente. Previsão de repasse: pagamento + 3 dias úteis. Aceita cupom de desconto no checkout.
+        </div>
+      </Card>
+      <Card style={{ borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
+        <SectionTitle>Custos da operação — mês atual</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 14 }}>
+          {[['🕵️ Custos BC', 'R$ 412,30', '43 relatórios · listas restritivas e crédito'],
+            ['📥 Captura de documentos', 'R$ 38,60', '214 certidões obtidas nas fontes oficiais'],
+            ['🤖 IA', 'R$ 6,90', '118 pré-análises · concordância do analista 91%']].map(([t, v, s]) => (
+            <div key={t} style={{ background: '#fafbff', border: '1px solid rgba(46,49,146,.12)', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ fontFamily: M, fontWeight: 700, fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t} <EmBreve style={{ marginLeft: 4 }}/></div>
+              <div style={{ fontFamily: M, fontWeight: 800, fontSize: 20, color: '#1a1c5e' }}>{v}</div>
+              <div style={{ fontFamily: D, fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{s}</div>
+            </div>
+          ))}
+        </div>
+        {[['FGTS (CRF)', 62, 'R$ 16,12'], ['CNDT (Justiça do Trabalho)', 58, 'R$ 16,24'], ['CND Federal (PGFN)', 21, 'R$ 6,24'], ['Receita · Cartão CNPJ, Simples · "Lista suja"', 73, 'gratuitas']].map(([f, q, c]) => (
+          <div key={f} style={{ display: 'grid', gridTemplateColumns: '1.6fr 110px 110px', gap: 10, padding: '8px 0', borderTop: '1px solid #f4f5f9', fontFamily: D, fontSize: 12.5, color: '#374151' }}>
+            <span>{f}</span><span>{q} consultas</span><strong style={{ color: '#1a1c5e' }}>{c}</strong>
+          </div>
+        ))}
+        <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
+          Fonte paga só cobra quando devolve a certidão; documento válido ou enviado pelo fornecedor não gera consulta. A IA tem teto diário de gasto e só sugere — quem decide é o analista.
         </div>
       </Card>
       <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
