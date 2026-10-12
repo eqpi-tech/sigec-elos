@@ -699,20 +699,9 @@ export default function SupplierOnboarding() {
                 <div>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Sua homologação com {clientQuote.cliente}</div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>Valor combinado entre a EQPI e {clientQuote.cliente} para este processo.</div>
-                  <div onClick={() => setPreCadastro(false)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${!preCadastro ? '#F47E2F' : '#e2e4ef'}`, background:!preCadastro ? 'rgba(244,126,47,.05)' : '#fff', marginBottom: canPreCadastro ? 10 : 20, cursor: canPreCadastro ? 'pointer' : 'default' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                      <span style={{ fontSize:28 }}>🏅</span>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>Homologado — {clientQuote.cliente}</div>
-                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>{clientQuote.fluxo ? `Pacote ${clientQuote.fluxo} · ` : ''}Análise documental pela EQPI · Selo com o nome do cliente</div>
-                      </div>
-                      <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ {brl(clientQuote.preco)}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
-                      </div>
-                    </div>
-                  </div>
+                  {/* portal do cliente: o pré-cadastro (sem custo) vem antes da homologação — pedido do Luiz 12/10 */}
                   {canPreCadastro && (
-                    <div onClick={() => setPreCadastro(true)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${preCadastro ? '#2E3192' : '#e2e4ef'}`, background:preCadastro ? 'rgba(46,49,146,.05)' : '#fff', marginBottom:20, cursor:'pointer' }}>
+                    <div onClick={() => setPreCadastro(true)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${preCadastro ? '#2E3192' : '#e2e4ef'}`, background:preCadastro ? 'rgba(46,49,146,.05)' : '#fff', marginBottom:10, cursor:'pointer' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                         <span style={{ fontSize:28 }}>📝</span>
                         <div style={{ flex:1 }}>
@@ -725,6 +714,18 @@ export default function SupplierOnboarding() {
                       </div>
                     </div>
                   )}
+                  <div onClick={() => setPreCadastro(false)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${!preCadastro ? '#F47E2F' : '#e2e4ef'}`, background:!preCadastro ? 'rgba(244,126,47,.05)' : '#fff', marginBottom:20, cursor: canPreCadastro ? 'pointer' : 'default' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                      <span style={{ fontSize:28 }}>🏅</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>Homologado — {clientQuote.cliente}</div>
+                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>{clientQuote.fluxo ? `Pacote ${clientQuote.fluxo} · ` : ''}Análise documental pela EQPI · Selo com o nome do cliente</div>
+                      </div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ {brl(clientQuote.preco)}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
+                      </div>
+                    </div>
+                  </div>
                   {clientQuote.erro && !preCadastro && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{clientQuote.erro}</div>}
                   {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{error}</div>}
                   <div style={{ display:'flex', gap:8 }}>
