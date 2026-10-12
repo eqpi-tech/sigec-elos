@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { cnpjApi, paymentsApi, invitationsApi } from '../../services/api.js'
 import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
+import { siteUrl } from '../../lib/siteUrl.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
 // Fallback local — a fonte é app_settings.elos_prices (Preços ELOS no backoffice)
@@ -56,6 +57,10 @@ export default function SupplierOnboarding() {
 
   // ── Supplier state ────────────────────────────────────────────────
   const [invitation, setInvitation]         = useState(null)
+  // termos do cliente quando a entrada é o PORTAL (?ref=slug, sem convite) —
+  // mesmo formato do convite; antes o portal mostrava só o termo ELOS (12/10)
+  const [portalTerms, setPortalTerms]       = useState(null)
+  const termsSrc = invitation || portalTerms
   const [elosPrices, setElosPrices]         = useState({})   // app_settings.elos_prices
 
   useEffect(() => {
@@ -141,6 +146,37 @@ export default function SupplierOnboarding() {
       .catch(e => console.warn('invitation lookup:', e.message))
   }, [inviteToken])
 
+  useEffect(() => {
+    if (inviteToken || !refSlug) return
+    invitationsApi.getPortalTerms(refSlug)
+      .then(setPortalTerms)
+      .catch(e => console.warn('portal terms:', e.message))
+  }, [inviteToken, refSlug])
+
+  // Empresa que JÁ tem login (dono/equipe): a etapa Conta vira "Entrar" —
+  // outro e-mail não ganha acesso à empresa (create-supplier recusa)
+  const ownerMode = !!existingSupplier?.hasOwner
+  const [loggedAs, setLoggedAs] = useState(null)   // e-mail da sessão validada para esta empresa
+  const isMemberOf = async (uid, supplierId) => {
+    const { data } = await supabase.from('user_roles').select('supplier_id')
+      .eq('user_id', uid).eq('role', 'SUPPLIER')
+    return (data || []).some(r => r.supplier_id === supplierId)
+  }
+  useEffect(() => {
+    if (step !== 2 || !ownerMode || loggedAs) return
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const u = session?.user
+      if (u && await isMemberOf(u.id, existingSupplier.id)) { setLoggedAs(u.email); setEmail(u.email) }
+    })
+  }, [step, ownerMode, loggedAs, existingSupplier?.id])
+  const [resetSent, setResetSent] = useState(false)
+  const handleForgot = async () => {
+    if (!email) { setError('Informe o e-mail para receber o link de redefinição.'); return }
+    setError('')
+    const { error: e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl()}/redefinir-senha` })
+    if (e) setError(e.message); else setResetSent(true)
+  }
+
   const formatCnpj = (v) => {
     const d = v.replace(/\D/g,'').slice(0,14)
     return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
@@ -159,7 +195,7 @@ export default function SupplierOnboarding() {
     setLookupLoading(true); setLookupError(''); setSanctionsConfirm(false)
     setExistingSeal(null); setExistingSupplier(null)
     try {
-      const result = await cnpjApi.lookup(cnpj)
+      const result = await cnpjApi.lookup(cnpj, { ref: inviteToken ? undefined : refSlug, token: inviteToken || undefined })
       setCnpjData(result.cnpj)
       setSanctions(result.sanctions)
 
@@ -172,8 +208,13 @@ export default function SupplierOnboarding() {
         return
       }
       if (db.isSupplier) {
-        setExistingSupplier({ id: db.supplierId, razao_social: db.razaoSocial })
-        if (db.hasActiveSeal) {
+        setExistingSupplier({ id: db.supplierId, razao_social: db.razaoSocial,
+          hasOwner: !!db.hasOwner, ownerEmailMasked: db.ownerEmailMasked || null,
+          activeElsewhere: !!db.hasActiveSeal && db.hasActiveSealForContext === false })
+        setLoggedAs(null)
+        // atalho "já homologado" só vale para o selo DESTE cliente (portal/
+        // convite) — homologado com outro abre processo novo, pago (12/10)
+        if (db.hasActiveSealForContext ?? db.hasActiveSeal) {
           setExistingSeal({ status: 'ACTIVE' })
           setStep(2); return
         }
@@ -197,14 +238,31 @@ export default function SupplierOnboarding() {
   }
 
   const handleCreateAccount = async () => {
+    if (ownerMode) {
+      // empresa com login: entra com a conta que já existe e confere o vínculo
+      if (loggedAs) { setStep(3); setError(''); return }
+      setLoading(true); setError('')
+      try {
+        const { data, error: e } = await supabase.auth.signInWithPassword({ email, password })
+        if (e) throw new Error('E-mail ou senha incorretos.')
+        if (!await isMemberOf(data.user.id, existingSupplier.id)) {
+          await supabase.auth.signOut()
+          throw new Error(`Esta conta não tem acesso a esta empresa. Entre com o login da empresa${existingSupplier.ownerEmailMasked ? ` (${existingSupplier.ownerEmailMasked})` : ''} ou peça ao responsável para incluir você na equipe.`)
+        }
+        setLoggedAs(data.user.email); setStep(3)
+      } catch (err) { setError(err.message) }
+      finally { setLoading(false) }
+      return
+    }
     if (password !== password2) { setError('As senhas não coincidem'); return }
     if (password.length < 8)    { setError('Senha deve ter pelo menos 8 caracteres'); return }
     setStep(3); setError('')
   }
 
   const handleAcceptTerms = () => {
-    if (!termsAccepted || !dataSharingAccepted) {
-      setError('Você precisa aceitar os Termos de Uso e a política de compartilhamento para continuar.')
+    // a vitrine (marketplace) é OPCIONAL — só os Termos de Uso são obrigatórios
+    if (!termsAccepted) {
+      setError('Você precisa aceitar os Termos de Uso para continuar.')
       return
     }
     setError('')
@@ -216,7 +274,8 @@ export default function SupplierOnboarding() {
   const createAuthAndSupplier = async ({ isExistingActive: isExAct = false } = {}) => {
     let authUser = null
     try {
-      authUser = await signup({ email, password, role: 'SUPPLIER', name })
+      // já entrou com a conta da empresa na etapa Conta: usa a sessão
+      if (!(ownerMode && loggedAs)) authUser = await signup({ email, password, role: 'SUPPLIER', name })
     } catch (signupErr) {
       if (signupErr.message?.toLowerCase().includes('already registered') ||
           signupErr.message?.toLowerCase().includes('already been registered') ||
@@ -247,7 +306,7 @@ export default function SupplierOnboarding() {
         employee_range: cnpjData?.porte ? cnpjData.porte : null,
         sanctions_checked: true, sanctions_result: sanctions,
         terms_accepted: true, data_sharing_accepted: true,
-        term_acceptances: (invitation?.terms_items || [])
+        term_acceptances: (termsSrc?.terms_items || [])
           .filter(it => itemsAccepted[it.id])
           .map(it => ({ item_id: it.id, version: it.version })),
         cnpj_full_data: cnpjData || null, category_ids: [...selectedCategories],
@@ -396,12 +455,21 @@ export default function SupplierOnboarding() {
                     <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginTop:16 }}>
                       <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#15803d', marginBottom:4 }}>✅ Sua empresa já está homologada!</div>
                       <div style={{ fontSize:13, color:'#166534', fontFamily:'DM Sans,sans-serif', marginBottom:12 }}>Encontramos sua empresa na base com processo ativo. Crie seu acesso e entre direto no painel — sem necessidade de pagamento.</div>
-                      <Button variant="orange" full onClick={() => setStep(2)}>Criar Acesso →</Button>
+                      <Button variant="orange" full onClick={() => setStep(2)}>{ownerMode ? 'Entrar →' : 'Criar Acesso →'}</Button>
                     </div>
                   )}
-                  {existingSupplier && !isExistingActive && (
+                  {existingSupplier && !isExistingActive && (existingSupplier.activeElsewhere ? (
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif' }}>
+                      🏅 Sua empresa já tem homologação vigente no ELOS. O processo com <strong>{termsSrc?.sender_name || clientQuote?.cliente || 'este cliente'}</strong> é um processo novo: escolha as categorias, aceite os termos{isSubsidiado ? '' : ' e conclua o pagamento'}. Os documentos válidos que você já enviou são aproveitados.
+                    </div>
+                  ) : (
                     <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
                       ⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.
+                    </div>
+                  ))}
+                  {existingSupplier?.hasOwner && (
+                    <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'10px 14px', marginTop:10, fontSize:12.5, color:'#374151', fontFamily:'DM Sans,sans-serif' }}>
+                      🔐 Esta empresa já tem acesso ao ELOS{existingSupplier.ownerEmailMasked ? <> (<strong>{existingSupplier.ownerEmailMasked}</strong>)</> : ''}. Na etapa <strong>Conta</strong>, entre com esse login — não é preciso criar outro.
                     </div>
                   )}
                   {sanctionsConfirm ? (
@@ -449,8 +517,15 @@ export default function SupplierOnboarding() {
               {/* Step 2 — Conta */}
               {step === 2 && (
                 <div>
-                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Crie sua conta</div>
-                  {isExistingActive && (
+                  <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>{ownerMode ? 'Entre com a conta da empresa' : 'Crie sua conta'}</div>
+                  {ownerMode && (
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 16px', marginBottom:16, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif', lineHeight:1.55 }}>
+                      {loggedAs
+                        ? <>✅ Você já está conectado como <strong>{loggedAs}</strong>, com acesso a esta empresa.</>
+                        : <>🔐 <strong>{existingSupplier?.razao_social || 'Esta empresa'}</strong> já tem cadastro no ELOS{existingSupplier?.ownerEmailMasked ? <> — acesso de <strong>{existingSupplier.ownerEmailMasked}</strong></> : ''}. Entre com esse login (ou com o seu, se você já faz parte da equipe). Se não tem acesso, peça ao responsável para incluir você em <strong>Minha Equipe</strong>.</>}
+                    </div>
+                  )}
+                  {isExistingActive && !ownerMode && (
                     <div style={{ background:'linear-gradient(135deg,#1a1c5e,#2E3192)', borderRadius:12, padding:'16px 20px', marginBottom:16 }}>
                       <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#fff', marginBottom:4 }}>
                         🏅 Sua empresa já está homologada!
@@ -469,28 +544,50 @@ export default function SupplierOnboarding() {
                       {sanctions?.ceis?.length > 0 && <div style={{ marginTop:6, fontSize:12, color:'#dc2626' }}>⚠️ Consta em listas de sanções — análise especial necessária</div>}
                     </div>
                   )}
-                  <div style={{ marginBottom:16 }}>
-                    <label style={labelStyle}>Seu nome completo</label>
-                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="João da Silva" style={inputStyle} />
-                  </div>
-                  <div style={{ marginBottom:16 }}>
-                    <label style={labelStyle}>E-mail corporativo</label>
-                    <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="joao@empresa.com.br" style={inputStyle} />
-                  </div>
-                  <div style={{ marginBottom:16 }}>
-                    <label style={labelStyle}>Senha (mín. 8 caracteres)</label>
-                    <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
-                  </div>
-                  <div style={{ marginBottom:20 }}>
-                    <label style={labelStyle}>Confirmar senha</label>
-                    <input value={password2} onChange={e=>setPassword2(e.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
-                  </div>
+                  {ownerMode ? (!loggedAs && (
+                    <>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={labelStyle}>E-mail</label>
+                        <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="seu@empresa.com.br" style={inputStyle} />
+                      </div>
+                      <div style={{ marginBottom:8 }}>
+                        <label style={labelStyle}>Senha</label>
+                        <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" style={inputStyle}
+                          onKeyDown={e => { if (e.key === 'Enter' && email && password) handleCreateAccount() }} />
+                      </div>
+                      <div style={{ marginBottom:20, fontSize:12, fontFamily:'DM Sans,sans-serif' }}>
+                        {resetSent
+                          ? <span style={{ color:'#15803d' }}>✅ Enviamos o link de redefinição para {email}.</span>
+                          : <button type="button" onClick={handleForgot} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'#2E3192', fontWeight:700, fontSize:12 }}>Esqueci minha senha</button>}
+                      </div>
+                    </>
+                  )) : (
+                    <>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={labelStyle}>Seu nome completo</label>
+                        <input value={name} onChange={e=>setName(e.target.value)} placeholder="João da Silva" style={inputStyle} />
+                      </div>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={labelStyle}>E-mail corporativo</label>
+                        <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="joao@empresa.com.br" style={inputStyle} />
+                      </div>
+                      <div style={{ marginBottom:16 }}>
+                        <label style={labelStyle}>Senha (mín. 8 caracteres)</label>
+                        <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
+                      </div>
+                      <div style={{ marginBottom:20 }}>
+                        <label style={labelStyle}>Confirmar senha</label>
+                        <input value={password2} onChange={e=>setPassword2(e.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
+                      </div>
+                    </>
+                  )}
                   {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626' }}>{error}</div>}
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="neutral" full onClick={() => setStep(isExistingActive ? 0 : 1)}>← Voltar</Button>
                     <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
-                      disabled={!name || !email || !password || !password2} onClick={handleCreateAccount}>
-                      Próximo →
+                      disabled={loading || (ownerMode ? (!loggedAs && (!email || !password)) : (!name || !email || !password || !password2))}
+                      onClick={handleCreateAccount}>
+                      {loading ? <><Spinner size={16}/> Entrando...</> : ownerMode && !loggedAs ? 'Entrar e continuar →' : 'Próximo →'}
                     </Button>
                   </div>
                 </div>
@@ -513,16 +610,16 @@ export default function SupplierOnboarding() {
                       <div style={{ fontSize:13, color:'#166534', fontFamily:'DM Sans,sans-serif' }}>O custo desta homologação será assumido por <strong>{invitation.sender_name}</strong>. Você não precisará realizar nenhum pagamento.</div>
                     </div>
                   )}
-                  {invitation?.client_terms && (
+                  {(termsSrc?.client_terms || termsSrc?.terms_items?.length > 0) && termsSrc?.sender_name && (
                     <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:'#1d4ed8', fontFamily:'DM Sans,sans-serif' }}>
-                      📋 <strong>{invitation.sender_name}</strong> utiliza termos de uso específicos para esta homologação.
+                      📋 <strong>{termsSrc.sender_name}</strong> utiliza termos específicos para esta homologação — leia e aceite cada um abaixo.
                     </div>
                   )}
                   <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'16px', marginBottom:16, maxHeight:220, overflowY:'auto' }}>
-                    {invitation?.client_terms ? (
+                    {termsSrc?.client_terms ? (
                       <>
-                        <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 12px' }}>TERMOS DE HOMOLOGAÇÃO — {(invitation.sender_name || 'Cliente').toUpperCase()}</p>
-                        <pre style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:0, whiteSpace:'pre-wrap', fontFamily:'DM Sans,sans-serif' }}>{invitation.client_terms}</pre>
+                        <p style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e', margin:'0 0 12px' }}>TERMOS DE HOMOLOGAÇÃO — {(termsSrc.sender_name || 'Cliente').toUpperCase()}</p>
+                        <pre style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:0, whiteSpace:'pre-wrap', fontFamily:'DM Sans,sans-serif' }}>{termsSrc.client_terms}</pre>
                       </>
                     ) : (
                       <>
@@ -538,7 +635,7 @@ export default function SupplierOnboarding() {
                     )}
                   </div>
                   {/* Coleção de aceites do cliente (patch_073): um checkbox por item */}
-                  {(invitation?.terms_items || []).map(it => (
+                  {(termsSrc?.terms_items || []).map(it => (
                     <label key={it.id} style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:10, padding:'12px', background: itemsAccepted[it.id] ? 'rgba(34,197,94,.05)' : 'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${itemsAccepted[it.id]?'#22c55e':'#e2e4ef'}` }}>
                       <input type="checkbox" checked={!!itemsAccepted[it.id]}
                         onChange={e => setItemsAccepted(p => ({ ...p, [it.id]: e.target.checked }))}
@@ -573,7 +670,7 @@ export default function SupplierOnboarding() {
                     <Button variant="neutral" full onClick={() => { setStep(2); setError('') }}>← Voltar</Button>
                     <Button variant="orange" full size="lg" style={{ borderRadius:12 }}
                       disabled={!termsAccepted || loading
-                        || (invitation?.terms_items || []).some(it => it.required !== false && !itemsAccepted[it.id])}
+                        || (termsSrc?.terms_items || []).some(it => it.required !== false && !itemsAccepted[it.id])}
                       onClick={handleAcceptTerms}>
                       {loading ? <><Spinner size={16}/> Cadastrando...</> : isSubsidiado ? 'Finalizar Cadastro →' : 'Aceitar e Continuar →'}
                     </Button>

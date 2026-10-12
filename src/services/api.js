@@ -19,11 +19,14 @@ const DOC_LABELS = {
 
 // ── CNPJ Lookup (via Netlify Function → BrasilAPI + Portal Transparência) ───
 export const cnpjApi = {
-  lookup: async (cnpj) => {
+  // ref/token: portal ou convite do cliente — o servidor diz se o selo ativo
+  // vale para ESTE cliente (dbInfo.hasActiveSealForContext)
+  lookup: async (cnpj, { ref, token } = {}) => {
     const clean = cnpj.replace(/\D/g, '')
     if (clean.length !== 14) throw new Error('CNPJ deve ter 14 dígitos')
 
-    const res = await fetch(`/.netlify/functions/cnpj-lookup?cnpj=${clean}`)
+    const ctx = ref ? `&ref=${encodeURIComponent(ref)}` : token ? `&token=${encodeURIComponent(token)}` : ''
+    const res = await fetch(`/.netlify/functions/cnpj-lookup?cnpj=${clean}${ctx}`)
     if (!res.ok) throw new Error('Erro ao consultar CNPJ')
     return res.json()
   },
@@ -1556,6 +1559,19 @@ export const routeBApi = {
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
 export const clientApi = {
+  // Interessados (patch_125): RPC — o RLS de suppliers escondia nome/CNPJ de
+  // quem declarou interesse sem ter processo com o cliente. Mantém o formato
+  // { ..., suppliers: {...} } que a tela já usa.
+  getInterests: async (clientId) => {
+    const { data, error } = await supabase.rpc('client_supplier_interests', { p_client: clientId })
+    if (error) throw new Error(error.message)
+    return (data || []).map(r => ({
+      id: r.id, supplier_id: r.supplier_id, message: r.message, created_at: r.created_at,
+      suppliers: { id: r.supplier_id, razao_social: r.razao_social, cnpj: r.cnpj, city: r.city,
+                   state: r.state, email: r.email, phone: r.phone, contact_name: r.contact_name },
+    }))
+  },
+
   // Dashboard KPIs (05/10): mesma base de "Meus Fornecedores" — processos
   // (selos do cliente, inclusive os migrados do HOC, que não têm convite) +
   // convites. Antes contava só convites: MVV/Appian, com 500+ homologados
@@ -2040,6 +2056,15 @@ export const invitationsApi = {
     const res = await fetch(`/.netlify/functions/get-invitation?token=${token}`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Convite inválido')
+    return data
+  },
+
+  // termos do cliente para o cadastro pelo portal (?ref=slug) — mesmo formato
+  // de client_terms/terms_items do convite
+  getPortalTerms: async (slug) => {
+    const res = await fetch(`/.netlify/functions/get-portal-terms?slug=${encodeURIComponent(slug)}`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Portal inválido')
     return data
   },
 }

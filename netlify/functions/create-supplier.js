@@ -63,6 +63,21 @@ exports.handler = async (event) => {
     let isNewSupplier = false
 
     if (existingSupplier) {
+      // 12/10 — empresa COM DONO só aceita quem já tem acesso a ela (dono ou
+      // equipe). Antes, qualquer e-mail novo que digitasse o CNPJ ganhava o
+      // perfil de fornecedor da empresa. Migrado do HOC sem login segue
+      // podendo ser reivindicado (primeiro acesso).
+      const { data: membros } = await supabaseAdmin.from('user_roles')
+        .select('user_id').eq('supplier_id', existingSupplier.id).eq('role', 'SUPPLIER')
+      const temDono = !!existingSupplier.user_id || !!membros?.length
+      const ehMembro = existingSupplier.user_id === user.id || (membros || []).some(m => m.user_id === user.id)
+      if (temDono && !ehMembro) {
+        console.warn(`[create-supplier] acesso negado: user ${user.id} tentou entrar no fornecedor ${existingSupplier.id}`)
+        return { statusCode: 403, headers, body: JSON.stringify({
+          error: 'Esta empresa já tem cadastro no ELOS. Entre com o login que já existe ou peça ao responsável para incluir você na equipe (Minha Equipe).',
+        }) }
+      }
+
       // Fornecedor já existe (migrado do HOC ou cadastro anterior)
       // Atualiza dados com informações frescas da Receita Federal
       const updatePayload = {
@@ -99,6 +114,8 @@ exports.handler = async (event) => {
           services:          services        || [],
           certifications:    certifications  || [],
           status:            'PENDING',
+          // vitrine é OPCIONAL (12/10): sem isto o novo nascia visível (default true)
+          marketplace_optin: marketplace_optin !== false,
           sanctions_checked: !!sanctions_checked,
           sanctions_result:  sanctions_result || null,
         })
@@ -178,8 +195,10 @@ exports.handler = async (event) => {
     if (autoDocuments.length > 0) {
       for (const doc of autoDocuments) {
         try {
+          // fornecedor que já existe: só cria o que falta — sobrescrever
+          // voltava a Análise CNAEs aprovada para "Em análise" (12/10)
           const { error: docErr } = await supabaseAdmin.from('documents')
-            .upsert(doc, { onConflict: 'supplier_id,type' })
+            .upsert(doc, { onConflict: 'supplier_id,type', ignoreDuplicates: !isNewSupplier })
           if (docErr) console.warn(`Auto-doc ${doc.type} warn:`, docErr.message)
         } catch (e) { console.warn(`Auto-doc ${doc.type} catch:`, e.message) }
       }
@@ -488,6 +507,28 @@ exports.handler = async (event) => {
           })
           await ensureClientSeal(lp.client_id, defFlow?.id || null)
           console.log(`🔗 Fornecedor vinculado ao cliente via LP slug="${ref_slug}"`)
+        }
+
+        // Aceites dos termos do cliente pelo PORTAL (12/10) — mesma trilha do
+        // convite (patch_073): quem aceitou o quê, versão, quando, de qual IP
+        if (lp?.client_id && Array.isArray(term_acceptances) && term_acceptances.length) {
+          try {
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(user.id)
+            const ip = event.headers['x-nf-client-connection-ip'] || event.headers['x-forwarded-for'] || null
+            const { data: validItems } = await supabaseAdmin
+              .from('client_terms_items').select('id, version')
+              .eq('client_id', lp.client_id)
+              .in('id', term_acceptances.map(t => t.item_id))
+            const rows = (validItems || []).map(it => ({
+              item_id: it.id, item_version: it.version,
+              client_id: lp.client_id, supplier_id: supplier.id,
+              invitation_id: null,
+              accepted_name: authUser?.user?.user_metadata?.name || razao_social,
+              accepted_email: authUser?.user?.email || null,
+              accepted_ip: ip,
+            }))
+            if (rows.length) await supabaseAdmin.from('client_term_acceptances').insert(rows)
+          } catch (e) { console.warn('portal term acceptances (não crítico):', e.message) }
         }
       } catch (e) { console.warn('LP invitation link (não crítico):', e.message) }
     }

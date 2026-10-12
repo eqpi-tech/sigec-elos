@@ -182,9 +182,14 @@ exports.handler = async (event) => {
       // hora; boleto só na compensação — chega aqui por async_payment_succeeded)
       // libera os processos do fornecedor: envio de documentos, fila de
       // análise e, depois da análise, o selo
-      const { error: relErr } = await supabase.from('seals')
+      // 12/10: pagamento do processo de um cliente libera SÓ esse processo —
+      // quem já tem outro selo e entra pelo portal de outro cliente não pode
+      // liberar processos não pagos de terceiros com um único pagamento
+      let relQ = supabase.from('seals')
         .update({ released_at: new Date().toISOString() })
         .eq('supplier_id', supplierId).is('released_at', null)
+      if (clientId) relQ = relQ.eq('client_id', clientId)
+      const { error: relErr } = await relQ
       if (relErr) console.error('[trava-pagamento] liberação:', relErr.message)
 
       // Rota A (staging): a coleta nas fontes oficiais começa na LIBERAÇÃO —

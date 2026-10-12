@@ -175,7 +175,7 @@ exports.handler = async (event) => {
       )
       const [clientRes, supplierRes] = await Promise.allSettled([
         supabaseAdmin.from('clients').select('id').eq('cnpj', cnpj).maybeSingle(),
-        supabaseAdmin.from('suppliers').select('id, status, razao_social').eq('cnpj', cnpj).maybeSingle(),
+        supabaseAdmin.from('suppliers').select('id, status, razao_social, user_id').eq('cnpj', cnpj).maybeSingle(),
       ])
       if (clientRes.value?.data) {
         dbInfo.isClient = true
@@ -186,10 +186,48 @@ exports.handler = async (event) => {
         dbInfo.razaoSocial = supplierRes.value.data.razao_social || null
         // limit(1): fornecedor pode ter VÁRIOS selos ativos (um por cliente) —
         // maybeSingle() sem limit erra com 2+ linhas e derrubava hasActiveSeal
-        const { data: sealData } = await supabaseAdmin
-          .from('seals').select('status').eq('supplier_id', supplierRes.value.data.id)
-          .eq('status', 'ACTIVE').limit(1).maybeSingle()
-        dbInfo.hasActiveSeal = !!sealData
+        const { data: activeSeals } = await supabaseAdmin
+          .from('seals').select('client_id').eq('supplier_id', supplierRes.value.data.id)
+          .eq('status', 'ACTIVE')
+        dbInfo.hasActiveSeal = !!activeSeals?.length
+
+        // Entrada pelo portal (?ref) ou convite (?token) de um CLIENTE: o selo
+        // ativo só dispensa o processo se for DESSE cliente — homologado para
+        // outro cliente abre processo novo (pago) com este (12/10)
+        const ref   = event.queryStringParameters?.ref
+        const token = event.queryStringParameters?.token
+        let ctxClientId = null
+        if (ref) {
+          const { data: lp } = await supabaseAdmin.from('client_landing_pages')
+            .select('client_id').eq('slug', ref).eq('is_active', true).maybeSingle()
+          ctxClientId = lp?.client_id || null
+        } else if (token) {
+          const { data: inv } = await supabaseAdmin.from('invitations')
+            .select('client_id').eq('token', token).is('hoc_id', null).maybeSingle()
+          ctxClientId = inv?.client_id || null
+        }
+        dbInfo.hasActiveSealForContext = ctxClientId
+          ? (activeSeals || []).some(s => s.client_id === ctxClientId)
+          : dbInfo.hasActiveSeal
+
+        // Empresa com dono: o cadastro só continua com o login que já existe
+        // (create-supplier recusa outro e-mail). E-mail do responsável mascarado.
+        let ownerId = supplierRes.value.data.user_id || null
+        if (!ownerId) {
+          const { data: anyRole } = await supabaseAdmin.from('user_roles')
+            .select('user_id').eq('supplier_id', supplierRes.value.data.id).eq('role', 'SUPPLIER')
+            .order('created_at').limit(1).maybeSingle()
+          ownerId = anyRole?.user_id || null
+        }
+        dbInfo.hasOwner = !!ownerId
+        if (ownerId) {
+          try {
+            const { data: ou } = await supabaseAdmin.auth.admin.getUserById(ownerId)
+            const em = ou?.user?.email || ''
+            const [loc, dom] = em.split('@')
+            dbInfo.ownerEmailMasked = dom ? `${loc.slice(0, 2)}***@${dom}` : null
+          } catch { dbInfo.ownerEmailMasked = null }
+        }
 
         // REGRA: a consulta ATUALIZA o banco com os dados frescos da Receita —
         // o sistema sempre LÊ do banco. Só grava campos que a BrasilAPI trouxe.

@@ -121,7 +121,7 @@ export default function ClientSuppliers() {
 
   const handleTabChange = tab => {
     setActiveTab(tab)
-    setMySearch(''); setMyStatus('Todos')
+    setMySearch(''); setFSit([])   // setMyStatus não existia: a troca de aba quebrava aqui
     setVStage(1); setVFilters({ category:'', q:'', state:'', tipo:'Todos', level:'Todos', onlyMine:false })
     setVResults([]); setVSearched(false)
   }
@@ -436,13 +436,9 @@ function InterestsReport({ clientId, navigate }) {
 
   useEffect(() => {
     if (!clientId) return
-    supabase
-      .from('supplier_interests')
-      .select('id, supplier_id, message, created_at, suppliers(id, razao_social, cnpj, city, state, email, phone, contact_name)')
-      .eq('client_id', clientId)
-      .eq('status', 'PENDING')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => setRows(data || []))
+    clientApi.getInterests(clientId)
+      .then(setRows)
+      .catch(() => setRows([]))
   }, [clientId])
 
   const dismiss = async (row) => {
