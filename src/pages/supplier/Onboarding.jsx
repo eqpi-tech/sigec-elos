@@ -495,6 +495,12 @@ export default function SupplierOnboarding() {
                 <div>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Em quais categorias você atua?</div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', marginBottom:16 }}>Selecione todas as categorias relevantes. Os documentos exigidos serão calculados automaticamente.</div>
+                  {/* a consulta pula direto para cá — o aviso do passo 0 não seria visto */}
+                  {existingSupplier?.activeElsewhere && (
+                    <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 14px', marginBottom:14, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif', lineHeight:1.5 }}>
+                      🏅 Sua empresa já tem homologação vigente no ELOS. O processo com <strong>{termsSrc?.sender_name || clientQuote?.cliente || 'este cliente'}</strong> é um processo novo: escolha as categorias, aceite os termos{isSubsidiado ? '' : ' e conclua o pagamento'}. Os documentos válidos que você já enviou são aproveitados.
+                    </div>
+                  )}
                   <div style={{ maxHeight:340, overflowY:'auto', paddingRight:4 }}>
                     <CategorySelector selectedIds={selectedCategories} onChange={setSelectedCategories} showDocuments={true} cnpjData={cnpjData}
                       clientIds={invitation?.client_id ? [invitation.client_id] : undefined}
