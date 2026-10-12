@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
+import { teamApi } from '../../services/api.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
 const BLOCKED_DOMAINS = [
@@ -29,7 +30,10 @@ export default function SupplierTeam() {
   const [success,    setSuccess]    = useState('')
   const [togglingId, setTogglingId] = useState(null)
 
-  const isMaster  = user?.isPrimary !== false  // fallback: first user is master
+  const [profileSaving, setProfileSaving] = useState(null)
+  // master pela regra do servidor (patch_128); fallback: vínculo principal
+  const me = members.find(m => m.is_me)
+  const isMaster  = me ? !!me.is_master : user?.isPrimary !== false
   const supplierId = user?.supplierId
 
   useEffect(() => {
@@ -46,13 +50,8 @@ export default function SupplierTeam() {
 
   async function loadMembers() {
     setLoading(true)
-    const { data } = await supabase
-      .from('user_roles')
-      .select('id, user_id, is_primary, is_active, invited_by, created_at')
-      .eq('supplier_id', supplierId)
-      .eq('role', 'SUPPLIER')
-      .order('created_at')
-    setMembers(data || [])
+    // patch_128: o RLS de user_roles só mostrava o próprio usuário
+    setMembers(await teamApi.members('SUPPLIER').catch(() => []))
     setLoading(false)
   }
 
@@ -84,13 +83,23 @@ export default function SupplierTeam() {
   }
 
   async function toggleActive(member) {
-    if (member.is_primary) return
-    setTogglingId(member.id)
-    await supabase.from('user_roles')
-      .update({ is_active: !member.is_active })
-      .eq('id', member.id)
-    setMembers(prev => prev.map(m => m.id === member.id ? { ...m, is_active: !m.is_active } : m))
+    if (member.is_master) return
+    setTogglingId(member.id); setError('')
+    try {
+      await teamApi.update(member.id, { isActive: !member.is_active })
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, is_active: !m.is_active } : m))
+    } catch (e) { setError(e.message) }
     setTogglingId(null)
+  }
+
+  async function changeProfile(member, profileId) {
+    setProfileSaving(member.id); setError(''); setSuccess('')
+    try {
+      await teamApi.update(member.id, { accessProfileId: profileId || null })
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, access_profile_id: profileId || null } : m))
+      setSuccess('Perfil de acesso atualizado.')
+    } catch (e) { setError(e.message) }
+    setProfileSaving(null)
   }
 
   const activeCount = members.filter(m => m.is_active).length
@@ -124,19 +133,30 @@ export default function SupplierTeam() {
         ) : (
           members.map(m => (
             <div key={m.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, background:'#fafbff', border:'1px solid #e2e4ef', marginBottom:8 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background: m.is_primary ? 'rgba(46,49,146,.12)' : 'rgba(100,116,139,.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>
-                {m.is_primary ? '👑' : '👤'}
+              <div style={{ width:36, height:36, borderRadius:10, background: m.is_master ? 'rgba(46,49,146,.12)' : 'rgba(100,116,139,.1)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>
+                {m.is_master ? '👑' : '👤'}
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, color:'#1a1c5e' }}>
-                  {m.is_primary ? 'Usuário Master' : 'Usuário Adicional'}
+                  {m.name || (m.is_master ? 'Usuário Master' : 'Usuário Adicional')}
+                  {m.is_me && <span style={{ fontSize:10, color:'#2E3192', marginLeft:8, fontWeight:700 }}>(você)</span>}
                   {!m.is_active && <span style={{ fontSize:10, color:'#9B9B9B', marginLeft:8, fontFamily:'DM Sans,sans-serif' }}>(inativo)</span>}
                 </div>
                 <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-                  Adicionado em {m.created_at?.slice(0,10) || '—'}
+                  {m.email ? `${m.email} · ` : ''}Adicionado em {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR') : '—'}
                 </div>
               </div>
-              {!m.is_primary && isMaster && (
+              {/* perfil de acesso do membro — o master troca (patch_128) */}
+              {!m.is_master && isMaster && !m.is_me && profiles.length > 0 && (
+                profileSaving === m.id ? <Spinner size={16}/> : (
+                  <select value={m.access_profile_id || ''} onChange={e => changeProfile(m, e.target.value)}
+                    style={{ ...inp, width:'auto', minWidth:150, padding:'6px 8px', fontSize:12 }}>
+                    {!profiles.some(p => p.id === m.access_profile_id) && <option value="">Acesso Total</option>}
+                    {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                )
+              )}
+              {!m.is_master && isMaster && !m.is_me && (
                 togglingId === m.id ? <Spinner size={16}/> : (
                   <Button variant={m.is_active ? 'neutral' : 'success'} size="sm"
                     onClick={() => toggleActive(m)}>
@@ -144,7 +164,7 @@ export default function SupplierTeam() {
                   </Button>
                 )
               )}
-              {m.is_primary && (
+              {m.is_master && (
                 <span style={{ fontSize:10, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>
                   Master
                 </span>

@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
+import { teamApi } from '../../services/api.js'
 import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 export default function ClientTeam() {
@@ -19,27 +20,20 @@ export default function ClientTeam() {
 
   const load = useCallback(async () => {
     if (!user?.clientId) return
-    const [{ data: roles }, { data: aps }] = await Promise.all([
-      supabase.from('user_roles')
-        .select('id, user_id, is_primary, is_active, access_profile_id, created_at')
-        .eq('client_id', user.clientId).eq('role', 'CLIENT'),
+    // patch_128: equipe por RPC — o RLS de user_roles/profiles só mostrava o
+    // próprio usuário (master com 14 usuários via 1, sem nomes)
+    const [roles, { data: aps }] = await Promise.all([
+      teamApi.members('CLIENT').catch(() => []),
       supabase.from('access_profiles').select('id, name, is_system').eq('role_type', 'CLIENT').order('is_system', { ascending: false }).order('name'),
     ])
     setProfiles(aps || [])
-    // Nomes via profiles
-    const ids = (roles || []).map(r => r.user_id)
-    let names = {}
-    if (ids.length) {
-      const { data: ps } = await supabase.from('profiles').select('id, name').in('id', ids)
-      ;(ps || []).forEach(p => { names[p.id] = p.name })
-    }
     const apName = {}
     ;(aps || []).forEach(a => { apName[a.id] = a.name })
-    setMembers((roles || []).map(r => ({
+    setMembers(roles.map(r => ({
       ...r,
-      name: names[r.user_id] || '—',
+      name: r.name || '—',
       profileName: r.access_profile_id ? (apName[r.access_profile_id] || 'Perfil') : 'Acesso Total',
-    })).sort((a, b) => (b.is_primary === true) - (a.is_primary === true)))
+    })))
   }, [user?.clientId])
 
   useEffect(() => { load() }, [load])
@@ -64,19 +58,18 @@ export default function ClientTeam() {
   }
 
   const setProfile = async (member, profileId) => {
-    const { error: err } = await supabase.from('user_roles')
-      .update({ access_profile_id: profileId }).eq('id', member.id)
-    if (err) { showToast('Erro: ' + err.message, 'error'); return }
+    try { await teamApi.update(member.id, { accessProfileId: profileId }) }
+    catch (err) { showToast('Erro: ' + err.message, 'error'); return }
     setMembers(prev => prev.map(m => m.id === member.id
       ? { ...m, access_profile_id: profileId, profileName: profiles.find(p => p.id === profileId)?.name || 'Perfil' } : m))
     showToast('Perfil atualizado.')
   }
 
   const toggleActive = async (member) => {
-    if (member.is_primary) { showToast('O usuário principal não pode ser desativado.', 'error'); return }
+    if (member.is_master) { showToast('O usuário master não pode ser desativado.', 'error'); return }
     const next = member.is_active === false
-    const { error: err } = await supabase.from('user_roles').update({ is_active: next }).eq('id', member.id)
-    if (err) { showToast('Erro: ' + err.message, 'error'); return }
+    try { await teamApi.update(member.id, { isActive: next }) }
+    catch (err) { showToast('Erro: ' + err.message, 'error'); return }
     setMembers(prev => prev.map(m => m.id === member.id ? { ...m, is_active: next } : m))
   }
 
@@ -112,27 +105,32 @@ export default function ClientTeam() {
                 <div style={{ flex:1, minWidth:180 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                     <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>{m.name}</span>
-                    {m.is_primary && (
-                      <span style={{ fontSize:10, fontWeight:700, color:'#F47E2F', background:'rgba(244,126,47,.12)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>PRINCIPAL</span>
+                    {m.is_master && (
+                      <span style={{ fontSize:10, fontWeight:700, color:'#F47E2F', background:'rgba(244,126,47,.12)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>MASTER</span>
+                    )}
+                    {m.is_me && (
+                      <span style={{ fontSize:10, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>VOCÊ</span>
                     )}
                     {m.is_active === false && (
                       <span style={{ fontSize:10, fontWeight:700, color:'#dc2626', background:'rgba(239,68,68,.1)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>INATIVO</span>
                     )}
                   </div>
                   <div style={{ fontSize:11.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>
-                    Desde {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR') : '—'}
+                    {m.email ? `${m.email} · ` : ''}Desde {m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR') : '—'}
                   </div>
                 </div>
 
                 {/* Perfil de módulos */}
                 <div style={{ minWidth:180 }}>
                   <select value={m.access_profile_id || ''} onChange={e => setProfile(m, e.target.value || null)}
-                    style={{ ...inp, padding:'8px 10px', fontSize:13 }}>
+                    disabled={m.is_me || m.is_master}
+                    title={m.is_me ? 'O próprio acesso é alterado por outro gestor da equipe' : m.is_master ? 'O usuário master tem acesso total' : ''}
+                    style={{ ...inp, padding:'8px 10px', fontSize:13, opacity: (m.is_me || m.is_master) ? .6 : 1 }}>
                     {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
 
-                {!m.is_primary && (
+                {!m.is_master && !m.is_me && (
                   <Button variant={m.is_active === false ? 'success' : 'danger'} size="sm" onClick={() => toggleActive(m)}>
                     {m.is_active === false ? '↺ Reativar' : 'Desativar'}
                   </Button>

@@ -1561,6 +1561,28 @@ export const routeBApi = {
 }
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
+// ── Equipe do cliente / fornecedor (patch_128) ──────────────────────────────
+// O RLS de user_roles só mostra o próprio vínculo: a lista e as alterações da
+// equipe vão por RPC, que confere se quem pede pode gerir a MESMA empresa.
+export const teamApi = {
+  members: async (role) => {
+    const { data, error } = await supabase.rpc('team_members', { p_role: role })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  // { accessProfileId } troca o perfil ('' / null = Acesso Total); { isActive } ativa/desativa
+  update: async (memberId, { accessProfileId, isActive } = {}) => {
+    const clear = accessProfileId === null || accessProfileId === ''
+    const { error } = await supabase.rpc('team_update_member', {
+      p_member: memberId,
+      p_access_profile_id: clear ? null : (accessProfileId ?? null),
+      p_is_active: isActive ?? null,
+      p_clear_profile: clear,
+    })
+    if (error) throw new Error(error.message)
+  },
+}
+
 // ── Pré-cadastro pelo portal do cliente (patch_126) ─────────────────────────
 export const preRegistrationsApi = {
   // cliente: status 'ACTIVE' | 'ARCHIVED' | 'todos'
