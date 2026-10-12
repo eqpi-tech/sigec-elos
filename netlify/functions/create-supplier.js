@@ -46,6 +46,7 @@ exports.handler = async (event) => {
       ref_slug,
       ref_flow_id,
       is_existing_active,
+      pre_cadastro,       // portal do cliente: só pré-cadastro, sem processo (patch_126)
       term_acceptances,   // [{ item_id, version }] — aceites da coleção (patch_073)
     } = body
 
@@ -469,6 +470,7 @@ exports.handler = async (event) => {
     } catch (e) { console.warn('invitation link (não crítico):', e.message) }
 
     // 5b. Se veio de landing page de cliente (?ref=slug), cria vínculo client_id ↔ supplier
+    let preClientName = null
     if (ref_slug) {
       try {
         const { data: lp } = await supabaseAdmin
@@ -484,7 +486,19 @@ exports.handler = async (event) => {
           ? await supabaseAdmin.from('invitations').select('id')
               .eq('supplier_id', supplier.id).eq('client_id', lp.client_id).is('hoc_id', null).limit(1)
           : { data: null }
-        if (lp?.client_id && !jaConvidado?.length) {
+        if (lp?.client_id && pre_cadastro) {
+          // Pré-cadastro (12/10, patch_126): sem convite, sem selo — nada de
+          // pagamento, fila ou automação. O cliente vê na aba Pré-cadastros.
+          const { error: preErr } = await supabaseAdmin.from('client_pre_registrations').upsert({
+            client_id: lp.client_id, supplier_id: supplier.id, status: 'ACTIVE',
+            source: 'PORTAL', created_by: user.id, archived_at: null, archived_by: null,
+          }, { onConflict: 'client_id,supplier_id' })
+          if (preErr) throw new Error('Pré-cadastro: ' + preErr.message)
+          const { data: cli } = await supabaseAdmin.from('clients')
+            .select('nome_fantasia, razao_social').eq('id', lp.client_id).maybeSingle()
+          preClientName = cli?.nome_fantasia || cli?.razao_social || null
+          console.log(`📝 Pré-cadastro de ${supplier.id} no cliente ${lp.client_id} (slug="${ref_slug}")`)
+        } else if (lp?.client_id && !jaConvidado?.length) {
           // Espontâneo via LP: fluxo escolhido no portal (validado) ou o PADRÃO
           let defFlow = null
           if (ref_flow_id) {
@@ -530,7 +544,10 @@ exports.handler = async (event) => {
             if (rows.length) await supabaseAdmin.from('client_term_acceptances').insert(rows)
           } catch (e) { console.warn('portal term acceptances (não crítico):', e.message) }
         }
-      } catch (e) { console.warn('LP invitation link (não crítico):', e.message) }
+      } catch (e) {
+        if (pre_cadastro) throw e
+        console.warn('LP invitation link (não crítico):', e.message)
+      }
     }
 
     console.log(`✅ Fornecedor criado: ${supplier.id} (${razao_social}) para user ${user.id} — ${categoryIds.length} categorias`)
@@ -544,17 +561,26 @@ exports.handler = async (event) => {
         .eq('supplier_id', supplier.id).not('client_id', 'is', null)
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       const clientName = sealRow?.clients?.nome_fantasia || sealRow?.clients?.razao_social || null
-      const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
-  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-    <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
-  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
-    <p><strong>Bem-vindo!</strong> O cadastro da <strong>${razao_social}</strong> foi concluído com sucesso${clientName ? ` no processo de homologação da <strong>${clientName}</strong>` : ''}.</p>
+      const passos = preClientName
+        ? `<p>Seu <strong>pré-cadastro</strong> na <strong>${preClientName}</strong> foi registrado — sem custo.</p>
     <p><strong>Próximos passos:</strong></p>
+    <ul style="padding-left:18px;line-height:1.9">
+      <li>❓ Responder o questionário da ${preClientName}, quando houver — ele ajuda o cliente a conhecer sua empresa</li>
+      <li>🛒 Usar o perfil <strong>Comprador</strong> (troque o perfil na barra do menu)</li>
+    </ul>
+    <p>Se a ${preClientName} convidar sua empresa para a homologação, você recebe um e-mail com o próximo passo.</p>`
+        : `<p><strong>Próximos passos:</strong></p>
     <ul style="padding-left:18px;line-height:1.9">
       <li>📄 Enviar os documentos exigidos na aba <strong>Documentos</strong></li>
       <li>❓ Responder o questionário do cliente, quando houver</li>
     </ul>
-    <p>Com tudo enviado, seu processo entra automaticamente na fila de análise (prazo padrão: 3 dias úteis).</p>
+    <p>Com tudo enviado, seu processo entra automaticamente na fila de análise (prazo padrão: 3 dias úteis).</p>`
+      const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
+    <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
+    <p><strong>Bem-vindo!</strong> O cadastro da <strong>${razao_social}</strong> foi concluído com sucesso${clientName && !preClientName ? ` no processo de homologação da <strong>${clientName}</strong>` : ''}.</p>
+    ${passos}
     <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Acessar meu painel</a></p>
   </div>
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`

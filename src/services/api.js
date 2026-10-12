@@ -572,13 +572,16 @@ export const paymentsApi = {
 
   paymentStatus: async (supplierId) => {
     if (!supplierId) return { released: true, pendentes: [], boleto: false }
-    const [{ data: seals }, { data: plan }] = await Promise.all([
+    const [{ data: seals }, { data: plan }, { count: preCount }] = await Promise.all([
       supabase.from('seals').select('id, status, released_at, hoc_process_id, client_id, seal_name, clients(razao_social, nome_fantasia)').eq('supplier_id', supplierId),
       supabase.from('plans').select('status, type').eq('supplier_id', supplierId).maybeSingle(),
+      // pré-cadastro (patch_126): sem processo, acesso limitado — não é "falta pagar"
+      supabase.from('client_pre_registrations').select('id', { count: 'exact', head: true }).eq('supplier_id', supplierId),
     ])
     const lista = seals || []
     return {
       released: lista.some(x => x.released_at),
+      preCadastro: !lista.length && (preCount || 0) > 0,
       pendentes: lista.filter(x => !x.released_at && x.status === 'PENDING'),
       boleto: plan?.status === 'PENDING',
       plan: plan || null,
@@ -1558,6 +1561,31 @@ export const routeBApi = {
 }
 
 // ── Cliente (HOC) ─────────────────────────────────────────────────────────────
+// ── Pré-cadastro pelo portal do cliente (patch_126) ─────────────────────────
+export const preRegistrationsApi = {
+  // cliente: status 'ACTIVE' | 'ARCHIVED' | 'todos'
+  list: async (clientId, status = 'ACTIVE') => {
+    const { data, error } = await supabase.rpc('client_pre_registrations_list', { p_client: clientId, p_status: status })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  answers: async (clientId, supplierId) => {
+    const { data, error } = await supabase.rpc('client_pre_registration_answers', { p_client: clientId, p_supplier: supplierId })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  setStatus: async (id, status) => {
+    const { error } = await supabase.rpc('client_set_pre_registration_status', { p_id: id, p_status: status })
+    if (error) throw new Error(error.message)
+  },
+  // fornecedor: os pré-cadastros dele (painel)
+  mine: async () => {
+    const { data, error } = await supabase.rpc('my_pre_registrations')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+}
+
 export const clientApi = {
   // Interessados (patch_125): RPC — o RLS de suppliers escondia nome/CNPJ de
   // quem declarou interesse sem ter processo com o cliente. Mantém o formato
@@ -1908,14 +1936,16 @@ export const questionnaireApi = {
     // clientes do fornecedor = convites + PROCESSOS (06/10): quem entra pelo
     // portal do cliente não tem convite e não via o questionário — e sem ele
     // respondido o processo nunca entra na fila de análise
-    const [{ data: invites }, { data: procs }] = await Promise.all([
+    const [{ data: invites }, { data: procs }, { data: pres }] = await Promise.all([
       supabase.from('invitations').select('client_id')
         .eq('supplier_id', supplierId)
         .or('hoc_id.is.null,status.eq.REGISTERED'),   // do HOC, só o que virou processo (patch_116)
       supabase.from('seals').select('client_id')
         .eq('supplier_id', supplierId).not('client_id', 'is', null),
+      // pré-cadastro pelo portal (patch_126) também responde o questionário
+      supabase.from('client_pre_registrations').select('client_id').eq('supplier_id', supplierId),
     ])
-    const clientIds = [...new Set([...(invites || []), ...(procs || [])].map(i => i.client_id).filter(Boolean))]
+    const clientIds = [...new Set([...(invites || []), ...(procs || []), ...(pres || [])].map(i => i.client_id).filter(Boolean))]
     if (!clientIds.length) return []
     const { data, error } = await supabase
       .from('questionnaires')

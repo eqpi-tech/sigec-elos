@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { planName, planCycle } from '../../lib/planLabels.js'
 import { ELOS_VERIFICADO_DOCS } from '../../lib/score.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, mobilityApi, getRequiredTypesBySeal } from '../../services/api.js'
+import { supplierApi, documentApi, mobilityApi, getRequiredTypesBySeal, preRegistrationsApi } from '../../services/api.js'
+import PreCadastroHome from './PreCadastroHome.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
@@ -30,15 +31,18 @@ export default function SupplierDashboard() {
   const [ready,          setReady]          = useState(null)  // regra do servidor: processo pronto p/ análise?
   const [mobPend,        setMobPend]        = useState(null)  // mobilidade: { complete, peopleShortfall, docsMissing, posts }
   const [reqBySeal,      setReqBySeal]      = useState({})    // seal.id → tipos exigidos DAQUELE processo
+  const [preRegs,        setPreRegs]        = useState([])    // pré-cadastros pelo portal (patch_126)
 
   const load = useCallback(async () => {
     if (!user?.supplierId) { setLoading(false); return }
     setLoading(true)
     try {
-      const [s, d] = await Promise.all([
+      const [s, d, pr] = await Promise.all([
         supplierApi.me(user.supplierId),
         documentApi.list(user.supplierId),
+        preRegistrationsApi.mine().catch(() => []),
       ])
+      setPreRegs(pr)
       setSupplier(s)
       setDocs(d)
       // seals já vêm com clients(razao_social) do me() atualizado
@@ -119,6 +123,9 @@ export default function SupplierDashboard() {
       <Spinner size={48}/>
     </div>
   )
+  // só pré-cadastro (sem processo): painel próprio, sem documentos
+  if (!seals.length && preRegs.length) return <PreCadastroHome supplier={supplier} preRegs={preRegs} navigate={navigate}/>
+
 
   if (!user?.supplierId) return (
     <div style={{ padding:'60px 32px', textAlign:'center' }}>

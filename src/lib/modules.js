@@ -52,6 +52,7 @@ export const ACTIONS = {
   CLIENT: [
     { key: 'acao:todos_fornecedores',module: 'fornecedores', label: 'Todos os Fornecedores',        icon: '🔍', desc: 'Pesquisar em toda a base ELOS (aba Todos / marketplace)' },
     { key: 'acao:interessados',      module: 'fornecedores', label: 'Interessados',                 icon: '💡', desc: 'Ver fornecedores que declararam intenção de atender' },
+    { key: 'acao:pre_cadastros',     module: 'fornecedores', label: 'Pré-cadastros',                icon: '📝', desc: 'Ver pré-cadastros feitos pelo portal, convidar ou arquivar' },
     { key: 'acao:ver_documentos',    module: 'fornecedores', label: 'Ver documentos do fornecedor', icon: '👁', desc: 'Abrir/baixar arquivos no processo do fornecedor' },
     { key: 'acao:carta_excecao',     module: 'fornecedores', label: 'Enviar Carta de Exceção',      icon: '📜', desc: 'Anexar carta aprovando categoria com pendência' },
     { key: 'acao:priorizar_analise', module: 'fornecedores', label: 'Priorizar Análise',            icon: '⚡', desc: 'Pedir à EQPI análise prioritária de um processo em análise (urgência)' },

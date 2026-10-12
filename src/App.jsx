@@ -114,6 +114,13 @@ function PaymentGate({ children }) {
   }, [sid, pathname])
   if (!sid || PAY_FREE.some(p => pathname.startsWith(p))) return children
   if (!st) return null
+  // pré-cadastro (patch_126): sem processo — painel, questionário, dados,
+  // equipe e conta; documentos e demais telas de processo voltam ao painel
+  if (!st.released && st.preCadastro) {
+    const PRE_FREE = ['/fornecedor/questionario', '/fornecedor/dados', '/fornecedor/equipe', '/fornecedor/clientes']
+    if (pathname === '/fornecedor' || PRE_FREE.some(p => pathname.startsWith(p))) return children
+    return <Navigate to="/fornecedor" replace/>
+  }
   if (!st.released) return <Navigate to="/fornecedor/pagamento" replace/>
   return children
 }

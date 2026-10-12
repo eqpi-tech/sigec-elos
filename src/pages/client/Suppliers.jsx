@@ -6,6 +6,7 @@ import { clientApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 import BuyerMarketplace from '../buyer/Marketplace.jsx'
+import PreRegistrationsReport from './PreRegistrations.jsx'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 import { SITUACAO, clientSealStatus } from '../../lib/clientSituacao.js'
 
@@ -248,6 +249,7 @@ export default function ClientSuppliers() {
           ['meus', `Meus Fornecedores (${mySuppliers.length})`],
           ...(hasAction(user, 'acao:todos_fornecedores') ? [['todos', 'Todos os Fornecedores']] : []),
           ...(hasAction(user, 'acao:interessados') ? [['interessados', '💡 Interessados']] : []),
+          ...(hasAction(user, 'acao:pre_cadastros') ? [['pre', '📝 Pré-cadastros']] : []),
         ].map(([tab, label]) => (
           <button key={tab} onClick={() => handleTabChange(tab)}
             style={{ padding:'10px 22px', background:'none', border:'none', borderBottom:`3px solid ${activeTab===tab?'#2E3192':'transparent'}`, color:activeTab===tab?'#2E3192':'#9B9B9B', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, cursor:'pointer', marginBottom:-2 }}>
@@ -381,6 +383,11 @@ export default function ClientSuppliers() {
       {/* ── Tab: Fornecedores com Intenção de Prestar Serviços ── */}
       {activeTab === 'interessados' && hasAction(user, 'acao:interessados') && (
         <InterestsReport clientId={user?.clientId} navigate={navigate}/>
+      )}
+
+      {/* ── Tab: Pré-cadastros feitos pelo portal (patch_126) ── */}
+      {activeTab === 'pre' && hasAction(user, 'acao:pre_cadastros') && (
+        <PreRegistrationsReport clientId={user?.clientId} navigate={navigate}/>
       )}
 
       {/* Modal Inativar */}

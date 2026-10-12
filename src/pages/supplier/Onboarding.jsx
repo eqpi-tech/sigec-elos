@@ -110,6 +110,9 @@ export default function SupplierOnboarding() {
   const [password2, setPassword2] = useState('')
 
   const [planType, setPlanType]   = useState('homologado')
+  // portal do cliente (sem convite): pré-cadastro sem custo no lugar da homologação (patch_126)
+  const canPreCadastro = !!refSlug && !inviteToken
+  const [preCadastro, setPreCadastro] = useState(false)
   const [billingCycle, setBilling] = useState('anual')
 
   const [loading, setLoading] = useState(false)
@@ -314,6 +317,7 @@ export default function SupplierOnboarding() {
         marketplace_optin: dataSharingAccepted,   // opcional (22/09): negou → fora das buscas
         ref_flow_id: refFlowId || undefined,
         is_existing_active: isExAct || undefined,
+        pre_cadastro: (canPreCadastro && preCadastro) || undefined,
       }),
     })
     const resData = await res.json()
@@ -322,6 +326,12 @@ export default function SupplierOnboarding() {
   }
 
   const handleSubsidiatedRegistration = async () => {
+    setLoading(true); setError('')
+    try { await createAuthAndSupplier(); await reloadProfile(); navigate('/fornecedor') }
+    catch (err) { setError(err.message); setLoading(false) }
+  }
+
+  const handlePreCadastro = async () => {
     setLoading(true); setError('')
     try { await createAuthAndSupplier(); await reloadProfile(); navigate('/fornecedor') }
     catch (err) { setError(err.message); setLoading(false) }
@@ -689,7 +699,7 @@ export default function SupplierOnboarding() {
                 <div>
                   <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>Sua homologação com {clientQuote.cliente}</div>
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>Valor combinado entre a EQPI e {clientQuote.cliente} para este processo.</div>
-                  <div style={{ padding:'18px', borderRadius:14, border:'2px solid #F47E2F', background:'rgba(244,126,47,.05)', marginBottom:20 }}>
+                  <div onClick={() => setPreCadastro(false)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${!preCadastro ? '#F47E2F' : '#e2e4ef'}`, background:!preCadastro ? 'rgba(244,126,47,.05)' : '#fff', marginBottom: canPreCadastro ? 10 : 20, cursor: canPreCadastro ? 'pointer' : 'default' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                       <span style={{ fontSize:28 }}>🏅</span>
                       <div style={{ flex:1 }}>
@@ -701,10 +711,29 @@ export default function SupplierOnboarding() {
                       </div>
                     </div>
                   </div>
-                  {clientQuote.erro && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{clientQuote.erro}</div>}
+                  {canPreCadastro && (
+                    <div onClick={() => setPreCadastro(true)} style={{ padding:'18px', borderRadius:14, border:`2px solid ${preCadastro ? '#2E3192' : '#e2e4ef'}`, background:preCadastro ? 'rgba(46,49,146,.05)' : '#fff', marginBottom:20, cursor:'pointer' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                        <span style={{ fontSize:28 }}>📝</span>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>Pré-cadastro {clientQuote.cliente}</div>
+                          <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>A {clientQuote.cliente} vê o cadastro da sua empresa e pode convidar para a homologação · Questionário do cliente · Perfil Comprador · Sem envio de documentos</div>
+                        </div>
+                        <div style={{ textAlign:'right', flexShrink:0 }}>
+                          <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:16, color:'#2E3192' }}>Sem custo</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {clientQuote.erro && !preCadastro && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{clientQuote.erro}</div>}
+                  {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:16, fontSize:13, color:'#dc2626' }}>{error}</div>}
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="neutral" full onClick={() => setStep(3)}>← Voltar</Button>
-                    <Button variant="orange" full size="lg" style={{ borderRadius:12 }} disabled={!!clientQuote.erro} onClick={() => setStep(5)}>Ir para pagamento →</Button>
+                    {preCadastro
+                      ? <Button variant="primary" full size="lg" style={{ borderRadius:12 }} disabled={loading} onClick={handlePreCadastro}>
+                          {loading ? <><Spinner size={16}/> Cadastrando...</> : 'Concluir pré-cadastro →'}
+                        </Button>
+                      : <Button variant="orange" full size="lg" style={{ borderRadius:12 }} disabled={!!clientQuote.erro} onClick={() => setStep(5)}>Ir para pagamento →</Button>}
                   </div>
                 </div>
               )}
