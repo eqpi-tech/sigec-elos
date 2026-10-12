@@ -5,9 +5,10 @@
 // com header Authorization: Bearer CRON_SECRET
 
 const { createClient } = require('@supabase/supabase-js')
-const { frontendUrl } = require('./lib/runtime_env.js')
+const { frontendUrl, env } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
-const { normalizeCnpj } = require('./lib/cnpj.js')
+const routeA = require('./lib/route_a.js')
+const { requiredDocsForSeal } = require('./lib/required_docs.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
 // Usamos fetch direto para a API do Resend.
@@ -76,7 +77,6 @@ exports.handler = async (event) => {
     const now     = new Date()
     const in30d   = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     const in7d    = new Date(now.getTime() +  7 * 24 * 60 * 60 * 1000)
-    const in5d    = new Date(now.getTime() +  5 * 24 * 60 * 60 * 1000)
     const today   = now.toISOString().slice(0,10)
     const limit30 = in30d.toISOString().slice(0,10)
 
@@ -86,47 +86,75 @@ exports.handler = async (event) => {
     const eligible = new Set((eligibleRows || []).map(r =>
       typeof r === 'string' ? r : r.analysable_supplier_ids || Object.values(r)[0]))
 
-    // ── Auto-renovação: documentos AUTO vencendo em ≤5 dias ──────────────────
-    const AUTO_DOC_TYPES = ['37','61','62','7'] // CNPJ, CNAEs, Simples Nacional, FGTS
-    const { data: autoExpiring } = await supabase
-      .from('documents')
-      .select('id, type, supplier_id, suppliers(id, cnpj, user_id)')
-      .in('type', AUTO_DOC_TYPES)
-      .eq('source', 'AUTO')
-      .in('status', ['VALID','EXPIRING'])
-      .lte('expires_at', in5d.toISOString())
-      .gte('expires_at', today)
-
-    // Orçamento de tempo: a function é morta pelo Netlify em ~26s — o job
-    // roda DIARIAMENTE, então processar parcial e devolver 200 é correto
-    // (o restante entra amanhã). Era a causa do 'Failed in 33 seconds'.
+    // ── Esteira de renovação automática (Rota A) ─────────────────────────────
+    // 12/10: o bloco antigo nunca renovou nada (mandava o tipo num campo que a
+    // coleta não lia e chamava o FGTS sem o CNPJ). Agora o documento coletado
+    // pela fonte oficial que vence em ≤7 dias volta para a fila da Rota A: o
+    // coletor consulta de novo e deixa o novo documento "Em análise" com a
+    // sugestão para o analista (nada é aprovado sozinho).
+    // REGRA DO LUIZ (12/10): só ORIGEM ELOS entra na esteira — documento
+    // espelhado do HOC (hoc_arquivo_id) e processo do HOC (hoc_process_id)
+    // ficam fora até a migração de todos os clientes. Processo precisa estar
+    // liberado (pago ou subsidiado) e operável (ativo ou em análise).
     const startedAt = Date.now()
     const budgetLeft = () => 20000 - (Date.now() - startedAt)
-
-    const autoEligible = (autoExpiring || []).filter(d => !eligible.size || eligible.has(d.supplier_id))
-    if (autoEligible.length) {
-      // Teto por execução + chamadas em paralelo com timeout individual
-      const batch = autoEligible.slice(0, 15)
-      console.log(`🔄 Auto-renovando ${batch.length}/${autoEligible.length} documento(s) AUTO...`)
-      const baseUrl = frontendUrl()
-      const renew = async (doc) => {
-        const cnpj = normalizeCnpj(doc.suppliers?.cnpj)   // numérico ou alfanumérico
-        if (!cnpj) return
-        const ctrl = new AbortController()
-        const t = setTimeout(() => ctrl.abort(), 6000)
-        try {
-          const fn = doc.type === '7' ? 'fgts-crf-lookup' : 'collect-document'
-          await fetch(`${baseUrl}/.netlify/functions/${fn}`, {
-            method: 'POST', signal: ctrl.signal,
-            headers: { 'Content-Type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
-            body: JSON.stringify({ supplierId: doc.supplier_id, docType: doc.type, cnpj }),
-          })
-        } catch (e) {
-          console.warn(`  ✗ renovação doc ${doc.type} supplier ${doc.supplier_id}:`, e.message)
-        } finally { clearTimeout(t) }
+    let renovacoes = 0
+    if (routeA.enabled()) {
+      const in7d = new Date(now.getTime() + 7 * 864e5)
+      const { data: vencendo } = await supabase
+        .from('documents')
+        .select('type, supplier_id')
+        .in('type', Object.keys(routeA.ROUTE_A))
+        .eq('source', 'AUTO')
+        .is('hoc_arquivo_id', null)
+        .in('status', ['VALID', 'EXPIRING'])
+        .lte('expires_at', in7d.toISOString())
+        .gte('expires_at', today)
+      const porFornecedor = new Map()
+      for (const d of vencendo || []) {
+        if (eligible.size && !eligible.has(d.supplier_id)) continue
+        if (!porFornecedor.has(d.supplier_id)) porFornecedor.set(d.supplier_id, new Set())
+        porFornecedor.get(d.supplier_id).add(d.type)
       }
-      for (let i = 0; i < batch.length && budgetLeft() > 8000; i += 5) {
-        await Promise.allSettled(batch.slice(i, i + 5).map(renew))
+      const MAX_RENOVACOES = 40   // teto por execução (o job é diário)
+      for (const [supplierId, tipos] of porFornecedor) {
+        if (renovacoes >= MAX_RENOVACOES || budgetLeft() < 8000) break
+        const { data: selos } = await supabase.from('seals')
+          .select('id, client_id, flow_id')
+          .eq('supplier_id', supplierId).is('hoc_process_id', null)
+          .not('released_at', 'is', null).in('status', ['ACTIVE', 'PENDING'])
+          .order('created_at')
+        const pendentes = new Set(tipos)
+        for (const selo of selos || []) {
+          if (!pendentes.size) break
+          const exigidos = new Set((await requiredDocsForSeal(supabase, supplierId, selo)).map(String))
+          for (const tipo of [...pendentes]) {
+            if (!exigidos.has(tipo)) continue
+            pendentes.delete(tipo)   // um job por fornecedor+documento (a consulta é paga uma vez)
+            const { data: job } = await supabase.from('auto_collect_jobs')
+              .select('id, status').eq('seal_id', selo.id).eq('doc_type', tipo).maybeSingle()
+            if (job && !['done', 'fallback'].includes(job.status)) continue   // já na fila
+            const { error: jErr } = job
+              ? await supabase.from('auto_collect_jobs').update({
+                  status: 'queued', attempts: 0, next_attempt_at: new Date().toISOString(),
+                  last_error: 'renovação automática (vence em até 7 dias)', finished_at: null,
+                }).eq('id', job.id)
+              : await supabase.from('auto_collect_jobs').insert({ supplier_id: supplierId, seal_id: selo.id, doc_type: tipo })
+            if (jErr) console.warn(`  ✗ renovação ${tipo} fornecedor ${supplierId}:`, jErr.message)
+            else renovacoes++
+          }
+        }
+      }
+      if (renovacoes) {
+        console.log(`🔄 ${renovacoes} documento(s) de origem ELOS na esteira de renovação (Rota A)`)
+        // o cron da Rota A (15 min) processa a fila; o disparo só adianta
+        const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
+        if (site && process.env.CRON_SECRET) {
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000)
+          await fetch(`${site}/.netlify/functions/homolog-collect-background`, {
+            method: 'POST', signal: ctrl.signal, headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` }, body: '{}',
+          }).catch(() => {}).finally(() => clearTimeout(t))
+        }
       }
     }
 
@@ -143,7 +171,7 @@ exports.handler = async (event) => {
 
     if (error) throw new Error(error.message)
     if (!expiringDocs?.length) {
-      return { statusCode: 200, body: JSON.stringify({ message: 'Nenhum documento vencendo em 30 dias', count: 0 }) }
+      return { statusCode: 200, body: JSON.stringify({ message: 'Nenhum documento vencendo em 30 dias', count: 0, renovacoes }) }
     }
 
     // Notifica só nos MARCOS (30/15/7/3/1/0 dias p/ vencer) — sem isso o
@@ -235,6 +263,7 @@ exports.handler = async (event) => {
         total_docs: expiringDocs.length,
         suppliers_notified: sent,
         urgent_marked: urgent,
+        renovacoes,          // documentos de origem ELOS reenviados à Rota A
         results,
       }),
     }

@@ -1,7 +1,7 @@
 // netlify/functions/collect-document.js
 // Dispara a coleta automática de um documento específico para um fornecedor.
-// Chamado pelo frontend quando o fornecedor clica "Buscar automaticamente"
-// POST body: { supplierId, documentId, cnpj, uf }
+// (o botão "Buscar automaticamente" do front foi aposentado; a renovação usa a Rota A)
+// POST body: { supplierId, documentId, uf } — só chamada interna (Bearer CRON_SECRET)
 //
 // documentId → qual documento coletar:
 //   7  = CRF FGTS (via scraping Caixa)
@@ -25,12 +25,31 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode:200, headers, body:'' }
   if (event.httpMethod !== 'POST') return { statusCode:405, headers, body: JSON.stringify({ error:'Method not allowed' }) }
 
+  // 12/10: era ABERTA — qualquer um gravava o FGTS de um fornecedor usando o
+  // CNPJ de outra empresa. Só chamada interna (CRON_SECRET); o CNPJ vem do
+  // cadastro, nunca do corpo. A renovação automática usa a Rota A.
+  const bearer = (event.headers?.authorization || event.headers?.Authorization || '').replace('Bearer ', '')
+  const cronHdr = event.headers?.['x-cron-secret'] || ''
+  if (!process.env.CRON_SECRET || (bearer !== process.env.CRON_SECRET && cronHdr !== process.env.CRON_SECRET)) {
+    return { statusCode:401, headers, body: JSON.stringify({ error:'Unauthorized' }) }
+  }
+
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode:400, headers, body: JSON.stringify({ error:'Invalid JSON' }) } }
 
-  const { supplierId, documentId, cnpj, uf } = body
-  if (!supplierId || !documentId || !cnpj) {
-    return { statusCode:400, headers, body: JSON.stringify({ error:'supplierId, documentId e cnpj são obrigatórios' }) }
+  const { supplierId, uf } = body
+  const documentId = body.documentId ?? body.docType
+  if (!supplierId || !documentId) {
+    return { statusCode:400, headers, body: JSON.stringify({ error:'supplierId e documentId são obrigatórios' }) }
+  }
+  const { data: sup } = await supabaseAdmin.from('suppliers').select('cnpj').eq('id', supplierId).maybeSingle()
+  const cnpj = normalizeCnpj(sup?.cnpj)
+  if (!cnpj) return { statusCode:404, headers, body: JSON.stringify({ error:'Fornecedor não encontrado' }) }
+  // documento espelhado do HOC: nunca sobrescrever (regra 12/10 — só origem ELOS)
+  const { data: atual } = await supabaseAdmin.from('documents').select('hoc_arquivo_id')
+    .eq('supplier_id', supplierId).eq('type', String(documentId)).maybeSingle()
+  if (atual?.hoc_arquivo_id) {
+    return { statusCode:409, headers, body: JSON.stringify({ error:'Documento de origem HOC — fora da coleta automática' }) }
   }
 
   const docIdNum = Number(documentId)
@@ -39,7 +58,7 @@ exports.handler = async (event) => {
     // ── Documento 7: CRF FGTS ───────────────────────────────────────────────
     if (docIdNum === 7) {
       const fgtsUrl = new URL(`${functionsUrl()}/.netlify/functions/fgts-crf-lookup`)
-      fgtsUrl.searchParams.set('cnpj', normalizeCnpj(cnpj))
+      fgtsUrl.searchParams.set('cnpj', cnpj)
       fgtsUrl.searchParams.set('uf',   uf || '')
 
       const res  = await fetch(fgtsUrl.toString())
