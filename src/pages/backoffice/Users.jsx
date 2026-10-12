@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj } from '../../lib/cnpj.js'
 import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 const ROLE_LABEL = { ADMIN:'Backoffice', BUYER:'Comprador', CLIENT:'Cliente', SUPPLIER:'Fornecedor' }
@@ -89,11 +90,11 @@ export default function BackofficeUsers() {
       if (!u.email?.toLowerCase().includes(q) && !u.name?.toLowerCase().includes(q)) return false
     }
     if (cnpjSearch) {
-      const digits = cnpjSearch.replace(/\D/g, '')
+      const digits = normalizeCnpj(cnpjSearch)   // aceita CNPJ alfanumérico
       if (digits) {
         // Busca em todos os CNPJs vinculados ao usuário (fornecedor, cliente ou comprador)
-        const allCnpjs = (u.orgs || []).map(o => (o.cnpj || '').replace(/\D/g, ''))
-        if (u.supplierCnpj) allCnpjs.push(u.supplierCnpj.replace(/\D/g, ''))
+        const allCnpjs = (u.orgs || []).map(o => normalizeCnpj(o.cnpj))
+        if (u.supplierCnpj) allCnpjs.push(normalizeCnpj(u.supplierCnpj))
         if (!allCnpjs.some(c => c.includes(digits))) return false
       }
     }

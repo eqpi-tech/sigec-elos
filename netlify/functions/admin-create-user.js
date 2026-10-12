@@ -5,6 +5,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -109,7 +110,7 @@ exports.handler = async (event) => {
 
     // 4b. Se CLIENT, upsert por CNPJ (suporta clientes antigos que voltam a assinar)
     if (role === 'CLIENT') {
-      const cleanCnpj = (cnpj || '').replace(/\D/g, '')
+      const cleanCnpj = normalizeCnpj(cnpj)   // numérico ou alfanumérico
       const { data: existingClient } = await supabaseAdmin
         .from('clients').select('id').eq('cnpj', cleanCnpj).maybeSingle()
 

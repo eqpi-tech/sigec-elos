@@ -10,13 +10,14 @@
 // cost_brl = 9.576 SÓ quando emite de fato (raw.emitted).
 
 const { getAdminClient } = require('../bcdb.js')
+const cnpjLib = require('../cnpj.js')
 
 const ASSERTIVA_BASE = 'https://api.assertivasolucoes.com.br'
 
+// numérico ou alfanumérico; fora de 14 caracteres devolve o valor original
 function formatCnpj(raw) {
-  const d = String(raw || '').replace(/\D/g, '')
-  if (d.length !== 14) return raw
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12, 14)}`
+  if (!cnpjLib.isCnpjComplete(raw)) return raw
+  return cnpjLib.formatCnpj(raw)
 }
 
 async function getAssertivaToken() {

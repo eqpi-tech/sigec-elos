@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 // busca de cliente por nome fantasia OU razão social, sem acento/espaço/
@@ -110,7 +111,9 @@ export default function BackofficeProcessSearch() {
     setPendingInvites([])
 
     const qTrim = q.trim()
-    const qNums = qTrim.replace(/\D/g, '')
+    // CNPJ numérico ou alfanumérico: compara sempre normalizado (maiúsculas, sem pontuação)
+    const isCnpjQ = looksLikeCnpj(qTrim)
+    const qCnpj = normalizeCnpj(qTrim)
     const clientIdToName = clients.reduce((acc, c) => { acc[c.id] = clientLabel(c); return acc }, {})
 
     // análise prioritária pedida pelo cliente (patch_113): processo em análise
@@ -176,10 +179,9 @@ export default function BackofficeProcessSearch() {
       ].filter(Boolean))
 
       // convites aguardando cadastro (reenvio substituído não conta de novo)
-      const digitos = (v) => String(v || '').replace(/\D/g, '')
       const pend = clientInvites
         .filter(i => !i.supplier_id && !['REGISTERED', 'SUPERSEDED', 'CANCELLED', 'EXPIRED'].includes(i.status))
-        .filter(i => !qTrim || (qNums.length >= 8 ? digitos(i.supplier_cnpj).includes(qNums)
+        .filter(i => !qTrim || (isCnpjQ ? normalizeCnpj(i.supplier_cnpj).includes(qCnpj)
           : `${i.supplier_razao_social || ''} ${i.supplier_email || ''}`.toLowerCase().includes(qTrim.toLowerCase())))
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
       const mostrarConvites = ['Todos', 'CONVITE'].includes(filterType)
@@ -196,7 +198,7 @@ export default function BackofficeProcessSearch() {
           .in('id', batch)
         if (!showInactive) { bq = bq.neq('status', 'INACTIVE'); bq = bq.is('archived_at', null) }
         if (qTrim) {
-          if (qNums.length >= 8) bq = bq.ilike('cnpj', `%${qNums}%`)
+          if (isCnpjQ) bq = bq.ilike('cnpj', `%${qCnpj}%`)
           else bq = bq.ilike('razao_social', `%${qTrim}%`)
         }
         const { data } = await bq
@@ -216,9 +218,9 @@ export default function BackofficeProcessSearch() {
       enriched = prioFirst(enriched)
 
       // convite de CNPJ que já aparece como fornecedor não se repete
-      const cnpjsListados = new Set(suppliers.map(x => digitos(x.cnpj)))
+      const cnpjsListados = new Set(suppliers.map(x => normalizeCnpj(x.cnpj)))
       setResults(enriched)
-      setPendingInvites(mostrarConvites ? pend.filter(i => !cnpjsListados.has(digitos(i.supplier_cnpj))) : [])
+      setPendingInvites(mostrarConvites ? pend.filter(i => !cnpjsListados.has(normalizeCnpj(i.supplier_cnpj))) : [])
       setLoading(false)
       return
     }

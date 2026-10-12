@@ -7,6 +7,8 @@ import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { siteUrl } from '../../lib/siteUrl.js'
 import { Button, Spinner } from '../../components/ui.jsx'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 
 // Fallback local — a fonte é app_settings.elos_prices (Preços ELOS no backoffice)
 const PLAN_PRICES = {
@@ -95,8 +97,7 @@ export default function SupplierOnboarding() {
 
   const [cnpj, setCnpj]     = useState(() => {
     if (!cnpjParam) return ''
-    const d = cnpjParam.replace(/\D/g,'').slice(0,14)
-    return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
+    return formatCnpj(cnpjParam)
   })
   const [cnpjData, setCnpjData]     = useState(null)
   const [sanctions, setSanctions]   = useState(null)
@@ -178,11 +179,6 @@ export default function SupplierOnboarding() {
     setError('')
     const { error: e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl()}/redefinir-senha` })
     if (e) setError(e.message); else setResetSent(true)
-  }
-
-  const formatCnpj = (v) => {
-    const d = v.replace(/\D/g,'').slice(0,14)
-    return d.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2')
   }
 
   // Reset ao trocar perfil
@@ -301,7 +297,7 @@ export default function SupplierOnboarding() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
       body: JSON.stringify({
-        cnpj: cnpj.replace(/\D/g,''), razao_social: cnpjData?.razao_social || existingSupplier?.razao_social || name,
+        cnpj: normalizeCnpj(cnpj), razao_social: cnpjData?.razao_social || existingSupplier?.razao_social || name,
         nome_fantasia: cnpjData?.nome_fantasia || null, cnae_main: cnpjData?.cnae_fiscal_descricao || '',
         cnae_list: cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
         state: cnpjData?.uf || '', city: cnpjData?.municipio || '',
@@ -390,7 +386,7 @@ export default function SupplierOnboarding() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cnpj: buyerCnpj.replace(/\D/g,''),
+          cnpj: normalizeCnpj(buyerCnpj),
           razaoSocial: buyerCnpjData?.razao_social || buyerName,
           email: buyerEmail, name: buyerName, phone: buyerPhone || null,
         }),
@@ -492,7 +488,7 @@ export default function SupplierOnboarding() {
                     </div>
                   ) : !isExistingActive && (
                     <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
-                      disabled={cnpj.replace(/\D/g,'').length !== 14 || lookupLoading}
+                      disabled={!isCnpjComplete(cnpj) || lookupLoading}
                       onClick={handleCnpjLookup}>
                       {lookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
                     </Button>
@@ -872,7 +868,7 @@ export default function SupplierOnboarding() {
                     style={{ ...inputStyle, fontSize:20, fontWeight:700, fontFamily:'Montserrat,sans-serif', letterSpacing:1 }} />
                   {buyerLookupError && <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'10px 14px', marginTop:12, fontSize:13, color:'#c2410c' }}>{buyerLookupError}</div>}
                   <Button variant="orange" full size="lg" style={{ borderRadius:12, marginTop:20 }}
-                    disabled={buyerCnpj.replace(/\D/g,'').length !== 14 || buyerLookupLoading}
+                    disabled={!isCnpjComplete(buyerCnpj) || buyerLookupLoading}
                     onClick={handleBuyerCnpjLookup}>
                     {buyerLookupLoading ? <><Spinner size={16} /> Consultando...</> : 'Consultar CNPJ →'}
                   </Button>

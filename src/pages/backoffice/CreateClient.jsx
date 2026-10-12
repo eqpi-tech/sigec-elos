@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Card, PageHeader, Spinner } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 
 const STEPS = ['Empresa', 'Precificação', 'Landing Page', 'Revisão']
 
@@ -9,12 +11,6 @@ function slugify(str) {
   return (str || '').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
-}
-
-function formatCnpj(v) {
-  const n = v.replace(/\D/g,'').slice(0,14)
-  return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, (_,a,b,c,d,e) =>
-    e ? `${a}.${b}.${c}/${d}-${e}` : d ? `${a}.${b}.${c}/${d}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a)
 }
 
 export default function BackofficeCreateClient() {
@@ -48,8 +44,8 @@ export default function BackofficeCreateClient() {
   const frow = { marginBottom:16 }
 
   async function lookupCnpj() {
-    const digits = cnpj.replace(/\D/g,'')
-    if (digits.length !== 14) return
+    const digits = normalizeCnpj(cnpj)
+    if (!isCnpjComplete(digits)) return
     setCnpjLoading(true)
     try {
       const res  = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`)
@@ -66,7 +62,7 @@ export default function BackofficeCreateClient() {
   function nextStep() {
     setError('')
     if (step === 0) {
-      if (cnpj.replace(/\D/g,'').length !== 14) { setError('CNPJ inválido.'); return }
+      if (!isCnpjComplete(cnpj)) { setError('CNPJ inválido.'); return }
       if (!razao.trim()) { setError('Informe a razão social.'); return }
       if (!email.trim()) { setError('Informe o e-mail do responsável.'); return }
       if (!nome.trim())  { setError('Informe o nome do responsável.'); return }
@@ -87,7 +83,7 @@ export default function BackofficeCreateClient() {
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${session.access_token}` },
         body: JSON.stringify({
           email, role: 'CLIENT', name: nome,
-          organization: razao, cnpj: cnpj.replace(/\D/g,''),
+          organization: razao, cnpj: normalizeCnpj(cnpj),
         }),
       })
       const data = await res.json()
@@ -96,7 +92,7 @@ export default function BackofficeCreateClient() {
       // 2. Buscar o client_id recém-criado
       const { data: clientRow } = await supabase
         .from('clients').select('id')
-        .eq('cnpj', cnpj.replace(/\D/g,'')).maybeSingle()
+        .eq('cnpj', normalizeCnpj(cnpj)).maybeSingle()
 
       if (clientRow?.id) {
         // 3. Salvar precificação
@@ -217,7 +213,7 @@ export default function BackofficeCreateClient() {
               <div style={{ display:'flex', gap:8 }}>
                 <input value={cnpj} onChange={e => setCnpj(formatCnpj(e.target.value))}
                   placeholder="00.000.000/0001-00" style={{ ...inp, flex:1 }}/>
-                <Button variant="neutral" size="sm" disabled={cnpjLoading || cnpj.replace(/\D/g,'').length < 14} onClick={lookupCnpj}>
+                <Button variant="neutral" size="sm" disabled={cnpjLoading || !isCnpjComplete(cnpj)} onClick={lookupCnpj}>
                   {cnpjLoading ? <Spinner size={14}/> : '🔍 Consultar'}
                 </Button>
               </div>

@@ -14,6 +14,7 @@ const { downloadReceipt } = require('./lib/infosimples.js')
 const { ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin } = require('./lib/route_a.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 const { guardMail } = require('./lib/mail_guard.js')
+const { isCnpjComplete, formatCnpj } = require('./lib/cnpj.js')
 const registry = require('./lib/connectors/index.js')
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -193,7 +194,7 @@ async function processar(job, catalogo, prefOverrides) {
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 function registroConsulta({ sup, docNome, fonte, r }) {
-  const cnpj = String(sup.cnpj).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  const cnpj = isCnpjComplete(sup.cnpj) ? formatCnpj(sup.cnpj) : String(sup.cnpj)   // numérico ou alfanumérico
   const linhas = Object.entries(r.dados || {}).slice(0, 40)
     .map(([k, v]) => `<tr><td style="color:#6b7280;padding:3px 10px 3px 0">${esc(k)}</td><td>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td></tr>`).join('')
   return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Registro de consulta — ${esc(docNome)}</title>

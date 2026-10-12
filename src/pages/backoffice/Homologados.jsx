@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { adminApi } from '../../services/api.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
@@ -80,9 +81,11 @@ export function BackofficeHomologados() {
   const filtered = suppliers.filter(s => {
     if (filterStatus !== 'Todos' && s.seal_status !== filterStatus) return false
     if (!search) return true
+    // CNPJ (numérico ou alfanumérico) comparado normalizado; parte numérica curta segue valendo
+    const qCnpj = looksLikeCnpj(search) ? normalizeCnpj(search) : search.replace(/\D/g,'')
     return (
       s.razao_social?.toLowerCase().includes(search.toLowerCase()) ||
-      s.cnpj?.includes(search.replace(/\D/g,''))
+      (!!qCnpj && normalizeCnpj(s.cnpj).includes(qCnpj))
     )
   })
 

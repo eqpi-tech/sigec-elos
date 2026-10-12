@@ -10,6 +10,7 @@
 
 const { createClient } = require('@supabase/supabase-js')
 const { functionsUrl } = require('./lib/runtime_env.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -38,7 +39,7 @@ exports.handler = async (event) => {
     // ── Documento 7: CRF FGTS ───────────────────────────────────────────────
     if (docIdNum === 7) {
       const fgtsUrl = new URL(`${functionsUrl()}/.netlify/functions/fgts-crf-lookup`)
-      fgtsUrl.searchParams.set('cnpj', cnpj.replace(/\D/g,''))
+      fgtsUrl.searchParams.set('cnpj', normalizeCnpj(cnpj))
       fgtsUrl.searchParams.set('uf',   uf || '')
 
       const res  = await fetch(fgtsUrl.toString())

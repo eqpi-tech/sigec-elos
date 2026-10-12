@@ -11,6 +11,7 @@
 
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl, functionsUrl } = require('./lib/runtime_env.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -462,7 +463,7 @@ function buildApprovalEmail(supplier, { sealId, clientName, expiresAt }) {
   const code    = sealId ? `ELOS-${String(sealId).replace(/-/g, '').slice(0, 12).toUpperCase()}` : null
   const certUrl = sealId ? `${site}/fornecedor/certificado/${sealId}` : `${site}/fornecedor/dashboard`
   const verUrl  = code ? `${site}/verificar?code=${code}` : `${site}/verificar`
-  const d       = String(supplier.cnpj || '').replace(/\D/g, '')
+  const d       = normalizeCnpj(supplier.cnpj)   // numérico ou alfanumérico
   const cnpj    = d.length === 14 ? `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}` : (supplier.cnpj || '')
   const validade = expiresAt ? expiresAt.toLocaleDateString('pt-BR') : null
   const row = (k, v) => `<tr><td style="padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:bold;width:42%;font-size:13px;color:#1a1c5e">${k}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;font-size:13px;color:#374151">${v}</td></tr>`

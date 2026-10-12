@@ -7,6 +7,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -185,8 +186,9 @@ async function handleClientInvitation(body, callerUser, h) {
     const { data: existentes } = await supabaseAdmin.from('invitations')
       .select('id, status, supplier_cnpj').eq('client_id', client_id).eq('supplier_email', email)
       .is('hoc_id', null)   // histórico do HOC não bloqueia nem é substituído (patch_116)
-    const cnpjNovo = String(cnpj || '').replace(/\D/g, '')
-    if ((existentes || []).some(e => e.status === 'REGISTERED' && String(e.supplier_cnpj || '').replace(/\D/g, '') === cnpjNovo))
+    // normaliza os dois lados (CNPJ numérico ou alfanumérico)
+    const cnpjNovo = normalizeCnpj(cnpj)
+    if ((existentes || []).some(e => e.status === 'REGISTERED' && normalizeCnpj(e.supplier_cnpj) === cnpjNovo))
       return { statusCode:409, headers:h, body: JSON.stringify({ error:'Este fornecedor já se cadastrou por um convite enviado para este e-mail.' }) }
     abertosMesmoEmail = (existentes || []).filter(e => ['SENT', 'VIEWED'].includes(e.status)).map(e => e.id)
   }

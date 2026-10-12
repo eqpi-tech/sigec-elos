@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react'
 import { preRegistrationsApi } from '../../services/api.js'
+import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 
 // Aba "Pré-cadastros" do cliente (patch_126): empresas que entraram pelo portal
 // do cliente e escolheram o pré-cadastro sem custo — sem processo, sem
 // documentos. O cliente vê a ficha e o questionário, convida ou arquiva.
 
-const fmtCnpj = (c) => {
-  const d = String(c || '').replace(/\D/g, '')
-  return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '')
-}
+// CNPJ numérico ou alfanumérico: mascara quando completo, senão mostra como veio
+const fmtCnpj = (c) => isCnpjComplete(c) ? formatCnpj(c) : (c || '')
 const resposta = (a) => a.answer_boolean === true ? 'Sim' : a.answer_boolean === false ? 'Não' : (a.answer_text || '—')
 
 const FILTROS = [['ACTIVE', 'Ativos'], ['ARCHIVED', 'Arquivados'], ['todos', 'Todos']]

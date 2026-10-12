@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { invitationsApi } from '../services/api.js'
 import { useIsMobile } from '../hooks/useIsMobile.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../lib/cnpj.js'
 
 const ELOS_PLANS = [
   {
@@ -139,18 +141,9 @@ export default function ClientPortal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteToken])
 
-  const formatCnpj = (v) => {
-    const d = v.replace(/\D/g, '').slice(0, 14)
-    if (d.length <= 2) return d
-    if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
-    if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
-    if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
-    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
-  }
-
   const handleRegister = () => {
-    const raw = cnpj.replace(/\D/g, '')
-    if (raw.length !== 14) { alert('Informe um CNPJ válido com 14 dígitos.'); return }
+    const raw = normalizeCnpj(cnpj)
+    if (!isCnpjComplete(raw)) { alert('Informe um CNPJ válido com 14 caracteres.'); return }
     navigate(`/cadastro?cnpj=${raw}&ref=${slug}${chosenFlow ? `&flow=${chosenFlow}` : ''}${inviteToken ? `&token=${inviteToken}` : ''}`)
   }
 

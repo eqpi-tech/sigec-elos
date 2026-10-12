@@ -1,6 +1,8 @@
 // netlify/functions/fgts-crf-lookup.js
 // Consulta CRF FGTS - Caixa Econômica Federal (JSF sem captcha)
 
+const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
+
 const BASE = 'https://consulta-crf.caixa.gov.br/consultacrf/pages/consultaEmpregador.jsf'
 const UA   = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
@@ -142,11 +144,11 @@ exports.handler = async (event) => {
   const headers = { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' }
   if (event.httpMethod === 'OPTIONS') return { statusCode:200, headers, body:'' }
 
-  const cnpj   = (event.queryStringParameters?.cnpj || '').replace(/\D/g,'')
+  const cnpj   = normalizeCnpj(event.queryStringParameters?.cnpj)   // numérico ou alfanumérico
   const uf     = (event.queryStringParameters?.uf   || '').toUpperCase().trim() || 'MG'
   const debug  = event.queryStringParameters?.debug === '1'
 
-  if (!cnpj || cnpj.length !== 14) {
+  if (!cnpj || !isCnpjComplete(cnpj)) {
     return { statusCode:400, headers, body: JSON.stringify({ error:'CNPJ inválido' }) }
   }
 

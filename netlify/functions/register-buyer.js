@@ -3,6 +3,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardedResend } = require('./lib/mail_guard.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +32,7 @@ exports.handler = async (event) => {
     const { cnpj, razaoSocial, email, name, phone } = JSON.parse(event.body || '{}')
     if (!cnpj || !email || !name) return { statusCode: 400, headers, body: JSON.stringify({ error: 'cnpj, email e name são obrigatórios' }) }
 
-    const cleanCnpj = cnpj.replace(/\D/g, '')
+    const cleanCnpj = normalizeCnpj(cnpj)   // numérico ou alfanumérico
 
     // Verifica se e-mail já existe
     const { data: existingUsers } = await supabase.auth.admin.listUsers()

@@ -7,6 +7,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
 // Usamos fetch direto para a API do Resend.
@@ -109,7 +110,7 @@ exports.handler = async (event) => {
       console.log(`🔄 Auto-renovando ${batch.length}/${autoEligible.length} documento(s) AUTO...`)
       const baseUrl = frontendUrl()
       const renew = async (doc) => {
-        const cnpj = doc.suppliers?.cnpj?.replace(/\D/g,'')
+        const cnpj = normalizeCnpj(doc.suppliers?.cnpj)   // numérico ou alfanumérico
         if (!cnpj) return
         const ctrl = new AbortController()
         const t = setTimeout(() => ctrl.abort(), 6000)

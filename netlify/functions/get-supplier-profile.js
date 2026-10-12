@@ -3,6 +3,7 @@
 // GET /.netlify/functions/get-supplier-profile?id=<supplier_uuid>
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
 exports.handler = async (event) => {
   const h = { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*' }
@@ -91,6 +92,9 @@ exports.handler = async (event) => {
 
     // CPF sempre mascarado (LGPD); CNPJ de sócio PJ parcialmente
     const maskDoc = (v) => {
+      // CNPJ alfanumérico de sócio PJ (CPF nunca tem letra — ramo CPF intocado)
+      const c = normalizeCnpj(v)
+      if (/[A-Z]/.test(c) && isCnpjComplete(c)) return `**.***.${c.slice(5,8)}/****-**`
       const d = String(v || '').replace(/\D/g, '')
       if (d.length === 11) return `***.${d.slice(3,6)}.${d.slice(6,9)}-**`
       if (d.length === 14) return `**.***.${d.slice(5,8)}/****-**`

@@ -7,15 +7,10 @@ import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 
-const fmtCnpj = (v) => {
-  const d = String(v || '').replace(/\D/g, '').slice(0, 14)
-  if (d.length <= 2) return d
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
-}
+const fmtCnpj = formatCnpj
 
 const STATUS_META = {
   pending:      { label: 'Na fila',            color: '#64748b', icon: '⏳' },
@@ -74,7 +69,7 @@ export default function BcReport() {
 
   const load = useCallback(async (cnpjFilter) => {
     try {
-      const d = await callApi('GET', cnpjFilter ? { cnpj: cnpjFilter.replace(/\D/g, '') } : undefined)
+      const d = await callApi('GET', cnpjFilter ? { cnpj: normalizeCnpj(cnpjFilter) } : undefined)
       setRows(d.rows)
     } catch (e) { setMsg({ ok: false, texto: e.message }) }
   }, [])
@@ -105,8 +100,8 @@ export default function BcReport() {
   }, [rows, load, filterCnpj])
 
   const emitir = async () => {
-    const digits = cnpj.replace(/\D/g, '')
-    if (digits.length !== 14) { setMsg({ ok: false, texto: 'Informe um CNPJ válido (14 dígitos).' }); return }
+    const digits = normalizeCnpj(cnpj)
+    if (!isCnpjComplete(digits)) { setMsg({ ok: false, texto: 'Informe um CNPJ válido (14 caracteres).' }); return }
     setBusy(true); setMsg(null)
     try {
       const d = await callApi('POST', { cnpj: digits, tipo })

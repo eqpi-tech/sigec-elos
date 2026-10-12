@@ -3,6 +3,7 @@
 // Chamado via: /.netlify/functions/cnpj-lookup?cnpj=00000000000000
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
 /**
  * Filtra apenas sanções COMPROVADAMENTE ATIVAS.
@@ -65,9 +66,10 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: '' }
   }
 
-  const cnpj = (event.queryStringParameters?.cnpj || '').replace(/\D/g, '')
-  if (!cnpj || cnpj.length !== 14) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'CNPJ inválido — informe 14 dígitos' }) }
+  // Aceita CNPJ numérico e alfanumérico (14 caracteres, maiúsculas, sem pontuação)
+  const cnpj = normalizeCnpj(event.queryStringParameters?.cnpj)
+  if (!cnpj || !isCnpjComplete(cnpj)) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'CNPJ inválido — informe 14 caracteres' }) }
   }
 
   const apiKey = process.env.TRANSPARENCY_API_KEY
@@ -97,7 +99,7 @@ exports.handler = async (event) => {
 
     // Extrai e filtra por CNPJ exato — a API pode retornar registros de filiais
     // ou do grupo econômico inteiro ao buscar pela raiz do CNPJ (8 dígitos)
-    const cnpjNums = cnpj.replace(/\D/g, '') // 14 dígitos limpos
+    const cnpjNums = normalizeCnpj(cnpj) // 14 caracteres limpos (numérico ou alfanumérico)
 
     // Valida que cada registro retornado pertence ao CNPJ consultado.
     // Com o parâmetro correto (codigoSancionado), a API já filtra na fonte,
@@ -105,11 +107,11 @@ exports.handler = async (event) => {
     function extractAndFilterByCnpj(body) {
       if (!Array.isArray(body)) return []
       return body.filter(record => {
-        const cnpjRecord = (
+        const cnpjRecord = normalizeCnpj(
           record.sancionado?.codigoFormatado ||
           record.pessoa?.cnpjFormatado       ||
           ''
-        ).replace(/\D/g, '')
+        )
         // Se a API retornou registro sem CNPJ identificável, mantém por precaução
         if (!cnpjRecord) return true
         return cnpjRecord === cnpjNums

@@ -4,6 +4,8 @@
 // produção pelo cnpj-lookup.js; aceita TRANSPARENCIA_API_KEY como alias).
 // NUNCA logar a chave.
 
+const { normalizeCnpj } = require('./cnpj.js')
+
 async function consultaTransparencia(recurso, params = {}, { maxPaginas = 3 } = {}) {
   const key = process.env.TRANSPARENCY_API_KEY || process.env.TRANSPARENCIA_API_KEY
   if (!key) throw new Error('TRANSPARENCY_API_KEY não configurada')
@@ -58,8 +60,9 @@ function filterActiveSanctions(list) {
 // econômico inteiro na busca pela raiz) — camada extra do cnpj-lookup.js
 function onlyExactCnpj(list, cnpj14) {
   return (list || []).filter((r) => {
-    const doc = (r.sancionado?.codigoFormatado || r.pessoa?.cnpjFormatado || '').replace(/\D/g, '')
-    return !doc || doc === cnpj14
+    // compara normalizado dos dois lados (CNPJ numérico ou alfanumérico)
+    const doc = normalizeCnpj(r.sancionado?.codigoFormatado || r.pessoa?.cnpjFormatado || '')
+    return !doc || doc === normalizeCnpj(cnpj14)
   })
 }
 

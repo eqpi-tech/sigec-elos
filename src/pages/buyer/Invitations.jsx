@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, looksLikeCnpj, formatCnpj } from '../../lib/cnpj.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { Card, Spinner, PageHeader } from '../../components/ui.jsx'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 const fmtDate = (v) => v ? new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
-const fmtCNPJ = (v='') => { const n=String(v).replace(/\D/g,'').padStart(14,'0'); return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5,8)}/${n.slice(8,12)}-${n.slice(12)}` }
+// CNPJ numérico (completa zeros à esquerda) ou alfanumérico
+const fmtCNPJ = (v='') => { const n=normalizeCnpj(v); return formatCnpj(/^\d*$/.test(n) ? n.padStart(14,'0') : n) }
 
 export default function BuyerInvitations() {
   const { user } = useAuth()
@@ -30,7 +32,10 @@ export default function BuyerInvitations() {
   const filtered = invites.filter(i =>
     !search ||
     i.supplier_razao_social?.toLowerCase().includes(search.toLowerCase()) ||
-    i.supplier_cnpj?.includes(search.replace(/\D/g,''))
+    (() => {
+      const qc = looksLikeCnpj(search) ? normalizeCnpj(search) : search.replace(/\D/g,'')
+      return !!qc && normalizeCnpj(i.supplier_cnpj).includes(qc)
+    })()
   )
 
   const statusColor = { SENT:'#2E3192', VIEWED:'#f59e0b', REGISTERED:'#22c55e' }

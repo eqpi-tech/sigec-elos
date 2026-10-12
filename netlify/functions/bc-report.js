@@ -6,6 +6,7 @@
 // A COLETA é feita pelo orquestrador (estágio 5) — aqui é só o starter/fila.
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -27,7 +28,7 @@ exports.handler = async (event) => {
   if (!roleRow) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso negado' }) }
 
   if (event.httpMethod === 'GET') {
-    const cnpj = (event.queryStringParameters?.cnpj || '').replace(/\D/g, '')
+    const cnpj = normalizeCnpj(event.queryStringParameters?.cnpj)
     let q = sb.from('report_requests')
       .select('id, cnpj, tipo, status, score_eqpi, risk_band, parecer, cost_brl, price_brl, pdf_path, error, created_at, finished_at, supplier_id')
       .order('created_at', { ascending: false }).limit(30)
@@ -51,9 +52,9 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body) } catch {
     return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) }
   }
-  const cnpj = String(body.cnpj || '').replace(/\D/g, '')
+  const cnpj = normalizeCnpj(body.cnpj)   // numérico ou alfanumérico
   const tipo = body.tipo
-  if (cnpj.length !== 14) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'CNPJ deve ter 14 dígitos' }) }
+  if (!isCnpjComplete(cnpj)) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'CNPJ deve ter 14 caracteres' }) }
   if (!['light', 'full'].includes(tipo)) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "tipo deve ser 'light' ou 'full'" }) }
 
   // Idempotência (§4): request não-final do mesmo cnpj+tipo < 10 min → retorna o existente

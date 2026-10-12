@@ -7,6 +7,7 @@
 // GET /.netlify/functions/verify-certificate?code=ELOS-...
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -59,7 +60,7 @@ exports.handler = async (event) => {
         situation,                                  // VALIDO | VENCIDO | SUSPENSO | CANCELADO
         cert_code:  seal.cert_code,
         supplier:   seal.suppliers?.razao_social || null,
-        cnpj:       fmtCnpj((seal.suppliers?.cnpj || '').replace(/\D/g, '')),
+        cnpj:       fmtCnpj(normalizeCnpj(seal.suppliers?.cnpj)),   // numérico ou alfanumérico
         seal_name:  seal.seal_name || seal.level || 'ELOS',
         client:     seal.clients?.razao_social || null,
         exception:  !!seal.exception,

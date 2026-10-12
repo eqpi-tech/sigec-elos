@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { invitationsApi } from '../../services/api.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 
@@ -68,10 +69,10 @@ export default function BackofficeInvitations() {
     if (origem === 'hoc')  q = q.not('hoc_id', 'is', null)
     const b = busca.trim()
     if (b) {
-      const dig = b.replace(/\D/g, '')
       const txt = b.replace(/[%,()]/g, ' ')
-      q = dig.length >= 8
-        ? q.ilike('supplier_cnpj', `%${dig}%`)
+      // CNPJ numérico ou alfanumérico (gravado em maiúsculas, sem pontuação)
+      q = looksLikeCnpj(b)
+        ? q.ilike('supplier_cnpj', `%${normalizeCnpj(b)}%`)
         : q.or(`supplier_razao_social.ilike.%${txt}%,supplier_email.ilike.%${txt}%`)
     }
     const { data, count, error } = await q

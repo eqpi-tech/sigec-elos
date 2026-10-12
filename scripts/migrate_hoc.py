@@ -22,6 +22,8 @@ import uuid
 from datetime import datetime, date, timezone
 from typing import Optional
 
+from cnpj_utils import normalize_doc
+
 import mysql.connector
 from supabase import create_client, Client
 
@@ -80,9 +82,11 @@ def chunks(lst, n):
 
 
 def clean_cnpj(cnpj: Optional[str]) -> Optional[str]:
+    """CNPJ alfanumérico válido (Receita, jul/2026) → 14 caracteres em maiúsculas;
+    qualquer outro valor segue a regra antiga, só os dígitos (cnpj_utils)."""
     if not cnpj:
         return None
-    return "".join(c for c in str(cnpj) if c.isdigit())
+    return normalize_doc(cnpj)
 
 
 def safe_str(val) -> Optional[str]:

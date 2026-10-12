@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
 import { clientApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
 import { authFetch } from '../../lib/authFetch.js'
@@ -25,10 +26,10 @@ function safeStr(val, fallback = '—') {
 function filterActiveSanctions(list, cnpj) {
   if (!Array.isArray(list)) return []
   const today = new Date(); today.setHours(0,0,0,0)
-  const cnpjNums = (cnpj||'').replace(/\D/g,'')
+  const cnpjNums = normalizeCnpj(cnpj)   // numérico ou alfanumérico
   return list.filter(s => {
     if (cnpjNums) {
-      const rec = (s.sancionado?.codigoFormatado||s.pessoa?.cnpjFormatado||s.cnpjSancionado||s.cpfCnpj||'').replace(/\D/g,'')
+      const rec = normalizeCnpj(s.sancionado?.codigoFormatado||s.pessoa?.cnpjFormatado||s.cnpjSancionado||s.cpfCnpj||'')
       if (rec && rec !== cnpjNums) return false
     }
     const sit = (s.situacaoDoSancionado||'').toLowerCase().trim()

@@ -1,6 +1,8 @@
 // Conector: Base CNPJ (Receita via BrasilAPI) — handoff §7, rota A grátis.
 // É o PRIMEIRO conector do plano: além do próprio quadro, fornece
 // company/socios para os demais (OFAC/ONU/CEAF/mídia usam o QSA).
+const { normalizeCnpj } = require('../cnpj.js')
+
 module.exports = {
   slug: 'cnpj_base',
   route: 'free',
@@ -9,7 +11,7 @@ module.exports = {
   costBase: 0, costExtra: 0,
 
   async fetch({ cnpj }) {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${normalizeCnpj(cnpj)}`, {
       headers: { Accept: 'application/json', 'User-Agent': 'SIGEC-ELOS/1.0' },
     })
     if (res.status === 404) return { notFound: true }

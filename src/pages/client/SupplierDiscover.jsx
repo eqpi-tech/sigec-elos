@@ -7,6 +7,8 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { Button, Card, ScoreBar, StatusDot, Spinner } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, formatCnpj } from '../../lib/cnpj.js'
 
 // ── Formatadores ──────────────────────────────────────────────────────────────
 const ss = (v, fb = '—') => {
@@ -15,7 +17,7 @@ const ss = (v, fb = '—') => {
   if (typeof v === 'object') return v.descricao || v.nome || v.sigla || String(v)
   return String(v)
 }
-const fmtCNPJ  = (v = '') => { const n = String(v).replace(/\D/g,'').padStart(14,'0'); return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5,8)}/${n.slice(8,12)}-${n.slice(12)}` }
+const fmtCNPJ  = (v = '') => formatCnpj(normalizeCnpj(v).padStart(14,'0'))
 const fmtPhone = (v = '') => { const n = String(v).replace(/\D/g,''); return n.length===11?`(${n.slice(0,2)}) ${n.slice(2,7)}-${n.slice(7)}`:n.length===10?`(${n.slice(0,2)}) ${n.slice(2,6)}-${n.slice(6)}`:v||'—' }
 const fmtCEP   = (v = '') => { const n = String(v).replace(/\D/g,''); return n.length===8?`${n.slice(0,5)}-${n.slice(5)}`:v||'—' }
 const fmtDate  = (v = '') => { if (!v) return '—'; if (/^\d{4}-\d{2}-\d{2}/.test(v)) { const [y,m,d]=v.split('T')[0].split('-'); return `${d}/${m}/${y}` } return v }
@@ -91,7 +93,7 @@ export default function ClientSupplierDiscover() {
       const { data: { session } } = await supabase.auth.getSession()
       await invitationsApi.send({
         razao_social:    data.razao_social,
-        cnpj:            (data.cnpj || '').replace(/\D/g, ''),
+        cnpj:            normalizeCnpj(data.cnpj),
         email:           '',          // lookup server-side se fornecedor já tem conta
         supplier_id:     data.id,     // supplier já existe na base
         client_id:       user.clientId,
@@ -439,8 +441,8 @@ export default function ClientSupplierDiscover() {
             </div>
           </div>
           {allSancoes.map((item, i) => {
-            const cnpjSanc = item.sancionado?.codigoFormatado?.replace(/\D/g,'')
-            const isSelf   = cnpjStr && cnpjSanc === String(cnpjStr).replace(/\D/g,'')
+            const cnpjSanc = normalizeCnpj(item.sancionado?.codigoFormatado)
+            const isSelf   = cnpjStr && cnpjSanc === normalizeCnpj(cnpjStr)
             return (
               <div key={i} style={{ border:`1px solid ${isSelf?'#fca5a5':'#fed7aa'}`, borderRadius:12, overflow:'hidden', marginBottom:12 }}>
                 <div style={{ padding:'12px 14px', background:isSelf?'#fef2f2':'#fff7ed' }}>

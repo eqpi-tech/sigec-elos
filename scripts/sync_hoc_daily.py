@@ -101,7 +101,8 @@ def load_supplier_map_ordered(sb):
     """cnpj → supplier_id com paginação ORDENADA (o load_supplier_map do v2
     pagina sem order — omissões aqui virariam deleções indevidas no diff)."""
     rows = fetch_all(sb, "suppliers", "id,cnpj")
-    return {re.sub(r"\D", "", r["cnpj"] or ""): r["id"] for r in rows if r.get("cnpj")}
+    # clean_cnpj (não \D): o CNPJ alfanumérico mantém as letras (patch_129)
+    return {clean_cnpj(r["cnpj"]): r["id"] for r in rows if r.get("cnpj")}
 
 
 def max_wm(rows, *cols):

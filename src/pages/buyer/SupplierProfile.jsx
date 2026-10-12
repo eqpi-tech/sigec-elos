@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { marketplaceApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, formatCnpj } from '../../lib/cnpj.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { Button, Card, ScoreBar, StatusDot, Spinner } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
@@ -14,9 +15,10 @@ const ss = (v, fb = '—') => {
   if (typeof v === 'object') return v.descricao || v.nome || v.sigla || String(v)
   return String(v)
 }
+// CNPJ numérico (completa zeros à esquerda) ou alfanumérico
 const fmtCNPJ = (v = '') => {
-  const n = String(v).replace(/\D/g,'').padStart(14,'0')
-  return `${n.slice(0,2)}.${n.slice(2,5)}.${n.slice(5,8)}/${n.slice(8,12)}-${n.slice(12)}`
+  const n = normalizeCnpj(v)
+  return formatCnpj(/^\d*$/.test(n) ? n.padStart(14,'0') : n)
 }
 const fmtPhone = (v = '') => {
   const n = String(v).replace(/\D/g,'')
@@ -89,8 +91,8 @@ function Badge({ ok, label }) {
 // Sanção expansível
 function SancaoCard({ item, supplierCnpj }) {
   const [open, setOpen] = useState(false)
-  const cnpjSanc = item.sancionado?.codigoFormatado?.replace(/\D/g,'')
-  const isSelf   = supplierCnpj && cnpjSanc === String(supplierCnpj).replace(/\D/g,'')
+  const cnpjSanc = normalizeCnpj(item.sancionado?.codigoFormatado)
+  const isSelf   = supplierCnpj && cnpjSanc === normalizeCnpj(supplierCnpj)
   return (
     <div style={{border:`1px solid ${isSelf?'#fca5a5':'#fed7aa'}`,borderRadius:12,overflow:'hidden',marginBottom:12}}>
       <div style={{padding:'12px 14px',background:isSelf?'#fef2f2':'#fff7ed',cursor:'pointer',display:'flex',gap:12,alignItems:'flex-start'}}

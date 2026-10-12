@@ -9,6 +9,7 @@
 // NFE_DISCRIMINACAO e alíquotas (defaults = parâmetros fiscais do HOC)
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj } = require('./lib/cnpj.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -62,7 +63,8 @@ async function ibgePorCep(cep, municipio, uf) {
 }
 
 function mapearParaNfeIo(sup, inv, codigoIbge) {
-  const cleanCnpj = String(sup.cnpj || '').replace(/\D/g, '')
+  // CPF (11) ou CNPJ numérico/alfanumérico (14); CPF/CNPJ só dígitos seguem iguais
+  const cleanCnpj = normalizeCnpj(sup.cnpj)
   const addr = sup.address || {}
   const hocEnd = (sup.hoc_extra?.enderecos || [])[0] || {}
   const cep = String(addr.cep || hocEnd.cep || '').replace(/\D/g, '')
@@ -74,7 +76,8 @@ function mapearParaNfeIo(sup, inv, codigoIbge) {
     borrower: {
       type: cleanCnpj.length > 11 ? 'LegalEntity' : 'NaturalPerson',
       name: sup.razao_social,
-      federalTaxNumber: Number(cleanCnpj),
+      // numérico segue Number (como sempre); alfanumérico não cabe em Number → string
+      federalTaxNumber: /^\d+$/.test(cleanCnpj) ? Number(cleanCnpj) : cleanCnpj,
       municipalTaxNumber: isSaoPauloCapital ? (sup.inscricao_municipal || '') : '',
       email: sup.email_financeiro || sup.email || '',
       address: {

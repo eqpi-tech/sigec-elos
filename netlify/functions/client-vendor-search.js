@@ -4,6 +4,7 @@
 // GET ?search=texto&state=SP
 
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj, looksLikeCnpj } = require('./lib/cnpj.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -51,7 +52,11 @@ exports.handler = async (event) => {
 
     if (hasSearch) {
       const digits = cleanSearch.replace(/\D/g, '')
-      if (digits.length >= 8) {
+      if (/[A-Za-z]/.test(cleanSearch) && !/\s/.test(cleanSearch) && looksLikeCnpj(cleanSearch)) {
+        // CNPJ alfanumérico (ex.: 12.ABC.345/01DE-35) — ambíguo com nome curto
+        // sem espaço, então busca nos dois (cnpj normalizado OU razão social)
+        query = query.or(`cnpj.ilike.%${normalizeCnpj(cleanSearch)}%,razao_social.ilike."%${cleanSearch}%"`)
+      } else if (digits.length >= 8) {
         query = query.ilike('cnpj', `%${digits}%`)
       } else {
         query = query.ilike('razao_social', `%${cleanSearch}%`)

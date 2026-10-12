@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pg8000.native
 
+from cnpj_utils import cnpj_root, normalize_doc
+
 REPO = Path(__file__).resolve().parent.parent
 BATCH = 2000
 # gov.br devolve 403 para UA de robô/HEAD — usar UA de navegador (GET)
@@ -198,13 +200,13 @@ def ingest_trabalho_escravo(pg):
             i_nome = next(i for i, h in enumerate(header) if "empregador" in h or "nome" in h)
         except StopIteration:
             continue
-        doc = re.sub(r"\D", "", vals[i_doc] or "")
+        doc = normalize_doc(vals[i_doc])   # CPF/CNPJ; CNPJ alfanumérico mantém as letras
         nome = re.sub(r"^[\d./\- ]+", "", vals[i_nome] or "").strip()
         if not doc or not nome:
             continue
         i_uf = next((i for i, h in enumerate(header) if h in ("uf", "estado")), None)
         i_ano = next((i for i, h in enumerate(header) if "ano" in h), None)
-        rows.append([doc, doc[:8] if len(doc) == 14 else None, nome, None,
+        rows.append([doc, cnpj_root(doc), nome, None,
                      vals[i_uf] if i_uf is not None else None,
                      vals[i_ano] if i_ano is not None else None, None])
     cols = ["doc_digits", "cnpj_root", "nome", "nome_norm", "uf", "ano_acao", "meta"]
@@ -243,7 +245,7 @@ def ingest_leniencia(pg):
     rows = []
     for rec in rdr:
         low = {k.lower(): (v or "").strip() for k, v in rec.items() if k}
-        doc = re.sub(r"\D", "", next((v for k, v in low.items() if "cnpj" in k), ""))
+        doc = normalize_doc(next((v for k, v in low.items() if "cnpj" in k), ""))
         nome = (next((v for k, v in low.items() if "raz" in k and "cnpj" not in k), "")
                 or next((v for k, v in low.items() if "nome" in k and "cnpj" not in k), ""))
         if not doc and not nome:
@@ -252,7 +254,7 @@ def ingest_leniencia(pg):
             v = next((v for k, v in low.items() if frag in k), "")
             m2 = re.match(r"(\d{2})/(\d{2})/(\d{4})", v)
             return f"{m2.group(3)}-{m2.group(2)}-{m2.group(1)}" if m2 else None
-        rows.append([doc or None, doc[:8] if len(doc) == 14 else None, nome or None, None,
+        rows.append([doc or None, cnpj_root(doc), nome or None, None,
                      next((v for k, v in low.items() if "situa" in k), None),
                      dt("data de in"), dt("data de fim"), json.dumps(low, ensure_ascii=False)])
     cols = ["cnpj_digits", "cnpj_root", "nome", "nome_norm", "situacao", "data_inicio", "data_fim", "meta"]

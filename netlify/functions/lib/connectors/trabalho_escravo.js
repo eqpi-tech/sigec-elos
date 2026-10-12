@@ -2,6 +2,7 @@
 // ref_trabalho_escravo (scripts/bc_ingest_lists.py). Match determinístico
 // por documento: CNPJ exato = apontamento; mesma RAIZ (outra filial) idem.
 const { getAdminClient } = require('../bcdb.js')
+const { normalizeCnpj } = require('../cnpj.js')
 
 module.exports = {
   slug: 'trabalho_escravo',
@@ -10,8 +11,9 @@ module.exports = {
   inLight: true, inFull: true,
   costBase: 0, costExtra: 0,
 
-  async fetch({ cnpj }) {
+  async fetch({ cnpj: cnpjIn }) {
     const sb = getAdminClient()
+    const cnpj = normalizeCnpj(cnpjIn)   // raiz = 8 primeiros caracteres (pode ser alfanumérica)
     const root = cnpj.slice(0, 8)
     const [{ data: hits, error }, { data: ver }] = await Promise.all([
       sb.from('ref_trabalho_escravo').select('doc_digits, nome, uf, ano_acao, meta').eq('cnpj_root', root),

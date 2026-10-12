@@ -6,10 +6,12 @@
 import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase.js'
+import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 import { Tile } from '../../components/charts.jsx'
 
-const fmtCnpj = (c) => c ? c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : ''
+// CNPJ numérico ou alfanumérico: mascara quando completo, senão mostra como veio
+const fmtCnpj = (c) => c ? (isCnpjComplete(c) ? formatCnpj(c) : c) : ''
 
 export default function ClientCompliance() {
   const [rows, setRows] = useState(null)

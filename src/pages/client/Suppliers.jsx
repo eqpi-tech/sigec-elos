@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 import BuyerMarketplace from '../buyer/Marketplace.jsx'
 import PreRegistrationsReport from './PreRegistrations.jsx'
@@ -156,8 +157,10 @@ export default function ClientSuppliers() {
   const filteredMine = mySuppliers.filter(item => {
     const q    = mySearch.toLowerCase()
     const name = (item.supplier?.razao_social || item.inviteRazaoSocial || '').toLowerCase()
-    const cnpj = item.supplier?.cnpj || item.inviteCnpj || ''
-    if (q && !name.includes(q) && !cnpj.includes(q.replace(/\D/g,''))) return false
+    const cnpj = normalizeCnpj(item.supplier?.cnpj || item.inviteCnpj || '')
+    // CNPJ (numérico ou alfanumérico) comparado normalizado nos dois lados, sem minúsculas
+    const qCnpj = looksLikeCnpj(mySearch) ? normalizeCnpj(mySearch) : mySearch.replace(/\D/g,'')
+    if (q && !name.includes(q) && !(qCnpj && cnpj.includes(qCnpj))) return false
     if (fSit.length && !fSit.includes(situacaoDe(item))) return false
     if (fNivel.length && !fNivel.includes(item.flowId || 'sem')) return false
     if (fCust.length && !fCust.includes(item.subsidiado ? 'sim' : 'nao')) return false

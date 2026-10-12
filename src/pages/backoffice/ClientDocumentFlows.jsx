@@ -4,6 +4,8 @@
 // Os documentos exigidos de um fluxo derivam das suas categorias.
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isValidCnpj, formatCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, PageHeader } from '../../components/ui.jsx'
 
 const font   = { fontFamily: 'DM Sans,sans-serif' }
@@ -504,18 +506,6 @@ function MatrixTab({ clientId, categories, setError }) {
 // abertos por CNPJ (o fornecedor vê a árvore ao se cadastrar).
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
-function validCnpj(value) {
-  const d = String(value || '').replace(/\D/g, '')
-  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false
-  const calc = (len) => {
-    const w = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
-    const sum = w.reduce((a, p, i) => a + p * Number(d[i]), 0)
-    const r = sum % 11
-    return r < 2 ? 0 : 11 - r
-  }
-  return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
-}
-const fmtCnpj = (c) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
 
 function PostFormModal({ post, categories, onSave, onClose, busy }) {
   const [f, setF] = useState({
@@ -525,8 +515,8 @@ function PostFormModal({ post, categories, onSave, onClose, busy }) {
     funcao_label: post?.funcao_label || '',
   })
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
-  const cnpjDigits = f.supplier_cnpj.replace(/\D/g, '')
-  const cnpjOk = validCnpj(cnpjDigits)
+  const cnpjDigits = normalizeCnpj(f.supplier_cnpj)
+  const cnpjOk = isValidCnpj(cnpjDigits)
   const ok = cnpjOk && f.category_id && f.site_city.trim() && f.site_uf && Number(f.qty_people) > 0 && Number(f.qty_posts) > 0
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(15,17,60,.45)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
@@ -734,7 +724,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
   const filteredPosts = useMemo(() => {
     const q = filter.trim().toLowerCase()
     if (!q) return posts
-    return posts.filter(p => p.supplier_cnpj.includes(q.replace(/\D/g, '') || '\u0000')
+    return posts.filter(p => p.supplier_cnpj.includes(normalizeCnpj(q) || '\u0000')
       || (catMap[p.category_id]?.name || '').toLowerCase().includes(q)
       || p.site_city.toLowerCase().includes(q))
   }, [posts, filter, catMap])
@@ -793,7 +783,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
                 const okPeople = cadastradas >= p.qty_people
                 return (
                   <div key={p.id} style={{ display:'grid', gridTemplateColumns:'150px 1fr 150px 60px 110px 110px 70px', gap:8, alignItems:'center', padding:'9px 10px', borderRadius:8, border:'1px solid #eef0f6', marginBottom:4, opacity: p.active ? 1 : .5 }}>
-                    <span style={{ ...font, fontSize:12, color:'#1a1c5e', fontWeight:600 }}>{fmtCnpj(p.supplier_cnpj)}</span>
+                    <span style={{ ...font, fontSize:12, color:'#1a1c5e', fontWeight:600 }}>{formatCnpj(p.supplier_cnpj)}</span>
                     <div>
                       <div style={{ ...font, fontSize:12.5, color:'#1a1c5e' }}>{catMap[p.category_id]?.name || `#${p.category_id}`}</div>
                       {p.funcao_label && <div style={{ ...font, fontSize:11, color:'#9B9B9B' }}>{p.funcao_label}</div>}

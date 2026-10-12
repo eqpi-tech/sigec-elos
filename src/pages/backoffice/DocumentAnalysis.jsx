@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { adminApi, documentApi, routeBApi, ROUTE_A_ENABLED, ROUTE_B_ENABLED } from '../../services/api.js'
 import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { supabase } from '../../lib/supabase.js'
+import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 import { getHolidaySet, adjustToBusinessDay } from '../../lib/businessDays.js'
 import { Card, Spinner, Button, StatusDot, SectionTitle, PageHeader } from '../../components/ui.jsx'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
@@ -691,10 +692,8 @@ export default function DocumentAnalysis() {
       } catch(e) { alert('Erro ao exportar: ' + e.message); return }
     }
     // CNPJ com máscara — evita que o Excel converta para notação científica
-    const fmtCnpj = (c) => {
-      const d = String(c || '').replace(/\D/g, '')
-      return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '')
-    }
+    // (numérico ou alfanumérico)
+    const fmtCnpj = (c) => isCnpjComplete(c) ? formatCnpj(c) : (c || '')
     const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR') : ''
     // Data limite de análise = envio + SLA do tipo (patch_031, fallback padrão),
     // rolada para o próximo dia útil (feriados/fins de semana)

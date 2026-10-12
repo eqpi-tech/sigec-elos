@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED } from '../../services/api.js'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
+import { normalizeCnpj } from '../../lib/cnpj.js'
 import CnaeValidationModal from '../../components/CnaeValidationModal.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import RouteABadge from '../../components/RouteABadge.jsx'
@@ -48,7 +49,7 @@ function filterActiveSanctions(list, supplierCnpj) {
   if (!Array.isArray(list)) return []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const cnpjNums = (supplierCnpj || '').replace(/\D/g, '')
+  const cnpjNums = normalizeCnpj(supplierCnpj)   // numérico ou alfanumérico
 
   return list.filter(s => {
     // ── Filtro 1: CNPJ exato ──────────────────────────────────────────────
@@ -56,13 +57,13 @@ function filterActiveSanctions(list, supplierCnpj) {
     // (mesmo grupo econômico). Descarta qualquer registro que não seja do CNPJ exato.
     if (cnpjNums) {
       // O CNPJ do sancionado pode estar aninhado em diferentes campos
-      const cnpjRecord = (
+      const cnpjRecord = normalizeCnpj(
         s.sancionado?.codigoFormatado ||
         s.pessoa?.cnpjFormatado       ||
         s.cnpjSancionado              ||
         s.cpfCnpj                     ||
         ''
-      ).replace(/\D/g, '')
+      )
       if (cnpjRecord && cnpjRecord !== cnpjNums) return false
     }
 

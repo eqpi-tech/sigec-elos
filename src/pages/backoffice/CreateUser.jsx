@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button, Card, PageHeader } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, isCnpjComplete, formatCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 
 const ROLES = [
   { value:'BUYER',    label:'Comprador',  icon:'🔍', desc:'Acesso ao marketplace — requer análise prévia do time comercial' },
@@ -19,8 +21,10 @@ function SupplierSearch({ value, onChange, inp, lbl }) {
     if (q.trim().length < 3) { setOptions([]); return }
     const t = setTimeout(async () => {
       const digits = q.replace(/\D/g, '')
+      // CNPJ alfanumérico: com letras, busca pelos caracteres normalizados
+      const termo = looksLikeCnpj(q) ? normalizeCnpj(q) : digits
       let query = supabase.from('suppliers').select('id, razao_social, cnpj').limit(15)
-      if (digits.length >= 4) query = query.ilike('cnpj', `%${digits}%`)
+      if (digits.length >= 4 || looksLikeCnpj(q)) query = query.ilike('cnpj', `%${termo}%`)
       else query = query.ilike('razao_social', `%${q.trim()}%`)
       const { data } = await query
       setOptions(data || [])
@@ -60,12 +64,6 @@ function SupplierSearch({ value, onChange, inp, lbl }) {
   )
 }
 
-function formatCnpj(v) {
-  const n = v.replace(/\D/g,'').slice(0,14)
-  return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, (_,a,b,c,d,e)=>
-    e ? `${a}.${b}.${c}/${d}-${e}` : d ? `${a}.${b}.${c}/${d}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a)
-}
-
 export default function BackofficeCreateUser() {
   const [name, setName]       = useState('')
   const [email, setEmail]     = useState('')
@@ -99,7 +97,7 @@ export default function BackofficeCreateUser() {
       const res = await fetch('/.netlify/functions/admin-create-user', {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${token}` },
-        body: JSON.stringify({ email, role, name, organization: org, cnpj: cnpj.replace(/\D/g,''), accessProfile, supplierId: supplierId || undefined, moduleProfileId: moduleProfileId || undefined }),
+        body: JSON.stringify({ email, role, name, organization: org, cnpj: normalizeCnpj(cnpj), accessProfile, supplierId: supplierId || undefined, moduleProfileId: moduleProfileId || undefined }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -218,7 +216,7 @@ export default function BackofficeCreateUser() {
           )}
 
           <Button type="submit" variant="primary" full size="lg" style={{ borderRadius:12 }}
-            disabled={loading || (role === 'CLIENT' && cnpj.replace(/\D/g,'').length !== 14) || (role === 'SUPPLIER' && !supplierId)}>
+            disabled={loading || (role === 'CLIENT' && !isCnpjComplete(cnpj)) || (role === 'SUPPLIER' && !supplierId)}>
             {loading ? '⏳ Criando...' : `✅ Criar ${ROLES.find(r=>r.value===role)?.label}`}
           </Button>
         </form>

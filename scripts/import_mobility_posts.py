@@ -37,6 +37,8 @@ from urllib.parse import unquote
 import pg8000.native
 import openpyxl
 
+from cnpj_utils import normalize_doc
+
 APPLY = '--apply' in sys.argv
 DB_ENV = sys.argv[sys.argv.index('--env') + 1] if '--env' in sys.argv else 'SUPABASE_DB_URL'
 
@@ -101,11 +103,13 @@ def clean_city(v, uf):
     return c.title()
 
 def valid_cnpj(d):
-    if len(d) != 14 or d == d[0] * 14:
+    # CNPJ numérico ou ALFANUMÉRICO (Receita, jul/2026): 12 [0-9A-Z] + 2 DV;
+    # valor de cada caractere = código ASCII − 48 (igual a int() nos dígitos)
+    if not re.fullmatch(r'[0-9A-Z]{12}[0-9]{2}', d) or d == d[0] * 14:
         return False
     def dv(n):
         w = [5,4,3,2,9,8,7,6,5,4,3,2] if n == 12 else [6,5,4,3,2,9,8,7,6,5,4,3,2]
-        r = sum(p * int(d[i]) for i, p in enumerate(w)) % 11
+        r = sum(p * (ord(d[i]) - 48) for i, p in enumerate(w)) % 11
         return 0 if r < 2 else 11 - r
     return dv(12) == int(d[12]) and dv(13) == int(d[13])
 
@@ -123,7 +127,9 @@ for path, kind in [(VIGILANCIA, 'vigilancia'), (LIMPEZA, 'limpeza')]:
         sys.exit(f'planilha não encontrada: {path}')
     for i, row in enumerate(read_sheet(path), start=1):
         forn = str(row.get('FORNECEDOR') or row.get('FORNECEDOR ATUAL') or '').strip()
-        cnpj = re.sub(r'\D', '', str(row.get('CNPJ') or '')).zfill(14)
+        cnpj = normalize_doc(row.get('CNPJ'))
+        if not re.search(r'[A-Z]', cnpj):   # zfill só faz sentido no numérico
+            cnpj = cnpj.zfill(14)
         funcao = str(row.get('FUNCAO') or '').strip()
         uf = norm(row.get('ESTADO') or row.get('ESTADO '))[:2]
         cidade = clean_city(row.get('LOCALIDADE'), uf)

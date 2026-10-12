@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { invitationsApi } from '../../services/api.js'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
 
 const EMPTY_INVITE = { razao_social:'', cnpj:'', email:'', telefone:'', contato:'', tipo_fornecedor:'servico', subsidiado:false, escopo:'', flow_id:'' }
@@ -49,7 +51,9 @@ export default function BackofficeClientSettings() {
 
   const filtered = clients.filter(c => {
     const q = search.toLowerCase()
-    return !q || c.razao_social?.toLowerCase().includes(q) || c.cnpj?.includes(q)
+    // CNPJ comparado normalizado (alfanumérico fica em maiúsculas no banco)
+    const qc = normalizeCnpj(search)
+    return !q || c.razao_social?.toLowerCase().includes(q) || (qc && normalizeCnpj(c.cnpj).includes(qc))
   })
 
   async function save() {
@@ -109,7 +113,7 @@ export default function BackofficeClientSettings() {
       const { data: { session } } = await supabase.auth.getSession()
       await invitationsApi.send({
         razao_social:    inviteForm.razao_social,
-        cnpj:            inviteForm.cnpj.replace(/\D/g,''),
+        cnpj:            normalizeCnpj(inviteForm.cnpj),
         email:           inviteForm.email,
         telefone:        inviteForm.telefone,
         contato:         inviteForm.contato,

@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js')
+const { normalizeCnpj, looksLikeCnpj } = require('./lib/cnpj.js')
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -108,7 +109,11 @@ exports.handler = async (event) => {
       if (capitalMax != null) query = query.lte('capital_social', capitalMax)
       if (q) {
         const qNums = q.replace(/\D/g, '')
-        if (qNums.length >= 8) query = query.ilike('cnpj', `%${qNums}%`)
+        // CNPJ alfanumérico (ex.: 12.ABC.345/01DE-35) — ambíguo com nome curto
+        // sem espaço, então busca nos dois (cnpj normalizado OU razão social)
+        if (/[A-Za-z]/.test(q) && !/\s/.test(q.trim()) && looksLikeCnpj(q))
+          query = query.or(`cnpj.ilike.%${normalizeCnpj(q)}%,razao_social.ilike."%${q.trim()}%"`)
+        else if (qNums.length >= 8) query = query.ilike('cnpj', `%${qNums}%`)
         else                   query = query.ilike('razao_social', `%${q}%`)
       }
       return query

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js'
 import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 import { planLabel } from '../lib/planLabels.js'
 import { authFetch } from '../lib/authFetch.js'
+import { normalizeCnpj, isCnpjComplete } from '../lib/cnpj.js'
 import { clientSealStatus } from '../lib/clientSituacao.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -22,8 +23,9 @@ export const cnpjApi = {
   // ref/token: portal ou convite do cliente — o servidor diz se o selo ativo
   // vale para ESTE cliente (dbInfo.hasActiveSealForContext)
   lookup: async (cnpj, { ref, token } = {}) => {
-    const clean = cnpj.replace(/\D/g, '')
-    if (clean.length !== 14) throw new Error('CNPJ deve ter 14 dígitos')
+    // CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+    const clean = normalizeCnpj(cnpj)
+    if (!isCnpjComplete(clean)) throw new Error('CNPJ deve ter 14 caracteres')
 
     const ctx = ref ? `&ref=${encodeURIComponent(ref)}` : token ? `&token=${encodeURIComponent(token)}` : ''
     const res = await fetch(`/.netlify/functions/cnpj-lookup?cnpj=${clean}${ctx}`)

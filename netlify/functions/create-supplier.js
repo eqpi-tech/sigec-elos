@@ -6,6 +6,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
 const { env, frontendUrl } = require('./lib/runtime_env.js')
+const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -54,7 +55,8 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'cnpj e razao_social são obrigatórios' }) }
     }
 
-    const cleanCnpj = cnpj.replace(/\D/g, '')
+    // CNPJ numérico ou alfanumérico: 14 caracteres em maiúsculas, sem pontuação
+    const cleanCnpj = normalizeCnpj(cnpj)
 
     // 1. Verifica se CNPJ já existe — upsert em vez de insert cego
     const { data: existingSupplier } = await supabaseAdmin
@@ -218,7 +220,7 @@ exports.handler = async (event) => {
         const { error: cnpjInsertErr } = await supabaseAdmin
           .from('cnpj_consultations')
           .insert({
-            cnpj:           body.cnpj.replace(/\D/g, ''),
+            cnpj:           normalizeCnpj(body.cnpj),
             supplier_id:    supplier.id,
             cnpj_data:      body.cnpj_full_data    || null,
             sanctions_data: body.sanctions_result  || null,
@@ -230,7 +232,7 @@ exports.handler = async (event) => {
           if (cnpjInsertErr.code === 'PGRST204' || cnpjInsertErr.message?.includes('column')) {
             console.warn('cnpj_consultations: tentando sem campo sanctions_history...')
             await supabaseAdmin.from('cnpj_consultations').insert({
-              cnpj:        body.cnpj.replace(/\D/g, ''),
+              cnpj:        normalizeCnpj(body.cnpj),
               supplier_id: supplier.id,
               cnpj_data:   body.cnpj_full_data || null,
               has_sanctions: hasSanctions,
@@ -325,7 +327,8 @@ exports.handler = async (event) => {
               tipo: (q.identificador_de_socio === 1 || /jur/i.test(q.qualificacao_socio || '')) ? 'pj' : 'pf',
               nome: q.nome_socio,
               cargo: q.qualificacao_socio || 'Sócio',
-              cpf_cnpj: String(q.cnpj_cpf_do_socio || '').replace(/\D/g, '') || null,
+              // sócio PJ pode ter CNPJ alfanumérico; CPF (mascarado) segue só dígitos
+              cpf_cnpj: (isCnpjComplete(q.cnpj_cpf_do_socio) ? normalizeCnpj(q.cnpj_cpf_do_socio) : String(q.cnpj_cpf_do_socio || '').replace(/\D/g, '')) || null,
             }))
           if (rows.length) await supabaseAdmin.from('supplier_partners').insert(rows)
         }
@@ -410,7 +413,7 @@ exports.handler = async (event) => {
 
     // 5. Vincula convite ao fornecedor recém-criado (pelo token do URL, e-mail ou CNPJ)
     try {
-      const cleanCnpj = cnpj.replace(/\D/g, '')
+      const cleanCnpj = normalizeCnpj(cnpj)
 
       if (invitation_token) {
         // Prioridade 1: token único do link de convite
@@ -514,7 +517,7 @@ exports.handler = async (event) => {
           await supabaseAdmin.from('invitations').insert({
             client_id:        lp.client_id,
             supplier_id:      supplier.id,
-            supplier_cnpj:    cnpj.replace(/\D/g, ''),
+            supplier_cnpj:    normalizeCnpj(cnpj),
             status:           'REGISTERED',
             invited_by_role:  'CLIENT',
             flow_id:          defFlow?.id || null,

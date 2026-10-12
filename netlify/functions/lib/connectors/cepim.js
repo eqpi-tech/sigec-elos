@@ -1,6 +1,7 @@
 // Conector: CEPIM — Entidades Privadas sem fins lucrativos Impedidas
 // (Portal da Transparência). Parâmetro correto: cnpjSancionado (swagger v3).
 const { consultaTransparencia } = require('../transparencia.js')
+const { normalizeCnpj } = require('../cnpj.js')
 
 module.exports = {
   slug: 'cepim',
@@ -9,11 +10,12 @@ module.exports = {
   inLight: true, inFull: true,
   costBase: 0, costExtra: 0,
 
-  async fetch({ cnpj }) {
+  async fetch({ cnpj: cnpjIn }) {
+    const cnpj = normalizeCnpj(cnpjIn)   // numérico ou alfanumérico
     const registros = await consultaTransparencia('cepim', { cnpjSancionado: cnpj })
     // valida o CNPJ no shape próprio do CEPIM (pessoaJuridica.cnpjFormatado)
     const exatos = (registros || []).filter((r) => {
-      const doc = (r.pessoaJuridica?.cnpjFormatado || '').replace(/\D/g, '')
+      const doc = normalizeCnpj(r.pessoaJuridica?.cnpjFormatado || '')
       return !doc || doc === cnpj
     })
     return { registros: exatos }

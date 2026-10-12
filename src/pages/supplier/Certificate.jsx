@@ -7,13 +7,12 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
+import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
 import { Spinner } from '../../components/ui.jsx'
 import { siteUrl } from '../../lib/siteUrl.js'
 
-const fmtCnpj = (c) => {
-  const d = String(c || '').replace(/\D/g, '')
-  return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : (c || '')
-}
+// CNPJ numérico ou alfanumérico: mascara quando completo, senão mostra como veio
+const fmtCnpj = (c) => isCnpjComplete(c) ? formatCnpj(c) : (c || '')
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : null
 
 const MAX_CATEGORIES = 24

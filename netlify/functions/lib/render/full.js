@@ -6,6 +6,7 @@
 // PDF pelo bc_render (pdf-lib) — cada seção referencia "evidência anexa".
 
 const { montserrat } = require('./fonts.js')
+const { isCnpjComplete, formatCnpj } = require('../cnpj.js')
 
 const NAVY = '#2E3191'
 const ORANGE = '#F57D2E'
@@ -54,7 +55,7 @@ const NOME_FONTE = {
 }
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const fmtCnpj = (d) => d?.length === 14 ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}` : d
+const fmtCnpj = (d) => isCnpjComplete(d) ? formatCnpj(d) : d   // numérico ou alfanumérico
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—'
 
 // gauge SVG semicircular do Score EQPI — o preenchimento usa o MESMO path

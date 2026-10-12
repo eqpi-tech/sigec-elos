@@ -7,17 +7,13 @@ import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 import { can } from '../../lib/permissions.js'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
+// CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
+import { normalizeCnpj, formatCnpj } from '../../lib/cnpj.js'
 
 const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado', EXPIRED:'Expirado' }
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B', EXPIRED:'#64748b' }
 // convite com hoc_id = histórico espelhado do HOC (patch_116): o ELOS não
 // reenvia nem cancela — os lembretes dele são do HOC
-
-function formatCnpj(v) {
-  const n = v.replace(/\D/g,'').slice(0,14)
-  return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, (_,a,b,c,d,e)=>
-    e ? `${a}.${b}.${c}/${d}-${e}` : d ? `${a}.${b}.${c}/${d}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a)
-}
 
 const EMPTY_FORM = {
   objetivo:'', razao_social:'', cnpj:'', email:'', telefone:'', contato:'',
@@ -112,7 +108,7 @@ export default function ClientInvitations() {
   const filtered = invites.filter(inv => {
     const q = search.toLowerCase().trim()
     if (q && !(inv.supplier_razao_social?.toLowerCase().includes(q)
-      || (q.replace(/\D/g, '') && inv.supplier_cnpj?.includes(q.replace(/\D/g, '')))
+      || (normalizeCnpj(q) && normalizeCnpj(inv.supplier_cnpj).includes(normalizeCnpj(q)))
       || inv.supplier_email?.toLowerCase().includes(q))) return false
     if (fStatus.length && !fStatus.includes(inv.status)) return false
     if (fNivel.length && !fNivel.includes(inv.flow_id || 'sem')) return false
@@ -159,7 +155,7 @@ export default function ClientInvitations() {
       await invitationsApi.send({
         objetivo:        form.objetivo || 'homologacao',
         razao_social:    form.razao_social,
-        cnpj:            form.cnpj.replace(/\D/g,''),
+        cnpj:            normalizeCnpj(form.cnpj),
         email:           form.email,
         telefone:        form.telefone,
         contato:         form.contato,
