@@ -209,6 +209,8 @@ export default function SupplierOnboarding() {
       if (db.isSupplier) {
         setExistingSupplier({ id: db.supplierId, razao_social: db.razaoSocial,
           hasOwner: !!db.hasOwner, ownerEmailMasked: db.ownerEmailMasked || null,
+          fromHoc: !!db.fromHoc, migrationLocked: !!db.migrationLocked,
+          migrationEmailsMasked: db.migrationEmailsMasked || [],
           activeElsewhere: !!db.hasActiveSeal && db.hasActiveSealForContext === false })
         setLoggedAs(null)
         // atalho "já homologado" só vale para o selo DESTE cliente (portal/
@@ -255,6 +257,19 @@ export default function SupplierOnboarding() {
     }
     if (password !== password2) { setError('As senhas não coincidem'); return }
     if (password.length < 8)    { setError('Senha deve ter pelo menos 8 caracteres'); return }
+    // empresa migrada do HOC sem login: o primeiro acesso é só dos e-mails do
+    // HOC — confere ANTES de criar a conta (create-supplier também recusa)
+    if (existingSupplier?.migrationLocked) {
+      setLoading(true); setError('')
+      try {
+        const r = await fetch('/.netlify/functions/hoc-claim-check', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cnpj: normalizeCnpj(cnpj), email }),
+        }).then(x => x.json())
+        if (r.allowed === false) { setError(r.message); return }
+      } catch (err) { setError(err.message); return }
+      finally { setLoading(false) }
+    }
     setStep(3); setError('')
   }
 
@@ -283,7 +298,7 @@ export default function SupplierOnboarding() {
           const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
           if (loginErr) throw new Error('E-mail já cadastrado. Verifique a senha ou use outro e-mail.')
           authUser = loginData.user
-        } catch { throw new Error('E-mail já cadastrado com outra senha. Use o mesmo e-mail e senha da conta existente, ou use um e-mail diferente.') }
+        } catch { throw new Error('E-mail já cadastrado com outra senha. Use o mesmo e-mail e senha da conta existente, ou use um e-mail diferente. Usava o HOC e ainda não criou a senha no ELOS? Use "Esqueci minha senha" na tela de login.') }
       } else { throw signupErr }
     }
     let sessionToken = null
@@ -473,6 +488,11 @@ export default function SupplierOnboarding() {
                       ⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.
                     </div>
                   ))}
+                  {existingSupplier?.migrationLocked && (
+                    <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'10px 14px', marginTop:10, fontSize:12.5, color:'#374151', fontFamily:'DM Sans,sans-serif' }}>
+                      🔐 Esta empresa veio do HOC. O acesso ao ELOS é liberado para os e-mails cadastrados lá{existingSupplier.migrationEmailsMasked.length ? <> (<strong>{existingSupplier.migrationEmailsMasked.join(', ')}</strong>)</> : ''} — use um deles na etapa <strong>Conta</strong>. Outro e-mail? Fale com o suporte: <strong>suporte@eqpitech.com.br</strong>.
+                    </div>
+                  )}
                   {existingSupplier?.hasOwner && (
                     <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'10px 14px', marginTop:10, fontSize:12.5, color:'#374151', fontFamily:'DM Sans,sans-serif' }}>
                       🔐 Esta empresa já tem acesso ao ELOS{existingSupplier.ownerEmailMasked ? <> (<strong>{existingSupplier.ownerEmailMasked}</strong>)</> : ''}. Na etapa <strong>Conta</strong>, entre com esse login — não é preciso criar outro.
@@ -534,7 +554,7 @@ export default function SupplierOnboarding() {
                     <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 16px', marginBottom:16, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif', lineHeight:1.55 }}>
                       {loggedAs
                         ? <>✅ Você já está conectado como <strong>{loggedAs}</strong>, com acesso a esta empresa.</>
-                        : <>🔐 <strong>{existingSupplier?.razao_social || 'Esta empresa'}</strong> já tem cadastro no ELOS{existingSupplier?.ownerEmailMasked ? <> — acesso de <strong>{existingSupplier.ownerEmailMasked}</strong></> : ''}. Entre com esse login (ou com o seu, se você já faz parte da equipe). Se não tem acesso, peça ao responsável para incluir você em <strong>Equipe</strong>.</>}
+                        : <>🔐 <strong>{existingSupplier?.razao_social || 'Esta empresa'}</strong> já tem cadastro no ELOS{existingSupplier?.ownerEmailMasked ? <> — acesso de <strong>{existingSupplier.ownerEmailMasked}</strong></> : ''}. Entre com esse login (ou com o seu, se você já faz parte da equipe). Se não tem acesso, peça ao responsável para incluir você em <strong>Equipe</strong>.{existingSupplier?.fromHoc && <> Usava o HOC e ainda não criou a senha no ELOS? Clique em <strong>Esqueci minha senha</strong> com o seu e-mail do HOC.</>}</>}
                     </div>
                   )}
                   {isExistingActive && !ownerMode && (

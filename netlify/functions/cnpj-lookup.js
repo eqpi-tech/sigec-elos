@@ -3,6 +3,7 @@
 // Chamado via: /.netlify/functions/cnpj-lookup?cnpj=00000000000000
 
 const { createClient } = require('@supabase/supabase-js')
+const { claimRule, mask } = require('./lib/hoc_claim.js')
 const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
 /**
@@ -177,7 +178,7 @@ exports.handler = async (event) => {
       )
       const [clientRes, supplierRes] = await Promise.allSettled([
         supabaseAdmin.from('clients').select('id').eq('cnpj', cnpj).maybeSingle(),
-        supabaseAdmin.from('suppliers').select('id, status, razao_social, user_id').eq('cnpj', cnpj).maybeSingle(),
+        supabaseAdmin.from('suppliers').select('id, status, razao_social, user_id, hoc_id').eq('cnpj', cnpj).maybeSingle(),
       ])
       if (clientRes.value?.data) {
         dbInfo.isClient = true
@@ -229,6 +230,14 @@ exports.handler = async (event) => {
             const [loc, dom] = em.split('@')
             dbInfo.ownerEmailMasked = dom ? `${loc.slice(0, 2)}***@${dom}` : null
           } catch { dbInfo.ownerEmailMasked = null }
+        }
+        // Migrado do HOC sem login: primeiro acesso só com os e-mails do HOC
+        // (lib/hoc_claim.js — create-supplier recusa os demais)
+        dbInfo.fromHoc = !!supplierRes.value.data.hoc_id
+        if (!ownerId) {
+          const rule = await claimRule(supabaseAdmin, supplierRes.value.data)
+          dbInfo.migrationLocked = rule.locked
+          if (rule.locked) dbInfo.migrationEmailsMasked = rule.emails.slice(0, 3).map(mask)
         }
 
         // REGRA: a consulta ATUALIZA o banco com os dados frescos da Receita —
