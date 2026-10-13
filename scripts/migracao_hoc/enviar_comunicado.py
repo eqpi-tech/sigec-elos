@@ -144,7 +144,7 @@ def onda2(c, k):
 passa para o <strong>SIGEC-ELOS</strong> em <strong>{k['inicio']}</strong>. O seu acesso já está pronto, com o seu e-mail
 <strong>{c['email']}</strong> e a sua empresa já vinculada.</p>
 {bloco_senha(c, k)}
-<p>Depois de criar a senha, você já pode entrar e conhecer a plataforma: seus processos, seus documentos e o histórico estão lá.</p>
+<p>{'Você já pode' if c.get('tem_senha') else 'Depois de criar a senha, você já pode'} entrar e conhecer a plataforma: seus processos, seus documentos e o histórico estão lá.</p>
 <p><strong>Importante:</strong> até {k['hoc_ate']}, continue enviando os documentos pelo SIGEC-HOC, como sempre.</p>
 {outros_docs(k) if c.get('outros') else ''}{assinatura()}"""
     else:
@@ -153,7 +153,7 @@ passa para o <strong>SIGEC-ELOS</strong> em <strong>{k['inicio']}</strong>. O se
 <p>A gestão dos fornecedores da <strong>{lista_clientes(c['clientes'])}</strong> passa para o <strong>SIGEC-ELOS</strong> em
 <strong>{k['inicio']}</strong>. O seu acesso já está pronto, com o e-mail <strong>{c['email']}</strong> e o mesmo perfil que você tem hoje no SIGEC-HOC.</p>
 {bloco_senha(c, k)}
-<p>Depois de criar a senha, você já pode entrar e conhecer: seus fornecedores, os processos e os documentos estão lá. Até {k['hoc_ate']},
+<p>{'Você já pode' if c.get('tem_senha') else 'Depois de criar a senha, você já pode'} entrar e conhecer: seus fornecedores, os processos e os documentos estão lá. Até {k['hoc_ate']},
 o SIGEC-HOC continua sendo o sistema oficial.</p>{assinatura()}"""
     return assunto, moldura('Comunicado 2 de 4 · Seu acesso está pronto', corpo)
 
