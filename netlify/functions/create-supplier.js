@@ -7,6 +7,7 @@ const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
 const { env, frontendUrl } = require('./lib/runtime_env.js')
 const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
+const { claimRule, canClaim, msgRefused } = require('./lib/hoc_claim.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -79,6 +80,15 @@ exports.handler = async (event) => {
         return { statusCode: 403, headers, body: JSON.stringify({
           error: 'Esta empresa já tem cadastro no ELOS. Entre com o login que já existe ou peça ao responsável para incluir você na equipe (menu Equipe).',
         }) }
+      }
+      // 13/10 — migrado do HOC SEM login: na lista da migração, só os e-mails
+      // ativos no HOC para esta empresa fazem o primeiro acesso (lib/hoc_claim.js)
+      if (!temDono) {
+        const rule = await claimRule(supabaseAdmin, existingSupplier)
+        if (!canClaim(rule, user.email)) {
+          console.warn(`[create-supplier] reivindicação recusada: user ${user.id} fora da lista HOC do fornecedor ${existingSupplier.id}`)
+          return { statusCode: 403, headers, body: JSON.stringify({ error: msgRefused(rule), code: 'HOC_CLAIM_LOCKED' }) }
+        }
       }
 
       // Fornecedor já existe (migrado do HOC ou cadastro anterior)
