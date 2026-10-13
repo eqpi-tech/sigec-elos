@@ -18,7 +18,7 @@ const plano = (pl) => execSync(`PGGSSENCMODE=disable /usr/local/opt/libpq/bin/ps
   await p.context().close()
   plano('pro')
   p = await entrar(b, 'beatriz.rocha@comercialexemplo.com.br')
-  await ir(p, `/comprador/fornecedor/${CONSTRUTORA}`); await clicar(p, '👥 Sócios'); await foto(p, M, '06-ficha-pro-contatos')
+  await ir(p, `/comprador/fornecedor/${CONSTRUTORA}`); await foto(p, M, '06-ficha-pro-contatos', { full: true })
   await ir(p, '/comprador/cotacoes'); await clicar(p, 'Manutenção preventiva'); await foto(p, M, '07-cotacoes', { full: true })
   await ir(p, '/comprador'); await clicar(p, '🔍 Buscar Fornecedores', 6000); await borrar(p, 'Ver Perfil'); await foto(p, M, '08-marketplace-pro')
   await b.close()

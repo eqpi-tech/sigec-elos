@@ -83,4 +83,10 @@ async function escolher(p, texto) {
   await p.waitForTimeout(3000); return ok
 }
 async function clicar(p, texto, espera = 2500) { await p.getByText(texto, { exact: false }).first().click().catch(e => console.warn('  [clique]', texto, e.message.slice(0, 60))); await p.waitForTimeout(espera) }
-module.exports = { BASE, browser, contexto, entrar, ir, foto, borrar, borrarLinhas, escolher, clicar }
+// campo de busca com lista (combobox): digita e clica na opção
+async function buscarEscolher(p, placeholder, texto, opcao = texto) {
+  await p.locator(`input[placeholder*="${placeholder}"]`).first().fill(texto).catch(() => {})
+  await p.waitForTimeout(1200); await p.getByText(opcao, { exact: false }).last().click().catch(() => {})
+  await p.waitForTimeout(3500)
+}
+module.exports = { BASE, browser, contexto, entrar, ir, foto, borrar, borrarLinhas, escolher, clicar, buscarEscolher }

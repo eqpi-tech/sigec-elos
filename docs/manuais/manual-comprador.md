@@ -1,115 +1,135 @@
 # Manual do Comprador — SIGEC-ELOS
 
-> Guia completo do perfil **Comprador**: como buscar fornecedores verificados, consultar fichas, convidar empresas e solicitar cotações.
+**Para quem é este manual:** compradores que usam o marketplace do SIGEC-ELOS para encontrar fornecedores com documentação verificada, convidá-los e pedir cotações.
+
+> As telas deste manual mostram empresas e pessoas **fictícias** (Comercial Exemplo, Construtora Modelo, etc.).
 
 ---
 
-## Índice "Como fazer"
+## Sumário
 
-| Quero... | Onde está |
-|---|---|
-| Buscar fornecedores por categoria/região/selo | [Marketplace](#1-marketplace) |
-| Consultar a ficha completa de um fornecedor | [Ficha do Fornecedor](#2-ficha-do-fornecedor) |
-| Ver contatos completos (e-mail, telefone) | [Contatos e assinatura](#3-contatos-e-assinatura) |
-| Convidar uma empresa que não está na plataforma | [Convites](#4-convites) |
-| Pedir cotação a fornecedores | [Cotações (RFQ)](#5-cotações-rfq) |
-| Assinar ou trocar de plano | [Meu Plano](#6-meu-plano) |
+1. [Criar sua conta (grátis)](#1-criar-sua-conta-grátis)
+2. [Marketplace](#2-marketplace)
+3. [Ficha do fornecedor](#3-ficha-do-fornecedor)
+4. [Convidar um fornecedor](#4-convidar-um-fornecedor)
+5. [Convites](#5-convites)
+6. [Planos: Free e Pro](#6-planos-free-e-pro)
+7. [Cotações (Pro)](#7-cotações-pro)
+8. [Dúvidas frequentes](#8-dúvidas-frequentes)
 
 ---
 
-## 1. Marketplace
+## 1. Criar sua conta (grátis)
 
-A busca central de fornecedores verificados.
+1. Em `elos.eqpitech.com.br`, clique em **Cadastre-se** e escolha **Comprador** (ou, na tela de login, **Comprador? Crie sua conta gratuita**).
+2. Informe o CNPJ da sua empresa — a plataforma confere na Receita Federal.
+3. Informe seu nome, e-mail corporativo e telefone (opcional).
+4. Clique em **Criar conta gratuita**. A senha provisória chega por e-mail; troque-a no primeiro acesso em **Minha Conta**.
 
-**Filtros disponíveis:** texto livre (nome/CNPJ), categoria de fornecimento, tipo de selo (Verificado/Homologado), estado (UF), porte, optante do Simples, capital social.
+Por segurança, a plataforma pede que você ative a **verificação em duas etapas** (código no celular). Você tem 30 dias para ativar.
 
-**Regras de exibição:**
+---
 
-- Só aparecem fornecedores com **selo ativo** — a vitrine é de empresas em conformidade.
-- O **score** (0–100) reflete a regularidade documental do fornecedor.
-- Selos de homologação por cliente levam o **nome do cliente homologador** — um fornecedor "Homologado — Mineradora X" passou pelo crivo documental daquela empresa.
+## 2. Marketplace
 
-```mermaid
-flowchart LR
-    A[🔍 Busca com filtros] --> B[Lista de fornecedores<br>com selo ativo]
-    B --> C[👁 Ficha completa]
-    C --> D{Próximo passo}
-    D -->|Interessou| E[💬 Enviar RFQ]
-    D -->|Não está na base| F[🤝 Convidar empresa]
-```
+A tela inicial do comprador. À esquerda ficam os **filtros**:
 
-## 2. Ficha do Fornecedor
+- **Busca** por nome, CNPJ ou atividade (CNAE);
+- **Categoria**, **Estado**, **Cidade** e **raio** a partir de um CEP;
+- **Porte**, **Capital social** e **Simples Nacional**;
+- **Selos ELOS** (Verificado ou Homologado) e **Selos de Cliente** (quantos clientes já homologaram o fornecedor);
+- **Certificações** (ISO 9001, ISO 14001, ISO 45001, PBQP-H…).
 
-Dossiê completo, organizado em abas:
+Clique em **Buscar Fornecedores**.
 
-| Aba | Conteúdo |
-|---|---|
-| 📋 Cadastral | Razão social, CNPJ, endereço(s), contatos, regime tributário |
-| 🏭 Atividade | CNAEs, porte, capital social, data de abertura |
-| 👥 Sócios | Quadro societário com cargo, participação e telefone |
-| 📄 Docs | Situação dos documentos de compliance (sem acesso aos arquivos) |
-| 🏷️ Categorias | Categorias de fornecimento ativas |
-| ⚠️ Sanções | Apontamentos em listas restritivas, quando existirem |
+![Marketplace](img/comprador/01-marketplace-inicio.jpg)
 
-**Verificações de compliance** aparecem em selos visuais: regularidade fiscal, trabalhista, FGTS, listas restritivas.
+Cada resultado mostra o selo (**Homologado**, **Verificado** ou **Sem selo**), quantos clientes homologaram o fornecedor, o score de documentação, a cidade e as atividades. **Ver Perfil** abre a ficha completa.
 
-## 3. Contatos e assinatura
+![Resultados da busca](img/comprador/02-marketplace-resultados.jpg)
 
-A visualização de contatos depende da sua assinatura:
+---
 
-| Dado | Sem assinatura | Com assinatura |
+## 3. Ficha do fornecedor
+
+A ficha tem as abas **Cadastral**, **Atividade**, **Sócios**, **Docs** (documentos validados) e **Categorias** — e **Sanções** quando o fornecedor consta nas listas públicas CEIS/CNEP.
+
+![Ficha do fornecedor](img/comprador/03-ficha-free.jpg)
+
+**Contatos:**
+
+- No plano **Free**, telefone, e-mail e contatos dos sócios aparecem **ocultos**.
+- No plano **Pro**, aparecem **completos**.
+- O CPF dos sócios é sempre ocultado, em qualquer plano (proteção de dados pessoais — LGPD).
+
+![Ficha com contatos completos (Pro)](img/comprador/06-ficha-pro-contatos.jpg)
+
+---
+
+## 4. Convidar um fornecedor
+
+Na ficha, clique em **Enviar Convite** e escolha o objetivo:
+
+- **Fazer contato com o fornecedor** — avisa o fornecedor do seu interesse.
+- **Solicitar homologação** — convida o fornecedor a se cadastrar e obter o selo ELOS.
+
+Revise a mensagem e envie. Também é possível convidar vários fornecedores de uma vez no marketplace: marque os resultados e clique em **Convidar**.
+
+> Precisa homologar fornecedores em volume, com preços diferenciados? Fale com o comercial em **comercial@eqpitech.com.br**.
+
+---
+
+## 5. Convites
+
+Menu **Convites**: os convites enviados e a situação de cada um — **Enviado**, **Visualizado** ou **Cadastrado**. **Ver Ficha** abre o fornecedor.
+
+![Convites](img/comprador/05-convites.jpg)
+
+---
+
+## 6. Planos: Free e Pro
+
+Menu **Meu Plano**.
+
+| | Free | Pro |
 |---|---|---|
-| E-mail da empresa | `co*****@***.com.br` | completo |
-| Telefone da empresa | `(11) *****-**17` | completo |
-| Telefone dos sócios | mascarado | completo |
-| CPF dos sócios | **sempre mascarado** (LGPD) | **sempre mascarado** (LGPD) |
+| Marketplace e filtros | ✓ | ✓ |
+| Fichas e documentos validados | ✓ | ✓ |
+| Convites a fornecedores | ✓ | ✓ |
+| Contatos completos dos fornecedores | — | ✓ |
+| Cotações para fornecedores e acompanhamento das propostas | — | ✓ |
 
-> O mascaramento é feito no servidor — os dados completos não trafegam para o navegador de quem não tem direito.
+O Pro pode ser **mensal** ou **anual** (o anual sai mais barato). O pagamento é pelo Stripe (cartão). Para cancelar, use o portal de assinatura ou fale com o suporte.
 
-**Fornecedores também compram:** se você é fornecedor com **selo vigente**, tem os direitos de um comprador assinante durante a vigência do selo.
-
-## 4. Convites
-
-Para trazer à plataforma uma empresa que ainda não está cadastrada:
-
-1. **Convites → Novo convite** (ou direto da busca, quando o CNPJ não é encontrado)
-2. Informe razão social, CNPJ e e-mail do contato
-3. Escolha o **objetivo**:
-   - 📞 **Fazer contato** — apresentação comercial, sem processo formal
-   - 🏅 **Solicitar homologação** — convida para o processo documental completo
-4. **Edite a mensagem** — o texto sugerido aparece na tela e você pode personalizá-lo antes do envio
-
-A empresa convidada recebe o e-mail com link de cadastro. Você acompanha o status (enviado → visualizado → cadastrado) na lista de convites.
-
-> 💡 **Preços diferenciados** estão disponíveis para compradores que subsidiam a homologação dos seus fornecedores — fale com o time comercial.
-
-## 5. Cotações (RFQ)
-
-Envio de solicitações de cotação a fornecedores do marketplace:
-
-1. Na ficha do fornecedor → **Enviar RFQ** (ou pelo menu Convites/RFQ)
-2. Descreva o item/serviço, quantidade e prazo
-3. Acompanhe: **Enviada → Visualizada → Respondida**
-
-**Regra:** a RFQ é dirigida a fornecedores **do marketplace** (com selo). Para empresas de fora, primeiro convide (seção anterior) — após o cadastro e verificação, elas podem receber cotações.
-
-## 6. Meu Plano
-
-- O plano do comprador libera a visualização de **contatos completos** e recursos de maior volume (fichas ilimitadas, RFQs ilimitadas, alertas).
-- Gerencie em **Meu Plano**.
+![Meu Plano](img/comprador/04-plano-free.jpg)
 
 ---
 
-## Perguntas frequentes
+## 7. Cotações (Pro)
 
-**Por que não encontro determinada empresa na busca?**
-Ou ela não está cadastrada (use Convites), ou o selo dela não está ativo — fornecedores com pendência documental saem da vitrine.
+1. No marketplace, marque os fornecedores e clique em **Cotação**.
+2. Escreva o assunto, a mensagem e, se quiser, o prazo para resposta. Envie (até 200 fornecedores por cotação).
+3. Os fornecedores recebem o pedido na caixa **Cotações** deles e respondem com uma proposta.
+4. Acompanhe no menu **Cotações**: quantos receberam, leram e responderam, e as propostas de cada um.
 
-**O que significa o score?**
-Percentual de documentos de compliance válidos do fornecedor. 100 = documentação em dia.
+![Cotações](img/comprador/07-cotacoes.jpg)
 
-**Posso ver os documentos do fornecedor?**
-Você vê a **situação** de cada documento (válido/vencendo/pendente), não os arquivos — esses pertencem ao processo de homologação do fornecedor com o respectivo cliente.
+---
 
-**Convidei uma empresa e nada aconteceu.**
-O convite expira do funil se não houver cadastro; reenvie ou tente outro contato. Convites de clientes têm lembrete automático; convites de comprador, não.
+## 8. Dúvidas frequentes
+
+**Por que os contatos aparecem ocultos?**
+No plano Free os contatos ficam ocultos. Assine o **Pro** para vê-los completos.
+
+**O que significa o selo do fornecedor?**
+**Verificado:** documentação básica conferida (dados da Receita e certidões principais). **Homologado:** documentação completa analisada pela equipe EQPI. **Selos de Cliente:** o fornecedor foi homologado por empresas contratantes da plataforma.
+
+**O fornecedor que convidei não respondeu.**
+Confira em **Convites** se ele visualizou. Você pode reenviar o convite pela ficha.
+
+**Sou fornecedor. Posso usar o marketplace?**
+Sim — todo fornecedor tem o perfil Comprador. Troque o perfil no seletor ao lado do seu nome, no alto da tela.
+
+---
+
+**Precisa de ajuda?** Escreva para **suporte@eqpitech.com.br**.
