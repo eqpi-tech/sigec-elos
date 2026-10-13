@@ -183,7 +183,7 @@ export default function Navbar() {
                       style={{ background: groupActive || isOpen ? 'rgba(255,255,255,.12)' : 'transparent',
                         border: groupActive || isOpen ? '1px solid rgba(255,255,255,.2)' : '1px solid transparent',
                         color: groupActive || isOpen ? '#fff' : 'rgba(255,255,255,.6)',
-                        padding:'6px 12px', borderRadius:8, cursor:'pointer',
+                        padding:'6px 9px', borderRadius:8, cursor:'pointer',
                         fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:500,
                         display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
                       {item.icon} {item.label}
@@ -230,7 +230,7 @@ export default function Navbar() {
                   style={{ background: active ? 'rgba(255,255,255,.12)' : 'transparent',
                     border: active ? '1px solid rgba(255,255,255,.2)' : '1px solid transparent',
                     color: active ? '#fff' : 'rgba(255,255,255,.6)',
-                    padding:'6px 12px', borderRadius:8, cursor:'pointer',
+                    padding:'6px 9px', borderRadius:8, cursor:'pointer',
                     fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:500,
                     display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
                   {item.icon} {item.label}
@@ -246,10 +246,10 @@ export default function Navbar() {
         {!mobile && (
           <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
             {/* Ajuda: manuais e canais de suporte (13/10) */}
-            <button onClick={() => go('/ajuda')} title="Ajuda e suporte"
-              style={{ padding:'6px 11px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)', background: pathname === '/ajuda' ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)',
-                color:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-              ❓ Ajuda
+            <button onClick={() => go('/ajuda')} title="Ajuda e suporte" aria-label="Ajuda e suporte"
+              style={{ width:34, height:34, borderRadius:10, border:'1px solid rgba(255,255,255,.2)', background: pathname === '/ajuda' ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.08)',
+                color:'#fff', fontFamily:'Montserrat,sans-serif', fontSize:15, fontWeight:800, cursor:'pointer', flexShrink:0, padding:0 }}>
+              ?
             </button>
             <UserChip/>
             {roleOptions?.length > 1 && (
