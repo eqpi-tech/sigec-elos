@@ -9,16 +9,17 @@ camp = sys.argv[1] if len(sys.argv) > 1 else 'A'
 k = CAMPANHAS[camp]
 NOMES = (sys.argv[2:4] + ['Cliente 1', 'Cliente 2'])[:2]
 DATAS = {'A': ['terça, 13/10', 'quarta, 14/10', 'quinta, 15/10', 'sexta, 16/10'],
-         'B': ['a definir', 'a definir', 'a definir', 'sexta, 20/11']}[camp]
+         'B': ['quarta, 04/11 (previsto)', 'quarta, 11/11 (previsto)', 'quarta, 18/11 (previsto)', 'sexta, 20/11 (previsto)']}[camp]
+ROT_OUTROS = {'A': 'Fornecedor que também atende cliente da onda B (Appian/MVV)',
+              'B': 'Fornecedor que já usa o ELOS com cliente da onda A (SPMar/Chemtrade)'}[camp]
 EX = [
     ('Fornecedor', {'nome': 'Carlos Lima', 'email': 'carlos.lima@empresaexemplo.com.br', 'tipo': 'SUPPLIER', 'clientes': [NOMES[0]], 'outros': False}),
-    ('Fornecedor que também atende cliente da outra onda', {'nome': 'Marina Alves', 'email': 'marina.alves@empresaexemplo.com.br', 'tipo': 'SUPPLIER', 'clientes': [NOMES[1]], 'outros': True}),
+    (ROT_OUTROS, {'nome': 'Marina Alves', 'email': 'marina.alves@empresaexemplo.com.br', 'tipo': 'SUPPLIER', 'clientes': [NOMES[1]], 'outros': True}),
     ('Usuário do cliente', {'nome': 'Ana Souza', 'email': 'ana.souza@clienteexemplo.com.br', 'tipo': 'CLIENT', 'clientes': [NOMES[0]], 'outros': False}),
 ]
 paginas = []
 for n in sorted(ONDAS):
     for rot, c in EX:
-        if camp == 'B' and c['outros']: continue
         assunto, html = ONDAS[n](dict(c, link='https://elos.eqpitech.com.br/redefinir-senha?welcome=1'), k)
         paginas.append(f'''<section class="pg"><div class="meta"><div class="n">Comunicado {n} de 4 · envio: {DATAS[n-1]}</div>
 <div><b>Público:</b> {rot}</div><div><b>Assunto:</b> {assunto}</div>
@@ -32,7 +33,8 @@ capa = f'''<section class="pg capa"><h1>Comunicados da migração HOC → SIGEC-
 <tr><td>3 · O que melhora</td><td>{DATAS[2]}</td><td>Novidades para fornecedor e cliente; manual no menu Ajuda</td></tr>
 <tr><td>4 · Segunda é no ELOS</td><td>{DATAS[3]}</td><td>Passo a passo do acesso; endereços do HOC levam ao ELOS; suporte</td></tr></table>
 <p><b>Destinatários:</b> usuários ativos no HOC — usuários dos clientes e de fornecedores com processo vigente ou aberto há menos de 1 ano (sem e-mails devolvidos).</p>
-<p><b>Três versões:</b> fornecedor · fornecedor que também atende cliente da outra onda (documentos seguem pelo HOC até a 2ª virada) · usuário do cliente.</p>
+<p><b>Três versões:</b> fornecedor · {ROT_OUTROS[0].lower() + ROT_OUTROS[1:]} · usuário do cliente.</p>
+<p><b>Virada:</b> sincronização final no sábado anterior ao início; a partir do início, os endereços do SIGEC-HOC levam ao login do portal de cada cliente no SIGEC-ELOS.</p>
 <p><b>Remetente:</b> SIGEC-ELOS &lt;noreply@eqpitech.com.br&gt; · respostas vão para suporte@eqpitech.com.br</p></section>'''
 print(f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
 @page {{ size: A4; margin: 12mm; }} body {{ font-family: Arial, sans-serif; margin: 0; color: #1f2937 }}

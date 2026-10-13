@@ -23,9 +23,9 @@ SUPORTE = ('<strong>E-mail:</strong> suporte@eqpitech.com.br · <strong>WhatsApp
 # Ondas da migração (decisão do Luiz, 13/10/2026). ids = clientes do HOC.
 CAMPANHAS = {
     'A': {'ids': [20, 33], 'hoc_ate': 'sexta-feira, 16/10', 'inicio': 'segunda-feira, 19/10', 'inicio_curto': 'segunda, 19/10',
-          'outros_ate': '20/11'},
+          'outros_ate': '20/11', 'link_ate': 'quarta-feira, 21/10'},
     'B': {'ids': [21, 34], 'hoc_ate': 'sexta-feira, 20/11', 'inicio': 'segunda-feira, 23/11', 'inicio_curto': 'segunda, 23/11',
-          'outros_ate': None},
+          'outros_ate': None, 'link_ate': 'quarta-feira, 25/11', 'ja_usa_elos': True},
 }
 AJUDA = f'{SITE}/ajuda'
 
@@ -66,7 +66,7 @@ def onda1(c, k):
   <li><strong>Até {k['hoc_ate']}</strong>, nada muda: continue usando o SIGEC-HOC normalmente, inclusive para enviar documentos.</li>
   <li><strong>A partir de {k['inicio']}</strong>, a homologação com {lista_clientes(c['clientes'], artigo=True)} passa a ser feita no SIGEC-ELOS.</li>
   <li>Os <strong>dados da sua empresa, seus documentos e o histórico</strong> dos seus processos já estarão lá — você não precisa se cadastrar de novo.</li>
-</ul>{OUTROS if c.get('outros') else ''}
+</ul>{(JA_USA if ja_usa(k, c) else OUTROS) if c.get('outros') else ''}
 <p>Nos próximos dias você vai receber, por este e-mail, o passo a passo para acessar o SIGEC-ELOS e criar a sua senha.</p>
 <p><strong>Por enquanto, não é preciso fazer nada.</strong></p>
 <p style="margin-top:22px">Conte com a gente,<br><strong>Equipe EQPI Tech</strong></p>"""
@@ -100,10 +100,26 @@ def outros_docs(k):
 <strong>Sua empresa também atende outros clientes</strong>, que passam para o SIGEC-ELOS em novembro. Por isso, até <strong>{k['outros_ate']}</strong>,
 continue enviando os documentos pelo SIGEC-HOC — eles aparecem automaticamente no SIGEC-ELOS e valem para todos os seus processos.</p>'''
 
+def ja_usa(k, c): return k.get('ja_usa_elos') and c.get('outros')
+
+# fornecedor da onda B que já usa o ELOS com cliente da onda A: mesmo login
+JA_USA = """<p style="background:#eff6ff;border-left:4px solid #2E3192;padding:10px 14px;border-radius:0 8px 8px 0">
+<strong>Você já usa o SIGEC-ELOS</strong> nos processos com outros clientes. Os novos processos vão aparecer <strong>no mesmo login</strong>
+— não é preciso criar outra conta.</p>"""
+
 # ── Comunicado 2 (quarta): o acesso está pronto ────────────────────────────
 def onda2(c, k):
     ola = f"Olá, {primeiro_nome(c['nome'])}!" if primeiro_nome(c['nome']) else 'Olá!'
     link = c.get('link') or f'{SITE}/login'
+    if c['tipo'] == 'SUPPLIER' and ja_usa(k, c):
+        assunto = f"Seus processos com {lista_clientes(c['clientes'], artigo=True)} chegam ao seu SIGEC-ELOS"
+        corpo = f"""<p>{ola}</p>
+<p>A homologação da sua empresa com {lista_clientes(['<strong>' + x + '</strong>' for x in c['clientes']], artigo=True)} passa para o
+<strong>SIGEC-ELOS</strong> em <strong>{k['inicio']}</strong>. Como você já usa a plataforma, <strong>é só entrar com o mesmo e-mail e senha</strong>
+({c['email']}): os novos processos vão aparecer no seu painel.</p>
+{botao('Acessar o SIGEC-ELOS', f'{SITE}/login')}
+<p><strong>Importante:</strong> até {k['hoc_ate']}, continue enviando os documentos pelo SIGEC-HOC, como sempre.</p>{assinatura()}"""
+        return assunto, moldura('Comunicado 2 de 4 · Seus novos processos no mesmo login', corpo)
     if c['tipo'] == 'SUPPLIER':
         assunto = 'Seu acesso ao SIGEC-ELOS está pronto — crie a sua senha'
         corpo = f"""<p>{ola}</p>
@@ -112,7 +128,7 @@ passa para o <strong>SIGEC-ELOS</strong> em <strong>{k['inicio']}</strong>. O se
 <strong>{c['email']}</strong> e a sua empresa já vinculada.</p>
 <p><strong>Falta só criar a sua senha:</strong></p>
 {botao('Criar minha senha', link)}
-<p style="font-size:13px;color:#6b7280">O link é pessoal e vale por 7 dias. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
+<p style="font-size:13px;color:#6b7280">O link é pessoal e vale até {k['link_ate']}. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
 clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p>
 <p>Depois de criar a senha, você já pode entrar e conhecer a plataforma: seus processos, seus documentos e o histórico estão lá.</p>
 <p><strong>Importante:</strong> até {k['hoc_ate']}, continue enviando os documentos pelo SIGEC-HOC, como sempre.</p>
@@ -124,7 +140,7 @@ clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p
 <strong>{k['inicio']}</strong>. O seu acesso já está pronto, com o e-mail <strong>{c['email']}</strong> e o mesmo perfil que você tem hoje no SIGEC-HOC.</p>
 <p><strong>Falta só criar a sua senha:</strong></p>
 {botao('Criar minha senha', link)}
-<p style="font-size:13px;color:#6b7280">O link é pessoal e vale por 7 dias. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
+<p style="font-size:13px;color:#6b7280">O link é pessoal e vale até {k['link_ate']}. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
 clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p>
 <p>Depois de criar a senha, você já pode entrar e conhecer: seus fornecedores, os processos e os documentos estão lá. Até {k['hoc_ate']},
 o SIGEC-HOC continua sendo o sistema oficial.</p>{assinatura()}"""
