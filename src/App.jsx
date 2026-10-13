@@ -11,6 +11,7 @@ import { Spinner } from './components/ui.jsx'
 
 import Login from './pages/Login.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
+import CreatePassword from './pages/CreatePassword.jsx'
 import SupplierOnboarding from './pages/supplier/Onboarding.jsx'
 
 import SupplierDashboard  from './pages/supplier/Dashboard.jsx'
@@ -143,6 +144,7 @@ function AppRoutes() {
       <Route path="/login"            element={<Login/>} />
       <Route path="/cadastro"         element={<SupplierOnboarding/>} />
       <Route path="/redefinir-senha"  element={<ResetPassword/>} />
+      <Route path="/criar-senha"      element={<CreatePassword/>} />
       <Route path="/portal/:slug"       element={<ClientPortal/>} />
       <Route path="/portal/:slug/login" element={<PortalLogin/>} />
       <Route path="/demo"             element={<DemoPage/>} />
