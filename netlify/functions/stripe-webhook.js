@@ -282,6 +282,19 @@ exports.handler = async (event) => {
             .in('status', ['ACTIVE', 'EXPIRED']).or(`expires_at.is.null,expires_at.lt.${fim}`)
           if (se) console.error('[renovacao] selo:', se.message)
         }
+        // Comprador Pro (13/10): a fatura paga estende a validade até o fim do
+        // período cobrado — sem isto o Pro mensal perdia os contatos depois de
+        // 30 dias com a assinatura em dia (my_buyer_is_pro, patch_133)
+        if (subId && periodEnd && !supplierId) {
+          const fim = new Date(periodEnd * 1000).toISOString()
+          const { data: br, error: be } = await supabase.from('user_roles')
+            .update({ buyer_plan: 'pro', buyer_plan_expires_at: fim })
+            .eq('role', 'BUYER').eq('buyer_stripe_sub_id', subId)
+            .or(`buyer_plan_expires_at.is.null,buyer_plan_expires_at.lt.${fim}`)
+            .select('user_id')
+          if (be) console.error('[renovacao] comprador:', be.message)
+          else if (br?.length) console.log(`✅ Comprador Pro renovado até ${fim.slice(0, 10)} (${br.length})`)
+        }
         if (qErr) console.error('[nfe-queue]', qErr.message)
         else if (amount > 0) {
           // tentativa imediata de emissão (o cron diário é a rede de segurança)

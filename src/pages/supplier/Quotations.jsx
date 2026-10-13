@@ -15,6 +15,9 @@ const STATUS = {
 }
 const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '')
 // quem pediu: cliente (nome) ou comprador do marketplace (🛒 nome · comprador)
+// decisão vem do cliente ou do comprador, conforme quem pediu a cotação
+const quemDecide = (it) => it?.requester_role === 'BUYER' ? 'comprador' : 'cliente'
+const rotulo = (it) => it?.status === 'ACCEPTED' ? `Aceita pelo ${quemDecide(it)}` : (STATUS[it?.status] || STATUS.READ).label
 const quem = (it) => it.requester_role === 'BUYER' ? `🛒 ${it.client_name || 'Comprador'} · comprador` : it.client_name
 const money = (v) => Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })
 
@@ -60,7 +63,7 @@ function RespondModal({ item, onClose, onSaved }) {
             {item.price != null && <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{money(item.price)}</div>}
             {item.message && <div style={{ marginTop:6, whiteSpace:'pre-wrap' }}>{item.message}</div>}
             <div style={{ marginTop:12, fontSize:12, color:'#9B9B9B' }}>
-              {decidida ? `Decisão do cliente: ${STATUS[item.status].label}.` : 'Prazo de resposta encerrado.'}
+              {decidida ? `Decisão do ${quemDecide(item)}: ${rotulo(item)}.` : 'Prazo de resposta encerrado.'}
             </div>
           </div>
         ) : (
@@ -138,7 +141,7 @@ export default function SupplierQuotations() {
                     </div>
                   </div>
                   <span style={{ fontSize:11, fontWeight:700, color:st.color, background:`${st.color}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap' }}>
-                    {it.status === 'READ' && respondida ? 'Proposta enviada' : st.label}
+                    {it.status === 'READ' && respondida ? 'Proposta enviada' : rotulo(it)}
                   </span>
                 </div>
               </Card>

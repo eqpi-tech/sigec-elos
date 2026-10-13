@@ -619,6 +619,15 @@ export const rfqApi = {
       p_description: message, p_deadline: deadline || null,
     })
     if (error) throw new Error(error.message)
+    // e-mail aos fornecedores (13/10) — melhor esforço: a cotação já está na
+    // caixa "Cotações" de cada um mesmo se o aviso falhar
+    try {
+      const r = await authFetch('/.netlify/functions/buyer-rfq-notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rfqId: data?.rfq_id }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) data.emails = j.emails
+    } catch (e) { console.warn('buyer-rfq-notify:', e.message) }
     return data
   },
 
@@ -634,6 +643,12 @@ export const rfqApi = {
     const { data, error } = await supabase.rpc('buyer_rfq_responses', { p_rfq: rfqId })
     if (error) throw new Error(error.message)
     return data || []
+  },
+
+  // aceitar ('ACCEPTED') ou recusar ('DECLINED') a proposta de um fornecedor (patch_133)
+  decide: async (responseId, status) => {
+    const { error } = await supabase.rpc('buyer_rfq_decide', { p_response: responseId, p_status: status })
+    if (error) throw new Error(error.message)
   },
 }
 

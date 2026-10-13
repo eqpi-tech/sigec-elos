@@ -11,7 +11,9 @@ import { Card, Spinner, PageHeader, EmptyState, Button } from '../../components/
 const RESP = {
   SENT:     { label:'Não lida',  color:'#9B9B9B' },
   READ:     { label:'Lida',      color:'#b45309' },
-  PROPOSTA: { label:'Proposta recebida', color:'#15803d' },
+  PROPOSTA: { label:'Proposta recebida', color:'#2E3192' },
+  ACCEPTED: { label:'✓ Aceita', color:'#15803d' },
+  DECLINED: { label:'Recusada', color:'#9B9B9B' },
 }
 const fmt   = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '')
 const money = (v) => Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })
@@ -19,14 +21,24 @@ const money = (v) => Number(v).toLocaleString('pt-BR', { style:'currency', curre
 function Responses({ rfqId, onProfile }) {
   const [items, setItems]     = useState(null)
   const [error, setError]     = useState('')
+  const [acting, setActing]   = useState(null)
   useEffect(() => { rfqApi.responses(rfqId).then(setItems).catch(e => setError(e.message)) }, [rfqId])
+  // aceitar / recusar a proposta (patch_133) — o fornecedor vê a decisão na caixa dele
+  const decidir = async (r, status) => {
+    if (status === 'DECLINED' && !confirm(`Recusar a proposta de ${r.razao_social}?`)) return
+    setActing(r.id); setError('')
+    try { await rfqApi.decide(r.id, status); setItems(prev => prev.map(x => x.id === r.id ? { ...x, status } : x)) }
+    catch (e) { setError(e.message) }
+    setActing(null)
+  }
   if (error) return <div style={{ padding:'12px 0', color:'#dc2626', fontSize:13 }}>{error}</div>
   if (!items) return <div style={{ display:'flex', justifyContent:'center', padding:16 }}><Spinner size={24}/></div>
   return (
     <div style={{ marginTop:12, borderTop:'1px solid #f0f0f7' }}>
       {items.map(r => {
         const temProposta = r.message || r.price != null
-        const st = temProposta ? RESP.PROPOSTA : (RESP[r.status] || RESP.READ)
+        const decidida = r.status === 'ACCEPTED' || r.status === 'DECLINED'
+        const st = decidida ? RESP[r.status] : temProposta ? RESP.PROPOSTA : (RESP[r.status] || RESP.READ)
         return (
           <div key={r.id} style={{ padding:'12px 0', borderBottom:'1px solid #f3f4f6' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
@@ -45,6 +57,12 @@ function Responses({ rfqId, onProfile }) {
               <div style={{ marginTop:8, background:'rgba(46,49,146,.04)', border:'1px solid rgba(46,49,146,.1)', borderRadius:10, padding:'10px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e' }}>
                 {r.price != null && <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15 }}>{money(r.price)}</div>}
                 {r.message && <div style={{ marginTop: r.price != null ? 4 : 0, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{r.message}</div>}
+                {!decidida && (
+                  <div style={{ display:'flex', gap:8, marginTop:10 }}>
+                    <Button variant="success" size="sm" disabled={acting === r.id} onClick={() => decidir(r, 'ACCEPTED')}>✓ Aceitar</Button>
+                    <Button variant="neutral" size="sm" disabled={acting === r.id} onClick={() => decidir(r, 'DECLINED')}>✕ Recusar</Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
