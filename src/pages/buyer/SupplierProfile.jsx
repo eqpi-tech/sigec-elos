@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { planName } from '../../lib/planLabels.js'
 import { useParams, useNavigate } from 'react-router-dom'
 import { marketplaceApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -336,7 +337,7 @@ export default function SupplierProfile() {
               {seal?.level && (
                 <span style={{fontSize:11,fontWeight:700,color:sealColor,background:`${sealColor}18`,
                   padding:'3px 10px',borderRadius:20,fontFamily:'Montserrat,sans-serif',flexShrink:0}}>
-                  🏅 Selo ELOS {seal.level}
+                  🏅 {planName(seal.level)}
                 </span>
               )}
               {allSancoes.length > 0 && (

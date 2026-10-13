@@ -43,8 +43,8 @@ const TIPOS  = [
 ]
 const LEVELS = [
   { v:'Todos',   label:'Todos os níveis' },
-  { v:'Premium', label:'Premium ⭐' },
-  { v:'Simples', label:'Simples 🏷️' },
+  { v:'Premium', label:'ELOS Homologado ⭐' },
+  { v:'Simples', label:'ELOS Verificado 🏷️' },
 ]
 
 export default function ClientSuppliers() {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { planName } from '../../lib/planLabels.js'
 import { hasAction } from '../../lib/modules.js'
 import { can } from '../../lib/permissions.js'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -201,7 +202,7 @@ export default function ClientSupplierDiscover() {
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:mobile?16:20, color:'#1a1c5e' }}>{razaoSocial}</div>
               {seal?.level && (
                 <span style={{ fontSize:11, fontWeight:700, color:sealColor, background:`${sealColor}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', flexShrink:0 }}>
-                  🏅 Selo ELOS {seal.level}
+                  🏅 {planName(seal.level)}
                 </span>
               )}
               {allSancoes.length > 0 && (
