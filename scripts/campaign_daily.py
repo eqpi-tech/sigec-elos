@@ -98,6 +98,9 @@ while True:
     if len(users) < 1000: break
     page += 1
 auth_emails = {u['email'].lower() for u in all_users if u.get('email')}
+# 13/10: contatos da migração HOC → ELOS (patch_134) recebem conta e link de
+# senha pelos comunicados da migração — a campanha não pode duplicar o e-mail
+migr_emails = {r['email'].strip().lower() for r in sb_get_all("/rest/v1/hoc_migration_contacts?select=email&order=email")}
 # fornecedor com login ORGÂNICO (dono do vínculo fora da campanha) → pula;
 # contas criadas pela própria campanha não bloqueiam os colegas.
 # Fonte da marca de campanha: audit_log (CAMPAIGN_FIRST_ACCESS) — o
@@ -137,7 +140,7 @@ for r in rows:
 # elegíveis = e-mail novo com pelo menos um fornecedor sem login orgânico
 todo = []
 for email, info in by_email.items():
-    if email in auth_emails: continue
+    if email in auth_emails or email in migr_emails: continue
     vincs, seen = [], set()
     for h in info['vinculos']:
         sid, rz = sup_map[h]
