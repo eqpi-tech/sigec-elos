@@ -245,6 +245,12 @@ export default function Navbar() {
         {/* ── Desktop right area ─────────────────────────────────────── */}
         {!mobile && (
           <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            {/* Ajuda: manuais e canais de suporte (13/10) */}
+            <button onClick={() => go('/ajuda')} title="Ajuda e suporte"
+              style={{ padding:'6px 11px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)', background: pathname === '/ajuda' ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.08)',
+                color:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:12.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+              ❓ Ajuda
+            </button>
             <UserChip/>
             {roleOptions?.length > 1 && (
               <select value={activeRole||''} onChange={e=>switchRole(e.target.value)}
@@ -369,6 +375,12 @@ export default function Navbar() {
               background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.15)',
               color:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:14, cursor:'pointer' }}>
             👤 Minha Conta
+          </button>
+          <button onClick={() => go('/ajuda')}
+            style={{ width:'100%', marginTop:8, padding:'12px', borderRadius:10,
+              background:'rgba(255,255,255,.08)', border:'1px solid rgba(255,255,255,.15)',
+              color:'#fff', fontFamily:'DM Sans,sans-serif', fontSize:14, cursor:'pointer' }}>
+            ❓ Ajuda e suporte
           </button>
           <button onClick={handleLogout}
             style={{ width:'100%', marginTop:8, padding:'12px', borderRadius:10,
