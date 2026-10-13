@@ -1,0 +1,27 @@
+// Imagens do Manual do Cliente — node scripts/manuais/shoot_cliente.cjs
+const { browser, entrar, ir, foto, borrar, clicar } = require('./shoot_lib.cjs')
+const M = 'cliente'
+const BETA = 'e1a00000-0000-4000-8000-000000000103', DELTA = 'e1a00000-0000-4000-8000-000000000105'
+;(async () => {
+  const b = await browser()
+  const p = await entrar(b, 'ana.souza@mineradoraexemplo.com.br')
+  await ir(p, '/cliente'); await foto(p, M, '01-painel', { full: true })
+  await ir(p, '/cliente/fornecedores'); await foto(p, M, '02-meus-fornecedores', { full: true })
+  await clicar(p, '💡 Interessados'); await foto(p, M, '03-interessados')
+  await clicar(p, '📝 Pré-cadastros'); await clicar(p, 'Questionário:'); await foto(p, M, '04-pre-cadastros')
+  await clicar(p, 'Todos os Fornecedores'); await clicar(p, '🔍 Buscar Fornecedores', 5000)
+  await borrar(p, 'Ver Perfil'); await foto(p, M, '05-todos-fornecedores')
+  await ir(p, `/cliente/fornecedor/${BETA}`); await foto(p, M, '06-processo-resumo', { full: true })
+  await clicar(p, 'Documentos'); await foto(p, M, '07-processo-documentos')
+  await ir(p, `/cliente/fornecedor/${DELTA}`); await foto(p, M, '08-processo-reprovado-carta', { full: true })
+  await ir(p, '/cliente/convites'); await foto(p, M, '09-convites', { full: true })
+  await clicar(p, '+ Novo Convite'); await clicar(p, 'Enviar convite para solicitar homologação'); await foto(p, M, '10-novo-convite', { full: true })
+  await ir(p, '/cliente/rfq'); await clicar(p, '+ Nova Cotação'); await foto(p, M, '11-nova-cotacao')
+  await ir(p, '/cliente/questionarios'); await foto(p, M, '12-questionarios')
+  await ir(p, '/cliente/relatorios'); await foto(p, M, '13-relatorios', { full: true })
+  await ir(p, '/cliente/compliance'); await foto(p, M, '14-compliance')
+  await ir(p, '/cliente/configuracoes'); await foto(p, M, '15-portal', { full: true })
+  await ir(p, '/cliente/termos'); await foto(p, M, '16-termos', { full: true })
+  await ir(p, '/cliente/equipe'); await foto(p, M, '17-equipe')
+  await b.close()
+})()

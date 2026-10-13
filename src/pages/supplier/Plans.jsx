@@ -32,7 +32,7 @@ const SEALS = [
       'Documentos completos da categoria (todos os níveis)',
       'Relatório Assertiva de análise de crédito',
       'Balanço patrimonial e DRE (2 anos)',
-      'Elegível para processos de clientes HOC',
+      'Elegível para processos de homologação de clientes',
     ],
   },
 ]

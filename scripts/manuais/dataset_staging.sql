@@ -18,7 +18,7 @@ DELETE FROM questionnaire_answers WHERE supplier_id::text LIKE 'e1a00000-%';
 DELETE FROM client_pre_registrations WHERE supplier_id::text LIKE 'e1a00000-%';
 DELETE FROM supplier_interests    WHERE supplier_id::text LIKE 'e1a00000-%';
 DELETE FROM rfq_responses         WHERE supplier_id::text LIKE 'e1a00000-%';
-DELETE FROM rfqs                  WHERE client_id = :cid;
+DELETE FROM rfqs                  WHERE client_id = :cid OR buyer_id::text LIKE 'e1a00000-%';
 DELETE FROM invitations           WHERE client_id = :cid OR supplier_id::text LIKE 'e1a00000-%';
 DELETE FROM documents             WHERE supplier_id::text LIKE 'e1a00000-%';
 DELETE FROM seals                 WHERE supplier_id::text LIKE 'e1a00000-%';
@@ -61,8 +61,10 @@ FROM u;
 INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
 SELECT gen_random_uuid(), id, id::text, jsonb_build_object('sub', id::text, 'email', email, 'email_verified', true), 'email', now(), now(), now() FROM u;
 -- perfil (o gatilho do cadastro cria como SUPPLIER; aqui o papel real) + tour já visto
-UPDATE profiles p SET role = u.papel, name = u.nome, onboarding_state = '{"dismissed": true, "skipped": true, "done": {}}'
-FROM u WHERE p.id = u.id;
+-- (no staging o gatilho on_auth_user_created não existe — o staging_sync recria só o schema public)
+INSERT INTO profiles (id, role, name, onboarding_state)
+SELECT id, papel, nome, '{"dismissed": true, "skipped": true, "done": {}}' FROM u
+ON CONFLICT (id) DO UPDATE SET role = excluded.role, name = excluded.name, onboarding_state = excluded.onboarding_state;
 
 -- ── 2. cliente-exemplo (cópia da matriz do cliente-modelo, preços fictícios) ─
 INSERT INTO clients (id, user_id, cnpj, razao_social, nome_fantasia, sigla, active, homologation_payer)
@@ -190,6 +192,13 @@ SELECT d.supplier_id, d.id, d.type, d.storage_path, 'done', 'aprovar', 0.92, 'pd
   '{"legivel": true, "veredito": "aprovar", "resumo": "Documento legível, CNPJ e razão social conferem, dentro da validade.", "checklist": [{"item": "CNPJ do documento igual ao do cadastro", "atende": true}, {"item": "Documento dentro da validade", "atende": true}]}'
 FROM documents d WHERE d.supplier_id = 'e1a00000-0000-4000-8000-000000000103' ORDER BY d.type LIMIT 1;
 
+-- coleta automática (Rota A) no processo ELOS da Construtora — painel do backoffice
+INSERT INTO auto_collect_jobs (supplier_id, seal_id, doc_type, status, attempts, fonte, cost_brl, finished_at, created_at, history) VALUES
+ ('e1a00000-0000-4000-8000-000000000101','e1a46000-0000-4000-8000-000000000406','37','done',1,'receita_cadastro',0,now()-interval '8 days',now()-interval '8 days','[{"resultado":"done","motivo":"Cartão CNPJ (Receita Federal): situação cadastral ATIVA","custo":0}]'),
+ ('e1a00000-0000-4000-8000-000000000101','e1a46000-0000-4000-8000-000000000406','7','done',1,'fgts_crf',0.26,now()-interval '2 days',now()-interval '8 days','[{"resultado":"done","motivo":"FGTS: empregador REGULAR (CRF vigente)","custo":0.26}]'),
+ ('e1a00000-0000-4000-8000-000000000101','e1a46000-0000-4000-8000-000000000406','8','done',1,'cndt',0.28,now()-interval '2 days',now()-interval '8 days','[{"resultado":"done","motivo":"CNDT: negativa — sem débitos trabalhistas","custo":0.28}]'),
+ ('e1a00000-0000-4000-8000-000000000101','e1a46000-0000-4000-8000-000000000406','42','fallback',1,'pgfn_cnd',0,now()-interval '5 days',now()-interval '8 days','[{"resultado":"fallback","motivo":"A fonte informou: certidão não emitida pela internet — o fornecedor precisa enviar","custo":0}]');
+
 -- questionário: Construtora e Alfa responderam; Beta respondeu metade
 INSERT INTO questionnaire_answers (question_id, supplier_id, answer_boolean, answer_text, answered_at)
 SELECT q.id, s.sid::uuid,
@@ -238,6 +247,18 @@ INSERT INTO user_roles (user_id, role, client_id, supplier_id, buyer_id, is_prim
  ('e1a00000-0000-4000-8000-0000000000d1','ADMIN', NULL, NULL, NULL, true, true, NULL);
 UPDATE profiles SET supplier_id = 'e1a00000-0000-4000-8000-000000000101' WHERE id = 'e1a00000-0000-4000-8000-0000000000b1';
 UPDATE profiles SET buyer_id = 'e1a00000-0000-4000-8000-000000000201' WHERE id = 'e1a00000-0000-4000-8000-0000000000c1';
+
+-- compradora com plano Pro e uma cotação enviada a dois fornecedores (pela própria função do sistema)
+UPDATE user_roles SET buyer_plan = 'pro', buyer_plan_expires_at = now() + interval '1 year'
+ WHERE user_id = 'e1a00000-0000-4000-8000-0000000000c1' AND role = 'BUYER';
+SELECT set_config('request.jwt.claims', '{"sub":"e1a00000-0000-4000-8000-0000000000c1","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT buyer_rfq_send(ARRAY['e1a00000-0000-4000-8000-000000000101','e1a00000-0000-4000-8000-000000000102']::uuid[],
+  'Manutenção preventiva de subestação',
+  'Precisamos de proposta para manutenção preventiva semestral de subestação de 13,8 kV em Belo Horizonte, com fornecimento de materiais.',
+  current_date + 15);
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '', true);
 
 SELECT (SELECT count(*) FROM categories WHERE client_id = :cid) categorias,
        (SELECT count(*) FROM client_flows WHERE client_id = :cid) fluxos,
