@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../services/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { can } from '../../lib/permissions.js'
 import { Button, Card, KpiCard, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 // ─── Donut Chart (SVG puro) ───────────────────────────────────────────────────
@@ -78,6 +80,9 @@ function exportCsv(docs) {
 // ─── Overview ─────────────────────────────────────────────────────────────────
 export default function BackofficeOverview() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  // mesma permissão da rota /backoffice/criar-usuario (analista legado não tem)
+  const canManageUsers = can(user, 'manage_users')
   const [metrics, setMetrics] = useState(null)
   const [queue,   setQueue]   = useState([])
   const [farol,   setFarol]   = useState(null)
@@ -113,7 +118,7 @@ export default function BackofficeOverview() {
     <div style={{ padding:'28px 32px', maxWidth:1200, margin:'0 auto' }}>
       <PageHeader title="Painel Backoffice" subtitle="EQPI Tech · Ecossistema SIGEC-ELOS"
         action={<div style={{ display:'flex',gap:8 }}>
-          <Button variant="neutral" onClick={()=>navigate('/backoffice/criar-usuario')}>+ Novo Usuário</Button>
+          {canManageUsers && <Button variant="neutral" onClick={()=>navigate('/backoffice/criar-usuario')}>+ Novo Usuário</Button>}
           <Button variant="primary" onClick={()=>navigate('/backoffice/analise-documentos')}>📄 Analisar Documentos</Button>
         </div>}/>
 
@@ -254,8 +259,8 @@ export default function BackofficeOverview() {
             {[
               ['📄','Análise de Docs',    '/backoffice/analise-documentos'],
               ['🏅','Homologados',        '/backoffice/homologados'],
-              ['📊','Métricas',           '/backoffice/metricas'],
-              ['👤','Criar Usuário',      '/backoffice/criar-usuario'],
+              ['💰','Financeiro',         '/backoffice/metricas'],
+              ...(canManageUsers ? [['👤','Criar Usuário',      '/backoffice/criar-usuario']] : []),
             ].map(([icon, label, path], idx) => (
               <button key={idx} onClick={()=>navigate(path)}
                 style={{ display:'flex', alignItems:'center', gap:10, width:'100%', background:'rgba(255,255,255,.1)', border:'1px solid rgba(255,255,255,.15)', color:'#fff', borderRadius:10, padding:'10px 14px', fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:8, textAlign:'left', transition:'all .15s' }}>

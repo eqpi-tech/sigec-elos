@@ -21,7 +21,7 @@ async function handleBuyerInvitation(body, h) {
   // registrado como CLIENT (entra na cadeia + relatórios do cliente).
   const { supplierId, supplierRazaoSocial, supplierCnpj, buyerName, buyerEmail, buyerId,
           clientId, clientName, subsidiado, flowId,
-          objective = 'homologacao', customMessage } = body
+          objective = 'homologacao', customMessage, tipo_fornecedor, escopo } = body
   if (!supplierId) return { statusCode:400, headers:h, body: JSON.stringify({ error:'supplierId obrigatório no modo BUYER' }) }
   let senderName = clientName || buyerName
   // Remetente SEMPRE pelo nome da EMPRESA (defesa server-side: o front já
@@ -103,6 +103,9 @@ async function handleBuyerInvitation(body, h) {
     flow_id:               resolvedFlowId,
     objetivo:              objective === 'contato' ? 'contato' : 'homologacao',
     message:               customMessage?.trim() || null,  // persistida p/ reparo/lembrete fiéis (patch_061)
+    // ficha do fornecedor (cliente) manda tipo e escopo — antes eram ignorados (13/10)
+    tipo_fornecedor:       ['produto', 'servico', 'ambos'].includes(tipo_fornecedor) ? tipo_fornecedor : null,
+    escopo:                escopo?.trim() || null,
   }).select('id, token').single()
   if (invErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: invErr.message }) }
 

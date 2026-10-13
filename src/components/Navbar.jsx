@@ -22,6 +22,9 @@ const NAVS = {
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍', module:'marketplace' },
     { path:'/comprador/convites',    label:'Convites',        icon:'🤝', module:'convites' },
+    // cotações do Comprador Pro (patch_131) — módulo do Marketplace: perfis
+    // existentes não conhecem uma chave nova; Free vê com cadeado (upsell)
+    { path:'/comprador/cotacoes',    label:'Cotações',        icon:'💬', module:'marketplace', proOnly:true },
     { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐', module:'plano' },
   ],
   CLIENT: [
@@ -119,6 +122,7 @@ export default function Navbar() {
   }).map(item => {
     // submenus (20/09): filhos com chave de ação respeitam o perfil; grupo
     // sem nenhum filho visível some do menu
+    if (item.proOnly && user.buyerPlan !== 'pro') return { ...item, label:`${item.label} 🔒` }
     if (!item.children) return item
     const children = item.children.filter(c => !c.action || hasAction(user, c.action))
     return children.length ? { ...item, children } : null
@@ -249,7 +253,7 @@ export default function Navbar() {
                   fontWeight:700, fontSize:11, cursor:'pointer', outline:'none' }}>
                 {roleOptions.map(r=>(
                   <option key={r.role} value={r.role} style={{ color:'#1a1c5e', background:'#fff' }}>
-                    {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
+                    {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🛒 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
                   </option>
                 ))}
               </select>
@@ -354,7 +358,7 @@ export default function Navbar() {
                     border:`1px solid ${r.role===activeRole?'rgba(255,255,255,.3)':'rgba(255,255,255,.1)'}`,
                     background: r.role===activeRole?'rgba(255,255,255,.12)':'transparent',
                     color:'rgba(255,255,255,.8)', fontFamily:'DM Sans,sans-serif', fontSize:13, cursor:'pointer', textAlign:'left' }}>
-                  {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🏢 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
+                  {r.role==='SUPPLIER'?'🏭 Fornecedor':r.role==='BUYER'?'🛒 Comprador':r.role==='CLIENT'?'🏢 Cliente':'⚙️ Backoffice'}
                 </button>
               ))}
             </div>

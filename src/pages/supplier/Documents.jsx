@@ -48,10 +48,11 @@ function DocLegend() {
   return <span style={{ display:'block', marginTop:4 }}>{itens.join(' · ')} · Envio: PDF, JPG, PNG ou DOCX, até 20 MB</span>
 }
 
+// Rótulos iguais aos da tela do processo (Process.jsx)
 const STATUS_CONFIG = {
   VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
-  EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vencendo' },
-  MISSING:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Pendente' },
+  EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vence em breve' },
+  MISSING:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Não enviado' },
   PENDING:  { bg:'#fff7ed', bd:'#fed7aa', color:'#f59e0b', label:'Em análise' },
   EXPIRED:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Vencido' },
   REJECTED: { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Rejeitado' },
@@ -60,6 +61,9 @@ const STATUS_CONFIG = {
 
 // Documento dispensado pelo backoffice conta como satisfeito (mesma regra do score)
 const isSatisfied = (up) => up?.status === 'VALID' || up?.status === 'NOT_APPLICABLE'
+// Status que aceitam envio do arquivo — EXPIRING também (o e-mail de vencimento
+// pede a renovação; o botão vira "↑ Renovar")
+const UPLOADABLE = ['MISSING','REJECTED','EXPIRED','EXPIRING']
 
 export default function SupplierDocuments() {
   const mobile = useIsMobile()
@@ -450,6 +454,8 @@ export default function SupplierDocuments() {
   )
 
   const okCount  = reqDocs.filter(d => isSatisfied(getDoc(d.id))).length
+  // enviados = válidos/dispensados + em análise + ainda válidos vencendo em breve
+  const sentCount = reqDocs.filter(d => { const up = getDoc(d.id); return isSatisfied(up) || ['PENDING','EXPIRING'].includes(up?.status) }).length
   const totCount = reqDocs.length
 
   const renderDocRow = (doc) => {
@@ -568,10 +574,10 @@ export default function SupplierDocuments() {
                 {isIsentoMarked ? '✓ Isento' : 'Isento'}
               </button>
             )}
-            {/* Upload: MISSING/REJECTED/EXPIRED + permissão de perfil (acao:enviar_documentos) */}
-            {['MISSING','REJECTED','EXPIRED'].includes(status) && !hasAction(user, 'acao:enviar_documentos') ? (
+            {/* Upload: MISSING/REJECTED/EXPIRED/EXPIRING + permissão de perfil (acao:enviar_documentos) */}
+            {UPLOADABLE.includes(status) && !hasAction(user, 'acao:enviar_documentos') ? (
               <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap' }} title="Seu perfil não permite enviar documentos">sem permissão</span>
-            ) : ['MISSING','REJECTED','EXPIRED'].includes(status) ? (
+            ) : UPLOADABLE.includes(status) ? (
               <>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
                   ref={el => fileRefs.current[doc.id] = el}
@@ -582,7 +588,7 @@ export default function SupplierDocuments() {
                   <Button variant="orange" size="sm"
                     onClick={() => fileRefs.current[doc.id]?.click()}
                     disabled={isIsentoMarked}>
-                    ↑ Enviar
+                    {status === 'EXPIRING' ? '↑ Renovar' : '↑ Enviar'}
                   </Button>
                 )}
               </>
@@ -633,13 +639,13 @@ export default function SupplierDocuments() {
                   {up?.storage_path && (
                     <Button variant="neutral" size="sm" onClick={() => handleViewDoc(up)}>👁 Ver</Button>
                   )}
-                  {['MISSING','REJECTED','EXPIRED'].includes(status) && (
+                  {UPLOADABLE.includes(status) && (
                     hasAction(user, 'acao:enviar_documentos') ? (
                       <>
                         <input type="file" id={inputId} accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display:'none' }}
                           onChange={e => handleMobUpload(typeKey, label, e.target.files[0], { personId, postId })}/>
                         {busy ? <Spinner size={18}/> : (
-                          <Button variant="orange" size="sm" onClick={() => document.getElementById(inputId)?.click()}>↑ Enviar</Button>
+                          <Button variant="orange" size="sm" onClick={() => document.getElementById(inputId)?.click()}>{status === 'EXPIRING' ? '↑ Renovar' : '↑ Enviar'}</Button>
                         )}
                       </>
                     ) : <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão</span>
@@ -791,19 +797,19 @@ export default function SupplierDocuments() {
       <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
 
       {/* Fechou a fase: docs + questionário + mobilidade completos e processo
-          aguardando a análise da EQPI (pedido 25/09) */}
+          aguardando a análise da EQPI (pedido 25/09). Enviar ≠ aprovar: o
+          "Parabéns" fica para o processo aprovado (Dashboard) */}
       {completion?.ready && completion?.mobComplete && completion?.pendingSeal
-        && totCount > 0 && okCount === totCount && (
-        <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.3)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ fontSize:28, lineHeight:1 }}>🎉</div>
+        && totCount > 0 && sentCount === totCount && (
+        <div style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ fontSize:28, lineHeight:1 }}>✅</div>
           <div style={{ flex:1 }}>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#15803d' }}>
-              Parabéns! Você concluiu a homologação.
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>
+              Documentos enviados — sua homologação está em análise
             </div>
-            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#166534', marginTop:3 }}>
-              Seus documentos foram encaminhados para análise — prazo padrão de 3 dias úteis.
-              Avisaremos por e-mail quando houver resultado; se algum documento precisar de ajuste,
-              ele volta a aparecer aqui como pendente.
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:3 }}>
+              Prazo padrão de 3 dias úteis. Avisaremos por e-mail quando houver resultado; se algum
+              documento precisar de ajuste, ele volta a aparecer aqui como rejeitado.
             </div>
           </div>
         </div>
@@ -813,7 +819,7 @@ export default function SupplierDocuments() {
       <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(3,1fr)', gap:16, marginBottom:24 }}>
         {[
           ['Válidos', okCount, '#22c55e', '✅'],
-          ['Pendentes', totCount - okCount, totCount - okCount > 0 ? '#f59e0b' : '#22c55e', '⏳'],
+          ['Em análise ou não enviados', totCount - okCount, totCount - okCount > 0 ? '#f59e0b' : '#22c55e', '⏳'],
           ['Score ELOS', `${supplier?.score||0}/100`, supplier?.score >= 70 ? '#22c55e' : '#f59e0b', '📊'],
         ].map(([l,v,c,i]) => (
           <Card key={l}><div style={{ display:'flex',alignItems:'center',gap:12 }}><div style={{ fontSize:28 }}>{i}</div><div><div style={{ fontSize:22,fontWeight:800,color:c,fontFamily:'Montserrat,sans-serif' }}>{v}</div><div style={{ fontSize:11,color:'#9B9B9B' }}>{l}</div></div></div></Card>

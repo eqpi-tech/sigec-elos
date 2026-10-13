@@ -4,21 +4,21 @@ import { supabase } from '../../lib/supabase.js'
 import { Card, PageHeader, Spinner } from '../../components/ui.jsx'
 import { paymentsApi } from '../../services/api.js'
 
+// Só o que o plano entrega de fato (13/10): contatos completos na ficha
+// (get-supplier-profile) e cotações para fornecedores (patch_131).
+// CPF de sócios é sempre mascarado (LGPD), em qualquer plano.
 const FEATURES_FREE = [
   '✅ Acesso ao marketplace de fornecedores',
-  '✅ Visualização de perfis completos',
+  '✅ Perfis dos fornecedores (contatos mascarados)',
   '✅ Envio de convites de homologação',
+  '❌ Contatos completos dos fornecedores',
   '❌ Solicitar cotações (RFQ)',
-  '❌ Comparador de fornecedores',
-  '❌ Exportação de relatórios',
 ]
 
 const FEATURES_PRO = [
   '✅ Tudo do plano Free',
-  '✅ Solicitar cotações para múltiplos fornecedores (RFQ)',
-  '✅ Comparador de fornecedores lado a lado',
-  '✅ Exportação de relatórios CSV',
-  '✅ Suporte prioritário',
+  '✅ Contatos completos dos fornecedores e dos sócios (telefone e e-mail)',
+  '✅ Solicitar cotações para múltiplos fornecedores e receber as propostas na plataforma',
 ]
 
 export default function BuyerPlan() {
@@ -74,7 +74,7 @@ export default function BuyerPlan() {
     <div style={{ padding:'28px 32px', maxWidth:860, margin:'0 auto' }}>
       <PageHeader
         title="Meu Plano"
-        subtitle={isPro ? 'Comprador Pro ativo' : 'Comprador Free — faça upgrade para desbloquear RFQ e mais'}
+        subtitle={isPro ? 'Comprador Pro ativo' : 'Comprador Free — faça upgrade para ver os contatos completos e solicitar cotações'}
       />
 
       {isPro ? (
@@ -176,10 +176,10 @@ export default function BuyerPlan() {
           Dúvidas sobre planos
         </div>
         <div style={{ fontSize:13, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', lineHeight:1.6 }}>
-          O plano Free permite navegar pelo marketplace e visualizar todos os fornecedores homologados.
-          O plano Pro desbloqueia a funcionalidade de cotação (RFQ), onde você pode solicitar propostas
-          de múltiplos fornecedores simultaneamente. Para cancelar a assinatura, acesse o portal do
-          cliente no Stripe ou entre em contato com o suporte.
+          O plano Free permite navegar pelo marketplace e visualizar os fornecedores, com os contatos mascarados.
+          O plano Pro libera os contatos completos dos fornecedores e a cotação (RFQ): você solicita propostas
+          de vários fornecedores ao mesmo tempo e acompanha as respostas em Cotações. Para cancelar a
+          assinatura, acesse o portal do cliente no Stripe ou entre em contato com o suporte.
         </div>
       </Card>
     </div>

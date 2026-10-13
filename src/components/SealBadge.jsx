@@ -1,7 +1,8 @@
 // Medalha de Selo ELOS — um selo por processo de homologação.
 // Cada selo representa uma homologação aprovada com um cliente específico,
-// ou o Selo ELOS Simples quando o fornecedor se cadastra de forma autônoma.
+// ou o Selo ELOS (Verificado/Homologado) quando o fornecedor se cadastra de forma autônoma.
 // Sem hierarquia Bronze/Prata/Ouro: o que importa é QUEM emitiu e o STATUS.
+import { isSealRejected } from '../lib/sealStatus.js'
 
 const STATUS_META = {
   ACTIVE:    { dot:'#22c55e', label:'Ativo',      glow: true  },
@@ -23,6 +24,9 @@ export default function SealBadge({ seal, size = 'md', showScore = false }) {
   // Homologação com exceção (carta do cliente): rótulo próprio, tom âmbar
   if (status === 'ACTIVE' && seal.exception)
     sMeta = { ...sMeta, dot:'#f59e0b', label:'Homologado com Exceção' }
+  // Reprovado ≠ Suspenso (patch_130): o motivo aparece nas telas do processo
+  if (status === 'SUSPENDED' && isSealRejected(seal))
+    sMeta = { ...sMeta, label:'Reprovado' }
   const isActive = status === 'ACTIVE'
   const isPending = status === 'PENDING'
 

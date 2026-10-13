@@ -6,7 +6,7 @@ import { normalizeCnpj, isCnpjComplete, formatCnpj, looksLikeCnpj } from '../../
 
 const ROLES = [
   { value:'BUYER',    label:'Comprador',  icon:'🔍', desc:'Acesso ao marketplace — requer análise prévia do time comercial' },
-  { value:'CLIENT',   label:'Cliente',    icon:'🏢', desc:'Acesso completo ao HOC dos fornecedores — requer contrato assinado' },
+  { value:'CLIENT',   label:'Cliente',    icon:'🏢', desc:'Acesso completo aos processos dos fornecedores — requer contrato assinado' },
   { value:'SUPPLIER', label:'Fornecedor', icon:'🏭', desc:'Usuário vinculado a um fornecedor já cadastrado na plataforma' },
   { value:'ADMIN',    label:'Backoffice', icon:'⚙️', desc:'Acesso administrativo completo — análise e aprovação (EQPI)' },
 ]
@@ -139,7 +139,7 @@ export default function BackofficeCreateUser() {
           {role === 'CLIENT' && (
             <div style={{ marginBottom:16, background:'#EEF0FF', border:'1px solid #C7CAFF', borderRadius:10, padding:'10px 14px' }}>
               <div style={{ fontSize:12, color:'#2E3192', fontFamily:'DM Sans,sans-serif' }}>
-                O Cliente terá acesso ao HOC dos seus fornecedores. Se o CNPJ já existir (migrado do HOC), a conta será vinculada ao registro existente — os fornecedores associados a esse cliente já ficarão visíveis.
+                O Cliente terá acesso aos processos dos seus fornecedores. Se o CNPJ já existir (migrado do HOC), a conta será vinculada ao registro existente — os fornecedores associados a esse cliente já ficarão visíveis.
               </div>
             </div>
           )}

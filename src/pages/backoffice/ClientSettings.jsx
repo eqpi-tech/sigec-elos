@@ -137,7 +137,7 @@ export default function BackofficeClientSettings() {
 
   return (
     <div style={{ padding:'24px 32px', maxWidth:960, margin:'0 auto' }}>
-      <PageHeader title="Configurações de Clientes"
+      <PageHeader title="Lista de Clientes"
         subtitle="Preços de homologação por fluxo e modalidade preferencial"/>
 
       {/* Explicação */}

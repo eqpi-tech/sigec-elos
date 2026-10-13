@@ -8,6 +8,7 @@ import { normalizeCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
 import { authFetch } from '../../lib/authFetch.js'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 
 function safeStr(val, fallback = '—') {
   if (val === null || val === undefined) return fallback
@@ -397,6 +398,8 @@ export default function ClientSupplierProcess() {
   const score       = docs.length > 0 ? Math.round((validDocs / docs.length) * 100) : 0
 
   const inv = data.invitation
+  // reprovado ≠ suspenso (patch_130); inativado pelo cliente continua "suspenso"
+  const reprovado = isSealRejected(mySeal) && !mySeal.client_suspended_at
 
   const bankDoc = docs.find(d => String(d.type) === '10' && d.storage_path)
 
@@ -469,6 +472,13 @@ export default function ClientSupplierProcess() {
         </div>
       </Card>
 
+      {reprovado && (
+        <div style={{ background:'#fff1f2', border:'1px solid #fecdd3', borderRadius:12, padding:'12px 18px', marginBottom:16, fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9f1239' }}>
+          <strong style={{ fontFamily:'Montserrat,sans-serif' }}>✕ Homologação reprovada.</strong>
+          {sealStatusReason(mySeal) && <> Motivo: {sealStatusReason(mySeal)}</>}
+        </div>
+      )}
+
       <ClientProcessDocs seal={mySeal} supplierId={supplierId} existingDocs={docs}/>
       <ExceptionLetters seal={seal} supplierId={supplierId} clientId={user?.clientId}/>
 
@@ -535,7 +545,7 @@ export default function ClientSupplierProcess() {
                 <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>Conformidade documental</span>
                 <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#1a1c5e' }}>{score}%</span>
               </div>
-              <ScoreBar value={score} />
+              <ScoreBar score={score} />
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {[

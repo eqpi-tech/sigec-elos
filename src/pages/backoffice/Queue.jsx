@@ -14,6 +14,7 @@ import AiReviewPanel from '../../components/AiReviewPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
 import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { siteUrl } from '../../lib/siteUrl.js'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 
 const RISK_COLOR = { Alto:'#ef4444', Médio:'#f59e0b', Baixo:'#22c55e' }
 
@@ -517,14 +518,14 @@ export function BackofficeAnalysis() {
               <h1 style="color:#fff;margin:0;font-size:22px">SIGEC-ELOS</h1>
             </div>
             <div style="background:#fff;padding:28px;border:1px solid #e2e8f0;border-top:none">
-              <p>Ola, <strong>${supplierData.razao_social}</strong>!</p>
-              <p>Sua solicitacao de homologacao esta sendo analisada pela equipe EQPI. Em breve voce recebera o resultado.</p>
+              <p>Olá, <strong>${supplierData.razao_social}</strong>!</p>
+              <p>Sua solicitação de homologação está sendo analisada pela equipe EQPI. Em breve você receberá o resultado.</p>
               <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin:20px 0">
                 <strong style="color:#1d4ed8">O que acontece agora?</strong>
                 <ul style="margin:8px 0 0;padding-left:20px;color:#374151;font-size:13px">
                   <li>Nossa equipe revisa cada documento enviado</li>
-                  <li>Se houver pendencias, voce sera notificado</li>
-                  <li>Ao final, voce recebe o resultado por email</li>
+                  <li>Se houver pendências, você será notificado</li>
+                  <li>Ao final, você recebe o resultado por e-mail</li>
                 </ul>
               </div>
               <a href="${siteUrl()}/fornecedor/documentos" style="display:inline-block;background:#2E3192;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Ver meus documentos →</a>
@@ -1911,6 +1912,13 @@ export function BackofficeAnalysis() {
           <Card style={{ borderRadius:16,padding:'20px 24px',border:'2px solid #e2e4ef' }}>
             <SectionTitle>Decisão de Homologação</SectionTitle>
 
+            {/* Processo reprovado (patch_130) — distinto de suspenso */}
+            {isSealRejected(processSeal) && (
+              <div style={{ background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:14,fontSize:12,color:'#dc2626',fontFamily:'DM Sans,sans-serif' }}>
+                <strong>❌ Processo reprovado</strong>{sealStatusReason(processSeal) ? ` — ${sealStatusReason(processSeal)}` : ''}
+              </div>
+            )}
+
             {hasActiveSanctions && (
               <div style={{ background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:10,padding:'10px 12px',marginBottom:14,fontSize:12,color:'#dc2626',fontFamily:'DM Sans,sans-serif' }}>
                 ⚠ Sanções ativas detectadas. Requer validação especial antes de aprovar.
@@ -1983,11 +1991,11 @@ export function BackofficeAnalysis() {
                   const active = s.status === 'ACTIVE'
                   return (
                     <div key={s.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:10,border:'1px solid #eef0f6',marginBottom:6 }}>
-                      <span style={{ fontSize:13 }}>{active ? '🏅' : '⏳'}</span>
+                      <span style={{ fontSize:13 }}>{active ? '🏅' : isSealRejected(s) ? '❌' : '⏳'}</span>
                       <div style={{ flex:1,minWidth:0 }}>
                         <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,fontWeight:700,color:'#1a1c5e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{name}</div>
                         <div style={{ fontSize:10,color: active?'#15803d':s.status==='SUSPENDED'?'#dc2626':'#b45309',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
-                          {active ? `${s.exception ? 'Homologado com Exceção' : 'Ativo'} · score ${s.score ?? '—'}` : s.status==='SUSPENDED' ? 'Suspenso' : 'Em análise'}
+                          {active ? `${s.exception ? 'Homologado com Exceção' : 'Ativo'} · score ${s.score ?? '—'}` : isSealRejected(s) ? 'Reprovado' : s.status==='SUSPENDED' ? 'Suspenso' : 'Em análise'}
                         </div>
                       </div>
                       {active && (

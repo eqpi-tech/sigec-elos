@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { adminApi } from '../../services/api.js'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 export function BackofficeHomologados() {
@@ -12,7 +13,7 @@ export function BackofficeHomologados() {
   const [loading,   setLoading]   = useState(true)
   const [search,    setSearch]    = useState('')
   const [filterStatus, setFilterStatus] = useState('Todos')
-  const [stats,     setStats]     = useState({ total:0, premium:0, simples:0, suspended:0 })
+  const [stats,     setStats]     = useState({ total:0, premium:0, simples:0, suspended:0, rejected:0 })
   const [modal, setModal]         = useState(null) // { type:'inativar'|'reativar', supplierId, supplierName }
   const [motivo, setMotivo]       = useState('')
   const [processing, setProcessing] = useState(false)
@@ -27,7 +28,7 @@ export function BackofficeHomologados() {
       for (;;) {
         const { data, error } = await supabase
           .from('seals')
-          .select('id, supplier_id, level, status, score, issued_at, seal_name, client_id, suspended_reason, clients(razao_social), suppliers!inner(*)')
+          .select('id, supplier_id, level, status, score, issued_at, seal_name, client_id, suspended_reason, rejection_reason, clients(razao_social), suppliers!inner(*)')
           .in('status', ['ACTIVE', 'SUSPENDED'])
           .order('id')
           .range(from, from + PAGE - 1)
@@ -55,9 +56,11 @@ export function BackofficeHomologados() {
           seal_status:      best.status,
           seal_score:       best.score,
           seal_issued_at:   best.issued_at,
-          suspended_reason: best.suspended_reason,
+          suspended_reason: sealStatusReason(best),
+          // REJECTED = reprovado (patch_130), só para exibição/filtro; status real segue SUSPENDED
+          seal_situation:   isSealRejected(best) ? 'REJECTED' : best.status,
           all_seals: seals.map(s => ({
-            id: s.id, status: s.status,
+            id: s.id, status: s.status, rejected: isSealRejected(s),
             name: s.clients?.razao_social || s.seal_name || (s.client_id ? 'Cliente' : 'ELOS'),
           })),
         }
@@ -66,8 +69,9 @@ export function BackofficeHomologados() {
       setStats({
         total:       list.filter(s => s.seal_status === 'ACTIVE').length,
         sealsActive: all.filter(s => s.status === 'ACTIVE').length,
-        sealsSusp:   all.filter(s => s.status === 'SUSPENDED').length,
-        suspended:   list.filter(s => s.seal_status === 'SUSPENDED').length,
+        sealsSusp:   all.filter(s => s.status === 'SUSPENDED' && !isSealRejected(s)).length,
+        suspended:   list.filter(s => s.seal_situation === 'SUSPENDED').length,
+        rejected:    list.filter(s => s.seal_situation === 'REJECTED').length,
       })
     } catch (e) {
       console.error('Homologados query:', e.message)
@@ -79,7 +83,7 @@ export function BackofficeHomologados() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const filtered = suppliers.filter(s => {
-    if (filterStatus !== 'Todos' && s.seal_status !== filterStatus) return false
+    if (filterStatus !== 'Todos' && s.seal_situation !== filterStatus) return false
     if (!search) return true
     // CNPJ (numérico ou alfanumérico) comparado normalizado; parte numérica curta segue valendo
     const qCnpj = looksLikeCnpj(search) ? normalizeCnpj(search) : search.replace(/\D/g,'')
@@ -120,7 +124,7 @@ export function BackofficeHomologados() {
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
-      <PageHeader title="Fornecedores Homologados" subtitle={`${stats.total} com Selo ELOS ativo · ${stats.suspended} suspenso${stats.suspended !== 1 ? 's' : ''}`}/>
+      <PageHeader title="Fornecedores Homologados" subtitle={`${stats.total} com Selo ELOS ativo · ${stats.suspended} suspenso${stats.suspended !== 1 ? 's' : ''} · ${stats.rejected} reprovado${stats.rejected !== 1 ? 's' : ''}`}/>
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:24 }}>
@@ -143,10 +147,10 @@ export function BackofficeHomologados() {
           placeholder="🔍  Buscar por razão social ou CNPJ..."
           style={{ flex:1, minWidth:220, padding:'10px 16px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, outline:'none', boxSizing:'border-box' }}/>
         <div style={{ display:'flex', gap:8 }}>
-          {['Todos','ACTIVE','SUSPENDED'].map(f => (
+          {['Todos','ACTIVE','SUSPENDED','REJECTED'].map(f => (
             <button key={f} onClick={() => setFilterStatus(f)}
               style={{ padding:'8px 14px', borderRadius:20, border:`1px solid ${filterStatus===f?'#2E3192':'#e2e4ef'}`, background:filterStatus===f?'#2E3192':'#fff', color:filterStatus===f?'#fff':'#1a1c5e', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-              {f === 'Todos' ? `Todos (${suppliers.length})` : f === 'ACTIVE' ? `Ativos (${stats.total})` : `Suspensos (${stats.suspended})`}
+              {f === 'Todos' ? `Todos (${suppliers.length})` : f === 'ACTIVE' ? `Ativos (${stats.total})` : f === 'REJECTED' ? `Reprovados (${stats.rejected})` : `Suspensos (${stats.suspended})`}
             </button>
           ))}
         </div>
@@ -156,6 +160,7 @@ export function BackofficeHomologados() {
         ? <EmptyState icon="🔍" title="Nenhum resultado" subtitle="Tente outro termo de busca ou ajuste o filtro"/>
         : filtered.map((s, i) => {
             const isSuspended = s.seal_status === 'SUSPENDED'
+            const isRejected  = s.seal_situation === 'REJECTED'
             const sealColor   = isSuspended ? '#dc2626' : s.seal_level === 'Premium' ? '#F47E2F' : '#2E3192'
             return (
               <Card key={i} hover style={{ borderRadius:14, padding:'16px 20px', marginBottom:10, opacity: isSuspended ? 0.85 : 1 }}>
@@ -170,7 +175,7 @@ export function BackofficeHomologados() {
                         <span style={{ fontSize:10, fontWeight:700, color:sealColor, background:`${sealColor}18`, padding:'2px 8px', borderRadius:20 }}>Selo {s.seal_level||'—'}</span>
                       )}
                       <span style={{ fontSize:10, fontWeight:700, color:isSuspended?'#dc2626':'#22c55e', background:isSuspended?'rgba(239,68,68,.1)':'rgba(34,197,94,.1)', padding:'2px 8px', borderRadius:20 }}>
-                        {isSuspended ? 'Suspenso' : 'Ativo'}
+                        {isRejected ? 'Reprovado' : isSuspended ? 'Suspenso' : 'Ativo'}
                       </span>
                     </div>
                     <div style={{ fontSize:12, color:'#9B9B9B', marginTop:2 }}>
@@ -182,9 +187,10 @@ export function BackofficeHomologados() {
                     {(s.all_seals || []).length > 1 && (
                       <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>
                         {s.all_seals.map(sl => (
-                          <span key={sl.id} style={{ fontSize:9, fontWeight:700, fontFamily:'Montserrat,sans-serif', padding:'1px 7px', borderRadius:20,
-                            color: sl.status==='ACTIVE' ? '#15803d' : '#b45309',
-                            background: sl.status==='ACTIVE' ? 'rgba(34,197,94,.1)' : 'rgba(245,158,11,.12)' }}>
+                          <span key={sl.id} title={sl.rejected ? 'Reprovado' : sl.status==='ACTIVE' ? 'Ativo' : 'Suspenso'}
+                            style={{ fontSize:9, fontWeight:700, fontFamily:'Montserrat,sans-serif', padding:'1px 7px', borderRadius:20,
+                            color: sl.status==='ACTIVE' ? '#15803d' : sl.rejected ? '#dc2626' : '#b45309',
+                            background: sl.status==='ACTIVE' ? 'rgba(34,197,94,.1)' : sl.rejected ? 'rgba(239,68,68,.1)' : 'rgba(245,158,11,.12)' }}>
                             {sl.name}
                           </span>
                         ))}

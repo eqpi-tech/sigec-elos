@@ -86,7 +86,7 @@ export const supplierApi = {
     // Queries separadas para evitar problema de RLS em joins embutidos
     const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, released_at, hoc_process_id, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
+      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, suspended_reason, rejection_reason, exception, released_at, hoc_process_id, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
       supabase.from('plans').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
     ])
@@ -123,7 +123,7 @@ export const supplierApi = {
   getProcess: async (sealId, supplierId) => {
     // 1. Busca o seal
     const sealRes = await supabase.from('seals')
-      .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, clients(razao_social, cnpj)')
+      .select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, suspended_reason, rejection_reason, exception, seal_type, clients(razao_social, cnpj)')
       .eq('id', sealId)
       .single()
     if (sealRes.error) throw new Error(sealRes.error.message)
@@ -608,30 +608,31 @@ export const paymentsApi = {
 }
 
 // ── RFQ ──────────────────────────────────────────────────────────────────────
+// RFQ do COMPRADOR Pro (patch_131): mesmo formato da RFQ do cliente — 1 rfqs
+// + 1 rfq_responses por fornecedor, que responde pela caixa "Cotações
+// recebidas". Gravação/leitura por RPCs que validam o plano e o dono.
 export const rfqApi = {
-  send: async ({ supplierIds, category, message, buyerId }) => {
-    const rfqs = supplierIds.map(sid => ({
-      buyer_id: buyerId, supplier_id: sid, category, message, status: 'SENT',
-    }))
-    const { data, error } = await supabase.from('rfqs').insert(rfqs).select()
+  // { rfq_id, fornecedores }; deadline 'AAAA-MM-DD' opcional
+  send: async ({ supplierIds, title, message, deadline }) => {
+    const { data, error } = await supabase.rpc('buyer_rfq_send', {
+      p_supplier_ids: supplierIds, p_title: title || null,
+      p_description: message, p_deadline: deadline || null,
+    })
     if (error) throw new Error(error.message)
     return data
   },
 
-  list: async (userId, role) => {
-    if (role === 'BUYER') {
-      const { data: buyer } = await supabase.from('buyers').select('id').eq('user_id', userId).single()
-      if (!buyer) return []
-      const { data } = await supabase.from('rfqs').select(`*, suppliers(razao_social)`).eq('buyer_id', buyer.id)
-      return data || []
-    }
-    if (role === 'SUPPLIER') {
-      const { data: profile } = await supabase.from('profiles').select('supplier_id').eq('id', userId).single()
-      if (!profile?.supplier_id) return []
-      const { data } = await supabase.from('rfqs').select(`*, buyers(razao_social)`).eq('supplier_id', profile.supplier_id)
-      return data || []
-    }
-    const { data } = await supabase.from('rfqs').select('*')
+  // cotações do comprador logado, com contagem de lidas/propostas
+  list: async () => {
+    const { data, error } = await supabase.rpc('buyer_rfq_list')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+
+  // respostas dos fornecedores a uma cotação do comprador
+  responses: async (rfqId) => {
+    const { data, error } = await supabase.rpc('buyer_rfq_responses', { p_rfq: rfqId })
+    if (error) throw new Error(error.message)
     return data || []
   },
 }
@@ -686,7 +687,7 @@ export const clientRfqApi = {
   },
 }
 
-// Caixa de entrada de cotações do fornecedor (patch_102)
+// Caixa de entrada de cotações do fornecedor (patch_102; RFQs de comprador desde o patch_131)
 export const supplierRfqApi = {
   inbox: async () => {
     const { data, error } = await supabase.rpc('supplier_rfq_inbox')
@@ -962,7 +963,8 @@ export const adminApi = {
   rejectSeal: async (supplierId, reason) => {
     const { error } = await supabase
       .from('seals')
-      .update({ status: 'SUSPENDED', suspended_reason: reason })
+      // rejection_reason marca REPROVADO (≠ suspenso) — patch_130
+      .update({ status: 'SUSPENDED', suspended_reason: reason, rejection_reason: reason || 'Homologação reprovada' })
       .eq('supplier_id', supplierId)
     if (error) throw new Error(error.message)
 

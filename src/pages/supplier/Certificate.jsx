@@ -154,6 +154,13 @@ export default function SupplierCertificate() {
                   {shown.length > 0 ? ', para as categorias de prestação de serviço e/ou fornecimento:' : '.'}
                 </div>
 
+                {/* Homologado com Exceção (carta do cliente, patch_051) — igual ao /verificar */}
+                {seal.exception && (
+                  <div style={{ display: 'inline-block', marginTop: 14, padding: '5px 16px', borderRadius: 20, border: '1.5px solid #d97706', background: '#fffbeb', fontFamily: 'Montserrat,sans-serif', fontWeight: 800, fontSize: 12, letterSpacing: 1, color: '#b45309', textTransform: 'uppercase' }}>
+                    Homologado com Exceção
+                  </div>
+                )}
+
                 {shown.length > 0 && (
                   <div style={{ margin: '16px auto 0', maxWidth: 860, fontFamily: 'DM Sans,sans-serif', fontSize: 12.5, color: '#4a4f66', lineHeight: 1.9 }}>
                     {shown.join('  ·  ')}
@@ -172,7 +179,8 @@ export default function SupplierCertificate() {
                     🔎 elos.eqpitech.com.br/verificar?code={certNumber}
                   </a>
                   <div style={{ fontFamily: 'DM Sans,sans-serif', fontSize: 11.5, color: '#8a8fa8', marginTop: 6 }}>
-                    Emitido em {fmtDate(new Date().toISOString())}
+                    {/* data real da homologação (seals.issued_at), não a data da impressão */}
+                    Emitido em {fmtDate(seal.issued_at) || '—'}
                   </div>
                 </div>
 

@@ -162,7 +162,7 @@ export default function BackofficeCreateClient() {
             ['E-mail', result.email],
             ['Empresa', result.razao],
             ['Precificação', `R$ ${Number(price).toLocaleString('pt-BR')} · ${payer==='client'?'Subsidiado pelo cliente':'Fornecedor paga'}`],
-            result.slug ? ['Landing page', `elos.eqpitech.com.br/${result.slug}`] : null,
+            result.slug ? ['Landing page', `elos.eqpitech.com.br/portal/${result.slug}`] : null,
           ].filter(Boolean).map(([k,v]) => (
             <div key={k} style={{ display:'flex', gap:12, alignItems:'baseline' }}>
               <span style={{ fontSize:12, color:'#9B9B9B', minWidth:100, fontFamily:'DM Sans,sans-serif' }}>{k}</span>
@@ -252,7 +252,7 @@ export default function BackofficeCreateClient() {
             <div style={frow}>
               <label style={lbl}>Preço por homologação (R$)</label>
               <input type="number" value={price} onChange={e => setPrice(e.target.value)} min="0" step="0.01" style={inp}/>
-              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Valor cobrado por cada fornecedor homologado neste cliente. Padrão: R$ 390,00</div>
+              <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Valor cobrado por cada fornecedor homologado neste cliente.</div>
             </div>
 
             <div style={frow}>
@@ -293,7 +293,7 @@ export default function BackofficeCreateClient() {
                   <div style={frow}>
                     <label style={lbl}>Slug (URL) *</label>
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span style={{ fontSize:12, color:'#9B9B9B', whiteSpace:'nowrap' }}>elos.eqpitech.com.br/</span>
+                      <span style={{ fontSize:12, color:'#9B9B9B', whiteSpace:'nowrap' }}>elos.eqpitech.com.br/portal/</span>
                       <input value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,''))}
                         placeholder="nome-empresa" style={{ ...inp, flex:1 }}/>
                     </div>
@@ -349,7 +349,7 @@ export default function BackofficeCreateClient() {
                 ['Quem paga', payer==='client' ? '🤝 Subsidiado pelo cliente' : '💳 Fornecedor paga'],
               ]},
               ...(!skipLp ? [{ section:'Landing Page', items:[
-                ['URL', `elos.eqpitech.com.br/${slug}`],
+                ['URL', `elos.eqpitech.com.br/portal/${slug}`],
                 ['Nome', lpName],
                 ['Cor de destaque', accentColor],
                 ...( desc ? [['Descrição', desc.slice(0,60) + (desc.length>60?'...':'')]] : [] ),

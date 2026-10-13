@@ -178,6 +178,9 @@ export default function ClientInvitations() {
     } finally { setSending(false) }
   }
 
+  // convidar/reenviar/cancelar: perfil somente leitura (legado) + ação do perfil
+  const podeConvidar = can(user, 'client_invite') && hasAction(user, 'acao:novo_convite')
+
   const inp  = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
   const lbl  = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
   const row2 = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }
@@ -187,7 +190,7 @@ export default function ClientInvitations() {
       <PageHeader
         title="Convites"
         subtitle={`${invites.length} convite${invites.length !== 1 ? 's' : ''} enviado${invites.length !== 1 ? 's' : ''}`}
-        action={can(user, 'client_invite') && hasAction(user, 'acao:novo_convite') ? { label:'+ Novo Convite', onClick: () => setShowModal(true) } : undefined}
+        action={podeConvidar ? { label:'+ Novo Convite', onClick: () => setShowModal(true) } : undefined}
       />
 
       {success && (
@@ -236,8 +239,8 @@ export default function ClientInvitations() {
         <EmptyState
           icon="📨"
           title="Nenhum convite encontrado"
-          subtitle={filtrosAtivos ? 'Ajuste os filtros.' : 'Clique em "+ Novo Convite" para começar.'}
-          action={!filtrosAtivos ? { label:'Enviar primeiro convite', onClick: () => setShowModal(true) } : undefined}
+          subtitle={filtrosAtivos ? 'Ajuste os filtros.' : podeConvidar ? 'Clique em "+ Novo Convite" para começar.' : 'Nenhum convite enviado ainda.'}
+          action={!filtrosAtivos && podeConvidar ? { label:'Enviar primeiro convite', onClick: () => setShowModal(true) } : undefined}
         />
       ) : (
         <div style={{ display:'grid', gap:10 }}>
@@ -285,20 +288,18 @@ export default function ClientInvitations() {
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(inv.created_at).toLocaleDateString('pt-BR')}
                   </div>
-                  {!inv.hoc_id && !['REGISTERED', 'CANCELLED', 'EXPIRED'].includes(inv.status) && (
+                  {podeConvidar && !inv.hoc_id && !['REGISTERED', 'CANCELLED', 'EXPIRED'].includes(inv.status) && (
                     <div style={{ display:'flex', gap:6 }}>
                       <button
                         onClick={() => handleResend(inv.id)}
                         style={{ fontSize:10, color:'#2E3192', background:'none', border:'1px solid #2E3192', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
                         Reenviar
                       </button>
-                      {hasAction(user, 'acao:novo_convite') && (
-                        <button
-                          onClick={() => setCancelando({ inv, reason:'', busy:false })}
-                          style={{ fontSize:10, color:'#b91c1c', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
-                          Cancelar
-                        </button>
-                      )}
+                      <button
+                        onClick={() => setCancelando({ inv, reason:'', busy:false })}
+                        style={{ fontSize:10, color:'#b91c1c', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                        Cancelar
+                      </button>
                     </div>
                   )}
                 </div>

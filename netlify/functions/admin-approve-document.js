@@ -338,7 +338,8 @@ exports.handler = async (event) => {
     const reason = `Homologação reprovada automaticamente. Documentos com pendências: ${rejectedLabels}. Corrija os documentos e solicite nova análise.`
 
     let rejQ = supabaseAdmin.from('seals')
-      .update({ status: 'SUSPENDED', suspended_reason: reason })
+      // rejection_reason marca REPROVADO (≠ suspenso) — patch_130
+      .update({ status: 'SUSPENDED', suspended_reason: reason, rejection_reason: reason })
       .eq('supplier_id', supplierId)
     rejQ = clientId ? rejQ.eq('client_id', clientId) : rejQ.is('client_id', null)
     const { error: rejErr } = await rejQ

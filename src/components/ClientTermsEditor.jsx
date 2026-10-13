@@ -20,7 +20,7 @@ async function callTerms(payload) {
 
 // Texto legado dos Termos de Homologação (clients.terms_content) — mesmo
 // editor no cliente e no backoffice (clientId só é enviado pelo ADMIN)
-function LegacyTermsCard({ clientId }) {
+function LegacyTermsCard({ clientId, readOnly = false }) {
   const [terms, setTerms]       = useState('')
   const [original, setOriginal] = useState('')
   const [isDefault, setIsDefault] = useState(true) // seguindo o padrão SIGEC
@@ -84,10 +84,10 @@ function LegacyTermsCard({ clientId }) {
           ? <span style={{ fontSize: 11, fontWeight: 700, color: '#9B9B9B', background: '#f0f0f0', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Usando termos padrão — edite para personalizar</span>
           : <span style={{ fontSize: 11, fontWeight: 700, color: '#2E3192', background: 'rgba(46,49,146,.1)', borderRadius: 20, padding: '4px 10px', fontFamily: 'Montserrat,sans-serif', flexShrink: 0 }}>Personalizado</span>}
       </div>
-      <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={12}
+      <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={12} readOnly={readOnly}
         placeholder="Cole aqui o texto dos Termos de Homologação deste cliente..."
         style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: '1px solid #e2e4ef', fontFamily: 'DM Mono,monospace,DM Sans,sans-serif', fontSize: 13, color: '#1a1c5e', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box', outline: 'none' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+      {!readOnly && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
         <button onClick={restoreDefault} disabled={saving || isDefault}
           style={{ background: 'none', border: 'none', cursor: isDefault ? 'default' : 'pointer', color: '#9B9B9B', fontSize: 13, fontFamily: 'DM Sans,sans-serif', textDecoration: isDefault ? 'none' : 'underline', padding: 0, opacity: isDefault ? 0.5 : 1 }}>
           Restaurar termos padrão
@@ -98,12 +98,13 @@ function LegacyTermsCard({ clientId }) {
             {saving ? '⏳ Salvando...' : 'Salvar Termos'}
           </Button>
         </div>
-      </div>
+      </div>}
     </Card>
   )
 }
 
-export default function ClientTermsEditor({ clientId }) {
+// readOnly: perfil somente leitura do cliente (legado) — só visualiza
+export default function ClientTermsEditor({ clientId, readOnly = false }) {
   const [items, setItems]     = useState(null)
   const [err, setErr]         = useState('')
   const [busy, setBusy]       = useState(false)
@@ -187,13 +188,15 @@ export default function ClientTermsEditor({ clientId }) {
           </div>
           {it.kind === 'DOCUMENT'
             ? <Button variant="neutral" size="sm" onClick={() => viewDoc(it)}>👁 Ver</Button>
-            : <Button variant="neutral" size="sm" onClick={() => { setEditItem(it); setTitle(it.title); setContent(it.content || ''); setShowText(true) }}>✏️ Editar</Button>}
-          <Button variant="neutral" size="sm" onClick={() => toggle(it)}>{it.active ? '⏸ Desativar' : '▶ Ativar'}</Button>
-          <Button variant="danger" size="sm" onClick={() => remove(it)}>🗑</Button>
+            : <Button variant="neutral" size="sm" onClick={() => { setEditItem(it); setTitle(it.title); setContent(it.content || ''); setShowText(true) }}>{readOnly ? '👁 Ver' : '✏️ Editar'}</Button>}
+          {!readOnly && <>
+            <Button variant="neutral" size="sm" onClick={() => toggle(it)}>{it.active ? '⏸ Desativar' : '▶ Ativar'}</Button>
+            <Button variant="danger" size="sm" onClick={() => remove(it)}>🗑</Button>
+          </>}
         </div>
       ))}
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16, alignItems: 'center' }}>
+      {!readOnly && <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16, alignItems: 'center' }}>
         <Button variant="primary" size="sm" onClick={() => { setEditItem(null); setTitle(''); setContent(''); setShowText(true) }}>+ Item de texto</Button>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input value={fileTitle} onChange={e => setFileTitle(e.target.value)}
@@ -205,22 +208,22 @@ export default function ClientTermsEditor({ clientId }) {
             {busy ? '⏳...' : '↑ Subir PDF'}
           </Button>
         </div>
-      </div>
+      </div>}
 
       {showText && (
         <div style={{ marginTop: 16, border: '1px solid #e2e4ef', borderRadius: 12, padding: 16, background: '#f8f9fb' }}>
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título (ex.: Termos de Homologação)"
+          <input value={title} onChange={e => setTitle(e.target.value)} readOnly={readOnly} placeholder="Título (ex.: Termos de Homologação)"
             style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e2e4ef', fontSize: 13, fontFamily: 'DM Sans,sans-serif', marginBottom: 8, boxSizing: 'border-box' }} />
-          <textarea value={content} onChange={e => setContent(e.target.value)} rows={8} placeholder="Texto integral que o fornecedor deverá aceitar..."
+          <textarea value={content} onChange={e => setContent(e.target.value)} rows={8} readOnly={readOnly} placeholder="Texto integral que o fornecedor deverá aceitar..."
             style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1px solid #e2e4ef', fontSize: 12, fontFamily: 'DM Sans,sans-serif', resize: 'vertical', boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <Button variant="primary" size="sm" disabled={busy} onClick={saveText}>{busy ? '⏳...' : editItem ? 'Salvar alterações' : 'Adicionar'}</Button>
-            <Button variant="neutral" size="sm" onClick={() => { setShowText(false); setEditItem(null) }}>Cancelar</Button>
+            {!readOnly && <Button variant="primary" size="sm" disabled={busy} onClick={saveText}>{busy ? '⏳...' : editItem ? 'Salvar alterações' : 'Adicionar'}</Button>}
+            <Button variant="neutral" size="sm" onClick={() => { setShowText(false); setEditItem(null) }}>{readOnly ? 'Fechar' : 'Cancelar'}</Button>
           </div>
-          {editItem && <div style={{ fontSize: 11, color: '#9B9B9B', marginTop: 6 }}>Alterar o texto cria a versão v{editItem.version + 1} — aceites antigos continuam vinculados à versão anterior.</div>}
+          {editItem && !readOnly && <div style={{ fontSize: 11, color: '#9B9B9B', marginTop: 6 }}>Alterar o texto cria a versão v{editItem.version + 1} — aceites antigos continuam vinculados à versão anterior.</div>}
         </div>
       )}
     </Card>
-    <LegacyTermsCard clientId={clientId} />
+    <LegacyTermsCard clientId={clientId} readOnly={readOnly} />
   </>)
 }

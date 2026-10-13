@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { hasAction } from '../../lib/modules.js'
+import { can } from '../../lib/permissions.js'
 import { useParams, useNavigate } from 'react-router-dom'
 import { marketplaceApi, invitationsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
@@ -71,11 +72,20 @@ export default function ClientSupplierDiscover() {
 
   // Modal de convite
   const [showModal,   setShowModal]   = useState(false)
-  const [inviteForm,  setInviteForm]  = useState({ tipo:'servico', escopo:'', subsidiado:false })
+  const [inviteForm,  setInviteForm]  = useState({ tipo:'servico', escopo:'', subsidiado:false, flow_id:'' })
   // padrão SIM quando o cliente opera no modelo subsidiado (28/09)
   useEffect(() => {
     invitationsApi.subsidyDefault(user?.clientId).then(sub => sub && setInviteForm(f => ({ ...f, subsidiado: true })))
   }, [user?.clientId])
+  // fluxos ativos do cliente (mesma escolha da tela Convites; padrão pré-selecionado)
+  const [flows, setFlows] = useState([])
+  useEffect(() => {
+    if (!user?.clientId) return
+    supabase.from('client_flows').select('id, name, is_default')
+      .eq('client_id', user.clientId).eq('active', true).order('name')
+      .then(({ data }) => setFlows(data || []))
+  }, [user?.clientId])
+  const podeConvidar = can(user, 'client_invite') && hasAction(user, 'acao:novo_convite')
   const [inviting,    setInviting]    = useState(false)
   const [inviteSent,  setInviteSent]  = useState(false)
   const [inviteError, setInviteError] = useState('')
@@ -91,17 +101,26 @@ export default function ClientSupplierDiscover() {
     setInviting(true); setInviteError('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      await invitationsApi.send({
-        razao_social:    data.razao_social,
-        cnpj:            normalizeCnpj(data.cnpj),
-        email:           '',          // lookup server-side se fornecedor já tem conta
-        supplier_id:     data.id,     // supplier já existe na base
-        client_id:       user.clientId,
-        invited_by_role: 'CLIENT',
-        tipo_fornecedor: inviteForm.tipo,
-        escopo:          inviteForm.escopo,
-        subsidiado:      inviteForm.subsidiado,
+      // fornecedor JÁ cadastrado → modo "supplierId" da função (o mesmo da aba
+      // Todos): e-mail resolvido no servidor (conta ou cadastro), fluxo validado
+      // e dedupe. Antes ia como empresa nova com e-mail vazio e era recusado.
+      const r = await invitationsApi.send({
+        supplierId:          data.id,
+        supplierRazaoSocial: data.razao_social,
+        supplierCnpj:        normalizeCnpj(data.cnpj),
+        clientId:            user.clientId,
+        objective:           'homologacao',
+        subsidiado:          inviteForm.subsidiado,
+        flowId:              inviteForm.flow_id || flows.find(f => f.is_default)?.id || null,
+        tipo_fornecedor:     inviteForm.tipo,
+        escopo:              inviteForm.escopo,
       }, session?.access_token)
+      if (r?.skipped) {
+        setInviteError(r.skipped === 'already_in_process'
+          ? 'Este fornecedor já está em processo de homologação com a sua empresa.'
+          : 'Este fornecedor já foi convidado pela sua empresa — veja em Convites.')
+        return
+      }
       setInviteSent(true)
       setShowModal(false)
     } catch (e) {
@@ -499,13 +518,28 @@ export default function ClientSupplierDiscover() {
               />
             </div>
 
+            {flows.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color:'#1a1c5e', textTransform:'uppercase', letterSpacing:.4, marginBottom:8 }}>Fluxo de homologação *</div>
+                <select value={inviteForm.flow_id || flows.find(f => f.is_default)?.id || ''}
+                  onChange={e => setInviteForm(f => ({...f, flow_id:e.target.value}))} style={inp}>
+                  {flows.map(fl => (
+                    <option key={fl.id} value={fl.id}>{fl.name}{fl.is_default ? ' (padrão)' : ''}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginTop:4 }}>
+                  Define as categorias e documentos exigidos do fornecedor
+                </div>
+              </div>
+            )}
+
             <label style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20, cursor:'pointer' }}>
               <input type="checkbox" checked={inviteForm.subsidiado}
                 onChange={e => setInviteForm(f => ({...f, subsidiado:e.target.checked}))}
                 style={{ width:16, height:16 }} />
               <div>
                 <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, fontWeight:600, color:'#1a1c5e' }}>Homologação subsidiada</div>
-                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>O custo de homologação será coberto pelo cliente</div>
+                <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:11, color:'#9B9B9B' }}>O custo da homologação será assumido pela sua empresa</div>
               </div>
             </label>
 
@@ -515,14 +549,14 @@ export default function ClientSupplierDiscover() {
               </div>
             )}
 
+            {!podeConvidar && (
+              <div style={{ background:'#fff7ed', border:'1px solid #fde68a', borderRadius:10, padding:'8px 12px', marginBottom:10, fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e' }}>
+                Seu perfil não permite enviar convites.
+              </div>
+            )}
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={() => setShowModal(false)}>Cancelar</Button>
-              {!hasAction(user, 'acao:novo_convite') && (
-                <div style={{ background:'#fff7ed', border:'1px solid #fde68a', borderRadius:10, padding:'8px 12px', marginBottom:10, fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e' }}>
-                  Seu perfil não permite enviar convites.
-                </div>
-              )}
-              <Button variant="orange" full disabled={inviting || !hasAction(user, 'acao:novo_convite')} onClick={sendInvite}>
+              <Button variant="orange" full disabled={inviting || !podeConvidar} onClick={sendInvite}>
                 {inviting ? '⏳ Enviando...' : '🤝 Confirmar Convite'}
               </Button>
             </div>

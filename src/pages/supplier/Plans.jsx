@@ -4,11 +4,12 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { paymentsApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { planLabel } from '../../lib/planLabels.js'
-import { Button, Card, PageHeader, Spinner } from '../../components/ui.jsx'
+import { Button, PageHeader, Spinner } from '../../components/ui.jsx'
 
 const SEALS = [
   {
     type: 'verificado', name: 'ELOS Verificado', icon: '🔵', color: '#2E3192', highlight: false,
+    // valores de referência — a fonte é app_settings.elos_prices (Preços ELOS no backoffice)
     priceAnual: 199, priceMensal: 29,
     badge: null,
     features: [
@@ -27,7 +28,6 @@ const SEALS = [
     features: [
       'Tudo do Verificado +',
       'Análise humana pelo backoffice EQPI',
-      'Selo de Reputação: Bronze → Prata → Ouro',
       'Prioridade de exibição no marketplace',
       'Documentos completos da categoria (todos os níveis)',
       'Relatório Assertiva de análise de crédito',
@@ -53,6 +53,16 @@ export default function SupplierPlans() {
   const [error,   setError]   = useState('')
   const [billing, setBilling] = useState({ verificado: 'anual' })
   const [currentPlan, setCurrentPlan] = useState(null)
+  const [elosPrices, setElosPrices]   = useState({})   // app_settings.elos_prices
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
+      .then(({ data }) => setElosPrices(data?.value || {}))
+  }, [])
+  // preço vigente do backoffice; os valores fixos do SEALS só valem se a configuração faltar
+  const priceOf = (seal, cycle) => cycle === 'mensal'
+    ? (elosPrices.verificado_mensal ?? seal.priceMensal)
+    : (elosPrices[`${seal.type}_anual`] ?? seal.priceAnual)
 
   useEffect(() => {
     if (!user?.supplierId) return
@@ -102,7 +112,7 @@ export default function SupplierPlans() {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:24 }}>
         {SEALS.map(seal => {
           const cycle   = billing[seal.type] || 'anual'
-          const price   = cycle === 'mensal' ? seal.priceMensal : seal.priceAnual
+          const price   = priceOf(seal, cycle)
           const monthly = cycle === 'mensal' ? price : Math.ceil(price / 12)
           const busy    = loading === seal.type
 
@@ -160,30 +170,6 @@ export default function SupplierPlans() {
         })}
       </div>
 
-      {/* Selo de Reputação — informativo */}
-      <Card style={{ borderRadius:16, padding:'20px 24px', background:'linear-gradient(135deg,#fff9f0,#fff)' }}>
-        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e', marginBottom:8 }}>
-          🏅 Selo de Reputação — Bronze · Prata · Ouro
-        </div>
-        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', lineHeight:1.6, marginBottom:12 }}>
-          O Selo de Reputação não é comprado — ele é <strong>conquistado</strong> dentro do ELOS Homologado.
-          É calculado com base na completude documental, tempo de casa, performance e indicadores ESG.
-          Ele rege seu posicionamento no ranking do marketplace.
-        </div>
-        <div style={{ display:'flex', gap:16 }}>
-          {[
-            ['🥉','Bronze','Ponto de entrada após homologação','#cd7f32'],
-            ['🥈','Prata','Documentação completa e histórico positivo','#9E9E9E'],
-            ['🥇','Ouro','Excelência comprovada em múltiplos critérios','#FFD700'],
-          ].map(([icon, tier, desc, color]) => (
-            <div key={tier} style={{ flex:1, textAlign:'center', padding:'12px 8px', background:`${color}12`, borderRadius:12, border:`1px solid ${color}44` }}>
-              <div style={{ fontSize:20 }}>{icon}</div>
-              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, color, marginTop:4 }}>{tier}</div>
-              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:10, color:'#64748b', marginTop:3, lineHeight:1.4 }}>{desc}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
 
       <div style={{ textAlign:'center', marginTop:16, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
         🔒 Pagamento seguro via <strong style={{ color:'#1a1c5e' }}>Stripe</strong> · Boleto, PIX e Cartão em até 12x · Cancele quando quiser

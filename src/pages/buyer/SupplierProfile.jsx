@@ -9,6 +9,8 @@ import SealBadge from '../../components/SealBadge.jsx'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 
 // ── Formatadores ─────────────────────────────────────────────────────────────
+// status de documento (documents_status_check) em pt-BR
+const DOC_STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Reprovado', EXPIRED:'Vencido', EXPIRING:'Vence em breve', NOT_APPLICABLE:'Não se aplica' }
 const ss = (v, fb = '—') => {
   if (v == null || v === '') return fb
   if (typeof v === 'string') return v.trim() || fb
@@ -611,7 +613,7 @@ export default function SupplierProfile() {
                 <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 0',borderBottom:'1px solid #f3f4f6'}}>
                   <StatusDot status={doc.status}/>
                   <span style={{flex:1,fontSize:13,color:'#9B9B9B'}}>{doc.label}</span>
-                  <span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>{doc.status}</span>
+                  <span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>{DOC_STATUS_LABEL[doc.status] || doc.status}</span>
                 </div>
               ))}
             </Section>
@@ -648,7 +650,6 @@ export default function SupplierProfile() {
             <Row label="Capital Social"       value={fmtMoeda(cd.capital_social)} highlight />
             <Row label="Faixa de Faturamento" value={ss(data.revenue_range)} />
             <Row label="Nº de Funcionários"   value={ss(data.employee_range)} />
-            <Row label="Plano SIGEC-ELOS"     value={ss(data.planType)} />
           </Section>
           <div style={{background:'rgba(46,49,146,.04)',border:'1px solid rgba(46,49,146,.1)',borderRadius:10,padding:'10px 14px',fontSize:11,color:'#9B9B9B',fontStyle:'italic'}}>
             ℹ️ Dados financeiros via Receita Federal ou autodeclarados. A EQPI Tech não garante exatidão para fins de crédito.

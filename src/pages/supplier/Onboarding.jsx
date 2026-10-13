@@ -534,7 +534,7 @@ export default function SupplierOnboarding() {
                     <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 16px', marginBottom:16, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif', lineHeight:1.55 }}>
                       {loggedAs
                         ? <>✅ Você já está conectado como <strong>{loggedAs}</strong>, com acesso a esta empresa.</>
-                        : <>🔐 <strong>{existingSupplier?.razao_social || 'Esta empresa'}</strong> já tem cadastro no ELOS{existingSupplier?.ownerEmailMasked ? <> — acesso de <strong>{existingSupplier.ownerEmailMasked}</strong></> : ''}. Entre com esse login (ou com o seu, se você já faz parte da equipe). Se não tem acesso, peça ao responsável para incluir você em <strong>Minha Equipe</strong>.</>}
+                        : <>🔐 <strong>{existingSupplier?.razao_social || 'Esta empresa'}</strong> já tem cadastro no ELOS{existingSupplier?.ownerEmailMasked ? <> — acesso de <strong>{existingSupplier.ownerEmailMasked}</strong></> : ''}. Entre com esse login (ou com o seu, se você já faz parte da equipe). Se não tem acesso, peça ao responsável para incluir você em <strong>Equipe</strong>.</>}
                     </div>
                   )}
                   {isExistingActive && !ownerMode && (
@@ -769,7 +769,7 @@ export default function SupplierOnboarding() {
                           <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>ELOS Homologado</span>
                           <span style={{ fontSize:9, fontWeight:700, color:'#F47E2F', background:'rgba(244,126,47,.12)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>RECOMENDADO</span>
                         </div>
-                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Homologação profissional com análise humana · Selo de reputação Bronze/Prata/Ouro · Prioridade no ranking</div>
+                        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Homologação profissional com análise humana · Documentos completos da categoria · Prioridade no ranking</div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
                         <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ {planPrice('homologado')}<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>

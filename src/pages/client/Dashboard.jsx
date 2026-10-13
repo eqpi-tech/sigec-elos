@@ -40,12 +40,12 @@ export default function ClientDashboard() {
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:28 }}>
         <KpiCard label="Fornecedores"           value={data?.total ?? 0} icon="🤝"
-          subtext={data?.convitesAbertos ? `+ ${data.convitesAbertos} convite(s) em aberto` : 'Com processo de homologação'} />
-        <KpiCard label="Homologados"            value={data?.homologados ?? 0} icon="✅" subtext="Selo ELOS ativo" />
+          sub={data?.convitesAbertos ? `+ ${data.convitesAbertos} convite(s) em aberto` : 'Com processo de homologação'} />
+        <KpiCard label="Homologados"            value={data?.homologados ?? 0} icon="✅" sub="Selo ELOS ativo" />
         <KpiCard label="Em Análise"             value={data?.emAnalise ?? 0} icon="⏳"
-          subtext={data?.aguardandoPagamento ? `+ ${data.aguardandoPagamento} aguardando pagamento` : 'Aguardando revisão EQPI'} />
-        <KpiCard label="Subsidiados"            value={data?.subsidiados ?? 0} icon="💰" subtext="Custo assumido por você" />
-        <KpiCard label="Carta de Exceção"       value={data?.cartasExcecao ?? 0} icon="📜" subtext="Fornecedores com carta vigente" />
+          sub={data?.aguardandoPagamento ? `+ ${data.aguardandoPagamento} aguardando pagamento` : 'Aguardando revisão EQPI'} />
+        <KpiCard label="Subsidiados"            value={data?.subsidiados ?? 0} icon="💰" sub="Custo assumido por você" />
+        <KpiCard label="Carta de Exceção"       value={data?.cartasExcecao ?? 0} icon="📜" sub="Fornecedores com carta vigente" />
       </div>
 
       {/* Lista recente */}

@@ -9,9 +9,10 @@ import PreCadastroHome from './PreCadastroHome.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, KpiCard, ScoreBar, StatusDot, Spinner, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 
-const STATUS_COLORS = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#f59e0b', EXPIRED:'#9B9B9B' }
-const STATUS_LABELS = { ACTIVE:'Ativo', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
+const STATUS_COLORS = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#f59e0b', REJECTED:'#ef4444', EXPIRED:'#9B9B9B' }
+const STATUS_LABELS = { ACTIVE:'Ativo', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Reprovado', EXPIRED:'Expirado' }
 const DOC_BG     = { VALID:'#f8fffe', EXPIRING:'#fffbeb', MISSING:'#fff5f5', PENDING:'#fff7ed', REJECTED:'#fff5f5' }
 const DOC_BORDER = { VALID:'#dcfce7', EXPIRING:'#fef3c7', MISSING:'#fee2e2', PENDING:'#fed7aa', REJECTED:'#fee2e2' }
 
@@ -166,7 +167,7 @@ export default function SupplierDashboard() {
     const isSusp   = !!(seal.client_suspended_at || seal.status === 'SUSPENDED')
     const effStatus = isSusp ? 'SUSPENDED' : (seal.status || 'PENDING')
     const clientName = seal.clients?.razao_social || (seal.client_id ? 'Cliente' : 'SIGEC-ELOS')
-    const name       = seal.seal_name || (seal.client_id ? `Processo ${clientName}` : 'SIGEC Simples')
+    const name       = seal.seal_name || (seal.client_id ? `Homologado — ${clientName}` : planName(seal.level || 'verificado'))
     const req = reqBySeal[seal.id] || []
     const cnt = { ok: 0, pend: 0, miss: 0 }
     for (const t of req) {
@@ -176,7 +177,9 @@ export default function SupplierDashboard() {
       else cnt.miss++
     }
     const awaiting = effStatus === 'PENDING' && ready === false
-    return { ...seal, effStatus, clientName, name, cnt, req, awaiting }
+    // Reprovado ≠ Suspenso (patch_130): rótulo e motivo próprios no card
+    const rejected = isSealRejected(seal)
+    return { ...seal, effStatus, clientName, name, cnt, req, awaiting, rejected }
   })
 
   return (
@@ -206,21 +209,42 @@ export default function SupplierDashboard() {
       </div>
 
       {/* ── Alertas ── */}
+      {/* "Parabéns" só com processo APROVADO (selo ACTIVE) — exibido por 30
+          dias após a emissão para não virar banner eterno */}
+      {(() => {
+        const approved = seals.find(s => s.status === 'ACTIVE' && !s.client_suspended_at && s.issued_at
+          && (Date.now() - new Date(s.issued_at).getTime()) < 30 * 86400000)
+        if (!approved) return null
+        return (
+          <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.3)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+            <div style={{ fontSize:28, lineHeight:1 }}>🎉</div>
+            <div style={{ flex:1, minWidth:220 }}>
+              <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#15803d' }}>
+                Parabéns! Sua homologação foi aprovada.
+              </div>
+              <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#166534', marginTop:2 }}>
+                O certificado já está disponível. Mantenha seus documentos em dia para conservar o selo.
+              </div>
+            </div>
+            <Button variant="neutral" size="sm" onClick={() => navigate(`/fornecedor/certificado/${approved.id}`)}>Ver certificado</Button>
+          </div>
+        )
+      })()}
       {/* Concluiu a parte dele (docs + questionário + mobilidade) e o processo
           está aguardando a análise da EQPI — confirmação visual do fechamento
-          da fase, além do e-mail (pedido 25/09) */}
+          da fase, além do e-mail (pedido 25/09). Ainda NÃO é aprovação. */}
       {ready === true && docsMissing === 0 && questPending === 0
         && (mobPend ? mobPend.complete : true)
         && seals.some(s => s.status === 'PENDING' && !s.client_suspended_at) && (
-        <div style={{ background:'rgba(34,197,94,.08)', border:'1px solid rgba(34,197,94,.3)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
-          <div style={{ fontSize:28, lineHeight:1 }}>🎉</div>
+        <div style={{ background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.2)', borderRadius:14, padding:'16px 20px', marginBottom:20, display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+          <div style={{ fontSize:28, lineHeight:1 }}>✅</div>
           <div style={{ flex:1, minWidth:220 }}>
-            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#15803d' }}>
-              Parabéns! Você concluiu a homologação.
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:14, color:'#1a1c5e' }}>
+              Documentos enviados — sua homologação está em análise
             </div>
-            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#166534', marginTop:2 }}>
-              Seus documentos foram encaminhados para análise — prazo padrão de 3 dias úteis.
-              Você será avisado por e-mail quando houver resultado; não é necessário fazer mais nada agora.
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginTop:2 }}>
+              Prazo padrão de 3 dias úteis. Você será avisado por e-mail quando houver resultado;
+              não é necessário fazer mais nada agora.
             </div>
           </div>
           <Button variant="neutral" size="sm" onClick={() => navigate('/fornecedor/documentos')}>Ver meus documentos</Button>
@@ -286,8 +310,9 @@ export default function SupplierDashboard() {
               {seals.filter(s=>s.status==='ACTIVE').length} selo{seals.filter(s=>s.status==='ACTIVE').length!==1?'s':''} ativo{seals.filter(s=>s.status==='ACTIVE').length!==1?'s':''}
             </div>
           </div>
-          {supplier.sealLevel !== 'Premium' && (
-            <Button variant="orange" size="sm" onClick={() => navigate('/fornecedor/planos')}>⭐ Upgrade Premium</Button>
+          {/* planos ELOS só para quem entrou direto (processo de cliente tem preço próprio) */}
+          {!seals.some(s => s.client_id) && !String(supplier.activePlan?.type || '').startsWith('homologado') && (
+            <Button variant="orange" size="sm" onClick={() => navigate('/fornecedor/planos')}>⭐ Ver planos</Button>
           )}
         </div>
         {seals.length === 0 ? (
@@ -358,11 +383,12 @@ export default function SupplierDashboard() {
         ) : (
           <div style={{ display:'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
             {processes.map((proc, i) => {
-              const statusColor  = proc.awaiting ? '#2E3192' : (STATUS_COLORS[proc.effStatus] || '#9B9B9B')
-              const statusLabel  = proc.awaiting ? 'Aguardando seus dados' : (STATUS_LABELS[proc.effStatus] || proc.effStatus)
+              const statusKey    = proc.rejected ? 'REJECTED' : proc.effStatus
+              const statusColor  = proc.awaiting ? '#2E3192' : (STATUS_COLORS[statusKey] || '#9B9B9B')
+              const statusLabel  = proc.awaiting ? 'Aguardando seus dados' : (STATUS_LABELS[statusKey] || statusKey)
               const scoreVal     = proc.score || 0
               return (
-                <Card key={proc.id || i} style={{ borderRadius:14, padding:'20px 22px', display:'flex', flexDirection:'column', gap:12, border:`1px solid ${proc.effStatus==='ACTIVE'?'rgba(34,197,94,.2)':proc.effStatus==='SUSPENDED'?'rgba(245,158,11,.2)':'rgba(46,49,146,.1)'}` }}>
+                <Card key={proc.id || i} style={{ borderRadius:14, padding:'20px 22px', display:'flex', flexDirection:'column', gap:12, border:`1px solid ${proc.effStatus==='ACTIVE'?'rgba(34,197,94,.2)':proc.rejected?'rgba(239,68,68,.2)':proc.effStatus==='SUSPENDED'?'rgba(245,158,11,.2)':'rgba(46,49,146,.1)'}` }}>
                   {/* Header do card */}
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                     <div>
@@ -377,6 +403,13 @@ export default function SupplierDashboard() {
                       {statusLabel}
                     </span>
                   </div>
+
+                  {/* motivo da reprovação/suspensão do processo */}
+                  {proc.effStatus === 'SUSPENDED' && sealStatusReason(proc) && (
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, lineHeight:1.4, color: proc.rejected ? '#b91c1c' : '#b45309', background: proc.rejected ? '#fef2f2' : '#fffbeb', border:`1px solid ${proc.rejected ? '#fecaca' : '#fde68a'}`, borderRadius:8, padding:'6px 10px' }}>
+                      {proc.rejected ? 'Motivo da reprovação: ' : 'Motivo da suspensão: '}{sealStatusReason(proc)}
+                    </div>
+                  )}
 
                   {/* Score */}
                   <div>

@@ -1,6 +1,7 @@
-// Cotações recebidas (RFQ de clientes — patch_102). O fornecedor lê a
-// solicitação, envia proposta (texto e/ou valor) e acompanha a decisão do
-// cliente (aceita/recusada). Dados via RPCs supplier_rfq_*.
+// Cotações recebidas (RFQ de clientes — patch_102 — e de compradores Pro do
+// marketplace — patch_131). O fornecedor lê a solicitação, envia proposta
+// (texto e/ou valor) e acompanha a decisão do cliente (aceita/recusada; o
+// comprador só recebe a proposta). Dados via RPCs supplier_rfq_*.
 import { useState, useEffect } from 'react'
 import { supplierRfqApi } from '../../services/api.js'
 import { parseMoneyBR } from '../../lib/money.js'
@@ -13,6 +14,8 @@ const STATUS = {
   DECLINED: { label:'Não selecionada',   color:'#9B9B9B' },
 }
 const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '')
+// quem pediu: cliente (nome) ou comprador do marketplace (🛒 nome · comprador)
+const quem = (it) => it.requester_role === 'BUYER' ? `🛒 ${it.client_name || 'Comprador'} · comprador` : it.client_name
 const money = (v) => Number(v).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })
 
 function RespondModal({ item, onClose, onSaved }) {
@@ -42,7 +45,7 @@ function RespondModal({ item, onClose, onSaved }) {
           <div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{item.title}</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
-              {item.client_name} · {item.category_name} · recebida em {fmt(item.created_at)}{item.deadline ? ` · prazo ${fmt(item.deadline)}` : ''}
+              {quem(item)} · {item.category_name} · recebida em {fmt(item.created_at)}{item.deadline ? ` · prazo ${fmt(item.deadline)}` : ''}
             </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:20, lineHeight:1 }}>✕</button>
@@ -107,7 +110,7 @@ export default function SupplierQuotations() {
 
   return (
     <div style={{ padding:'24px 32px', maxWidth:900, margin:'0 auto' }}>
-      <PageHeader title="Cotações recebidas" subtitle="Solicitações de cotação dos clientes que homologaram sua empresa"/>
+      <PageHeader title="Cotações recebidas" subtitle="Solicitações de cotação dos clientes que homologaram sua empresa e de compradores do marketplace"/>
       {loading ? (
         <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={40}/></div>
       ) : error ? (
@@ -117,7 +120,7 @@ export default function SupplierQuotations() {
           <div style={{ fontSize:40, marginBottom:12 }}>💬</div>
           <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:16, color:'#1a1c5e', marginBottom:6 }}>Nenhuma cotação recebida ainda</div>
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>
-            Quando um cliente enviar uma solicitação de cotação para a sua categoria, ela aparece aqui e você recebe um e-mail.
+            Quando um cliente ou comprador enviar uma solicitação de cotação para a sua empresa, ela aparece aqui (as de clientes também chegam por e-mail).
           </div>
         </Card>
       ) : (
@@ -131,7 +134,7 @@ export default function SupplierQuotations() {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>{it.title}</div>
                     <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
-                      {it.client_name} · {it.category_name} · {fmt(it.created_at)}{it.deadline ? ` · prazo ${fmt(it.deadline)}` : ''}
+                      {quem(it)} · {it.category_name} · {fmt(it.created_at)}{it.deadline ? ` · prazo ${fmt(it.deadline)}` : ''}
                     </div>
                   </div>
                   <span style={{ fontSize:11, fontWeight:700, color:st.color, background:`${st.color}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', whiteSpace:'nowrap' }}>

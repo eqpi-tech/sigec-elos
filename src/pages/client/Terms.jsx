@@ -3,12 +3,16 @@
 // aceite + texto legado dos Termos de Homologação.
 import { PageHeader } from '../../components/ui.jsx'
 import ClientTermsEditor from '../../components/ClientTermsEditor.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { can } from '../../lib/permissions.js'
 
 export default function ClientTerms() {
+  const { user } = useAuth()
+  // perfil somente leitura (legado): vê os termos, não edita
   return (
     <div style={{ padding: '28px 32px', maxWidth: 900, margin: '0 auto' }}>
       <PageHeader title="Termos e Aceites" subtitle="O que o fornecedor lê e aceita ao se cadastrar para a sua homologação" />
-      <ClientTermsEditor />
+      <ClientTermsEditor readOnly={!can(user, 'client_edit')} />
     </div>
   )
 }

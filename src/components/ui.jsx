@@ -1,7 +1,11 @@
+// seals.level legado ('Simples'/'Premium') fica como dado; só o rótulo segue o padrão Verificado/Homologado
+const LEVEL_LABEL = { Simples:'Verificado', Premium:'Homologado' }
+const levelLabel = (level) => LEVEL_LABEL[level] || level
+
 export const Badge = ({ level }) => {
   const C = { Simples:{bg:'#dbeafe',color:'#1d4ed8'}, Premium:{bg:'#fff7ed',color:'#ea580c'}, HOC:{bg:'#f0fdf4',color:'#16a34a'}, PENDING:{bg:'#fef9c3',color:'#ca8a04'}, ACTIVE:{bg:'#f0fdf4',color:'#16a34a'}, SUSPENDED:{bg:'#fee2e2',color:'#dc2626'} }
   const c = C[level] || C.Simples
-  return <span style={{ background:c.bg, color:c.color, fontSize:10, fontWeight:700, letterSpacing:.8, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', display:'inline-flex', alignItems:'center' }}>{level?.toUpperCase()}</span>
+  return <span style={{ background:c.bg, color:c.color, fontSize:10, fontWeight:700, letterSpacing:.8, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif', display:'inline-flex', alignItems:'center' }}>{levelLabel(level)?.toUpperCase()}</span>
 }
 
 export const Seal = ({ level, size=60 }) => {
@@ -10,7 +14,7 @@ export const Seal = ({ level, size=60 }) => {
   return (
     <div style={{ width:size,height:size,borderRadius:'50%',background:`radial-gradient(circle,${c.inner},${c.outer}22)`,border:`3px solid ${c.outer}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',boxShadow:`0 0 0 4px ${c.outer}11,0 4px 12px ${c.outer}33`,flexShrink:0 }}>
       <div style={{ fontSize:size*.3,color:c.outer,lineHeight:1 }}>{c.icon}</div>
-      <div style={{ fontSize:Math.max(size*.115,7),fontWeight:800,color:c.text,letterSpacing:.3,fontFamily:'Montserrat,sans-serif',lineHeight:1.2,textAlign:'center',marginTop:2,padding:'0 4px' }}>ELOS {level?.toUpperCase()}</div>
+      <div style={{ fontSize:Math.max(size*.115,7),fontWeight:800,color:c.text,letterSpacing:.3,fontFamily:'Montserrat,sans-serif',lineHeight:1.2,textAlign:'center',marginTop:2,padding:'0 4px' }}>ELOS {levelLabel(level)?.toUpperCase()}</div>
     </div>
   )
 }

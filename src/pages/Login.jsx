@@ -139,7 +139,12 @@ export default function Login() {
           </div>
           <div style={{ textAlign:'center', marginTop:16 }}>
             <p style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'rgba(255,255,255,.4)' }}>
-              Comprador ou backoffice? Solicite acesso ao administrador EQPI Tech.
+              {/* comprador se cadastra sozinho (Onboarding com ?type=buyer) */}
+              Comprador?{' '}
+              <Link to="/cadastro?type=buyer" style={{ color:'#F47E2F', fontWeight:700, textDecoration:'none' }}>Crie sua conta gratuita →</Link>
+            </p>
+            <p style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'rgba(255,255,255,.4)', marginTop:6 }}>
+              Backoffice? Solicite acesso ao administrador EQPI Tech.
             </p>
           </div>
         </div>

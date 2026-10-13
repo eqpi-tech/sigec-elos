@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { hasAction } from '../../lib/modules.js'
+import { can } from '../../lib/permissions.js'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
@@ -17,8 +19,8 @@ const situacaoDe = (item) => clientSealStatus(item.seal)
 const venceEm60 = (item) => item.seal?.status === 'ACTIVE' && item.seal?.expires_at
   && new Date(item.seal.expires_at) - Date.now() < 60 * 86400000
 
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado' }
-const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B' }
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', EXPIRED:'Expirado', REPROVADO:'Reprovado' }
+const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B', REPROVADO:'#9f1239' }
 
 // Mini-wizard "Todos os Fornecedores"
 const VSTAGES = [
@@ -293,7 +295,8 @@ export default function ClientSuppliers() {
                 const sup    = item.supplier
                 const seal   = item.seal
                 const isSusp = !!seal?.client_suspended_at
-                const sealSt = isSusp ? 'SUSPENDED' : seal?.status
+                const reprovado = !isSusp && isSealRejected(seal)
+                const sealSt = isSusp ? 'SUSPENDED' : reprovado ? 'REPROVADO' : seal?.status
                 return (
                   <Card key={item.supplierId} style={{ borderRadius:14, padding:'18px 22px', border:isSusp?'1px solid #fef3c7':undefined }}>
                     <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
@@ -310,8 +313,9 @@ export default function ClientSuppliers() {
                             <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>SUBSIDIADO</span>
                           )}
                           {seal && (
-                            <span style={{ fontSize:10, background:`${SEAL_COLOR[sealSt]||'#9B9B9B'}22`, color:SEAL_COLOR[sealSt]||'#9B9B9B', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
-                              {isSusp ? 'Inativado por mim' : situacaoDe(item) === 'PAGAMENTO' ? '💳 Aguardando pagamento' : SEAL_LABEL[seal.status] || seal.status}
+                            <span title={reprovado ? sealStatusReason(seal) : undefined}
+                              style={{ fontSize:10, background:`${SEAL_COLOR[sealSt]||'#9B9B9B'}22`, color:SEAL_COLOR[sealSt]||'#9B9B9B', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                              {isSusp ? 'Inativado por mim' : situacaoDe(item) === 'PAGAMENTO' ? '💳 Aguardando pagamento' : SEAL_LABEL[sealSt] || seal.status}
                             </span>
                           )}
                           {item.flowId && flowNames[item.flowId] && (
@@ -355,13 +359,13 @@ export default function ClientSuppliers() {
                             ⚡ Priorizar
                           </Button>
                         )}
-                        {seal?.status === 'ACTIVE' && !isSusp && (
+                        {seal?.status === 'ACTIVE' && !isSusp && can(user, 'client_inactivate') && (
                           <Button variant="danger" size="sm"
                             onClick={() => { setInactivateModal({ supplierId:item.supplierId, razaoSocial:sup?.razao_social||item.inviteRazaoSocial }); setInactivateReason('') }}>
                             Inativar
                           </Button>
                         )}
-                        {isSusp && (
+                        {isSusp && can(user, 'client_inactivate') && (
                           <Button variant="success" size="sm" onClick={() => handleReactivate(item.supplierId)}>
                             Reativar
                           </Button>
@@ -439,8 +443,10 @@ export default function ClientSuppliers() {
 
 // ── Relatório "Fornecedores com Intenção de Prestar Serviços" ────────────────
 // Convite reverso: fornecedores homologados que se auto-inseriram na lista.
-// O cliente pode ver a ficha, convidar (pré-preenchido), abrir RFQ ou remover.
+// O cliente pode ver a ficha, convidar (pré-preenchido) ou remover.
 function InterestsReport({ clientId, navigate }) {
+  const { user } = useAuth()
+  const podeConvidar = can(user, 'client_invite') && hasAction(user, 'acao:novo_convite')
   const [rows,    setRows]    = useState(null)
   const [acting,  setActing]  = useState(null)
 
@@ -480,7 +486,7 @@ function InterestsReport({ clientId, navigate }) {
     <>
       <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#64748b', marginBottom:14 }}>
         {rows.length} fornecedor{rows.length !== 1 ? 'es' : ''} declarou{rows.length !== 1 ? 'ram' : ''} intenção
-        de prestar serviços para sua empresa. Convide, solicite cotação ou remova da lista.
+        de prestar serviços para sua empresa. {podeConvidar ? 'Convide ou remova da lista.' : 'Veja a ficha ou remova da lista.'}
       </div>
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
         {rows.map(row => {
@@ -507,7 +513,7 @@ function InterestsReport({ clientId, navigate }) {
                 </div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
                   <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/perfil-fornecedor/${row.supplier_id}`)}>👁 Ficha</Button>
-                  <Button variant="primary" size="sm" onClick={() => invite(row)}>📨 Enviar Convite</Button>
+                  {podeConvidar && <Button variant="primary" size="sm" onClick={() => invite(row)}>📨 Enviar Convite</Button>}
                   <Button variant="danger"  size="sm" disabled={acting === row.id} onClick={() => dismiss(row)}>
                     {acting === row.id ? '⏳' : '🗑'}
                   </Button>

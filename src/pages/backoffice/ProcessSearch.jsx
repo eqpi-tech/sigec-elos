@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { isSealRejected } from '../../lib/sealStatus.js'
 import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
@@ -76,11 +77,13 @@ const ELOS_PSEUDO_CLIENT = { id: '__ELOS__', razao_social: '⭐ ELOS (processo p
 
 // Em análise = processo REAL em curso (selo PENDING). Cadastro sem selo é
 // só cadastro (regra 09/09: aceite+pagamento antecedem a análise).
-const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Rejeitado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)', PAGAMENTO:'💳 Aguardando pagamento', PRIORIDADE:'⚡ Prioritários' }
+const SEAL_LABEL = { ACTIVE:'Homologado', PENDING:'Em análise', SUSPENDED:'Suspenso', REJECTED:'Reprovado', CADASTRO:'Cadastro (sem processo)', CONVITE:'Convidado (sem cadastro)', PAGAMENTO:'💳 Aguardando pagamento', PRIORIDADE:'⚡ Prioritários' }
 // trava de pagamento (patch_112): pendente sem pagamento confirmado não é análise
+// reprovado (patch_130): SUSPENDED + rejection_reason → 'REJECTED' (≠ suspenso)
 const sealStatusOf = (seal) => !seal ? 'CADASTRO'
-  : (seal.status === 'PENDING' && !seal.released_at && !seal.hoc_process_id) ? 'PAGAMENTO' : seal.status
-const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#9B9B9B',  CADASTRO:'#94a3b8', CONVITE:'#6366f1', PAGAMENTO:'#ea580c', PRIORIDADE:'#b45309' }
+  : (seal.status === 'PENDING' && !seal.released_at && !seal.hoc_process_id) ? 'PAGAMENTO'
+  : isSealRejected(seal) ? 'REJECTED' : seal.status
+const SEAL_COLOR = { ACTIVE:'#22c55e',    PENDING:'#f59e0b',    SUSPENDED:'#ef4444',  REJECTED:'#991b1b',  CADASTRO:'#94a3b8', CONVITE:'#6366f1', PAGAMENTO:'#ea580c', PRIORIDADE:'#b45309' }
 // convite que ainda não virou cadastro (28/09: cliente recém-chegado só tem
 // convites — a busca voltava vazia e parecia defeito)
 const INVITE_LABEL = { SENT:'Enviado', VIEWED:'Visualizado — ainda não cadastrou', EXPIRED:'Expirado', CANCELLED:'Cancelado' }
@@ -90,7 +93,7 @@ export default function BackofficeProcessSearch() {
   const inputRef  = useRef(null)
 
   const [q,           setQ]           = useState('')
-  const [filterType,  setFilterType]  = useState('Todos')   // Todos | ACTIVE | PENDING | SUSPENDED | CADASTRO
+  const [filterType,  setFilterType]  = useState('Todos')   // Todos | ACTIVE | PENDING | SUSPENDED | REJECTED | CADASTRO
   const [filterClient,setFilterClient]= useState('')         // client_id ou ''
   const [showInactive,setShowInactive]= useState(false)
   const [results,     setResults]     = useState([])
@@ -156,7 +159,7 @@ export default function BackofficeProcessSearch() {
     if (filterClient) {
       const isElos = filterClient === ELOS_PSEUDO_CLIENT.id
       let sealQ = supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at, suspended_reason, rejection_reason')
         .range(0, 4999)
       sealQ = isElos ? sealQ.is('client_id', null) : sealQ.eq('client_id', filterClient)
       const [sealRes, invRes] = await Promise.allSettled([
@@ -251,7 +254,7 @@ export default function BackofficeProcessSearch() {
     const ids = suppliers.map(s => s.id)
     const [sealsRes, invitesRes] = await Promise.allSettled([
       supabase.from('seals')
-        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at')
+        .select('supplier_id, level, status, score, issued_at, client_id, released_at, hoc_process_id, priority_requested_at, suspended_reason, rejection_reason')
         .in('supplier_id', ids),
       supabase.from('invitations')
         .select('supplier_id, client_id')
@@ -290,7 +293,7 @@ export default function BackofficeProcessSearch() {
   return (
     <div style={{ padding:'28px 32px', maxWidth:1100, margin:'0 auto' }}>
       <PageHeader
-        title="Análise de Processo"
+        title="Processos"
         subtitle="Pesquisa geral de fornecedores cadastrados na plataforma"
       />
 
@@ -311,7 +314,7 @@ export default function BackofficeProcessSearch() {
 
         <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
           <div style={{ display:'flex', gap:6 }}>
-            {['Todos','PRIORIDADE','ACTIVE','PENDING','PAGAMENTO','SUSPENDED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
+            {['Todos','PRIORIDADE','ACTIVE','PENDING','PAGAMENTO','SUSPENDED','REJECTED','CADASTRO', ...(filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? ['CONVITE'] : [])].map(f => (
               <button key={f} onClick={() => setFilterType(f)}
                 style={{ padding:'6px 12px', borderRadius:20, border:`1px solid ${filterType===f?SEAL_COLOR[f]||'#2E3192':'#e2e4ef'}`, background:filterType===f?`${SEAL_COLOR[f]||'#2E3192'}12`:'#fff', color:filterType===f?SEAL_COLOR[f]||'#2E3192':'#9B9B9B', fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
                 {f === 'Todos' ? 'Todos' : SEAL_LABEL[f]}

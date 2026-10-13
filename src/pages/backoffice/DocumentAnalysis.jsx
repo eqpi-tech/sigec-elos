@@ -732,7 +732,7 @@ export default function DocumentAnalysis() {
 
   return (
     <div style={{ padding:'24px 32px', maxWidth:1200, margin:'0 auto' }}>
-      <PageHeader title="Análise de Documentos" subtitle="Aprovação e rejeição em lote · independente de fornecedor"
+      <PageHeader title="Análise de Documentos" subtitle="Fila de análise de todos os fornecedores · aprovação e rejeição por documento"
         action={
           <div style={{ display:'flex', gap:8 }}>
             {rows.length > 0 && (

@@ -27,14 +27,25 @@ exports.handler = async (event) => {
   //   · SUPPLIER com selo VIGENTE (regra comercial: fornecedor homologado
   //     conta como comprador assinante durante a vigência do selo; depois,
   //     renova a homologação ou assina como comprador)
-  // BUYER puro: mascarado até existir assinatura de comprador.
+  //   · BUYER com Comprador Pro vigente (13/10): buyer_plan 'pro' e validade
+  //     no futuro OU assinatura Stripe ainda viva — o stripe-webhook não
+  //     estende buyer_plan_expires_at nas renovações mensais; o cancelamento
+  //     (subscription.deleted) volta o plano para 'free'. Mesma regra da
+  //     my_buyer_is_pro() (patch_131).
+  // BUYER Free: mascarado (upsell na ficha).
   let openContacts = false
   try {
     const { data: { user } } = await supabase.auth.getUser(token)
     if (user) {
       const { data: roles } = await supabase
-        .from('user_roles').select('role, supplier_id').eq('user_id', user.id)
-      openContacts = (roles || []).some(r => r.role === 'CLIENT' || r.role === 'ADMIN')
+        .from('user_roles')
+        .select('role, supplier_id, is_active, buyer_plan, buyer_plan_expires_at, buyer_stripe_sub_id')
+        .eq('user_id', user.id)
+      const agora = Date.now()
+      openContacts = (roles || []).some(r =>
+        r.role === 'CLIENT' || r.role === 'ADMIN' ||
+        (r.role === 'BUYER' && r.is_active !== false && r.buyer_plan === 'pro' &&
+          ((r.buyer_plan_expires_at && new Date(r.buyer_plan_expires_at).getTime() > agora) || !!r.buyer_stripe_sub_id)))
 
       if (!openContacts) {
         const supplierIds = (roles || []).filter(r => r.role === 'SUPPLIER' && r.supplier_id).map(r => r.supplier_id)

@@ -4,7 +4,9 @@ import { Spinner } from './ui.jsx'
 import MfaGate from './MfaGate.jsx'
 import { isProdHost } from '../lib/siteUrl.js'
 
-const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice' }
+// home de cada papel — CLIENT faltava: trocar para cliente numa página de
+// fornecedor/comprador mandava para /login com sessão ativa
+const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', CLIENT:'/cliente', ADMIN:'/backoffice' }
 
 // MFA desligado SÓ no staging (pedido 28/09, testes com o cliente): a flag
 // VITE_MFA_DISABLED existe apenas em [context."staging".environment] do

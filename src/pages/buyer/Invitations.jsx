@@ -45,7 +45,7 @@ export default function BuyerInvitations() {
 
   return (
     <div style={{padding:mobile?'16px':'28px 32px',maxWidth:960,margin:'0 auto'}}>
-      <PageHeader title="Convites Enviados" subtitle={`${invites.length} convite${invites.length!==1?'s':''} para o Portal HOC`}/>
+      <PageHeader title="Convites Enviados" subtitle={`${invites.length} convite${invites.length!==1?'s':''} enviado${invites.length!==1?'s':''}`}/>
 
       {/* Busca */}
       <div style={{marginBottom:20}}>

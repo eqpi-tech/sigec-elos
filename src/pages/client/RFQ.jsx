@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { hasAction } from '../../lib/modules.js'
+import { can } from '../../lib/permissions.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientRfqApi } from '../../services/api.js'
 import { Card, Spinner, Button, SectionTitle, PageHeader } from '../../components/ui.jsx'
@@ -209,6 +210,9 @@ export default function ClientRFQ() {
   const [showNew,     setShowNew]     = useState(false)
   const [detailRfq,   setDetailRfq]   = useState(null)
 
+  // criar cotação: ação do perfil + perfil somente leitura (legado, client_edit)
+  const podeCriar = hasAction(user, 'acao:nova_cotacao') && can(user, 'client_edit')
+
   useEffect(() => {
     if (!user?.clientId) return
     clientRfqApi.list(user.clientId).then(r => { setRfqs(r); setLoading(false) })
@@ -218,7 +222,7 @@ export default function ClientRFQ() {
     <div style={{ padding:'24px 32px', maxWidth:900, margin:'0 auto' }}>
       <PageHeader title="Solicitações de Cotação (RFQ)"
         subtitle="Envie cotações para todos os fornecedores homologados em uma categoria"
-        action={hasAction(user, 'acao:nova_cotacao') ? <Button variant="primary" onClick={() => setShowNew(true)}>+ Nova Cotação</Button> : undefined}
+        action={podeCriar ? <Button variant="primary" onClick={() => setShowNew(true)}>+ Nova Cotação</Button> : undefined}
       />
 
       {loading ? (
@@ -230,7 +234,7 @@ export default function ClientRFQ() {
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:20 }}>
             Crie uma solicitação de cotação e ela será enviada automaticamente para todos os fornecedores homologados na categoria escolhida.
           </div>
-          <Button variant="primary" onClick={() => setShowNew(true)}>+ Criar primeira cotação</Button>
+          {podeCriar && <Button variant="primary" onClick={() => setShowNew(true)}>+ Criar primeira cotação</Button>}
         </Card>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>

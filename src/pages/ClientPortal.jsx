@@ -6,38 +6,41 @@ import { useIsMobile } from '../hooks/useIsMobile.js'
 // CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
 import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../lib/cnpj.js'
 
+// Planos padrão ELOS (portal sem pacotes do cliente). Preço vem de
+// app_settings.elos_prices; o valor aqui é só fallback se a configuração faltar
 const ELOS_PLANS = [
   {
-    id: 'simples',
-    name: 'ELOS Simples',
-    price: '290',
+    id: 'verificado',
+    name: 'ELOS Verificado',
+    priceKey: 'verificado_anual',
+    fallbackPrice: 199,
     period: '/ano',
     color: '#5B7FA5',
     icon: '🔗',
     features: [
-      'Perfil na vitrine do marketplace',
-      'Consulta automática de CNPJ',
-      'Monitoramento de listas restritivas',
-      'Selo ELOS Simples no perfil',
-      'Suporte por e-mail',
+      'Verificação automática via Receita Federal',
+      'Consulta de sanções (CEIS, CNEP)',
+      'Perfil público no marketplace SIGEC-ELOS',
+      'Alertas de vencimento de documentos',
+      'Monitoramento mensal automático',
     ],
     cta: 'Iniciar Cadastro',
   },
   {
-    id: 'premium',
-    name: 'ELOS Premium',
-    price: '990',
+    id: 'homologado',
+    name: 'ELOS Homologado',
+    priceKey: 'homologado_anual',
+    fallbackPrice: 690,
     period: '/ano',
     color: '#F47E2F',
     icon: '⛓️',
     popular: true,
     features: [
-      'Tudo do plano Simples +',
-      'Coleta automática de certidões',
-      'Selo ELOS Premium verificado',
-      'Prioridade no ranking de busca',
-      'Dashboard de visibilidade',
-      'Ponte direta para SIGEC-ELOS',
+      'Tudo do ELOS Verificado +',
+      'Análise humana pelo backoffice EQPI',
+      'Documentos completos da categoria',
+      'Prioridade de exibição no marketplace',
+      'Selo ELOS Homologado no perfil',
     ],
     cta: 'Iniciar Cadastro',
   },
@@ -98,6 +101,12 @@ export default function ClientPortal() {
   const [scrolled, setScrolled]   = useState(false)
   const [flows, setFlows]         = useState([])       // fluxos (pacotes) do cliente
   const [chosenFlow, setChosenFlow] = useState(null)   // fluxo escolhido no card
+  const [elosPrices, setElosPrices] = useState({})     // app_settings.elos_prices
+
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'elos_prices').maybeSingle()
+      .then(({ data }) => setElosPrices(data?.value || {}))
+  }, [])
 
   // Fetch LP config from Supabase
   useEffect(() => {
@@ -529,7 +538,7 @@ export default function ClientPortal() {
         <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : 'repeat(4, 1fr)', gap: 24 }}>
           {[
             { n: 1, title: 'Informe o CNPJ', desc: 'O sistema consulta automaticamente a Receita Federal e preenche os dados da sua empresa.' },
-            { n: 2, title: 'Escolha o Plano', desc: 'Selecione entre ELOS Simples ou Premium, de acordo com o nível de validação desejado.' },
+            { n: 2, title: 'Escolha o Plano', desc: 'Selecione entre ELOS Verificado ou ELOS Homologado, de acordo com o nível de validação desejado.' },
             { n: 3, title: 'Valide Documentos', desc: 'Certidões são coletadas automaticamente. Documentos adicionais podem ser enviados pelo portal.' },
             { n: 4, title: 'Receba o Selo', desc: 'Após a validação, seu perfil fica visível na vitrine de fornecedores homologados.' },
           ].map((step) => (
@@ -594,7 +603,7 @@ export default function ClientPortal() {
               <div style={{ marginBottom: 24 }}>
                 <span style={{ fontSize: 14, color: '#667085' }}>R$</span>
                 <span style={{ fontSize: 44, fontWeight: 700, color: plan.popular ? accent : plan.color, marginLeft: 2 }}>
-                  {plan.price}
+                  {Number(elosPrices[plan.priceKey] ?? plan.fallbackPrice).toLocaleString('pt-BR')}
                 </span>
                 <span style={{ fontSize: 15, color: '#98A2B3' }}>{plan.period}</span>
               </div>

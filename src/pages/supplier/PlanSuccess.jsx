@@ -143,14 +143,12 @@ export default function PlanSuccess() {
       </div>
       <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#9B9B9B', lineHeight:1.6, marginBottom:28 }}>
         Estamos aguardando a <strong>compensação do pagamento</strong> (até 3 dias úteis após pagar).
-        Seu plano será ativado <strong>automaticamente</strong> — avisaremos por e-mail. Enquanto isso, você já pode
-        adiantar o envio dos seus documentos.
+        Seu plano será ativado <strong>automaticamente</strong> assim que o boleto compensar — avisaremos
+        por e-mail. O envio dos documentos é liberado depois dessa confirmação.
       </div>
-      <Button variant="orange" full size="lg" style={{ borderRadius:12, marginBottom:10 }}
-        onClick={() => navigate('/fornecedor/documentos')}>
-        📋 Adiantar Documentos →
-      </Button>
-      <Button variant="neutral" full onClick={() => navigate('/fornecedor')}>
+      {/* trava de pagamento (patch_112): Documentos só abre com o pagamento
+          confirmado — sem botão de "adiantar" para não mandar de volta ao Pagamento */}
+      <Button variant="orange" full size="lg" style={{ borderRadius:12 }} onClick={() => navigate('/fornecedor')}>
         Ir para o meu painel
       </Button>
     </div>
@@ -159,19 +157,21 @@ export default function PlanSuccess() {
   // Timeout
   return wrapper(
     <div style={cardStyle}>
-      <div style={{ fontSize:56, marginBottom:12 }}>✅</div>
+      <div style={{ fontSize:56, marginBottom:12 }}>⏳</div>
       <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:22, color:'#1a1c5e', marginBottom:8 }}>
-        Pagamento recebido!
+        Pagamento em confirmação
       </div>
-      <div style={{ background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:12, padding:'12px 14px', marginBottom:20, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif', textAlign:'left' }}>
-        ⚠️ A ativação está sendo processada. O dashboard mostrará o plano ativo em alguns instantes. Se não aparecer, confirme o webhook do Stripe no Netlify.
+      <div style={{ background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:12, padding:'12px 14px', marginBottom:20, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif', textAlign:'left', lineHeight:1.5 }}>
+        ⏳ Seu pagamento está sendo confirmado. Isso pode levar alguns minutos — atualize esta página
+        ou abra o seu painel daqui a pouco. Você também receberá um e-mail quando o plano for ativado.
+        Se o plano não aparecer, fale com a gente em <a href="mailto:suporte@eqpitech.com.br" style={{ color:'#92400e', fontWeight:700 }}>suporte@eqpitech.com.br</a>.
       </div>
       <Button variant="orange" full size="lg" style={{ borderRadius:12, marginBottom:10 }}
-        onClick={() => navigate('/fornecedor/documentos')}>
-        📋 Enviar Documentos →
+        onClick={() => window.location.reload()}>
+        ↻ Atualizar
       </Button>
       <Button variant="neutral" full onClick={() => navigate('/fornecedor')}>
-        Ver Dashboard
+        Ir para o meu painel
       </Button>
     </div>
   )

@@ -188,7 +188,7 @@ export default function BackofficeLandingPages() {
 
   return (
     <div style={{ padding:'28px 32px', maxWidth:900, margin:'0 auto' }}>
-      <PageHeader title="Portais de Fornecedores"
+      <PageHeader title="Portais White-label"
         subtitle="Landing pages públicas personalizáveis por cliente"/>
 
       {/* Seletor */}

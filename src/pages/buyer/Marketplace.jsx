@@ -16,39 +16,55 @@ const CERTS   = ['ISO 9001','ISO 14001','ISO 45001','PBQP-H','OHSAS 18001']
 const RADIUS_OPTIONS = [25, 50, 100, 200, 500]
 const CAPITAL_MAX_DISPLAY = 10_000_000
 
-// ── RFQ Modal ────────────────────────────────────────────────────────────────
-function BuyerRFQModal({ suppliers, user, onClose, onSent }) {
-  const [category, setCategory] = useState('')
+// ── RFQ Modal (Comprador Pro — patch_131) ────────────────────────────────────
+// A cotação chega na caixa "Cotações recebidas" de cada fornecedor e as
+// respostas aparecem em /comprador/cotacoes. Plano Pro validado no servidor.
+const RFQ_MAX = 200   // mesmo limite da RPC buyer_rfq_send
+function BuyerRFQModal({ suppliers, onClose, onSent }) {
+  const [title,    setTitle]    = useState('')
   const [message,  setMessage]  = useState('')
+  const [deadline, setDeadline] = useState('')
   const [sending,  setSending]  = useState(false)
+  const [error,    setError]    = useState('')
   const inp = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box', marginBottom:12, outline:'none' }
+  const lbl = { fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }
+  const excesso = suppliers.length > RFQ_MAX
+  const hoje = new Date().toISOString().slice(0, 10)
 
   const send = async () => {
-    if (!message.trim()) { alert('Escreva uma mensagem para os fornecedores.'); return }
-    setSending(true)
+    if (!message.trim()) { setError('Descreva o que você precisa.'); return }
+    if (excesso) { setError(`Máximo de ${RFQ_MAX} fornecedores por cotação — refine a seleção.`); return }
+    setSending(true); setError('')
     try {
-      await rfqApi.send({ supplierIds: suppliers.map(s => s.id), category, message, buyerId: user.id })
-      onSent()
-    } catch(e) { alert('Erro ao enviar cotação: ' + e.message) }
+      const out = await rfqApi.send({ supplierIds: suppliers.map(s => s.id), title: title.trim(), message: message.trim(), deadline })
+      onSent(out?.fornecedores ?? suppliers.length)
+    } catch(e) { setError(e.message) }
     finally { setSending(false) }
   }
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+      <div style={{ background:'#fff', borderRadius:20, padding:28, width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.2)', maxHeight:'92vh', overflowY:'auto' }}>
         <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:18, color:'#1a1c5e', marginBottom:6 }}>📝 Solicitar Cotação</div>
         <div style={{ fontSize:13, color:'#9B9B9B', marginBottom:20 }}>
           Para <strong style={{ color:'#2E3192' }}>{suppliers.length} fornecedor{suppliers.length !== 1 ? 'es' : ''}</strong> selecionado{suppliers.length !== 1 ? 's' : ''}.
+          {' '}Cada um recebe a solicitação na área de cotações e as propostas aparecem em <strong>Cotações</strong>.
         </div>
-        <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>Assunto / Categoria</div>
-        <input value={category} onChange={e => setCategory(e.target.value)} placeholder="Ex: Serviço de manutenção elétrica" style={inp} />
-        <div style={{ fontSize:11, fontWeight:700, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, marginBottom:4 }}>Mensagem *</div>
+        <div style={lbl}>Assunto</div>
+        <input value={title} onChange={e => setTitle(e.target.value)} maxLength={200} placeholder="Ex: Serviço de manutenção elétrica" style={inp} />
+        <div style={lbl}>Mensagem *</div>
         <textarea value={message} onChange={e => setMessage(e.target.value)}
           placeholder="Descreva o que precisa, prazo, volume, local..." rows={5}
           style={{ ...inp, resize:'vertical' }} />
+        <div style={lbl}>Prazo para resposta (opcional)</div>
+        <input type="date" value={deadline} min={hoje} onChange={e => setDeadline(e.target.value)} style={inp} />
+        {excesso && !error && (
+          <div style={{ fontSize:12, color:'#ea580c', marginBottom:10 }}>Máximo de {RFQ_MAX} fornecedores por cotação — refine a seleção.</div>
+        )}
+        {error && <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:13, color:'#dc2626' }}>{error}</div>}
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <Button variant="neutral" style={{ flex:1 }} onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" style={{ flex:1 }} onClick={send} disabled={sending}>
+          <Button variant="primary" style={{ flex:1 }} onClick={send} disabled={sending || excesso}>
             {sending ? '⏳ Enviando...' : '📨 Enviar'}
           </Button>
         </div>
@@ -511,8 +527,12 @@ export default function BuyerMarketplace() {
                       ✉️ Convidar ({selectedList.length})
                     </Button>
                   )}
+                  {/* A RFQ do cliente é enviada por CATEGORIA (patch_102) — a seleção
+                      daqui não é levada; o botão só abre a página de cotações */}
                   {user?.role === 'CLIENT'
-                    ? <Button variant="orange" onClick={() => navigate('/cliente/rfq')}>📝 Criar Cotação (RFQ)</Button>
+                    ? <span title="A cotação do cliente é enviada por categoria — os fornecedores selecionados aqui não são incluídos">
+                        <Button variant="orange" onClick={() => navigate('/cliente/rfq')}>📝 Ir para Cotações (RFQ)</Button>
+                      </span>
                     : user?.buyerPlan === 'pro'
                     ? <Button variant="orange" onClick={() => setShowRfq(true)}>📝 Cotação ({selectedList.length})</Button>
                     : <button onClick={() => navigate('/comprador/plano')}
@@ -627,10 +647,13 @@ export default function BuyerMarketplace() {
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
                       onClick={() => goToProfile(s.id)}>Ver Perfil</Button>
-                    <button onClick={() => setInviteTargets([s])} title="Enviar convite (dados já preenchidos)"
-                      style={{ padding:'5px 10px', borderRadius:8, border:'1px solid #e2e4ef', background:'#fff', color:'#2E3192', fontSize:12, cursor:'pointer' }}>
-                      ✉️
-                    </button>
+                    {/* mesma permissão do botão "Convidar" do topo */}
+                    {(user?.role !== 'CLIENT' || hasAction(user, 'acao:novo_convite')) && (
+                      <button onClick={() => setInviteTargets([s])} title="Enviar convite (dados já preenchidos)"
+                        style={{ padding:'5px 10px', borderRadius:8, border:'1px solid #e2e4ef', background:'#fff', color:'#2E3192', fontSize:12, cursor:'pointer' }}>
+                        ✉️
+                      </button>
+                    )}
                     <button onClick={() => setSelectedMap(m => { const n={...m}; if(n[s.id]) delete n[s.id]; else n[s.id]=s; return n })}
                       style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel?'#2E3192':'#e2e4ef'}`, background:isSel?'rgba(46,49,146,.1)':'#fff', color:isSel?'#2E3192':'#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
                       {isSel ? '✓' : '+'}
@@ -657,9 +680,12 @@ export default function BuyerMarketplace() {
 
       {/* Modal RFQ */}
       {showRfq && (
-        <BuyerRFQModal suppliers={selectedList} user={user}
+        <BuyerRFQModal suppliers={selectedList}
           onClose={() => setShowRfq(false)}
-          onSent={() => { setShowRfq(false); setSelectedMap({}); alert(`Cotação enviada para ${selectedList.length} fornecedor${selectedList.length !== 1 ? 'es' : ''}!`) }}
+          onSent={(n) => {
+            setShowRfq(false); setSelectedMap({})
+            if (window.confirm(`Cotação enviada para ${n} fornecedor${n !== 1 ? 'es' : ''}! Acompanhar as respostas agora?`)) navigate('/comprador/cotacoes')
+          }}
         />
       )}
     </div>

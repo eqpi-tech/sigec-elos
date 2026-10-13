@@ -5,6 +5,8 @@ import { supplierApi, documentApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, ScoreBar, StatusDot, SectionTitle } from '../../components/ui.jsx'
 import SealBadge from '../../components/SealBadge.jsx'
+import { planName } from '../../lib/planLabels.js'
+import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 
 const DOC_STATUS_LABEL = { VALID:'Aprovado', PENDING:'Em análise', MISSING:'Não enviado', REJECTED:'Rejeitado', EXPIRED:'Vencido', EXPIRING:'Vence em breve' }
 const DOC_STATUS_COLOR = { VALID:'#22c55e', PENDING:'#f59e0b', MISSING:'#9B9B9B', REJECTED:'#ef4444', EXPIRED:'#ef4444', EXPIRING:'#f59e0b' }
@@ -49,7 +51,13 @@ export default function SupplierProcess() {
   // 18/09: PENDING só é "Em análise" quando docs + questionário estão completos
   const awaiting  = effStatus === 'PENDING' && ready === false
   const clientName = seal.clients?.razao_social || (isSigec ? 'SIGEC-ELOS' : 'Cliente')
-  const sealName   = seal.seal_name || (isSigec ? 'SIGEC Simples' : `Processo ${clientName}`)
+  // nome padrão do plano/processo: ELOS Verificado / ELOS Homologado / "Homologado — {cliente}"
+  // (seals.level legado 'Simples'/'Premium' é só dado — planName traduz)
+  const planLabel  = isSigec ? planName(seal.level || 'verificado') : `Homologado — ${clientName}`
+  const sealName   = seal.seal_name || planLabel
+  // Reprovado ≠ Suspenso (patch_130)
+  const rejected   = isSealRejected(seal)
+  const suspReason = rejected ? sealStatusReason(seal) : (seal.client_suspended_reason || seal.suspended_reason)
 
   const validDocs   = documents.filter(d => d.status === 'VALID').length
   const pendingDocs = documents.filter(d => d.status === 'PENDING').length
@@ -91,13 +99,13 @@ export default function SupplierProcess() {
 
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))', gap:12 }}>
               <div>
-                <span style={lbl}>Nível</span>
-                <span style={val}>{seal.level || 'Simples'}</span>
+                <span style={lbl}>Plano</span>
+                <span style={val}>{planLabel}</span>
               </div>
               <div>
                 <span style={lbl}>Status</span>
                 <span style={{ ...val, color: effStatus==='ACTIVE'?'#22c55e':awaiting?'#2E3192':effStatus==='PENDING'?'#f59e0b':'#ef4444' }}>
-                  {effStatus==='ACTIVE'?'Ativo':awaiting?'Aguardando seus dados':effStatus==='PENDING'?'Em análise':effStatus==='SUSPENDED'?'Suspenso':'Expirado'}
+                  {effStatus==='ACTIVE'?'Ativo':awaiting?'Aguardando seus dados':effStatus==='PENDING'?'Em análise':effStatus==='SUSPENDED'?(rejected?'Reprovado':'Suspenso'):'Expirado'}
                 </span>
                 {awaiting && (
                   <div style={{ fontSize:11, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:3, lineHeight:1.4 }}>
@@ -127,9 +135,14 @@ export default function SupplierProcess() {
               )}
             </div>
 
-            {isSusp && seal.client_suspended_reason && (
+            {isSusp && rejected && (
+              <div style={{ marginTop:12, background:'rgba(239,68,68,.06)', border:'1px solid rgba(239,68,68,.2)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#b91c1c', fontFamily:'DM Sans,sans-serif' }}>
+                ✗ Reprovado{suspReason ? `: ${suspReason}` : ''}
+              </div>
+            )}
+            {isSusp && !rejected && suspReason && (
               <div style={{ marginTop:12, background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:10, padding:'10px 14px', fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
-                ⚠️ Suspenso: {seal.client_suspended_reason}
+                ⚠️ Suspenso: {suspReason}
               </div>
             )}
           </div>
@@ -228,7 +241,7 @@ export default function SupplierProcess() {
 
           {/* Resumo */}
           <div style={{ display:'flex', gap:8 }}>
-            {[['✓ Aprovados',validDocs,'#22c55e'],['⏳ Em análise',pendingDocs,'#f59e0b'],['✗ Pendentes',missingDocs,'#ef4444']].map(([label,n,color],i) => (
+            {[['✓ Aprovados',validDocs,'#22c55e'],['⏳ Em análise',pendingDocs,'#f59e0b'],['✗ Não enviados',missingDocs,'#ef4444']].map(([label,n,color],i) => (
               <div key={i} style={{ flex:1, textAlign:'center', padding:'8px', background:`${color}0d`, borderRadius:10, border:`1px solid ${color}22` }}>
                 <div style={{ fontSize:15, fontWeight:900, color, fontFamily:'Montserrat,sans-serif' }}>{n}</div>
                 <div style={{ fontSize:10, color:'#64748b', fontFamily:'DM Sans,sans-serif' }}>{label}</div>

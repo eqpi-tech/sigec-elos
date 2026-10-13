@@ -77,7 +77,7 @@ exports.handler = async (event) => {
       if (temDono && !ehMembro) {
         console.warn(`[create-supplier] acesso negado: user ${user.id} tentou entrar no fornecedor ${existingSupplier.id}`)
         return { statusCode: 403, headers, body: JSON.stringify({
-          error: 'Esta empresa já tem cadastro no ELOS. Entre com o login que já existe ou peça ao responsável para incluir você na equipe (Minha Equipe).',
+          error: 'Esta empresa já tem cadastro no ELOS. Entre com o login que já existe ou peça ao responsável para incluir você na equipe (menu Equipe).',
         }) }
       }
 

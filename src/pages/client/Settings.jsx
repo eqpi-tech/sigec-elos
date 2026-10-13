@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 import { siteUrl } from '../../lib/siteUrl.js'
+import { can } from '../../lib/permissions.js'
 
 function FieldLabel({ children, required }) {
   return (
@@ -30,6 +31,8 @@ const EMPTY_LP = {
 
 export default function ClientSettings() {
   const { user } = useAuth()
+  // perfil somente leitura (legado): vê o portal, não edita
+  const podeEditar = can(user, 'client_edit')
 
   // ── Landing page ──
   const [lp,             setLp]             = useState(null)
@@ -154,6 +157,8 @@ export default function ClientSettings() {
           <div style={{ display:'flex', justifyContent:'center', padding:'30px' }}><Spinner size={36}/></div>
         ) : lpForm && (
           <>
+            {/* fieldset desabilitado trava todos os campos/botões do formulário */}
+            <fieldset disabled={!podeEditar} style={{ border:'none', padding:0, margin:0, minWidth:0 }}>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px 24px' }}>
 
               {/* Slug */}
@@ -344,13 +349,18 @@ export default function ClientSettings() {
                 </label>
               </div>
             </div>
+            </fieldset>
 
             <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:12,
               marginTop:24, paddingTop:20, borderTop:'1px solid #f0f0f0' }}>
               {lpSaved && <span style={{ fontSize:12, fontWeight:700, color:'#22c55e', fontFamily:'Montserrat,sans-serif' }}>✓ Salvo com sucesso</span>}
-              <Button variant="primary" disabled={lpSaving} onClick={handleSaveLp}>
-                {lpSaving ? '⏳ Salvando...' : lp ? 'Salvar Portal' : 'Criar Portal'}
-              </Button>
+              {podeEditar ? (
+                <Button variant="primary" disabled={lpSaving} onClick={handleSaveLp}>
+                  {lpSaving ? '⏳ Salvando...' : lp ? 'Salvar Portal' : 'Criar Portal'}
+                </Button>
+              ) : (
+                <span style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Somente leitura — seu perfil não permite editar o portal.</span>
+              )}
             </div>
           </>
         )}
