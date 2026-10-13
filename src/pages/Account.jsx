@@ -3,6 +3,7 @@
 // SOMENTE LEITURA: e-mail (identidade do login) e perfil de acesso/papel
 // (perfil só muda pelo backoffice — o usuário nunca altera o próprio).
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Card, Button, PageHeader, SectionTitle, Spinner } from '../components/ui.jsx'
@@ -23,6 +24,7 @@ const fmtPhone = (v) => {
 
 export default function Account() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [name, setName]   = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -139,6 +141,15 @@ export default function Account() {
       </Card>
 
       <MfaSection />
+
+      <Card style={{ borderRadius: 16, padding: '20px 28px', marginTop: 20, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 26 }}>❓</div>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 800, fontSize: 14, color: '#1a1c5e' }}>Ajuda e suporte</div>
+          <div style={{ fontSize: 12.5, color: '#6b7280', fontFamily: 'DM Sans,sans-serif' }}>Manuais da plataforma e canais de suporte da EQPI</div>
+        </div>
+        <Button variant="primary" onClick={() => navigate('/ajuda')}>Abrir Ajuda</Button>
+      </Card>
     </div>
   )
 }

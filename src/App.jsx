@@ -76,6 +76,7 @@ import ClientRFQ               from './pages/client/RFQ.jsx'
 import ClientTeam              from './pages/client/Team.jsx'
 import BackofficeUserProfiles  from './pages/backoffice/UserProfiles.jsx'
 import Account                 from './pages/Account.jsx'
+import Help                    from './pages/Help.jsx'
 
 const ROLE_HOME = { SUPPLIER:'/fornecedor', BUYER:'/comprador', ADMIN:'/backoffice', CLIENT:'/cliente' }
 
@@ -104,7 +105,7 @@ function Protect({ roles, perm, module, children }) {
 // Trava de pagamento (01/10, patch_112): fornecedor sem processo liberado
 // (pago, subsidiado, HOC ou homologado) só acessa pagamento, planos e Minha
 // Conta. O banco também trava o envio de documentos (RLS) e o selo.
-const PAY_FREE = ['/fornecedor/pagamento', '/fornecedor/planos', '/fornecedor/plano-ativo', '/conta']
+const PAY_FREE = ['/fornecedor/pagamento', '/fornecedor/planos', '/fornecedor/plano-ativo', '/conta', '/ajuda']
 function PaymentGate({ children }) {
   const { user } = useAuth()
   const { pathname } = useLocation()
@@ -177,6 +178,8 @@ function AppRoutes() {
       {/* Backoffice */}
       {/* Minha Conta — todos os papéis (aberta pelo avatar do Navbar) */}
       <Route path="/conta" element={<Protect roles={['SUPPLIER','BUYER','CLIENT','ADMIN']}><Account/></Protect>} />
+      {/* Ajuda — manuais (só logado) e canais de suporte (13/10) */}
+      <Route path="/ajuda" element={<Protect roles={['SUPPLIER','BUYER','CLIENT','ADMIN']}><Help/></Protect>} />
 
       <Route path="/backoffice"                 element={<Protect roles={['ADMIN']}><BackofficeOverview/></Protect>} />
       <Route path="/backoffice/fila"            element={<Protect roles={['ADMIN']}><BackofficeQueue/></Protect>} />
