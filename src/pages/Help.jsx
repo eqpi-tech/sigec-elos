@@ -74,7 +74,7 @@ export default function Help() {
               <span style={{ fontSize: 22 }}>{c.icon}</span>
               <span>
                 <span style={{ display: 'block', fontFamily: 'Montserrat,sans-serif', fontWeight: 700, fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: .5 }}>{c.label}</span>
-                <span style={{ display: 'block', fontFamily: 'DM Sans,sans-serif', fontWeight: 700, fontSize: 14, color: '#1a1c5e' }}>{c.value}</span>
+                <span style={{ display: 'block', fontFamily: 'DM Sans,sans-serif', fontWeight: 700, fontSize: 14, color: '#1a1c5e', wordBreak: 'break-all' }}>{c.value}</span>
               </span>
             </a>
           ))}
