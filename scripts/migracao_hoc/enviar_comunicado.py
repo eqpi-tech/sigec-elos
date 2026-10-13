@@ -3,17 +3,22 @@
   python3 scripts/migracao_hoc/enviar_comunicado.py --campanha A --onda 1 --teste fulano@empresa.com   # 1 de cada versão p/ revisar
   python3 scripts/migracao_hoc/enviar_comunicado.py --campanha A --onda 1 --previa                       # gera os HTML em /tmp
   python3 scripts/migracao_hoc/enviar_comunicado.py --campanha A --onda 1 --enviar                       # envio real (pede confirmação)
+  python3 scripts/migracao_hoc/enviar_comunicado.py --agendado                                           # comunicado do CALENDARIO de hoje (workflow)
 
 Destinatários: hoc_migration_contacts (patch_134). Cada envio fica registrado em
 envios->'<onda>' (data + id da Resend) — reexecutar não reenvia para quem já recebeu.
 Remetente = SIGEC-ELOS; responder vai para o suporte.
 """
-import argparse, json, os, subprocess, sys, time, urllib.request, urllib.error
+import argparse, datetime, json, os, shutil, subprocess, sys, time, urllib.request, urllib.error
+from zoneinfo import ZoneInfo
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
-ENV = {l.split('=', 1)[0]: l.split('=', 1)[1].strip().strip('"') for l in open(os.path.join(ROOT, '.env')) if '=' in l and not l.startswith('#')}
-DB = ENV['SUPABASE_DB_URL']
-RESEND = ENV['RESEND_API_KEY']
+# local: .env · GitHub Actions: variáveis de ambiente (secrets MIGRACAO_DB_URL e RESEND_API_KEY)
+_envf = os.path.join(ROOT, '.env')
+ENV = {l.split('=', 1)[0]: l.split('=', 1)[1].strip().strip('"') for l in open(_envf) if '=' in l and not l.startswith('#')} if os.path.exists(_envf) else {}
+DB = os.environ.get('MIGRACAO_DB_URL') or ENV['SUPABASE_DB_URL']
+RESEND = os.environ.get('RESEND_API_KEY') or ENV['RESEND_API_KEY']
+PSQL = shutil.which('psql') or '/usr/local/opt/libpq/bin/psql'
 FROM = 'SIGEC-ELOS <noreply@eqpitech.com.br>'
 REPLY_TO = 'suporte@eqpitech.com.br'
 SITE = 'https://elos.eqpitech.com.br'
@@ -30,7 +35,7 @@ CAMPANHAS = {
 AJUDA = f'{SITE}/ajuda'
 
 def psql(sql):
-    r = subprocess.run(['/usr/local/opt/libpq/bin/psql', DB, '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    r = subprocess.run([PSQL, DB, '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql],
                        capture_output=True, text=True, env={**os.environ, 'PGGSSENCMODE': 'disable'})
     if r.returncode: raise SystemExit(r.stderr)
     return r.stdout
@@ -108,9 +113,21 @@ JA_USA = """<p style="background:#eff6ff;border-left:4px solid #2E3192;padding:1
 — não é preciso criar outra conta.</p>"""
 
 # ── Comunicado 2 (quarta): o acesso está pronto ────────────────────────────
+def link_senha(c):
+    return f"{SITE}/criar-senha?t={c['senha_token']}" if c.get('senha_token') else f'{SITE}/login'
+
+# já criou a senha (cadastro próprio antes do comunicado): sem botão de senha
+def bloco_senha(c, k):
+    if c.get('tem_senha'):
+        return f"""<p><strong>Você já criou a sua senha</strong> — é só entrar com este e-mail:</p>
+{botao('Acessar o SIGEC-ELOS', f'{SITE}/login')}"""
+    return f"""<p><strong>Falta só criar a sua senha:</strong></p>
+{botao('Criar minha senha', link_senha(c))}
+<p style="font-size:13px;color:#6b7280">O link é pessoal e vale até {k['link_ate']}. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
+clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p>"""
+
 def onda2(c, k):
     ola = f"Olá, {primeiro_nome(c['nome'])}!" if primeiro_nome(c['nome']) else 'Olá!'
-    link = c.get('link') or f'{SITE}/login'
     if c['tipo'] == 'SUPPLIER' and ja_usa(k, c):
         assunto = f"Seus processos com {lista_clientes(c['clientes'], artigo=True)} chegam ao seu SIGEC-ELOS"
         corpo = f"""<p>{ola}</p>
@@ -126,10 +143,7 @@ def onda2(c, k):
 <p>Como avisamos, a homologação da sua empresa com {lista_clientes(['<strong>' + x + '</strong>' for x in c['clientes']], artigo=True)}
 passa para o <strong>SIGEC-ELOS</strong> em <strong>{k['inicio']}</strong>. O seu acesso já está pronto, com o seu e-mail
 <strong>{c['email']}</strong> e a sua empresa já vinculada.</p>
-<p><strong>Falta só criar a sua senha:</strong></p>
-{botao('Criar minha senha', link)}
-<p style="font-size:13px;color:#6b7280">O link é pessoal e vale até {k['link_ate']}. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
-clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p>
+{bloco_senha(c, k)}
 <p>Depois de criar a senha, você já pode entrar e conhecer a plataforma: seus processos, seus documentos e o histórico estão lá.</p>
 <p><strong>Importante:</strong> até {k['hoc_ate']}, continue enviando os documentos pelo SIGEC-HOC, como sempre.</p>
 {outros_docs(k) if c.get('outros') else ''}{assinatura()}"""
@@ -138,10 +152,7 @@ clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p
         corpo = f"""<p>{ola}</p>
 <p>A gestão dos fornecedores da <strong>{lista_clientes(c['clientes'])}</strong> passa para o <strong>SIGEC-ELOS</strong> em
 <strong>{k['inicio']}</strong>. O seu acesso já está pronto, com o e-mail <strong>{c['email']}</strong> e o mesmo perfil que você tem hoje no SIGEC-HOC.</p>
-<p><strong>Falta só criar a sua senha:</strong></p>
-{botao('Criar minha senha', link)}
-<p style="font-size:13px;color:#6b7280">O link é pessoal e vale até {k['link_ate']}. Se ele expirar, entre em <strong>elos.eqpitech.com.br</strong>,
-clique em <strong>"Esqueci minha senha"</strong> e informe este mesmo e-mail.</p>
+{bloco_senha(c, k)}
 <p>Depois de criar a senha, você já pode entrar e conhecer: seus fornecedores, os processos e os documentos estão lá. Até {k['hoc_ate']},
 o SIGEC-HOC continua sendo o sistema oficial.</p>{assinatura()}"""
     return assunto, moldura('Comunicado 2 de 4 · Seu acesso está pronto', corpo)
@@ -230,7 +241,40 @@ def campo(camp, onda): return f'{camp}{onda}'          # chave em envios: 'A1', 
 # só os clientes da campanha entram no texto; 'outros' = também atende cliente de outra onda
 SEL = """SELECT id, email, nome, tipo,
   ARRAY(SELECT n FROM unnest(hoc_client_ids, clientes) AS u(i, n) WHERE i = ANY('{ids}')) clientes,
-  hoc_client_ids && '{outros}' outros FROM hoc_migration_contacts"""
+  hoc_client_ids && '{outros}' outros, elos_user_id,
+  CASE WHEN senha_token_expira > now() THEN senha_token END senha_token,
+  senha_criada_em IS NOT NULL tem_senha FROM hoc_migration_contacts"""
+
+# Calendário aprovado pelo Luiz (13/10/2026) — data em Brasília → (campanha, onda).
+# O A1 saiu em 13/10 à mão. Usado pelo workflow migracao-comunicados.yml (--agendado).
+CALENDARIO = {
+    '2026-10-14': ('A', 2), '2026-10-15': ('A', 3), '2026-10-16': ('A', 4),
+    '2026-11-04': ('B', 1), '2026-11-11': ('B', 2), '2026-11-18': ('B', 3), '2026-11-20': ('B', 4),
+}
+
+# Comunicado 2 só vai para quem pode entrar: conta criada com link de senha
+# válido, senha já criada, ou fornecedor da onda B que já usa o ELOS (onda A)
+def pode_receber(camp, onda, c):
+    if onda != 2: return True
+    return bool(ja_usa(CAMPANHAS[camp], c) or c.get('tem_senha') or (c.get('elos_user_id') and c.get('senha_token')))
+
+# Comunicados 3 e 4 mandam para o menu Ajuda: a função dos manuais precisa
+# estar no ar — sem login ela responde 401. Qualquer outra resposta (inclusive
+# 200: o redirect do SPA devolve o index.html para função inexistente) = fora do ar
+def ajuda_no_ar():
+    try:
+        urllib.request.urlopen(urllib.request.Request(f'{SITE}/.netlify/functions/help-docs',
+                               headers={'User-Agent': 'sigec-elos-comunicados/1.0'}), timeout=20)
+        return False
+    except urllib.error.HTTPError as e:
+        return e.code == 401
+    except Exception:
+        return False
+
+def resumo(txt):
+    print(txt)
+    if os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write(txt + '\n\n')
 
 def sel(camp):
     ids = CAMPANHAS[camp]['ids']; outros = [i for k, v in CAMPANHAS.items() if k != camp for i in v['ids']]
@@ -254,14 +298,25 @@ def enviar_lote(msgs):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--campanha', required=True, choices=list(CAMPANHAS))
-    ap.add_argument('--onda', type=int, required=True, choices=list(ONDAS))
+    ap.add_argument('--campanha', choices=list(CAMPANHAS))
+    ap.add_argument('--onda', type=int, choices=list(ONDAS))
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument('--teste', help='envia 1 exemplo de cada versão (fornecedor e cliente) para este e-mail')
     g.add_argument('--previa', action='store_true')
     g.add_argument('--enviar', action='store_true')
+    g.add_argument('--agendado', action='store_true', help='envia o comunicado do CALENDARIO de hoje (Brasília), sem perguntar')
     ap.add_argument('--limite', type=int)
+    ap.add_argument('--sim', action='store_true', help='não pede a confirmação "ENVIAR" (uso no workflow)')
     a = ap.parse_args()
+    if a.agendado:
+        hoje = datetime.datetime.now(ZoneInfo('America/Sao_Paulo')).date().isoformat()
+        if hoje not in CALENDARIO: return resumo(f'{hoje}: nenhum comunicado no calendário.')
+        a.campanha, a.onda = CALENDARIO[hoje]; a.enviar = a.sim = True
+        resumo(f'{hoje}: comunicado {a.campanha}{a.onda} do calendário.')
+    if not a.campanha or not a.onda: ap.error('--campanha e --onda são obrigatórios (ou use --agendado)')
+    if a.enviar and a.onda in (3, 4) and not ajuda_no_ar():
+        resumo(f'⛔ comunicado {a.campanha}{a.onda} NÃO enviado: a página Ajuda (help-docs) não está no ar.')
+        sys.exit(1)
     k = CAMPANHAS[a.campanha]
     fn = lambda c: ONDAS[a.onda](c, k)
 
@@ -281,11 +336,16 @@ def main():
                 print('teste enviado:', c['tipo'], '·', assunto)
         return
 
-    lista = contatos(a.campanha, a.onda, a.limite)
-    print(f"campanha {a.campanha} · comunicado {a.onda}: {len(lista)} destinatários pendentes "
-          f"({sum(1 for c in lista if c['tipo']=='CLIENT')} cliente, {sum(1 for c in lista if c['tipo']=='SUPPLIER')} fornecedor)")
-    if not lista: return
-    if input('Confirmar envio REAL? digite ENVIAR: ').strip() != 'ENVIAR': return print('cancelado')
+    todos = contatos(a.campanha, a.onda, a.limite)
+    lista = [c for c in todos if pode_receber(a.campanha, a.onda, c)]
+    fora = len(todos) - len(lista)
+    resumo(f"campanha {a.campanha} · comunicado {a.onda}: {len(lista)} destinatários pendentes "
+           f"({sum(1 for c in lista if c['tipo']=='CLIENT')} cliente, {sum(1 for c in lista if c['tipo']=='SUPPLIER')} fornecedor)"
+           + (f" · ⚠️ {fora} sem conta/link de senha ficaram de fora (rodar de novo depois de criar as contas)" if fora else ''))
+    if not lista:
+        if fora: sys.exit(1)   # ninguém apto: o workflow falha e o GitHub avisa por e-mail
+        return
+    if not a.sim and input('Confirmar envio REAL? digite ENVIAR: ').strip() != 'ENVIAR': return print('cancelado')
     ok = 0
     for i in range(0, len(lista), 100):
         lote = lista[i:i + 100]
@@ -296,12 +356,13 @@ def main():
         try:
             ids = enviar_lote(msgs)
         except Exception as e:
-            print(f'  lote {i // 100 + 1}: falhou ({e}) — rode de novo para continuar'); break
+            resumo(f'⛔ lote {i // 100 + 1}: falhou ({e}) — {ok} enviados; rode de novo para continuar'); sys.exit(1)
         vals = ','.join(f"('{c['id']}','{(ids[k] or {}).get('id', '') if k < len(ids) else ''}')" for k, c in enumerate(lote))
         psql(f"""UPDATE hoc_migration_contacts h SET envios = envios || jsonb_build_object('{campo(a.campanha, a.onda)}', jsonb_build_object('em', now(), 'id', v.rid)), updated_at = now()
                  FROM (VALUES {vals}) v(id, rid) WHERE h.id = v.id::uuid""")
         ok += len(lote); print(f'  {ok}/{len(lista)}'); time.sleep(0.6)   # limite da Resend: 2 req/s
-    print('concluído:', ok)
+    resumo(f'✅ concluído: {ok} enviados')
+    if fora: sys.exit(1)   # enviou aos aptos, mas há gente sem conta: avisa
 
 if __name__ == '__main__':
     main()

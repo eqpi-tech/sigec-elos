@@ -1,0 +1,46 @@
+# Comunicados da migração HOC → ELOS (13/10/2026) — calendário aprovado pelo Luiz
+# em scripts/migracao_hoc/enviar_comunicado.py (CALENDARIO). Roda às 09h de
+# Brasília nas datas do calendário; o script decide qual comunicado é o de hoje.
+# Travas: o comunicado 2 só vai para quem tem conta + link de senha; os 3 e 4 só
+# saem com a página Ajuda no ar. Faltou algo → o job falha e o GitHub avisa.
+# Quem já recebeu nunca recebe de novo (hoc_migration_contacts.envios).
+# Secrets: MIGRACAO_DB_URL (banco de produção) e RESEND_API_KEY.
+name: Migração HOC — comunicados
+
+on:
+  schedule:
+    - cron: '7 12 14-16 10 *'        # 09:07 BRT — A2, A3, A4
+    - cron: '7 12 4,11,18,20 11 *'   # 09:07 BRT — B1, B2, B3, B4
+  workflow_dispatch:
+    inputs:
+      campanha:
+        description: 'Campanha (A ou B) — vazio = comunicado do calendário de hoje'
+        required: false
+      onda:
+        description: 'Comunicado (1 a 4)'
+        required: false
+
+concurrency: { group: migracao-comunicados, cancel-in-progress: false }
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Cliente Postgres
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Envia
+        env:
+          MIGRACAO_DB_URL: ${{ secrets.MIGRACAO_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CAMPANHA: ${{ inputs.campanha }}
+          ONDA: ${{ inputs.onda }}
+        run: |
+          if [ -n "$CAMPANHA" ] && [ -n "$ONDA" ]; then
+            python scripts/migracao_hoc/enviar_comunicado.py --campanha "$CAMPANHA" --onda "$ONDA" --enviar --sim
+          else
+            python scripts/migracao_hoc/enviar_comunicado.py --agendado
+          fi
