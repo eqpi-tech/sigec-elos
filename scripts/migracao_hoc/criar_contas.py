@@ -21,7 +21,8 @@ ENV = {l.split('=', 1)[0]: l.split('=', 1)[1].strip().strip('"') for l in open(o
 DB, SB, KEY = ENV['SUPABASE_DB_URL'], ENV['SUPABASE_URL'].rstrip('/'), ENV['SUPABASE_SERVICE_ROLE_KEY']
 PSQL = '/usr/local/opt/libpq/bin/psql'
 
-CAMPANHAS = {'A': {'ids': [20, 33], 'expira': '2026-10-21 23:59:59-03'},
+# 14/10: Chemtrade (33) saiu da onda A (as contas dela, criadas em 14/10, continuam)
+CAMPANHAS = {'A': {'ids': [20], 'expira': '2026-10-21 23:59:59-03'},
              'B': {'ids': [21, 34], 'expira': '2026-11-25 23:59:59-03'}}
 # de/para dos grupos de cliente do HOC → perfil do ELOS (patch_136)
 GRUPO_PERFIL = {11: 'Gestão de Fornecedores', 31: 'Gestão de Fornecedores', 35: 'Gerencial',
