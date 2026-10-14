@@ -27,7 +27,8 @@ SUPORTE = ('<strong>E-mail:</strong> suporte@eqpitech.com.br · <strong>WhatsApp
 
 # Ondas da migração (decisão do Luiz, 13/10/2026). ids = clientes do HOC.
 CAMPANHAS = {
-    'A': {'ids': [20, 33], 'hoc_ate': 'sexta-feira, 16/10', 'inicio': 'segunda-feira, 19/10', 'inicio_curto': 'segunda, 19/10',
+    # 14/10: Chemtrade (33) saiu da onda A — A3 e A4 só para a SPMar (A1 e A2 já foram aos dois)
+    'A': {'ids': [20], 'hoc_ate': 'sexta-feira, 16/10', 'inicio': 'segunda-feira, 19/10', 'inicio_curto': 'segunda, 19/10',
           'outros_ate': '20/11', 'link_ate': 'quarta-feira, 21/10'},
     'B': {'ids': [21, 34], 'hoc_ate': 'sexta-feira, 20/11', 'inicio': 'segunda-feira, 23/11', 'inicio_curto': 'segunda, 23/11',
           'outros_ate': None, 'link_ate': 'quarta-feira, 25/11', 'ja_usa_elos': True},
