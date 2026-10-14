@@ -12,6 +12,7 @@
 // fornecedor pode editar. Tudo auditado em audit_log.
 
 const { createClient } = require('@supabase/supabase-js')
+const { resolveSupplierId } = require('./lib/supplier_ctx.js')
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -39,16 +40,10 @@ exports.handler = async (event) => {
   const { data: { user }, error: authErr } = await sb.auth.getUser(token)
   if (authErr || !user) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Token inválido' }) }
 
-  // Vínculo SUPPLIER ativo do caller
-  const { data: roleRow } = await sb
-    .from('user_roles')
-    .select('supplier_id, is_active')
-    .eq('user_id', user.id)
-    .eq('role', 'SUPPLIER')
-    .maybeSingle()
-  if (!roleRow?.supplier_id || roleRow.is_active === false)
+  // Vínculo SUPPLIER ativo do caller — na empresa ativa (multiempresa, patch_138)
+  const supplierId = await resolveSupplierId(sb, user.id, event)
+  if (!supplierId)
     return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso restrito a fornecedores' }) }
-  const supplierId = roleRow.supplier_id
 
   try {
     // ── GET: perfil + sócios ─────────────────────────────────

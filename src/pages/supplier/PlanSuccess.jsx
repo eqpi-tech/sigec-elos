@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { getActiveSupplierId } from '../../lib/activeSupplier.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 
 export default function PlanSuccess() {
@@ -36,11 +37,11 @@ export default function PlanSuccess() {
           setStatus('timeout'); return
         }
 
-        // Busca o supplier_id
+        // Empresa ativa (multiempresa, patch_138); sem ela, a do perfil
         const { data: profile } = await supabase
           .from('profiles').select('supplier_id').eq('id', user.id).single()
 
-        const supplierId = profile?.supplier_id
+        const supplierId = getActiveSupplierId() || profile?.supplier_id
         if (!supplierId) {
           if (attempts < MAX) { setTimeout(poll, 2000); return }
           clearInterval(dotsTimer); clearInterval(elapsedTimer)

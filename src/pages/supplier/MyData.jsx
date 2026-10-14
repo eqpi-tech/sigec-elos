@@ -3,6 +3,7 @@
 // Razão social, CNPJ e status são somente leitura (fontes: Receita/backoffice).
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { supplierHeader } from '../../lib/activeSupplier.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 
 const TIPO_LABEL = { pf: 'Pessoa Física', pj: 'Pessoa Jurídica', estrangeiro: 'Estrangeiro' }
@@ -11,7 +12,7 @@ async function callApi(method, body) {
   const { data: { session } } = await supabase.auth.getSession()
   const res = await fetch('/.netlify/functions/update-supplier-profile', {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...supplierHeader() },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const data = await res.json()

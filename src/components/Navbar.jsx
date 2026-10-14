@@ -92,7 +92,9 @@ const ROLE_LABEL = { SUPPLIER:'Fornecedor', BUYER:'Comprador', CLIENT:'Cliente',
 const ROLE_COLOR = { SUPPLIER:'#2563eb',    BUYER:'#ea580c',   CLIENT:'#059669', ADMIN:'#7c3aed' }
 
 export default function Navbar() {
-  const { user, logout, roleOptions, activeRole, switchRole } = useAuth()
+  const { user, logout, roleOptions, activeRole, switchRole, supplierOptions, switchSupplier } = useAuth()
+  // multiempresa (patch_138): seletor de empresa quando o login tem mais de uma
+  const multiSup = activeRole === 'SUPPLIER' && supplierOptions?.length > 1
   const navigate      = useNavigate()
   const { pathname }  = useLocation()
   const mobile        = useIsMobile()
@@ -252,6 +254,13 @@ export default function Navbar() {
               ?
             </button>
             <UserChip/>
+            {multiSup && (
+              <select value={user.supplierId || ''} onChange={e => switchSupplier(e.target.value)} title="Trocar de empresa"
+                style={{ padding:'5px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)', maxWidth:170,
+                  background:'rgba(255,255,255,.1)', color:'#fff', fontFamily:'Montserrat,sans-serif', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                {supplierOptions.map(o => <option key={o.supplier_id} value={o.supplier_id} style={{ color:'#1a1c5e' }}>{o._supplier_name}</option>)}
+              </select>
+            )}
             {roleOptions?.length > 1 && (
               <select value={activeRole||''} onChange={e=>switchRole(e.target.value)}
                 style={{ padding:'5px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,.2)',
@@ -353,6 +362,22 @@ export default function Navbar() {
               </button>
             )
           })}
+
+          {/* Empresa (multiempresa) */}
+          {multiSup && (
+            <div style={{ padding:'10px 0', borderTop:'1px solid rgba(255,255,255,.1)', marginTop:8 }}>
+              <div style={{ fontSize:11, color:'rgba(255,255,255,.4)', fontFamily:'DM Sans,sans-serif', marginBottom:6 }}>Trocar empresa</div>
+              {supplierOptions.map(o => (
+                <button key={o.supplier_id} onClick={() => { setOpen(false); if (o.supplier_id !== user.supplierId) switchSupplier(o.supplier_id) }}
+                  style={{ width:'100%', padding:'10px', borderRadius:8, marginBottom:4,
+                    border:`1px solid ${o.supplier_id===user.supplierId?'rgba(255,255,255,.3)':'rgba(255,255,255,.1)'}`,
+                    background: o.supplier_id===user.supplierId?'rgba(255,255,255,.12)':'transparent',
+                    color:'rgba(255,255,255,.8)', fontFamily:'DM Sans,sans-serif', fontSize:13, cursor:'pointer', textAlign:'left' }}>
+                  🏭 {o._supplier_name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Role switcher */}
           {roleOptions?.length > 1 && (
