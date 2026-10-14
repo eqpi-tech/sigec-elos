@@ -98,6 +98,9 @@ export default function Navbar() {
   const navigate      = useNavigate()
   const { pathname }  = useLocation()
   const mobile        = useIsMobile()
+  // telas médias: itens só com texto (sem emoji) para a barra caber — o menu
+  // do fornecedor passava ~64 px da tela em 1280 px (14/10)
+  const compact       = useIsMobile(1500)
   const [open,        setOpen]        = useState(false)
   const [openGroup,   setOpenGroup]   = useState(null)   // key of open dropdown
   const [mobileGroup, setMobileGroup] = useState(null)   // key of expanded mobile section
@@ -188,7 +191,7 @@ export default function Navbar() {
                         padding:'6px 9px', borderRadius:8, cursor:'pointer',
                         fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:500,
                         display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
-                      {item.icon} {item.label}
+                      {!compact && item.icon} {item.label}
                       <span style={{ fontSize:9, opacity:.7, marginLeft:2 }}>▾</span>
                     </button>
 
@@ -235,7 +238,7 @@ export default function Navbar() {
                     padding:'6px 9px', borderRadius:8, cursor:'pointer',
                     fontFamily:'DM Sans,sans-serif', fontSize:12, fontWeight:500,
                     display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
-                  {item.icon} {item.label}
+                  {!compact && item.icon} {item.label}
                 </button>
               )
             })}
