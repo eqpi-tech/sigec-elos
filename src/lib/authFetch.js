@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { supplierHeader } from './activeSupplier.js'
 
 // Chamada autenticada às Netlify functions. Garante um token válido antes de
 // enviar (renova se vence em menos de 60 s) e, se o servidor recusar a sessão
@@ -14,7 +15,8 @@ export async function authFetch(url, init = {}) {
     }
     return session?.access_token || ''
   }
-  const call = async (tk) => fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${tk}` } })
+  // multiempresa (patch_138): a empresa ativa vai junto; o servidor confere o vínculo
+  const call = async (tk) => fetch(url, { ...init, headers: { ...supplierHeader(), ...(init.headers || {}), Authorization: `Bearer ${tk}` } })
   let res = await call(await token(false))
   if (res.status === 401) res = await call(await token(true))
   return res

@@ -51,7 +51,7 @@ export default function SupplierTeam() {
   async function loadMembers() {
     setLoading(true)
     // patch_128: o RLS de user_roles só mostrava o próprio usuário
-    setMembers(await teamApi.members('SUPPLIER').catch(() => []))
+    setMembers(await teamApi.members('SUPPLIER', user?.supplierId).catch(() => []))
     setLoading(false)
   }
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { setActiveSupplierId, savedActiveSupplierId } from '../lib/activeSupplier.js'
 
 const AuthContext = createContext(null)
 
@@ -30,23 +31,37 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const [roleOptions, setRoleOptions] = useState([]) // para multi-perfil
+  const [roleOptions, setRoleOptions] = useState([]) // para multi-perfil (um item por papel)
   const [activeRole, setActiveRole]   = useState(null)
+  // Multiempresa (patch_138): vínculos SUPPLIER do usuário, um por empresa
+  const [supplierOptions, setSupplierOptions] = useState([])
+
+  const applyRow = (opt) => setUser(prev => ({
+    ...prev,
+    role: opt.role,
+    supplier_id: opt.supplier_id, supplierId: opt.supplier_id,
+    buyer_id:    opt.buyer_id,    buyerId:    opt.buyer_id,
+    client_id:   opt.client_id,   clientId:   opt.client_id,
+    isPrimary:   opt.is_primary !== false,
+    accessProfile: opt.access_profile || 'full',
+    modules:           opt._modules ?? null,
+    moduleProfileName: opt._profile_name ?? null,
+  }))
+
+  // troca a empresa ativa: grava a escolha e recarrega no painel do
+  // fornecedor — nenhuma tela fica com dados da empresa anterior
+  const switchSupplier = (supplierId) => {
+    if (!supplierOptions.some(o => o.supplier_id === supplierId)) return
+    setActiveSupplierId(user?.id, supplierId)
+    try { localStorage.setItem(`elos_active_role:${user?.id || ''}`, 'SUPPLIER') } catch { /* noop */ }
+    window.location.assign('/fornecedor')
+  }
 
   const switchRole = (role) => {
     const opt = roleOptions.find(r => r.role === role)
     if (!opt) return
     setActiveRole(role)
-    setUser(prev => ({
-      ...prev,
-      role,
-      supplier_id: opt.supplier_id, supplierId: opt.supplier_id,
-      buyer_id:    opt.buyer_id,    buyerId:    opt.buyer_id,
-      client_id:   opt.client_id,   clientId:   opt.client_id,
-      accessProfile: opt.access_profile || 'full',
-      modules:           opt._modules ?? null,
-      moduleProfileName: opt._profile_name ?? null,
-    }))
+    applyRow(opt)
     // chave POR USUÁRIO (18/09): o papel salvo de uma conta não pode vazar
     // p/ outra no mesmo navegador (fornecedor de teste caía como comprador)
     try { localStorage.setItem(`elos_active_role:${user?.id || ''}`, role) } catch { /* noop */ }
@@ -83,12 +98,34 @@ export function AuthProvider({ children }) {
           _modules:      r.access_profile_id ? (profileMap[r.access_profile_id]?.modules ?? null) : null,
           _profile_name: r.access_profile_id ? (profileMap[r.access_profile_id]?.name ?? null) : null,
         }))
-        setRoleOptions(withModules)
+        // Multiempresa: escolhe a empresa ativa (lembrada no navegador, senão a
+        // principal) e deixa UM item por papel no seletor de perfil
+        const supRows = withModules.filter(r => r.role === 'SUPPLIER' && r.supplier_id && r.is_active !== false)
+        let supOpts = supRows
+        if (supRows.length > 1) {
+          try {
+            const { data: sups } = await supabase.from('suppliers')
+              .select('id, razao_social, nome_fantasia, cnpj').in('id', supRows.map(r => r.supplier_id))
+            const byId = Object.fromEntries((sups || []).map(x => [x.id, x]))
+            supOpts = supRows.map(r => ({ ...r, _supplier_name: byId[r.supplier_id]?.nome_fantasia || byId[r.supplier_id]?.razao_social || 'Empresa', _supplier_cnpj: byId[r.supplier_id]?.cnpj || null }))
+              .sort((a, b) => a._supplier_name.localeCompare(b._supplier_name, 'pt-BR'))
+          } catch { /* sem nomes: segue com os vínculos */ }
+        }
+        const savedSup = savedActiveSupplierId(authUser.id)
+        const supRow = supOpts.find(r => r.supplier_id === savedSup) || supOpts.find(r => r.is_primary) || supOpts[0] || null
+        setSupplierOptions(supOpts)
+        setActiveSupplierId(authUser.id, supRow?.supplier_id || null)
+        const seen = new Set(), roleList = []
+        for (const r of withModules) {
+          const x = r.role === 'SUPPLIER' && supRow ? supRow : r
+          if (!seen.has(x.role)) { seen.add(x.role); roleList.push(x) }
+        }
+        setRoleOptions(roleList)
         // Decide qual role ativar: preferência salva POR USUÁRIO (18/09 — a
         // chave global antiga vazava a escolha entre contas no mesmo browser)
         let saved = null
         try { saved = localStorage.getItem(`elos_active_role:${authUser.id}`) } catch { /* noop */ }
-        const preferred = withModules.find(r => r.role === saved) || withModules.find(r => r.is_primary) || withModules[0]
+        const preferred = roleList.find(r => r.role === saved) || roleList.find(r => r.is_primary) || roleList[0] || withModules[0]
         setActiveRole(preferred.role)
         // Busca profile base
         const { data: profile } = await supabase
@@ -167,7 +204,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, reloadProfile, roleOptions, activeRole, switchRole }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, reloadProfile, roleOptions, activeRole, switchRole, supplierOptions, switchSupplier }}>
       {children}
     </AuthContext.Provider>
   )

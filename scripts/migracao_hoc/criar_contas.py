@@ -6,8 +6,9 @@
 Para cada contato da onda (hoc_migration_contacts, patch_134):
   · conta: reaproveita o login que já existe com o e-mail; senão cria (senha
     aleatória, e-mail confirmado) — ninguém recebe e-mail aqui
-  · fornecedor: vínculo SUPPLIER (Acesso Total) com a empresa da onda; quem
-    está em várias empresas fica com a principal (multiempresa: pendente)
+  · fornecedor: vínculo SUPPLIER (Acesso Total) com a empresa da onda e com as
+    demais empresas do HOC (multiempresa, patch_138 — a da onda é a principal);
+    perfil Comprador (marketplace), como no cadastro normal
   · cliente: vínculo CLIENT com o perfil do de/para do grupo do HOC (patch_136)
   · senha: quem já entrou no ELOS alguma vez fica com senha_criada_em; os
     demais ganham o token do link "Criar minha senha" (patch_135)
@@ -67,9 +68,10 @@ def main():
     emails = '{' + ','.join('"' + c['email'].replace('"', '') + '"' for c in contatos) + '}'
     auth = {u['email']: u for u in rows(f"SELECT id, lower(email) email, last_sign_in_at FROM auth.users WHERE lower(email) = ANY({q(emails)}::text[])")}
     uids = '{' + ','.join(u['id'] for u in auth.values()) + '}'
-    papeis = {}
-    for r in rows(f"SELECT user_id, role, supplier_id, client_id FROM user_roles WHERE user_id = ANY({q(uids)}::uuid[])"):
-        papeis.setdefault(r['user_id'], {})[r['role']] = r
+    papeis, sup_links = {}, {}
+    for r in rows(f"SELECT user_id, role, supplier_id, client_id FROM user_roles WHERE user_id = ANY({q(uids)}::uuid[]) ORDER BY is_primary DESC NULLS LAST, created_at"):
+        papeis.setdefault(r['user_id'], {}).setdefault(r['role'], r)
+        if r['role'] == 'SUPPLIER' and r['supplier_id']: sup_links.setdefault(r['user_id'], set()).add(r['supplier_id'])
     sup = {s['hoc_id']: s for s in rows(f"""SELECT s.id, s.hoc_id, s.user_id,
         EXISTS (SELECT 1 FROM seals se JOIN clients c ON c.id = se.client_id WHERE se.supplier_id = s.id AND c.hoc_id = ANY('{ids}')) da_onda
         FROM suppliers s WHERE s.hoc_id = ANY(ARRAY(SELECT unnest(supplier_hoc_ids) FROM hoc_migration_contacts WHERE hoc_client_ids && '{ids}'))""")}
@@ -78,7 +80,7 @@ def main():
         (role_type = 'CLIENT' AND name IN ('Gestão de Fornecedores','Gerencial','Comprador','Consulta'))""")}
     total_sup = rows("SELECT id FROM access_profiles WHERE role_type = 'SUPPLIER' AND is_system AND name = 'Acesso Total' LIMIT 1")[0]['id']
 
-    n = dict(novos=0, existentes=0, vinc_sup=0, vinc_cli=0, ja_vinculado=0, outra_empresa=0, multi=0,
+    n = dict(novos=0, existentes=0, vinc_sup=0, vinc_extra=0, comprador=0, vinc_cli=0, ja_vinculado=0, outra_empresa=0, multi=0,
              sem_empresa=0, grupo_desconhecido=0, token=0, tem_senha=0, erros=0)
     pend = []   # observações para o relatório
     for c in contatos:
@@ -98,13 +100,31 @@ def main():
                 principal = next((s for s in cands if s['da_onda']), cands[0])
                 atual = meus.get('SUPPLIER')
                 if atual and atual['supplier_id'] in {s['id'] for s in cands}: n['ja_vinculado'] += 1; principal = next(s for s in cands if s['id'] == atual['supplier_id'])
-                elif atual: n['outra_empresa'] += 1; pend.append(f"já é de outra empresa no ELOS (multiempresa): {c['email']}")
+                elif atual:   # já usa o ELOS com outra empresa: ganha esta também (não principal)
+                    n['outra_empresa'] += 1
+                    sql.append(f"""INSERT INTO user_roles (user_id, role, supplier_id, is_primary, is_active, access_profile_id)
+                        VALUES ({q(uid)}, 'SUPPLIER', {q(principal['id'])}, false, true, {q(total_sup)}) ON CONFLICT (user_id, role, supplier_id) DO NOTHING""")
                 else:
                     n['vinc_sup'] += 1
                     sql.append(f"""INSERT INTO user_roles (user_id, role, supplier_id, is_primary, is_active, access_profile_id)
-                        VALUES ({q(uid)}, 'SUPPLIER', {q(principal['id'])}, true, true, {q(total_sup)}) ON CONFLICT (user_id, role) DO NOTHING""")
+                        VALUES ({q(uid)}, 'SUPPLIER', {q(principal['id'])}, true, true, {q(total_sup)}) ON CONFLICT (user_id, role, supplier_id) DO NOTHING""")
                     sql.append(f"UPDATE profiles SET supplier_id = {q(principal['id'])} WHERE id = {q(uid)} AND supplier_id IS NULL")
                     sql.append(f"UPDATE suppliers SET user_id = {q(uid)} WHERE id = {q(principal['id'])} AND user_id IS NULL")
+                # multiempresa: as demais empresas do HOC entram como vínculos extras
+                ja = sup_links.get(uid, set()) | {principal['id']}
+                for s2 in cands:
+                    if s2['id'] in ja: continue
+                    n['vinc_extra'] += 1; ja.add(s2['id'])
+                    sql.append(f"""INSERT INTO user_roles (user_id, role, supplier_id, is_primary, is_active, access_profile_id)
+                        VALUES ({q(uid)}, 'SUPPLIER', {q(s2['id'])}, false, true, {q(total_sup)}) ON CONFLICT (user_id, role, supplier_id) DO NOTHING""")
+                # perfil Comprador (todo fornecedor tem — create-supplier faz o mesmo)
+                if 'BUYER' not in meus:
+                    n['comprador'] += 1
+                    sql.append(f"""INSERT INTO buyers (user_id, cnpj, razao_social) SELECT {q(uid)}, s.cnpj, s.razao_social
+                        FROM suppliers s WHERE s.id = {q(principal['id'])} ON CONFLICT (user_id) DO NOTHING""")
+                    sql.append(f"""INSERT INTO user_roles (user_id, role, buyer_id, is_primary, is_active)
+                        SELECT {q(uid)}, 'BUYER', b.id, false, true FROM buyers b WHERE b.user_id = {q(uid)}
+                        AND NOT EXISTS (SELECT 1 FROM user_roles x WHERE x.user_id = {q(uid)} AND x.role = 'BUYER')""")
             else:
                 hc = next((h for h in c['hoc_client_ids'] if h in cli), None)
                 perfil = GRUPO_PERFIL.get(c['hoc_group_id'])
@@ -115,7 +135,7 @@ def main():
                 else:
                     n['vinc_cli'] += 1
                     sql.append(f"""INSERT INTO user_roles (user_id, role, client_id, is_primary, is_active, access_profile_id)
-                        VALUES ({q(uid)}, 'CLIENT', {q(cli[hc])}, true, true, {q(perfis[perfil])}) ON CONFLICT (user_id, role) DO NOTHING""")
+                        VALUES ({q(uid)}, 'CLIENT', {q(cli[hc])}, true, true, {q(perfis[perfil])}) ON CONFLICT (user_id, role, supplier_id) DO NOTHING""")
                     if not u: sql.append(f"UPDATE profiles SET role = 'CLIENT' WHERE id = {q(uid)}")
 
             # senha: quem já entrou no ELOS tem senha; os demais recebem o link pessoal

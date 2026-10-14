@@ -10,6 +10,7 @@
 // Elegibilidade: pelo menos 1 selo ACTIVE (homologação HOC migrada ou ELOS).
 
 const { createClient } = require('@supabase/supabase-js')
+const { resolveSupplierId } = require('./lib/supplier_ctx.js')
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -27,12 +28,10 @@ exports.handler = async (event) => {
   const { data: { user }, error: authErr } = await sb.auth.getUser(token)
   if (authErr || !user) return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Token inválido' }) }
 
-  const { data: roleRow } = await sb
-    .from('user_roles').select('supplier_id')
-    .eq('user_id', user.id).eq('role', 'SUPPLIER').maybeSingle()
-  if (!roleRow?.supplier_id)
+  // empresa ativa do usuário (multiempresa, patch_138)
+  const supplierId = await resolveSupplierId(sb, user.id, event)
+  if (!supplierId)
     return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso restrito a fornecedores' }) }
-  const supplierId = roleRow.supplier_id
 
   // Elegibilidade: algum selo ACTIVE
   const { data: activeSeal } = await sb

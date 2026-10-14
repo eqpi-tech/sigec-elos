@@ -3,6 +3,7 @@
 // GET:  retorna o último relatório salvo (assertiva_reports)
 
 const { createClient } = require('@supabase/supabase-js')
+const { resolveSupplierId } = require('./lib/supplier_ctx.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -276,8 +277,8 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'GET') {
     let targetSupplierId = event.queryStringParameters?.supplierId
     if (!isAdmin) {
-      const { data: profile } = await supabaseAdmin.from('profiles').select('supplier_id').eq('id', caller.id).maybeSingle()
-      targetSupplierId = profile?.supplier_id
+      // empresa ativa do fornecedor (multiempresa, patch_138)
+      targetSupplierId = await resolveSupplierId(supabaseAdmin, caller.id, event)
     }
     if (!targetSupplierId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'supplierId ausente' }) }
 
@@ -300,8 +301,7 @@ exports.handler = async (event) => {
 
   let targetSupplierId = body.supplierId
   if (!isAdmin) {
-    const { data: profile } = await supabaseAdmin.from('profiles').select('supplier_id').eq('id', caller.id).maybeSingle()
-    targetSupplierId = profile?.supplier_id
+    targetSupplierId = await resolveSupplierId(supabaseAdmin, caller.id, event)
   }
   if (!targetSupplierId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'supplierId ausente' }) }
 

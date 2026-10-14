@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase.js'
 import { calculateScore, ELOS_VERIFICADO_DOCS } from '../lib/score.js'
 import { planLabel } from '../lib/planLabels.js'
 import { authFetch } from '../lib/authFetch.js'
+import { supplierHeader } from '../lib/activeSupplier.js'
 import { normalizeCnpj, isCnpjComplete } from '../lib/cnpj.js'
 import { clientSealStatus } from '../lib/clientSituacao.js'
 
@@ -1584,8 +1585,9 @@ export const routeBApi = {
 // O RLS de user_roles só mostra o próprio vínculo: a lista e as alterações da
 // equipe vão por RPC, que confere se quem pede pode gerir a MESMA empresa.
 export const teamApi = {
-  members: async (role) => {
-    const { data, error } = await supabase.rpc('team_members', { p_role: role })
+  // company: empresa da tela (multiempresa, patch_138); sem ela, a principal
+  members: async (role, company = null) => {
+    const { data, error } = await supabase.rpc('team_members', { p_role: role, ...(company ? { p_company: company } : {}) })
     if (error) throw new Error(error.message)
     return data || []
   },
@@ -1885,7 +1887,7 @@ export const assertivaApi = {
       ? `/.netlify/functions/assertiva-report?supplierId=${supplierId}`
       : '/.netlify/functions/assertiva-report'
     const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      headers: { 'Authorization': `Bearer ${session?.access_token}`, ...supplierHeader() },
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Erro ao buscar relatório')
@@ -1897,7 +1899,7 @@ export const assertivaApi = {
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch('/.netlify/functions/assertiva-report', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}`, ...supplierHeader() },
       body: JSON.stringify(supplierId ? { supplierId } : {}),
     })
     const data = await res.json()

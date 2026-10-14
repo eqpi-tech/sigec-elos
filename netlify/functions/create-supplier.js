@@ -297,10 +297,18 @@ exports.handler = async (event) => {
         .select('id').eq('role_type', 'SUPPLIER').eq('is_system', true).maybeSingle()
       supplierProfileId = total?.id || null
     } catch { /* pré-patch_038 */ }
-    await supabaseAdmin.from('user_roles').upsert({
-      user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: true,
-      access_profile_id: supplierProfileId,
-    }, { onConflict: 'user_id,role' })
+    // multiempresa (patch_138): um vínculo SUPPLIER por empresa — antes o
+    // upsert por (user_id, role) TROCAVA a empresa de quem já tinha outra.
+    // Consulta + insert (sem onConflict) vale antes e depois do patch.
+    const { data: meusSup } = await supabaseAdmin.from('user_roles')
+      .select('supplier_id').eq('user_id', user.id).eq('role', 'SUPPLIER')
+    if (!(meusSup || []).some(r => r.supplier_id === supplier.id)) {
+      const { error: urErr } = await supabaseAdmin.from('user_roles').insert({
+        user_id: user.id, role: 'SUPPLIER', supplier_id: supplier.id, is_primary: !(meusSup || []).length,
+        access_profile_id: supplierProfileId,
+      })
+      if (urErr) throw new Error('Vínculo com a empresa: ' + urErr.message)
+    }
 
     // 3b-1. Endereço COMPLETO da Receita → suppliers.address (jsonb).
     // Sem isso o cadastro espontâneo fica sem CEP e a NFSe é rejeitada
@@ -359,9 +367,11 @@ exports.handler = async (event) => {
         buyerId = newBuyer?.id
       }
       if (buyerId) {
-        await supabaseAdmin.from('user_roles').upsert({
+        const { data: temBuyer } = await supabaseAdmin.from('user_roles')
+          .select('id').eq('user_id', user.id).eq('role', 'BUYER').limit(1)
+        if (!temBuyer?.length) await supabaseAdmin.from('user_roles').insert({
           user_id: user.id, role: 'BUYER', buyer_id: buyerId, is_primary: false
-        }, { onConflict: 'user_id,role' })
+        })
       }
     } catch (e) { console.warn('BUYER role setup (não crítico):', e.message) }
 
