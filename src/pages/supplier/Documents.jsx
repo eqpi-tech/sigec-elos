@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal, routeAApi, ROUTE_A_ENABLED } from '../../services/api.js'
+import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal, routeAApi, ROUTE_A_ENABLED, processDocsApi } from '../../services/api.js'
+import { DOC_STATUS, ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { hasAction } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
@@ -48,16 +49,8 @@ function DocLegend() {
   return <span style={{ display:'block', marginTop:4 }}>{itens.join(' · ')} · Envio: PDF, JPG, PNG ou DOCX, até 20 MB</span>
 }
 
-// Rótulos iguais aos da tela do processo (Process.jsx)
-const STATUS_CONFIG = {
-  VALID:    { bg:'#f8fffe', bd:'#dcfce7', color:'#22c55e', label:'Válido' },
-  EXPIRING: { bg:'#fffbeb', bd:'#fef3c7', color:'#f59e0b', label:'Vence em breve' },
-  MISSING:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Não enviado' },
-  PENDING:  { bg:'#fff7ed', bd:'#fed7aa', color:'#f59e0b', label:'Em análise' },
-  EXPIRED:  { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Vencido' },
-  REJECTED: { bg:'#fff5f5', bd:'#fee2e2', color:'#ef4444', label:'Rejeitado' },
-  NOT_APPLICABLE: { bg:'#f8fafc', bd:'#e2e8f0', color:'#64748b', label:'Não se aplica' },
-}
+// Rótulos e cores iguais nas 3 visões (componente comum ProcessDocuments, 14/10)
+const STATUS_CONFIG = DOC_STATUS
 
 // Documento dispensado pelo backoffice conta como satisfeito (mesma regra do score)
 const isSatisfied = (up) => up?.status === 'VALID' || up?.status === 'NOT_APPLICABLE'
@@ -70,7 +63,16 @@ export default function SupplierDocuments() {
   const { user }   = useAuth()
   const [supplier, setSupplier] = useState(null)
   const [reqDocs, setReqDocs]   = useState([])   // união dos docs exigidos (todos os fluxos)
-  const [docGroups, setDocGroups] = useState([]) // [{ key, title, ids:Set }] — um por processo/cliente
+  const [docGroups, setDocGroups] = useState([]) // [{ key, title, ids:Set, sealId }] — um por processo/cliente
+  // resumo de cada processo pela fonte única (patch_139): PJ + PF, mesmos números do cliente e do backoffice
+  const [procByKey, setProcByKey] = useState({})
+  const groupsRef = useRef([])   // última lista de processos (o estado ainda não atualizou no fim do loadAll)
+  const loadProcSummaries = async (groups) => {
+    if (groups) groupsRef.current = groups
+    const pares = await Promise.all(groupsRef.current.filter(g => g.sealId).map(g =>
+      processDocsApi.get(g.sealId).then(r => [g.key, r]).catch(() => null)))
+    setProcByKey(Object.fromEntries(pares.filter(Boolean)))
+  }
   const [uploaded, setUploaded] = useState([])   // docs já no banco
   const [loading, setLoading]   = useState(true)
   const [uploading, setUploading] = useState(null)
@@ -121,6 +123,7 @@ export default function SupplierDocuments() {
         supabase.rpc('supplier_ready_for_analysis', { p_supplier: user.supplierId }),
         mobilityApi.pendingFor(cnpj, user.supplierId),
       ])
+      loadProcSummaries()
       setCompletion(prev => ({
         ready: rdy === true,
         mobComplete: mob.complete,
@@ -172,6 +175,7 @@ export default function SupplierDocuments() {
               ? `Processo — ${seal.clients?.razao_social || seal.seal_name || 'Cliente'}`
               : 'Fluxo padrão ELOS',
             ids: idSet,
+            sealId: seal.id,
           })
         }
       } catch (err) {
@@ -185,6 +189,7 @@ export default function SupplierDocuments() {
       }
       setReqDocs(docs)
       setDocGroups(groups)
+      loadProcSummaries(groups)
 
       // 3. Documentos já enviados
       const [d, jobs] = await Promise.all([documentApi.list(user.supplierId), routeAApi.jobsFor(user.supplierId)])
@@ -886,9 +891,10 @@ export default function SupplierDocuments() {
                     {g.key === 'global' ? '🌐 ' : '🏢 '}{g.title}
                   </SectionTitle>
                   <span style={{ fontSize:12, color: groupOk === groupDocs.length ? '#22c55e' : '#9B9B9B', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
-                    {groupOk}/{groupDocs.length} válidos
+                    PJ: {groupOk}/{groupDocs.length} aprovados
                   </span>
                 </div>
+                <ProcessDocsSummary totals={procByKey[g.key]?.totals} compact/>
                 {groupDocs.map(renderDocRow)}
                 {renderMobilitySection(g.key)}
               </Card>
@@ -909,6 +915,7 @@ export default function SupplierDocuments() {
               Editar categorias →
             </a>
           </div>
+          <ProcessDocsSummary totals={procByKey[docGroups[0]?.key]?.totals} compact/>
           {reqDocs.map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             <DocLegend/>

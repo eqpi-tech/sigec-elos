@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
-import { clientApi, documentApi } from '../../services/api.js'
+import { clientApi, documentApi , processDocsApi } from '../../services/api.js'
+import ProcessDocuments, { ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
 import { Card, Spinner, StatusDot, ScoreBar, SectionTitle, Button } from '../../components/ui.jsx'
@@ -347,6 +348,8 @@ export default function ClientSupplierProcess() {
   const [bankLoading, setBankLoading] = useState(false)
   const [cnaeMap, setCnaeMap] = useState({})
   const [supReady, setSupReady] = useState(null)  // fornecedor completou docs+questionário? (patch_074)
+  const [procDocs, setProcDocs] = useState(null)  // documentos do processo — fonte única (patch_139)
+  const [procDocsErr, setProcDocsErr] = useState(false)
 
   useEffect(() => {
     if (!supplierId) return
@@ -361,6 +364,13 @@ export default function ClientSupplierProcess() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [supplierId, user?.clientId])
+
+  // documentos do processo com ESTE cliente: mesma visão do backoffice e do fornecedor
+  const mySealId = data?.seals?.find(s => s.client_id === user?.clientId)?.id || null
+  useEffect(() => {
+    if (!mySealId) return
+    processDocsApi.get(mySealId).then(setProcDocs).catch(() => setProcDocsErr(true))
+  }, [mySealId])
 
   useEffect(() => {
     const codes = data?.cnpj_consultation?.cnpj_data?.cnaes_secundarios?.map(c => String(c.codigo)).filter(Boolean)
@@ -537,9 +547,10 @@ export default function ClientSupplierProcess() {
       {tab === 'Resumo' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
 
-          {/* Progresso documentos */}
+          {/* Progresso documentos — mesmos números do backoffice e do fornecedor */}
           <Card style={{ borderRadius:14, padding:'18px 20px' }}>
             <SectionTitle>Progresso dos Documentos</SectionTitle>
+            {procDocs ? <ProcessDocsSummary totals={procDocs.totals} compact/> : <>
             <div style={{ marginBottom:12 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
                 <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>Conformidade documental</span>
@@ -560,6 +571,7 @@ export default function ClientSupplierProcess() {
                 </div>
               ))}
             </div>
+            </>}
           </Card>
 
           {/* Detalhes do convite */}
@@ -651,7 +663,18 @@ export default function ClientSupplierProcess() {
       )}
 
       {/* ── Tab: Documentos ── */}
-      {tab === 'Documentos' && (
+      {tab === 'Documentos' && procDocs && (
+        <Card style={{ borderRadius:14, padding:'20px 24px' }}>
+          <SectionTitle>Documentos do processo{procDocs.seal?.client_name ? ` · ${procDocs.seal.client_name}` : ''}</SectionTitle>
+          <ProcessDocuments data={procDocs} canView={hasAction(user, 'acao:ver_documentos')}
+            onView={async (doc) => { try { await documentApi.view(doc) } catch { alert('Erro ao abrir documento') } }}/>
+        </Card>
+      )}
+      {tab === 'Documentos' && !procDocs && !procDocsErr && mySealId && (
+        <div style={{ display:'flex', justifyContent:'center', padding:40 }}><Spinner size={32}/></div>
+      )}
+      {/* reserva: sem processo com este cliente ou falha da RPC → lista antiga */}
+      {tab === 'Documentos' && !procDocs && (procDocsErr || !mySealId) && (
         <Card style={{ borderRadius:14, padding:'20px 24px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <SectionTitle>Documentos</SectionTitle>

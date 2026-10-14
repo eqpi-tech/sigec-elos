@@ -14,7 +14,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
-const { requiredDocsForSeal } = require('./lib/required_docs.js')
+const { requiredDocsForSeal, mobilityPending } = require('./lib/required_docs.js')
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -137,7 +137,9 @@ exports.handler = async (event) => {
       // pendências de documentos: exigidos sem envio (REJECTED/EXPIRED contam
       // como pendente — o fornecedor precisa reenviar)
       const reqTypes = (await requiredDocsForSeal(supabase, seal.supplier_id, seal)).map(String)
-      if (!reqTypes.length) { skipped++; continue }
+      // mobilidade (PF) também é exigida pelo fluxo (14/10): pessoas e documentos
+      const mob = seal.client_id ? await mobilityPending(supabase, seal.supplier_id, seal.client_id) : { peopleShortfall: 0, notSent: 0 }
+      if (!reqTypes.length && !mob.peopleShortfall && !mob.notSent) { skipped++; continue }
       const { data: docs } = await supabase
         .from('documents').select('type, status')
         .eq('supplier_id', seal.supplier_id).in('type', reqTypes)
@@ -159,20 +161,25 @@ exports.handler = async (event) => {
         }
       }
 
-      if (!missingTypes.length && !questPending) { skipped++; continue } // completo → fila cuida
+      if (!missingTypes.length && !questPending && !mob.peopleShortfall && !mob.notSent) { skipped++; continue } // completo → fila cuida
 
       const { data: cat } = await supabase
         .from('documents_catalog').select('id, name').in('id', missingTypes.map(Number).filter((n) => !isNaN(n)))
       const nameMap = Object.fromEntries((cat || []).map((c) => [String(c.id), c.name]))
-      const missingNames = missingTypes.map((t) => nameMap[t] || `Documento #${t}`).slice(0, 15)
+      const mobNames = [
+        mob.peopleShortfall && `👷 Cadastrar ${mob.peopleShortfall} colaborador(es) nos postos (mobilidade)`,
+        mob.notSent && `👷 ${mob.notSent} documento(s) de mobilidade (PF) a enviar`,
+      ].filter(Boolean)
+      const missingNames = [...mobNames, ...missingTypes.map((t) => nameMap[t] || `Documento #${t}`)].slice(0, 15)
+      const nMob = (mob.peopleShortfall ? 1 : 0) + (mob.notSent ? 1 : 0)
       const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
 
       try {
-        await sendEmail(to, `📋 Faltam ${missingTypes.length + (questPending ? 1 : 0)} pendência(s) na sua homologação — SIGEC-ELOS`,
+        await sendEmail(to, `📋 Faltam ${missingTypes.length + nMob + (questPending ? 1 : 0)} pendência(s) na sua homologação — SIGEC-ELOS`,
           buildHtml(clientName, missingNames, questPending))
         await supabase.from('audit_log').insert({
           action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: seal.id,
-          metadata: { to, missing_docs: missingTypes.length, quest_pendente: questPending, lembrete_n: (hist?.length || 0) + 1 },
+          metadata: { to, missing_docs: missingTypes.length, mob_pessoas: mob.peopleShortfall || 0, mob_docs: mob.notSent || 0, quest_pendente: questPending, lembrete_n: (hist?.length || 0) + 1 },
         })
         sent++
       } catch (e) { console.warn(`[pending-reminders] ${seal.id}: ${e.message}`) }
