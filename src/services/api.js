@@ -1591,6 +1591,11 @@ export const teamApi = {
     if (error) throw new Error(error.message)
     return data || []
   },
+  // troca o master (titular) da empresa — master atual ou backoffice (patch_142)
+  transferMaster: async (role, company, newUserId) => {
+    const { error } = await supabase.rpc('team_transfer_master', { p_role: role, p_company: company, p_new_user: newUserId })
+    if (error) throw new Error(error.message)
+  },
   // { accessProfileId } troca o perfil ('' / null = Acesso Total); { isActive } ativa/desativa
   update: async (memberId, { accessProfileId, isActive } = {}) => {
     const clear = accessProfileId === null || accessProfileId === ''

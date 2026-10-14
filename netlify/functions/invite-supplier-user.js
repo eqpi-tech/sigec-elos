@@ -63,7 +63,10 @@ exports.handler = async (event) => {
     .maybeSingle()
 
   if (!callerRole) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Acesso negado — você não é membro deste fornecedor' }) }
-  if (!callerRole.is_primary) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Apenas o usuário master pode convidar membros adicionais' }) }
+  // master = titular da empresa; sem titular, o vínculo principal (patch_142)
+  const { data: supRow } = await supabaseAdmin.from('suppliers').select('user_id').eq('id', supplierId).maybeSingle()
+  const isMaster = supRow?.user_id ? supRow.user_id === caller.id : !!callerRole.is_primary
+  if (!isMaster) return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Apenas o usuário master pode convidar membros adicionais' }) }
 
   // Bloquear e-mails pessoais
   if (isPersonalEmail(email)) {
