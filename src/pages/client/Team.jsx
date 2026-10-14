@@ -38,6 +38,16 @@ export default function ClientTeam() {
 
   useEffect(() => { load() }, [load])
 
+  // passa o master para outro membro ativo (patch_142) — confirma antes
+  const makeMaster = async (member) => {
+    if (!window.confirm(`Tornar ${member.name || member.email} o master da empresa?\n\nVocê deixa de ser o master: quem convida e gerencia a equipe passa a ser essa pessoa.`)) return
+    try {
+      await teamApi.transferMaster('CLIENT', user?.clientId, member.user_id)
+      showToast(`${member.name || member.email} agora é o master da empresa.`)
+      await load()
+    } catch (e) { showToast(e.message, 'error') }
+  }
+
   const invite = async () => {
     if (!modal?.name?.trim() || !modal?.email?.trim()) return
     setSending(true); setError('')
@@ -130,6 +140,9 @@ export default function ClientTeam() {
                   </select>
                 </div>
 
+                {!m.is_master && !m.is_me && m.is_active !== false && members.some(x => x.is_me && x.is_master) && (
+                  <Button variant="neutral" size="sm" onClick={() => makeMaster(m)} title="Passa a função de master para esta pessoa">👑 Tornar master</Button>
+                )}
                 {!m.is_master && !m.is_me && (
                   <Button variant={m.is_active === false ? 'success' : 'danger'} size="sm" onClick={() => toggleActive(m)}>
                     {m.is_active === false ? '↺ Reativar' : 'Desativar'}

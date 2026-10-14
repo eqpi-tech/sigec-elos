@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
+import { teamApi } from '../../services/api.js'
 import { Button, Card, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
 
 const ROLE_LABEL = { ADMIN:'Backoffice', BUYER:'Comprador', CLIENT:'Cliente', SUPPLIER:'Fornecedor' }
@@ -46,6 +47,15 @@ export default function BackofficeUsers() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // troca do master da empresa (patch_142): o usuário desta linha vira o titular
+  const makeMaster = async (u, o) => {
+    if (!window.confirm(`Tornar ${u.name !== '—' ? u.name : u.email} o master de ${o.razao || 'esta empresa'}?\n\nO master atual deixa de ser master (continua na equipe). Fica registrado no histórico.`)) return
+    setActing(a => ({ ...a, [u.id]: 'master' }))
+    try { await teamApi.transferMaster(o.role, o.companyId, u.id); await load() }
+    catch (e) { alert('Erro: ' + e.message) }
+    setActing(a => ({ ...a, [u.id]: undefined }))
+  }
   useEffect(() => {
     supabase.from('access_profiles').select('id, name, role_type, is_system').order('name')
       .then(({ data }) => setAccessProfiles(data || []))
@@ -197,8 +207,15 @@ export default function BackofficeUsers() {
                       {(u.orgs?.length > 0) && (
                         <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:4 }}>
                           {u.orgs.map((o, i) => (
-                            <span key={i} style={{ fontSize:10.5, fontFamily:'DM Sans,sans-serif', color:ROLE_COLOR[o.role]||'#64748b', background:`${ROLE_COLOR[o.role]||'#64748b'}10`, border:`1px solid ${ROLE_COLOR[o.role]||'#64748b'}25`, padding:'2px 8px', borderRadius:6 }}>
-                              {ROLE_LABEL[o.role]}: {o.razao || '—'}{o.cnpj ? ` · ${o.cnpj}` : ''}
+                            <span key={i} style={{ fontSize:10.5, fontFamily:'DM Sans,sans-serif', color:ROLE_COLOR[o.role]||'#64748b', background:`${ROLE_COLOR[o.role]||'#64748b'}10`, border:`1px solid ${ROLE_COLOR[o.role]||'#64748b'}25`, padding:'2px 8px', borderRadius:6, display:'inline-flex', alignItems:'center', gap:6, opacity: o.active === false ? .55 : 1 }}>
+                              {o.isMaster && <span title="Master da empresa">👑</span>}
+                              {ROLE_LABEL[o.role]}: {o.razao || '—'}{o.cnpj ? ` · ${o.cnpj}` : ''}{o.active === false ? ' · inativo' : ''}
+                              {o.companyId && !o.isMaster && o.active !== false && (
+                                <button onClick={() => makeMaster(u, o)} disabled={!!acting[u.id]} title="Tornar este usuário o master desta empresa"
+                                  style={{ border:'none', background:'none', padding:0, cursor:'pointer', color:'#2E3192', fontWeight:700, fontSize:10.5, fontFamily:'DM Sans,sans-serif', textDecoration:'underline' }}>
+                                  tornar master
+                                </button>
+                              )}
                             </span>
                           ))}
                         </div>

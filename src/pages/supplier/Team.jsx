@@ -82,6 +82,18 @@ export default function SupplierTeam() {
     }
   }
 
+  // passa o master para outro membro ativo (patch_142) — confirma antes
+  async function makeMaster(member) {
+    if (!window.confirm(`Tornar ${member.name || member.email} o master da empresa?\n\nVocê deixa de ser o master: quem convida e gerencia a equipe passa a ser essa pessoa.`)) return
+    setTogglingId(member.id); setError(''); setSuccess('')
+    try {
+      await teamApi.transferMaster('SUPPLIER', user?.supplierId, member.user_id)
+      setSuccess(`${member.name || member.email} agora é o master da empresa.`)
+      await loadMembers()
+    } catch (e) { setError(e.message) }
+    setTogglingId(null)
+  }
+
   async function toggleActive(member) {
     if (member.is_master) return
     setTogglingId(member.id); setError('')
@@ -157,12 +169,15 @@ export default function SupplierTeam() {
                 )
               )}
               {!m.is_master && isMaster && !m.is_me && (
-                togglingId === m.id ? <Spinner size={16}/> : (
+                togglingId === m.id ? <Spinner size={16}/> : (<>
+                  {m.is_active && (
+                    <Button variant="neutral" size="sm" onClick={() => makeMaster(m)} title="Passa a função de master para esta pessoa">👑 Tornar master</Button>
+                  )}
                   <Button variant={m.is_active ? 'neutral' : 'success'} size="sm"
                     onClick={() => toggleActive(m)}>
                     {m.is_active ? 'Desativar' : 'Reativar'}
                   </Button>
-                )
+                </>)
               )}
               {m.is_master && (
                 <span style={{ fontSize:10, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>

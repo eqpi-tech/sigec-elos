@@ -64,26 +64,26 @@ exports.handler = async (event) => {
         return out
       }
       const [rolesAll, profilesAll] = await Promise.all([
-        pageAll('user_roles', 'user_id, role, is_primary, client_id, supplier_id, buyer_id, access_profile, access_profile_id'),
+        pageAll('user_roles', 'user_id, role, is_primary, is_active, client_id, supplier_id, buyer_id, access_profile, access_profile_id'),
         pageAll('profiles', 'id, name'),
       ])
 
       // entidades: só as efetivamente vinculadas a algum usuário (a tabela
       // suppliers tem dezenas de milhares de linhas — não carregar inteira)
-      const fetchByIds = async (table, ids) => {
+      const fetchByIds = async (table, ids, cols = 'id, cnpj, razao_social') => {
         const uniq = [...new Set(ids.filter(Boolean))]
         const out = []
         for (let i = 0; i < uniq.length; i += 200) {
           const { data, error } = await supabaseAdmin.from(table)
-            .select('id, cnpj, razao_social').in('id', uniq.slice(i, i + 200))
+            .select(cols).in('id', uniq.slice(i, i + 200))
           if (error) throw new Error(`${table}: ${error.message}`)
           out.push(...(data || []))
         }
         return out
       }
       const [suppliersRows, clientsRows, buyersRows] = await Promise.all([
-        fetchByIds('suppliers', rolesAll.map(r => r.supplier_id)),
-        fetchByIds('clients',   rolesAll.map(r => r.client_id)),
+        fetchByIds('suppliers', rolesAll.map(r => r.supplier_id), 'id, cnpj, razao_social, user_id'),
+        fetchByIds('clients',   rolesAll.map(r => r.client_id), 'id, cnpj, razao_social, user_id'),
         fetchByIds('buyers',    rolesAll.map(r => r.buyer_id)),
       ])
       const authUsers = { users: authUsersAll }
@@ -114,8 +114,11 @@ exports.handler = async (event) => {
       ;(profilesRes.data || []).forEach(p => { nameMap[p.id] = p.name })
 
       const entityMap = {}  // 'supplier:<id>' | 'client:<id>' | 'buyer:<id>' → { cnpj, razao }
-      ;(suppliersRes.data || []).forEach(s => { entityMap[`supplier:${s.id}`] = { cnpj: s.cnpj, razao: s.razao_social } })
-      ;(clientsRes.data   || []).forEach(c => { entityMap[`client:${c.id}`]   = { cnpj: c.cnpj, razao: c.razao_social } })
+      ;(suppliersRes.data || []).forEach(s => { entityMap[`supplier:${s.id}`] = { cnpj: s.cnpj, razao: s.razao_social, titular: s.user_id } })
+      ;(clientsRes.data   || []).forEach(c => { entityMap[`client:${c.id}`]   = { cnpj: c.cnpj, razao: c.razao_social, titular: c.user_id } })
+      // multiempresa (patch_138): TODAS as empresas do usuário, com o master (patch_142)
+      const linksByUser = {}
+      ;(rolesAll || []).forEach(r => { (linksByUser[r.user_id] = linksByUser[r.user_id] || []).push(r) })
       ;(buyersRes.data    || []).forEach(b => { entityMap[`buyer:${b.id}`]    = { cnpj: b.cnpj, razao: b.razao_social } })
 
       const users = (authUsers?.users || []).map(u => {
@@ -126,11 +129,15 @@ exports.handler = async (event) => {
         const client   = clientId ? entityMap[`client:${clientId}`] : null
         const buyer    = buyerId  ? entityMap[`buyer:${buyerId}`]   : null
         // Todas as organizações (CNPJ + razão) vinculadas ao usuário, em qualquer papel
-        const orgs = [
-          supplier && { role: 'SUPPLIER', cnpj: supplier.cnpj || '', razao: supplier.razao || '' },
-          client   && { role: 'CLIENT',   cnpj: client.cnpj   || '', razao: client.razao   || '' },
-          buyer    && { role: 'BUYER',    cnpj: buyer.cnpj    || '', razao: buyer.razao    || '' },
-        ].filter(Boolean)
+        const orgs = (linksByUser[u.id] || []).map(r => {
+          const key = r.role === 'SUPPLIER' ? `supplier:${r.supplier_id}` : r.role === 'CLIENT' ? `client:${r.client_id}` : r.role === 'BUYER' ? `buyer:${r.buyer_id}` : null
+          const e = key && entityMap[key]
+          if (!e) return null
+          const companyId = r.role === 'SUPPLIER' ? r.supplier_id : r.role === 'CLIENT' ? r.client_id : null
+          // master = titular; sem titular, o vínculo principal (mesma regra do banco)
+          const isMaster = companyId ? (e.titular ? e.titular === u.id : !!r.is_primary) : false
+          return { role: r.role, cnpj: e.cnpj || '', razao: e.razao || '', companyId, isMaster, active: r.is_active !== false }
+        }).filter(Boolean)
         return {
           id:             u.id,
           email:          u.email,
