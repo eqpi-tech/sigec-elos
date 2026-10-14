@@ -397,6 +397,13 @@ export default function SupplierDocuments() {
   }
 
   const getDoc = (docId) => uploaded.find(d => d.type === String(docId) || d.type === `CNPJ_CARD` && docId === 37)
+  // linhas PJ do processo pela fonte única (patch_140): exigidos + CNAE/Simples
+  // (exigência EQPI) + demais enviados, na mesma lista das outras visões
+  const pjRowsFor = (key, fallback) => {
+    const r = procByKey[key]
+    if (!r) return fallback
+    return r.pj.filter(i => i.doc_id).map(i => ({ id: i.doc_id, name: i.name, auto_collect: i.auto_collect, extra: i.extra }))
+  }
 
   // ── Mobilidade: pessoas e uploads por posto/pessoa ──
   const handleAddPerson = async () => {
@@ -882,8 +889,8 @@ export default function SupplierDocuments() {
         /* Multi-processo: um card por fluxo (cliente ou padrão) */
         <>
           {docGroups.map(g => {
-            const groupDocs = reqDocs.filter(d => g.ids.has(d.id))
-            const groupOk   = groupDocs.filter(d => isSatisfied(getDoc(d.id))).length
+            const groupDocs = pjRowsFor(g.key, reqDocs.filter(d => g.ids.has(d.id)))
+            const groupOk   = groupDocs.filter(d => !d.extra && isSatisfied(getDoc(d.id))).length
             return (
               <Card key={g.key} style={{ borderRadius:16, padding:'20px 24px', marginBottom:16 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, justifyContent:'space-between', flexWrap:'wrap' }}>
@@ -891,7 +898,7 @@ export default function SupplierDocuments() {
                     {g.key === 'global' ? '🌐 ' : '🏢 '}{g.title}
                   </SectionTitle>
                   <span style={{ fontSize:12, color: groupOk === groupDocs.length ? '#22c55e' : '#9B9B9B', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
-                    PJ: {groupOk}/{groupDocs.length} aprovados
+                    PJ: {groupOk}/{groupDocs.filter(d => !d.extra).length} aprovados
                   </span>
                 </div>
                 <ProcessDocsSummary totals={procByKey[g.key]?.totals} compact/>
@@ -916,7 +923,7 @@ export default function SupplierDocuments() {
             </a>
           </div>
           <ProcessDocsSummary totals={procByKey[docGroups[0]?.key]?.totals} compact/>
-          {reqDocs.map(renderDocRow)}
+          {pjRowsFor(docGroups[0]?.key, reqDocs).map(renderDocRow)}
           <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(46,49,146,.04)', borderRadius:10, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
             <DocLegend/>
           </div>
