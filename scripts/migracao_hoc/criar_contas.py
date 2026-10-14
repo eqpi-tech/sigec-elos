@@ -31,10 +31,13 @@ def q(v):
     return "'" + str(v).replace("'", "''") + "'"
 
 def psql(sql):
-    r = subprocess.run([PSQL, DB, '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql], capture_output=True, text=True,
-                       env={**os.environ, 'PGGSSENCMODE': 'disable'})
-    if r.returncode: raise SystemExit(r.stderr)
-    return r.stdout
+    # queda de conexão do pooler derrubou a 1ª rodada (13/10, 385/707): tenta de novo
+    for tentativa in range(4):
+        r = subprocess.run([PSQL, DB, '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-c', sql], capture_output=True, text=True,
+                           env={**os.environ, 'PGGSSENCMODE': 'disable'})
+        if not r.returncode: return r.stdout
+        if 'connection' not in r.stderr or tentativa == 3: raise RuntimeError(r.stderr.strip()[:300])
+        time.sleep(5 * (tentativa + 1))
 
 def rows(sql):
     return json.loads(psql(f'SELECT coalesce(json_agg(row_to_json(x)), \'[]\') FROM ({sql}) x') or '[]')
