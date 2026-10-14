@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED, processDocsApi } from '../../services/api.js'
-import ProcessDocuments, { DocRow, ProcessDocsSummary, effectiveStatus } from '../../components/ProcessDocuments.jsx'
+import ProcessDocuments, { ProcessDocsSummary, effectiveStatus } from '../../components/ProcessDocuments.jsx'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
@@ -1109,8 +1109,6 @@ export function BackofficeAnalysis() {
     const row = (data.documents || []).find(d => d.id === item.document.id)
     return row ? { ...row, label: row.label || item.name } : { ...item.document, label: item.name, supplier_id: id }
   }
-  const reqIds = new Set((procDocs?.pj || []).map(i => i.document?.id).filter(Boolean))
-  const outrosDocs = procView ? (data.documents || []).filter(d => d.id && !String(d.type).startsWith('mob:') && !reqIds.has(d.id) && d.source !== 'REQUIRED') : []
   const cnpjC   = data.cnpj_consultation
   const cnpjDat = cnpjC?.cnpj_data
   const sanctions = cnpjC?.sanctions_data  // { ceis, cnep, ceisHistory, cnepHistory }
@@ -1602,17 +1600,6 @@ export function BackofficeAnalysis() {
               <ProcessDocuments data={procDocs} showSummary={false} canView={false}
                 renderDetails={(item) => { const doc = fullDoc(item); return doc ? analystDetails(doc) : null }}
                 renderActions={(item) => { const doc = fullDoc(item); return doc ? <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>{analystBar(doc)}</div> : null }}/>
-              {outrosDocs.length > 0 && (<>
-                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, margin:'18px 0 8px' }}>
-                  Outros documentos enviados (fora da exigência deste processo) · {outrosDocs.length}
-                </div>
-                {outrosDocs.map(doc => (
-                  <DocRow key={doc.id} canView={false}
-                    item={{ key: doc.id, name: doc.label, status: doc.status, responsibility: 'fornecedor', document: doc }}
-                    renderDetails={() => analystDetails(doc)}
-                    renderActions={() => <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>{analystBar(doc)}</div>}/>
-                ))}
-              </>)}
             </>)}
             {!procView && docs.map((doc,i)=>{
               const actn   = docActions[doc.id]

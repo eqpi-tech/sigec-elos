@@ -22,7 +22,14 @@ async function flowRequiredDocs(sb, flowId) {
 // Conjunto EXIGIDO do processo (denominador da auto-finalização, 16/09):
 // fluxo do selo → matriz das categorias do cliente → fluxos ativos do
 // cliente → 6 docs do ELOS Verificado (processo próprio/sem cliente)
+// Exigência da EQPI em TODO processo (14/10, patch_140): Análise de CNAEs (61 —
+// se pode prestar o serviço) e Simples Nacional (62 — captado pela EQPI)
+const EQPI_SEMPRE = [61, 62]
 async function requiredDocsForSeal(sb, supplierId, seal) {
+  const base = await requiredDocsBase(sb, supplierId, seal)
+  return [...new Set([...base, ...EQPI_SEMPRE])]
+}
+async function requiredDocsBase(sb, supplierId, seal) {
   const ELOS_VERIFICADO = [37, 61, 62, 7, 42, 8]
   if (!seal) return ELOS_VERIFICADO
   if (!seal.client_id) return ELOS_VERIFICADO

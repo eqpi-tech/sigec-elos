@@ -162,7 +162,7 @@ export default function ProcessDocuments({ data, renderActions, renderDetails, r
   return (
     <div>
       {showSummary && <ProcessDocsSummary totals={data.totals}/>}
-      <div style={sectionTitle}>Documentos da empresa (PJ) · {pj.filter(i => OK.includes(effectiveStatus(i))).length}/{pj.length} aprovados</div>
+      <div style={sectionTitle}>Documentos da empresa (PJ) · {pj.filter(i => !i.extra && OK.includes(effectiveStatus(i))).length}/{pj.filter(i => !i.extra).length} aprovados</div>
       {pj.length === 0 && <div style={{ fontSize:12.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>Nenhum documento exigido neste processo.</div>}
       {pj.map(it => <DocRow key={it.key} item={it} ctx={{}} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView}/>)}
       {data.mobility.length > 0 && <>
