@@ -18,7 +18,7 @@ export const DOC_STATUS = {
   NOT_APPLICABLE: { bg:'#f8fafc', bd:'#e2e8f0', color:'#64748b', label:'Não se aplica' },
 }
 const OK = ['VALID', 'EXPIRING', 'NOT_APPLICABLE']
-const RESP_LABEL = { cliente: 'Responsabilidade do cliente', interna: 'Obtido pela EQPI' }
+const RESP_LABEL = { cliente: 'Responsabilidade do cliente', interna: 'Captado pela EQPI' }
 
 // VALID que vence em até 30 dias aparece como "Vence em breve" (mesma regra das telas)
 export function effectiveStatus(item) {
@@ -48,7 +48,7 @@ export function DocRow({ item, ctx, renderActions, renderDetails, onView, canVie
         <div style={{ fontSize:12.5, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{item.name}</div>
         <div style={{ display:'flex', gap:6, marginTop:3, alignItems:'center', flexWrap:'wrap', fontFamily:'DM Sans,sans-serif' }}>
           <span style={pill(cfg)}>{cfg.label}</span>
-          {RESP_LABEL[item.responsibility] && <span style={{ fontSize:10, color:'#6b7280', background:'#f1f5f9', padding:'1px 7px', borderRadius:20 }}>{RESP_LABEL[item.responsibility]}</span>}
+          {RESP_LABEL[item.responsibility] && (item.responsibility !== 'interna' || st !== 'MISSING') && <span style={{ fontSize:10, color:'#6b7280', background:'#f1f5f9', padding:'1px 7px', borderRadius:20 }}>{RESP_LABEL[item.responsibility]}</span>}
           {(item.auto_collect || d?.source === 'AUTO') && <span style={{ fontSize:10, color:'#2E3192', background:'#eef0ff', padding:'1px 7px', borderRadius:20 }}>⚡ Auto-coletado</span>}
           {d?.submitted_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>enviado {fmt(d.submitted_at)}</span>}
           {d?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>validade {fmt(d.expires_at)}</span>}
@@ -84,12 +84,11 @@ export function ProcessDocsSummary({ totals, compact = false }) {
         {itens.map(([l, v, c]) => <span key={l}><strong style={{ color:c }}>{v}</strong> {l.toLowerCase()}</span>)}
         {t.people_shortfall > 0 && <span><strong style={{ color:'#ef4444' }}>{t.people_shortfall}</strong> pessoa{t.people_shortfall > 1 ? 's' : ''} a cadastrar (mobilidade)</span>}
       </div>
-      {!t.complete && (t.supplier_todo > 0 || t.people_shortfall > 0 || t.client_todo > 0 || t.internal_todo > 0) && (
+      {!t.complete && (t.supplier_todo > 0 || t.people_shortfall > 0 || t.client_todo > 0) && (
         <div style={{ marginTop:6, fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#6b7280' }}>
           Pendências: {[
             (t.supplier_todo > 0 || t.people_shortfall > 0) && `fornecedor (${t.supplier_todo} doc${t.supplier_todo !== 1 ? 's' : ''}${t.people_shortfall ? `, ${t.people_shortfall} pessoa${t.people_shortfall > 1 ? 's' : ''}` : ''})`,
             t.client_todo > 0 && `cliente (${t.client_todo})`,
-            t.internal_todo > 0 && `EQPI (${t.internal_todo})`,
           ].filter(Boolean).join(' · ')}
         </div>
       )}

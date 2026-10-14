@@ -14,7 +14,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
-const { requiredDocsForSeal, mobilityPending } = require('./lib/required_docs.js')
+const { requiredDocsForSeal, mobilityTodo } = require('./lib/required_docs.js')
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -38,14 +38,26 @@ async function sendEmail(to, subject, html) {
   if (!res.ok) throw new Error(`Resend ${res.status}`)
 }
 
-function buildHtml(clientName, missingDocs, questPending) {
+// mobilidade agrupada (14/10): um item por posto e um por pessoa
+const ST_MARCA = { REJECTED: ' (reprovado)', EXPIRED: ' (vencido)' }
+function mobLis(groups) {
+  return (groups || []).map((g) => {
+    const partes = []
+    if (g.peopleMissing) partes.push(`cadastrar ${g.peopleMissing} colaborador${g.peopleMissing > 1 ? 'es' : ''}`)
+    if (g.docs.length) partes.push(`enviar ${g.docs.map((d) => d.name + (ST_MARCA[d.status] || '')).join(', ')}`)
+    return `<li style="margin-bottom:6px">${g.kind === 'posto' ? '👷' : '👤'} <strong>${g.kind === 'posto' ? 'Posto ' : ''}${g.where}</strong>: ${partes.join(' · ')}</li>`
+  }).join('')
+}
+
+function buildHtml(clientName, missingDocs, questPending, mobGroups = []) {
   const docsLis = missingDocs.map((d) => `<li style="margin-bottom:6px">📄 ${d}</li>`).join('')
   return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
   <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center">
     <h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
   <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
     <p>Sua homologação${clientName ? ` com <strong>${clientName}</strong>` : ''} está quase lá — falta pouco para o processo entrar em análise:</p>
-    ${missingDocs.length ? `<p><strong>Documentos pendentes:</strong></p><ul style="padding-left:18px">${docsLis}</ul>` : ''}
+    ${missingDocs.length ? `<p><strong>Documentos da empresa:</strong></p><ul style="padding-left:18px">${docsLis}</ul>` : ''}
+    ${mobGroups.length ? `<p><strong>Mobilidade (postos e colaboradores):</strong></p><ul style="padding-left:18px">${mobLis(mobGroups)}</ul>` : ''}
     ${questPending ? `<p>❓ <strong>Questionário do cliente</strong> aguardando suas respostas.</p>` : ''}
     <p>Assim que tudo estiver enviado, o processo entra automaticamente na fila de análise.</p>
     <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Completar agora</a></p>
@@ -137,14 +149,19 @@ exports.handler = async (event) => {
       // pendências de documentos: exigidos sem envio (REJECTED/EXPIRED contam
       // como pendente — o fornecedor precisa reenviar)
       const reqTypes = (await requiredDocsForSeal(supabase, seal.supplier_id, seal)).map(String)
-      // mobilidade (PF) também é exigida pelo fluxo (14/10): pessoas e documentos
-      const mob = seal.client_id ? await mobilityPending(supabase, seal.supplier_id, seal.client_id) : { peopleShortfall: 0, notSent: 0 }
-      if (!reqTypes.length && !mob.peopleShortfall && !mob.notSent) { skipped++; continue }
+      // mobilidade (PF) também é exigida pelo fluxo (14/10): agrupada por posto e por pessoa
+      const mobGroups = seal.client_id ? await mobilityTodo(supabase, seal.supplier_id, seal.client_id) : []
+      if (!reqTypes.length && !mobGroups.length) { skipped++; continue }
       const { data: docs } = await supabase
         .from('documents').select('type, status')
         .eq('supplier_id', seal.supplier_id).in('type', reqTypes)
       const okTypes = new Set((docs || []).filter((d) => SENT_STATUSES.includes(d.status)).map((d) => String(d.type)))
-      const missingTypes = reqTypes.filter((t) => !okTypes.has(t))
+      // documento de responsabilidade do CLIENTE não é cobrado do fornecedor;
+      // o interno (captado pela EQPI) que não foi captado é (Luiz, 14/10)
+      const { data: respRows } = await supabase.from('documents_catalog')
+        .select('id, responsibility').in('id', reqTypes.map(Number).filter((n) => !isNaN(n)))
+      const doCliente = new Set((respRows || []).filter((r) => r.responsibility === 'cliente').map((r) => String(r.id)))
+      const missingTypes = reqTypes.filter((t) => !okTypes.has(t) && !doCliente.has(t))
 
       // questionário do cliente: perguntas obrigatórias sem resposta
       let questPending = false
@@ -161,25 +178,21 @@ exports.handler = async (event) => {
         }
       }
 
-      if (!missingTypes.length && !questPending && !mob.peopleShortfall && !mob.notSent) { skipped++; continue } // completo → fila cuida
+      if (!missingTypes.length && !questPending && !mobGroups.length) { skipped++; continue } // completo → fila cuida
 
       const { data: cat } = await supabase
         .from('documents_catalog').select('id, name').in('id', missingTypes.map(Number).filter((n) => !isNaN(n)))
       const nameMap = Object.fromEntries((cat || []).map((c) => [String(c.id), c.name]))
-      const mobNames = [
-        mob.peopleShortfall && `👷 Cadastrar ${mob.peopleShortfall} colaborador(es) nos postos (mobilidade)`,
-        mob.notSent && `👷 ${mob.notSent} documento(s) de mobilidade (PF) a enviar`,
-      ].filter(Boolean)
-      const missingNames = [...mobNames, ...missingTypes.map((t) => nameMap[t] || `Documento #${t}`)].slice(0, 15)
-      const nMob = (mob.peopleShortfall ? 1 : 0) + (mob.notSent ? 1 : 0)
+      const missingNames = missingTypes.map((t) => nameMap[t] || `Documento #${t}`).slice(0, 15)
+      const nMob = mobGroups.length
       const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
 
       try {
         await sendEmail(to, `📋 Faltam ${missingTypes.length + nMob + (questPending ? 1 : 0)} pendência(s) na sua homologação — SIGEC-ELOS`,
-          buildHtml(clientName, missingNames, questPending))
+          buildHtml(clientName, missingNames, questPending, mobGroups.slice(0, 20)))
         await supabase.from('audit_log').insert({
           action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: seal.id,
-          metadata: { to, missing_docs: missingTypes.length, mob_pessoas: mob.peopleShortfall || 0, mob_docs: mob.notSent || 0, quest_pendente: questPending, lembrete_n: (hist?.length || 0) + 1 },
+          metadata: { to, missing_docs: missingTypes.length, mob_pessoas: mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: questPending, lembrete_n: (hist?.length || 0) + 1 },
         })
         sent++
       } catch (e) { console.warn(`[pending-reminders] ${seal.id}: ${e.message}`) }

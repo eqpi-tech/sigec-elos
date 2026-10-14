@@ -128,4 +128,58 @@ async function mobilityPending(sb, supplierId, clientId) {
   return { peopleShortfall, missingOrUnreviewed, rejected, slots: slotKeys.length, notSent }
 }
 
-module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending }
+// Nome curto do documento para e-mail: "PCMSO (Programa de ...)" → "PCMSO",
+// "ASO — Atestado de Saúde Ocupacional" → "ASO"
+const shortDocName = (n) => String(n || '').split(/ \(| — /)[0].trim() || String(n || '')
+
+// Pendências de mobilidade AGRUPADAS para os e-mails ao fornecedor (14/10):
+// um item por posto (pessoas a cadastrar + docs do posto) e um por pessoa
+// (docs dela). Só o que o fornecedor precisa fazer: sem envio, vencido ou
+// reprovado — em análise não entra.
+//   [{ kind:'posto', where:'Serra/ES', peopleMissing:8, docs:[{ name, status }] },
+//    { kind:'pessoa', where:'Carlos Lima — Serra/ES', docs:[...] }]
+async function mobilityTodo(sb, supplierId, clientId) {
+  if (!clientId) return []
+  const { data: sup } = await sb.from('suppliers').select('cnpj').eq('id', supplierId).single()
+  if (!sup) return []
+  const { data: posts } = await sb.from('mobility_posts')
+    .select('id, category_id, armado, qty_people, site_city, site_uf')
+    .eq('client_id', clientId).eq('supplier_cnpj', sup.cnpj).eq('active', true)
+  if (!posts?.length) return []
+  const { data: matrix } = await sb.from('category_mobility_documents')
+    .select('category_id, document_id, escopo, documents_catalog(name)')
+    .eq('required', true).in('category_id', [...new Set(posts.map(p => p.category_id))])
+  const { data: people } = await sb.from('mobility_people')
+    .select('id, post_id, nome').eq('supplier_id', supplierId).eq('active', true)
+    .in('post_id', posts.map(p => p.id)).order('nome')
+  const slots = []   // { key, name, group }
+  const groups = []
+  for (const post of posts) {
+    const where = `${post.site_city}/${post.site_uf}`
+    const pPeople = (people || []).filter(p => p.post_id === post.id)
+    const g = { kind: 'posto', where, peopleMissing: Math.max(0, post.qty_people - pPeople.length), docs: [] }
+    groups.push(g)
+    const mx = (matrix || []).filter(m => m.category_id === post.category_id)
+    for (const m of mx.filter(x => x.escopo === 'posto' && (x.document_id !== 10017 || post.armado)))
+      slots.push({ key: `mob:${m.document_id}:s:${post.id}`, name: shortDocName(m.documents_catalog?.name), group: g })
+    for (const pe of pPeople) {
+      const gp = { kind: 'pessoa', where: `${pe.nome} — ${where}`, peopleMissing: 0, docs: [] }
+      groups.push(gp)
+      for (const m of mx.filter(x => x.escopo === 'pessoa'))
+        slots.push({ key: `mob:${m.document_id}:p:${pe.id}`, name: shortDocName(m.documents_catalog?.name), group: gp })
+    }
+  }
+  const byType = {}
+  for (let i = 0; i < slots.length; i += 200) {
+    const { data: docs } = await sb.from('documents').select('type, status')
+      .eq('supplier_id', supplierId).in('type', slots.slice(i, i + 200).map(x => x.key))
+    for (const d of (docs || [])) byType[d.type] = d.status
+  }
+  for (const sl of slots) {
+    const st = byType[sl.key]
+    if (!st || ['MISSING', 'EXPIRED', 'REJECTED'].includes(st)) sl.group.docs.push({ name: sl.name, status: st || 'MISSING' })
+  }
+  return groups.filter(g => g.peopleMissing || g.docs.length)
+}
+
+module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending, mobilityTodo, shortDocName }

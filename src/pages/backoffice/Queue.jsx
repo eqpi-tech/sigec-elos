@@ -577,7 +577,15 @@ export function BackofficeAnalysis() {
     ...p.people.flatMap(pe => pe.docs.map(it => ({ ...it, where: pe.name }))),
   ]) : []
   const mobTodo = mobItems.filter(it => ['MISSING', 'REJECTED', 'EXPIRED'].includes(effectiveStatus(it)))
-  const mobShortPosts = procDocs ? procDocs.mobility.filter(p => p.people_count < p.qty_people) : []
+  // e-mail ao fornecedor: mobilidade agrupada por posto e por pessoa (mesmo
+  // formato do lembrete automático — lib/required_docs.js mobilityTodo)
+  const shortDocName = (n) => String(n || '').split(/ \(| — /)[0].trim() || String(n || '')
+  const aFazer = (it) => ['MISSING', 'REJECTED', 'EXPIRED'].includes(effectiveStatus(it))
+  const mobGroups = procDocs ? procDocs.mobility.flatMap(p => {
+    const where = `${p.city}/${p.uf}`
+    return [{ kind: 'posto', where, peopleMissing: Math.max(0, p.qty_people - p.people_count), docs: p.post_docs.filter(aFazer) },
+      ...p.people.map(pe => ({ kind: 'pessoa', where: `${pe.name} — ${where}`, peopleMissing: 0, docs: pe.docs.filter(aFazer) }))]
+  }).filter(g => g.peopleMissing || g.docs.length) : []
   const mobShortfall = procDocs?.totals?.people_shortfall || 0
 
   // Documentos do PROCESSO selecionado: com 2+ clientes as exigências vêm
@@ -596,9 +604,14 @@ export function BackofficeAnalysis() {
   // Considera impeditivo apenas documentos obrigatórios não-auto que ainda não foram enviados
   const hardBlocked = blockingMissing.filter(d => d.source !== 'AUTO' && !['37','61','62'].includes(String(d.type)))
 
-  // 📧 Solicitar Documentos: e-mail ao fornecedor com a lista de pendências
-  const pendingDocs = docsView.filter(d =>
-    ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
+  // 📧 Solicitar Documentos: e-mail ao fornecedor com a lista de pendências.
+  // Fonte única quando há processo: exigidos do processo, sem os de
+  // responsabilidade do CLIENTE (o interno não captado é cobrado — 14/10)
+  const pendingDocs = procDocs
+    ? procDocs.pj.filter(i => !i.extra && i.responsibility !== 'cliente'
+        && ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(effectiveStatus(i)))
+        .map(i => ({ label: i.name, status: effectiveStatus(i), review_note: i.document?.review_note }))
+    : docsView.filter(d => ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
   const handleRequestDocs = async () => {
     // Questionário faz parte da homologação (18/09): entra na cobrança
     let questPend = 0
@@ -617,19 +630,21 @@ export function BackofficeAnalysis() {
         }
       } catch { /* não crítico */ }
     }
-    const nMob = mobTodo.length + mobShortPosts.length
+    const nMob = mobGroups.length
     if (!pendingDocs.length && !questPend && !nMob) { alert('Nenhuma pendência para solicitar.'); return }
     if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${nMob ? ` + ${nMob} pendência(s) de mobilidade` : ''}${questPend ? ' + questionário' : ''} pendente(s)?`)) return
     setProcessing(true)
     try {
       const questRow = questPend ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">📋 Questionário de homologação</td>
          <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${questPend} pergunta(s) obrigatória(s) sem resposta</td></tr>` : ''
-      const mobRows = mobShortPosts.map(p => `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">👷 Cadastrar colaboradores — posto ${p.city}/${p.uf}</td>
-         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${p.qty_people - p.people_count} pessoa(s) a cadastrar</td></tr>`).join('')
-        + mobTodo.map(it => `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">👷 ${it.name} — ${it.where}</td>
-         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${it.status==='REJECTED'?'#dc2626':'#b45309'}">${
-           it.status==='REJECTED' ? `Rejeitado${it.document?.review_note ? ` — ${it.document.review_note}` : ''}` : effectiveStatus(it)==='EXPIRED' ? 'Vencido' : 'Não enviado'
-         }</td></tr>`).join('')
+      const MARCA = { REJECTED: ' (reprovado)', EXPIRED: ' (vencido)' }
+      const mobRows = mobGroups.map(g => {
+        const partes = []
+        if (g.peopleMissing) partes.push(`cadastrar ${g.peopleMissing} colaborador${g.peopleMissing > 1 ? 'es' : ''}`)
+        if (g.docs.length) partes.push(`enviar ${g.docs.map(d => shortDocName(d.name) + (MARCA[effectiveStatus(d)] || '')).join(', ')}`)
+        return `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">${g.kind === 'posto' ? '👷 Posto ' : '👤 '}${g.where}</td>
+         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${partes.join(' · ')}</td></tr>`
+      }).join('')
       const rows = questRow + mobRows + pendingDocs.map(d =>
         `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">${d.label}</td>
          <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${d.status==='REJECTED'?'#dc2626':'#b45309'}">${
@@ -1027,7 +1042,7 @@ export function BackofficeAnalysis() {
   const ok      = procDocs ? procDocs.totals.valid : docs.filter(d=>d.status==='VALID').length
   // pendências = TODOS os exigidos do processo (PJ + PF) que falta fazer (14/10)
   const miss    = procDocs
-    ? procDocs.totals.supplier_todo + procDocs.totals.client_todo + procDocs.totals.internal_todo
+    ? procDocs.totals.supplier_todo + procDocs.totals.client_todo
     : docs.filter(d=>['MISSING','EXPIRED','REJECTED'].includes(d.status)).length
   const procView = !!procDocs && procSelKey !== 'ALL'
 
