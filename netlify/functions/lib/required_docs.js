@@ -65,7 +65,7 @@ async function requiredDocsForSeal(sb, supplierId, seal) {
 // O doc de mobilidade é um `documents` comum com type
 // 'mob:<docId>:p:<personId>' | 'mob:<docId>:s:<postId>'.
 async function mobilityPending(sb, supplierId, clientId) {
-  const empty = { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0, slots: 0 }
+  const empty = { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0, slots: 0, notSent: 0 }
   if (!clientId) return empty
   const { data: sup } = await sb.from('suppliers').select('cnpj').eq('id', supplierId).single()
   if (!sup) return empty
@@ -109,13 +109,16 @@ async function mobilityPending(sb, supplierId, clientId) {
       .eq('supplier_id', supplierId).in('type', slotKeys.slice(i, i + 200))
     for (const d of (docs || [])) byType[d.type] = d.status
   }
-  let missingOrUnreviewed = 0, rejected = 0
+  // notSent (14/10): o que o FORNECEDOR ainda precisa enviar — sem linha,
+  // MISSING, vencido ou reprovado (em análise não conta); usado no lembrete
+  let missingOrUnreviewed = 0, rejected = 0, notSent = 0
   for (const k of slotKeys) {
     const st = byType[k]
     if (st === 'REJECTED') rejected++
     else if (!['VALID', 'NOT_APPLICABLE'].includes(st)) missingOrUnreviewed++
+    if (!st || ['MISSING', 'EXPIRED', 'REJECTED'].includes(st)) notSent++
   }
-  return { peopleShortfall, missingOrUnreviewed, rejected, slots: slotKeys.length }
+  return { peopleShortfall, missingOrUnreviewed, rejected, slots: slotKeys.length, notSent }
 }
 
 module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending }

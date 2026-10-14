@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED, processDocsApi } from '../../services/api.js'
+import ProcessDocuments, { DocRow, ProcessDocsSummary, effectiveStatus } from '../../components/ProcessDocuments.jsx'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
@@ -305,6 +306,8 @@ export function BackofficeAnalysis() {
 
   // Mobilidade: postos/pessoas/matriz do fornecedor (árvore na aba Documentos)
   const [mob, setMob] = useState(null) // { posts, people, matrix }
+  // Documentos do PROCESSO selecionado — fonte única das 3 visões (patch_139)
+  const [procDocs, setProcDocs] = useState(null)
 
   useEffect(() => {
     adminApi.getSealAnalysis(id)
@@ -558,6 +561,25 @@ export function BackofficeAnalysis() {
     : autoSeal
   const processClientName = processSeal?.clients?.razao_social || null
 
+  // fonte única (patch_139): PJ + mobilidade do processo, com os totais; recarrega
+  // depois de cada decisão de documento (docActions) para os números baterem
+  const procSealId = procSelKey === 'ALL' ? null : (processSeal?.id || null)
+  const docActionsDone = Object.entries(docActions).filter(([, v]) => v !== 'loading').map(([k, v]) => k + v).join()
+  useEffect(() => {
+    if (!procSealId) { setProcDocs(null); return }
+    let vivo = true
+    processDocsApi.get(procSealId).then(r => { if (vivo) setProcDocs(r) }).catch(() => { if (vivo) setProcDocs(null) })
+    return () => { vivo = false }
+  }, [procSealId, docActionsDone])
+  // pendências de MOBILIDADE do processo (entram na trava, no e-mail e no rótulo)
+  const mobItems = procDocs ? procDocs.mobility.flatMap(p => [
+    ...p.post_docs.map(it => ({ ...it, where: `posto ${p.city}/${p.uf}` })),
+    ...p.people.flatMap(pe => pe.docs.map(it => ({ ...it, where: pe.name }))),
+  ]) : []
+  const mobTodo = mobItems.filter(it => ['MISSING', 'REJECTED', 'EXPIRED'].includes(effectiveStatus(it)))
+  const mobShortPosts = procDocs ? procDocs.mobility.filter(p => p.people_count < p.qty_people) : []
+  const mobShortfall = procDocs?.totals?.people_shortfall || 0
+
   // Documentos do PROCESSO selecionado: com 2+ clientes as exigências vêm
   // separadas por matriz (required_by); 'ALL' mostra a união de todos
   const procKey  = procSelKey === 'ALL' ? null : (processSeal ? (processSeal.client_id || '__ELOS__') : null)
@@ -595,13 +617,20 @@ export function BackofficeAnalysis() {
         }
       } catch { /* não crítico */ }
     }
-    if (!pendingDocs.length && !questPend) { alert('Nenhuma pendência para solicitar.'); return }
-    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${questPend ? ' + questionário' : ''} pendente(s)?`)) return
+    const nMob = mobTodo.length + mobShortPosts.length
+    if (!pendingDocs.length && !questPend && !nMob) { alert('Nenhuma pendência para solicitar.'); return }
+    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${nMob ? ` + ${nMob} pendência(s) de mobilidade` : ''}${questPend ? ' + questionário' : ''} pendente(s)?`)) return
     setProcessing(true)
     try {
       const questRow = questPend ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">📋 Questionário de homologação</td>
          <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${questPend} pergunta(s) obrigatória(s) sem resposta</td></tr>` : ''
-      const rows = questRow + pendingDocs.map(d =>
+      const mobRows = mobShortPosts.map(p => `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">👷 Cadastrar colaboradores — posto ${p.city}/${p.uf}</td>
+         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#b45309">${p.qty_people - p.people_count} pessoa(s) a cadastrar</td></tr>`).join('')
+        + mobTodo.map(it => `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">👷 ${it.name} — ${it.where}</td>
+         <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${it.status==='REJECTED'?'#dc2626':'#b45309'}">${
+           it.status==='REJECTED' ? `Rejeitado${it.document?.review_note ? ` — ${it.document.review_note}` : ''}` : effectiveStatus(it)==='EXPIRED' ? 'Vencido' : 'Não enviado'
+         }</td></tr>`).join('')
+      const rows = questRow + mobRows + pendingDocs.map(d =>
         `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">${d.label}</td>
          <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:${d.status==='REJECTED'?'#dc2626':'#b45309'}">${
            d.status==='REJECTED' ? `Rejeitado${d.review_note ? ` — ${d.review_note}` : ''}`
@@ -639,7 +668,7 @@ export function BackofficeAnalysis() {
           </div>`,
         }),
       })
-      alert(`📧 Solicitação enviada ao fornecedor (${pendingDocs.length} documento(s) listado(s)).`)
+      alert(`📧 Solicitação enviada ao fornecedor (${pendingDocs.length + nMob} pendência(s) listada(s)).`)
     } catch (e) { alert('Erro ao enviar: ' + e.message) }
     finally { setProcessing(false) }
   }
@@ -671,6 +700,12 @@ export function BackofficeAnalysis() {
     }
     if (hardBlocked.length > 0) {
       alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
+      return
+    }
+    // mobilidade (PF) também é exigida pelo fluxo (14/10): pessoas e documentos
+    const mobMissing = mobTodo.filter(it => effectiveStatus(it) === 'MISSING')
+    if (mobShortfall > 0 || mobMissing.length > 0) {
+      alert(`Não é possível homologar: a mobilidade (PF) está incompleta.\n${mobShortfall ? `· ${mobShortfall} pessoa(s) a cadastrar nos postos\n` : ''}${mobMissing.length ? `· ${mobMissing.length} documento(s) de PF não enviado(s)` : ''}`)
       return
     }
     setProcessing(true)
@@ -989,8 +1024,93 @@ export function BackofficeAnalysis() {
   if (!data) return null
 
   const docs    = docsView
-  const ok      = docs.filter(d=>d.status==='VALID').length
-  const miss    = docs.filter(d=>['MISSING','EXPIRED','REJECTED'].includes(d.status)).length
+  const ok      = procDocs ? procDocs.totals.valid : docs.filter(d=>d.status==='VALID').length
+  // pendências = TODOS os exigidos do processo (PJ + PF) que falta fazer (14/10)
+  const miss    = procDocs
+    ? procDocs.totals.supplier_todo + procDocs.totals.client_todo + procDocs.totals.internal_todo
+    : docs.filter(d=>['MISSING','EXPIRED','REJECTED'].includes(d.status)).length
+  const procView = !!procDocs && procSelKey !== 'ALL'
+
+  // ferramentas do analista em cada linha — as mesmas na lista antiga
+  // ("Todos") e na visão do processo (componente comum ProcessDocuments)
+  const analystDetails = (doc) => (<>
+                    <RouteABadge doc={doc}/>
+                    {ROUTE_B_ENABLED && (aiPorDoc[doc.id]
+                      ? <RouteBReview review={aiPorDoc[doc.id]} onReanalyze={() => pedirPreAnalise(doc.id)}/>
+                      : doc.storage_path && !doc.hoc_arquivo_id && aiTypes.has(String(doc.type)) && (
+                        <button onClick={() => pedirPreAnalise(doc.id)}
+                          style={{ marginTop:3, fontSize:9.5, border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:20, padding:'1px 8px', cursor:'pointer' }}>
+                          🤖 Pré-analisar com IA
+                        </button>
+                      ))}
+  </>)
+  const analystBar = (doc) => {
+    const actn   = docActions[doc.id]
+    const status = actn && actn!=='loading' ? actn : doc.status
+    return (<>
+                  {(() => {
+                    const aiType = getDocAiType(doc)
+                    if (aiType && doc.storage_path) {
+                      // Docs bancários e DRE: botão especial que abre modal de extração IA
+                      return (
+                        <Button variant="primary" size="sm"
+                          onClick={() => {
+                            if (aiType === 'dre') setDreEditing({ year: new Date().getFullYear() - 1 })
+                            setDocAiModal({ doc, extractType: aiType })
+                          }}>
+                          🤖 Analisar
+                        </Button>
+                      )
+                    }
+                    // Docs normais: botão Ver (Storage próprio ou S3 do HOC via URL pré-assinada)
+                    if (doc.storage_path) return (
+                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
+                    )
+                    if (doc.hoc_arquivo_id) return (
+                      <Button variant="neutral" size="sm" onClick={async()=>{
+                        try { const url = await documentApi.getHocFileUrl(doc.id); window.open(url,'_blank') }
+                        catch (e) { alert(e.message) }
+                      }}>👁 Ver</Button>
+                    )
+                    return null
+                  })()}
+                  <Button variant="neutral" size="sm" title="Histórico do documento"
+                    onClick={() => setDocHistModal({ doc: { ...doc, supplier_id: doc.supplier_id || id } })}>🕓</Button>
+                  {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
+                    <>
+                      {actn==='loading' ? <Spinner size={16}/> : <>
+                        {status === 'PENDING' && (() => {
+                          const dec = decisaoSugerida(sugestaoDoc(doc, aiPorDoc[doc.id]), rejectReasons)
+                          return dec && (
+                            <Button variant="neutral" size="sm" onClick={() => aceitarSugestao(doc)}
+                              title="Abre a decisão já preenchida pela sugestão (validade ou motivo) para você conferir">
+                              {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
+                            </Button>
+                          )
+                        })()}
+                        {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
+                          <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
+                        )}
+                        <Button variant="danger" size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>
+                          {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
+                        </Button>
+                      </>}
+                    </>
+                  )}
+                  {actn !== 'loading' && STATUS_DECISAO[status] && (
+                    <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
+                      onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
+                  )}
+    </>)
+  }
+  // linha do documento a partir do item da fonte única (com o rótulo do catálogo)
+  const fullDoc = (item) => {
+    if (!item.document) return null
+    const row = (data.documents || []).find(d => d.id === item.document.id)
+    return row ? { ...row, label: row.label || item.name } : { ...item.document, label: item.name, supplier_id: id }
+  }
+  const reqIds = new Set((procDocs?.pj || []).map(i => i.document?.id).filter(Boolean))
+  const outrosDocs = procView ? (data.documents || []).filter(d => d.id && !String(d.type).startsWith('mob:') && !reqIds.has(d.id) && d.source !== 'REQUIRED') : []
   const cnpjC   = data.cnpj_consultation
   const cnpjDat = cnpjC?.cnpj_data
   const sanctions = cnpjC?.sanctions_data  // { ceis, cnep, ceisHistory, cnepHistory }
@@ -1475,7 +1595,26 @@ export function BackofficeAnalysis() {
             )}
             <AutoCollectPanel supplierId={id} sealId={procSelKey === 'ALL' ? null : processSeal?.id} docs={docs}/>
             <AiReviewPanel reviews={aiReviews.filter(r => docs.some(d => d.id === r.document_id))}/>
-            {docs.map((doc,i)=>{
+            {/* visão do PROCESSO — a mesma do fornecedor e do cliente (patch_139):
+                PJ exigido + mobilidade (PF), com as ferramentas do analista */}
+            {procView && (<>
+              <ProcessDocsSummary totals={procDocs.totals}/>
+              <ProcessDocuments data={procDocs} showSummary={false} canView={false}
+                renderDetails={(item) => { const doc = fullDoc(item); return doc ? analystDetails(doc) : null }}
+                renderActions={(item) => { const doc = fullDoc(item); return doc ? <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>{analystBar(doc)}</div> : null }}/>
+              {outrosDocs.length > 0 && (<>
+                <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, margin:'18px 0 8px' }}>
+                  Outros documentos enviados (fora da exigência deste processo) · {outrosDocs.length}
+                </div>
+                {outrosDocs.map(doc => (
+                  <DocRow key={doc.id} canView={false}
+                    item={{ key: doc.id, name: doc.label, status: doc.status, responsibility: 'fornecedor', document: doc }}
+                    renderDetails={() => analystDetails(doc)}
+                    renderActions={() => <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>{analystBar(doc)}</div>}/>
+                ))}
+              </>)}
+            </>)}
+            {!procView && docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
               const status = actn && actn!=='loading' ? actn : doc.status
               const colors  = { VALID:'#f8fffe',PENDING:'#fff7ed',MISSING:'#fff5f5',REJECTED:'#fff5f5' }
@@ -1492,72 +1631,12 @@ export function BackofficeAnalysis() {
                       {doc.source==='AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}
                       {doc.expires_at ? ` · vence ${doc.expires_at.slice(0,10)}` : ''}
                     </div>
-                    <RouteABadge doc={doc}/>
-                    {ROUTE_B_ENABLED && (aiPorDoc[doc.id]
-                      ? <RouteBReview review={aiPorDoc[doc.id]} onReanalyze={() => pedirPreAnalise(doc.id)}/>
-                      : doc.storage_path && !doc.hoc_arquivo_id && aiTypes.has(String(doc.type)) && (
-                        <button onClick={() => pedirPreAnalise(doc.id)}
-                          style={{ marginTop:3, fontSize:9.5, border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:20, padding:'1px 8px', cursor:'pointer' }}>
-                          🤖 Pré-analisar com IA
-                        </button>
-                      ))}
+                    {analystDetails(doc)}
                     {doc.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {doc.review_note}</div>}
                   </div>
                   </div>
                   <div style={{ display:'flex',gap:6,justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap' }}>
-                  {(() => {
-                    const aiType = getDocAiType(doc)
-                    if (aiType && doc.storage_path) {
-                      // Docs bancários e DRE: botão especial que abre modal de extração IA
-                      return (
-                        <Button variant="primary" size="sm"
-                          onClick={() => {
-                            if (aiType === 'dre') setDreEditing({ year: new Date().getFullYear() - 1 })
-                            setDocAiModal({ doc, extractType: aiType })
-                          }}>
-                          🤖 Analisar
-                        </Button>
-                      )
-                    }
-                    // Docs normais: botão Ver (Storage próprio ou S3 do HOC via URL pré-assinada)
-                    if (doc.storage_path) return (
-                      <Button variant="neutral" size="sm" onClick={async()=>{ try { await documentApi.view(doc) } catch (e) { alert(e.message) } }}>👁 Ver</Button>
-                    )
-                    if (doc.hoc_arquivo_id) return (
-                      <Button variant="neutral" size="sm" onClick={async()=>{
-                        try { const url = await documentApi.getHocFileUrl(doc.id); window.open(url,'_blank') }
-                        catch (e) { alert(e.message) }
-                      }}>👁 Ver</Button>
-                    )
-                    return null
-                  })()}
-                  <Button variant="neutral" size="sm" title="Histórico do documento"
-                    onClick={() => setDocHistModal({ doc: { ...doc, supplier_id: doc.supplier_id || id } })}>🕓</Button>
-                  {(['PENDING','VALID','EXPIRING','EXPIRED'].includes(status)) && (
-                    <>
-                      {actn==='loading' ? <Spinner size={16}/> : <>
-                        {status === 'PENDING' && (() => {
-                          const dec = decisaoSugerida(sugestaoDoc(doc, aiPorDoc[doc.id]), rejectReasons)
-                          return dec && (
-                            <Button variant="neutral" size="sm" onClick={() => aceitarSugestao(doc)}
-                              title="Abre a decisão já preenchida pela sugestão (validade ou motivo) para você conferir">
-                              {dec.status === 'VALID' ? '✓' : '✕'} Aceitar sugestão
-                            </Button>
-                          )
-                        })()}
-                        {['PENDING','EXPIRING','EXPIRED'].includes(status) && (
-                          <Button variant="success" size="sm" onClick={()=>openApproveModal(doc)}>✓ Aprovar</Button>
-                        )}
-                        <Button variant="danger" size="sm" onClick={()=>handleDocReject(doc.id, doc.label)}>
-                          {status==='VALID' ? '✕ Revogar' : '✕ Rejeitar'}
-                        </Button>
-                      </>}
-                    </>
-                  )}
-                  {actn !== 'loading' && STATUS_DECISAO[status] && (
-                    <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise"
-                      onClick={() => { setDocRevertReason(''); setDocRevert({ doc: { ...doc, status } }) }}>↩ Reverter decisão</Button>
-                  )}
+                  {analystBar(doc)}
                   </div>
                 </div>
               )
@@ -1566,7 +1645,7 @@ export function BackofficeAnalysis() {
             {/* ── Documentos de Mobilidade: árvore posto → pessoa (espelho da
                  tela do fornecedor); aprovar/rejeitar = mesmas ações dos docs
                  PJ (mesma linha de documents por baixo) ── */}
-            {mob?.posts?.length > 0 && (() => {
+            {!procView && mob?.posts?.length > 0 && (() => {
               const mobByType = {}
               for (const d of mobUploaded) mobByType[d.type] = d
               const mobRow = (doc, catalogName, missing) => {
@@ -1927,7 +2006,11 @@ export function BackofficeAnalysis() {
 
             <div style={{ padding:'12px',background:miss>0?'rgba(239,68,68,.08)':'rgba(34,197,94,.08)',borderRadius:10,border:`1px solid ${miss>0?'rgba(239,68,68,.2)':'rgba(34,197,94,.2)'}`,marginBottom:16,textAlign:'center' }}>
               <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:miss>0?'#dc2626':'#16a34a' }}>
-                {miss>0 ? `⚠ ${miss} doc(s) pendente(s)` : '✅ Documentação completa'}
+                {procDocs
+                  ? (procDocs.totals.complete ? '✅ Documentação completa'
+                    : miss === 0 && mobShortfall === 0 ? `⏳ Tudo enviado · ${procDocs.totals.in_review} em análise`
+                    : `⚠ ${miss} doc(s) pendente(s)${mobShortfall ? ` · ${mobShortfall} pessoa(s) a cadastrar` : ''}`)
+                  : (miss>0 ? `⚠ ${miss} doc(s) pendente(s)` : '✅ Documentação completa')}
               </div>
               <div style={{ fontSize:11,color:'#9B9B9B',marginTop:2 }}>{ok}/{docs.length} documentos válidos</div>
             </div>
@@ -2048,6 +2131,7 @@ export function BackofficeAnalysis() {
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
                   {processing ? '⏳...'
                     : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)`
+                    : (mobShortfall > 0 || mobTodo.some(it => effectiveStatus(it) === 'MISSING')) ? '🚫 Mobilidade (PF) incompleta'
                     : level === 'verificado' ? '✅ Emitir ELOS Verificado'
                     : processClientName ? `✅ Homologar — ${processClientName}`
                     : '✅ Aprovar Homologação'}

@@ -1878,6 +1878,18 @@ export const clientApi = {
   },
 }
 
+// ── Documentos do processo (patch_139) ───────────────────────────────────────
+// Fonte ÚNICA para fornecedor, cliente e backoffice: PJ exigido pelo fluxo +
+// mobilidade (PF) por posto/pessoa, com os totais. O banco confere o acesso e
+// mascara nome/CPF para o cliente.
+export const processDocsApi = {
+  get: async (sealId) => {
+    const { data, error } = await supabase.rpc('process_documents', { p_seal: sealId })
+    if (error) throw new Error(error.message)
+    return data
+  },
+}
+
 // ── Assertiva ─────────────────────────────────────────────────────────────────
 export const assertivaApi = {
   // Busca o último relatório salvo (GET)
