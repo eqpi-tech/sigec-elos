@@ -199,7 +199,10 @@ export default function BackofficeProcessSearch() {
         let bq = supabase.from('suppliers')
           .select('id, razao_social, cnpj, city, state, status, created_at, archived_at')
           .in('id', batch)
-        if (!showInactive) { bq = bq.neq('status', 'INACTIVE'); bq = bq.is('archived_at', null) }
+        // status NULO (fornecedor importado do HOC) não é inativo: neq('INACTIVE')
+        // sozinho descartava o nulo e o processo só aparecia com "Mostrar
+        // inativos" (caso BRH/VIXPAR, 15/10) — mesma regra do admin_search_suppliers
+        if (!showInactive) { bq = bq.or('status.is.null,status.neq.INACTIVE'); bq = bq.is('archived_at', null) }
         if (qTrim) {
           if (isCnpjQ) bq = bq.ilike('cnpj', `%${qCnpj}%`)
           else bq = bq.ilike('razao_social', `%${qTrim}%`)
