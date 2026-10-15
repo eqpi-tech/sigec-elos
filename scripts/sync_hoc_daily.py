@@ -561,8 +561,11 @@ def sync_hoc_log(my, sb, dry, last_id):
         except Exception:
             last_id = 35719557  # max da importação inicial (17/08/2026)
     cur = my.cursor()
-    cur.execute(f"""SELECT l.id, l.descricao, l.data, l.created_by, p.id_fornecedor
+    # 15/10 (patch_144): o cliente do processo vai junto — o cliente vê no ELOS
+    # só o log do processo DELE (client_process_log)
+    cur.execute(f"""SELECT l.id, l.descricao, l.data, l.created_by, p.id_fornecedor, fl.id_cliente
         FROM log_processo l JOIN processo p ON p.id = l.id_processo
+        LEFT JOIN fluxo fl ON fl.id = p.id_fluxo
         WHERE l.id > %s AND {HUMAN_LOG_FILTER} ORDER BY l.id""", (last_id,))
     rows = cur.fetchall(); cur.close()
     if not rows:
@@ -573,7 +576,7 @@ def sync_hoc_log(my, sb, dry, last_id):
 
     written = 0; max_id = last_id
     batch = []
-    for hoc_log_id, descricao, data, autor, id_forn in rows:
+    for hoc_log_id, descricao, data, autor, id_forn, id_cli in rows:
         max_id = max(max_id, hoc_log_id)
         sup = supplier_map_hoc.get(id_forn)
         if not sup: continue
@@ -581,7 +584,7 @@ def sync_hoc_log(my, sb, dry, last_id):
             "entity_id": sup, "entity_type": "supplier", "action": "HOC_LOG", "user_id": None,
             "created_at": data.isoformat() if data else datetime.now(timezone.utc).isoformat(),
             "metadata": {"descricao": (descricao or "").strip()[:1000], "autor": autor or "",
-                          "hoc_log_id": hoc_log_id, "fonte": "hoc"},
+                          "hoc_log_id": hoc_log_id, "hoc_cliente_id": id_cli, "fonte": "hoc"},
         })
     if not dry:
         for chunk in chunks(batch, 500):

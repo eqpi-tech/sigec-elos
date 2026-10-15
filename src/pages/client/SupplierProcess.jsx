@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
-import { clientApi, documentApi , processDocsApi } from '../../services/api.js'
+import { clientApi, documentApi , processDocsApi, clientLogApi } from '../../services/api.js'
+import ProcessLog from '../../components/ProcessLog.jsx'
 import ProcessDocuments, { ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
@@ -53,7 +54,7 @@ const DOC_STATUS_LABEL = { VALID:'Aprovado', PENDING:'Aguardando análise', MISS
 const DOC_BG = { VALID:'#f0fdf4', PENDING:'#fff7ed', MISSING:'#f9fafb', REJECTED:'#fff5f5', EXPIRED:'#fff5f5', EXPIRING:'#fffbeb' }
 const DOC_BORDER = { VALID:'#dcfce7', PENDING:'#fed7aa', MISSING:'#e2e4ef', REJECTED:'#fee2e2', EXPIRED:'#fee2e2', EXPIRING:'#fde68a' }
 
-const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ']
+const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ', 'Log do Processo']
 
 
 // ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
@@ -727,6 +728,15 @@ export default function ClientSupplierProcess() {
       )}
 
       {/* ── Tab: Inteligência CNPJ ── */}
+      {/* Log do processo — mesmo visual do backoffice, só o processo deste cliente (patch_144) */}
+      {tab === 'Log do Processo' && (
+        <Card style={{ borderRadius:14, padding:'20px 24px' }}>
+          <SectionTitle>Log do processo</SectionTitle>
+          <ProcessLog fetcher={(f) => clientLogApi.get(supplierId, f)}
+            note="Histórico do processo com a sua empresa: registros do SIGEC-HOC, análises e decisões no SIGEC-ELOS e alterações no cadastro do fornecedor (últimos 300 eventos)."/>
+        </Card>
+      )}
+
       {tab === 'Questionários' && (
         <QuestionnairesTab supplierId={supplierId} clientId={user?.clientId} hocQ={mySeal?.hoc_questionario}/>
       )}
