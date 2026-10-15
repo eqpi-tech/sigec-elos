@@ -278,6 +278,14 @@ exports.handler = async (event) => {
         dbInfo.hasActiveSealForContext = ctxClientId
           ? (activeSeals || []).some(s => s.client_id === ctxClientId)
           : dbInfo.hasActiveSeal
+        // 15/10 (caso BRH/VIXPAR): já existe processo (qualquer situação) com o
+        // cliente do convite/portal — ou, sem contexto, qualquer processo. Com
+        // dono, o cadastro para aqui e manda entrar com o login que já existe
+        const { data: todosSelos } = await supabaseAdmin.from('seals')
+          .select('client_id').eq('supplier_id', supplierRes.value.data.id)
+        dbInfo.hasProcessForContext = ctxClientId
+          ? (todosSelos || []).some(s => s.client_id === ctxClientId)
+          : (todosSelos || []).length > 0
 
         // Empresa com dono: o cadastro só continua com o login que já existe
         // (create-supplier recusa outro e-mail). E-mail do responsável mascarado.
