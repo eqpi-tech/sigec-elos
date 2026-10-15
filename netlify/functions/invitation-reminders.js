@@ -33,7 +33,7 @@ exports.handler = async (event) => {
     // criados há 3+ dias, sem lembrete recente
     const { data: invites, error } = await supabaseAdmin
       .from('invitations')
-      .select('id, token, supplier_razao_social, supplier_email, client_id, buyer_name, created_at, last_reminder_at, reminder_count, objetivo, clients(razao_social)')
+      .select('id, token, supplier_razao_social, supplier_email, supplier_cnpj, client_id, buyer_name, created_at, last_reminder_at, reminder_count, objetivo, clients(razao_social)')
       .eq('invited_by_role', 'CLIENT')
       .in('status', ['SENT', 'VIEWED'])
       .is('hoc_id', null)   // só convite feito pelo ELOS — o HOC lembra os dele (patch_116)
@@ -51,6 +51,19 @@ exports.handler = async (event) => {
     const siteBase = frontendUrl()
 
     for (const inv of due) {
+      // 15/10 (caso BRH/VIXPAR): o CNPJ já tem processo com este cliente — a
+      // pessoa se cadastrou por outro convite. Não lembra: fecha o convite.
+      if (inv.supplier_cnpj) {
+        const { data: sup } = await supabaseAdmin.from('suppliers').select('id').eq('cnpj', inv.supplier_cnpj).maybeSingle()
+        if (sup) {
+          const { data: jaTem } = await supabaseAdmin.from('seals').select('id').eq('supplier_id', sup.id).eq('client_id', inv.client_id).limit(1)
+          if (jaTem?.length) {
+            await supabaseAdmin.from('invitations').update({ status: 'REGISTERED', supplier_id: sup.id }).eq('id', inv.id).in('status', ['SENT', 'VIEWED'])
+            console.log(`[invitation-reminders] ${inv.id}: CNPJ já tem processo com o cliente — convite fechado, sem lembrete`)
+            continue
+          }
+        }
+      }
       const clientName = inv.clients?.razao_social || inv.buyer_name || 'a empresa contratante'
       // Link de cadastro: portal do cliente quando houver LP ativa
       let cadastroLink = `${siteBase}/cadastro?token=${inv.token}`
