@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button } from '../components/ui.jsx'
@@ -16,7 +16,9 @@ export default function Login() {
   const navigate  = useNavigate()
   const mobile    = useIsMobile()
 
-  const [showForgot,    setShowForgot]    = useState(false)
+  // /login?esqueci=1 abre direto o "Esqueci minha senha" (vem do cadastro de empresa já cadastrada)
+  const [params] = useSearchParams()
+  const [showForgot,    setShowForgot]    = useState(params.get('esqueci') === '1')
   const [forgotEmail,   setForgotEmail]   = useState('')
   const [forgotSent,    setForgotSent]    = useState(false)
   const [forgotLoading, setForgotLoading] = useState(false)

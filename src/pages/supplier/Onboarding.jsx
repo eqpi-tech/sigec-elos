@@ -211,8 +211,11 @@ export default function SupplierOnboarding() {
           hasOwner: !!db.hasOwner, ownerEmailMasked: db.ownerEmailMasked || null,
           fromHoc: !!db.fromHoc, migrationLocked: !!db.migrationLocked,
           migrationEmailsMasked: db.migrationEmailsMasked || [],
+          // já cadastrada, com login e com processo aqui: não é cadastro, é login
+          alreadyIn: !!db.hasOwner && !!db.hasProcessForContext,
           activeElsewhere: !!db.hasActiveSeal && db.hasActiveSealForContext === false })
         setLoggedAs(null)
+        if (db.hasOwner && db.hasProcessForContext) return
         // atalho "já homologado" só vale para o selo DESTE cliente (portal/
         // convite) — homologado com outro abre processo novo, pago (12/10)
         if (db.hasActiveSealForContext ?? db.hasActiveSeal) {
@@ -483,11 +486,29 @@ export default function SupplierOnboarding() {
                       <Button variant="orange" full onClick={() => setStep(2)}>{ownerMode ? 'Entrar →' : 'Criar Acesso →'}</Button>
                     </div>
                   )}
-                  {existingSupplier && !isExistingActive && (existingSupplier.activeElsewhere ? (
+                  {/* 15/10: empresa já cadastrada, com login e processo — orienta a ENTRAR */}
+                  {existingSupplier?.alreadyIn && (
+                    <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:12, padding:'14px 16px', marginTop:16, fontFamily:'DM Sans,sans-serif' }}>
+                      <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#15803d', marginBottom:6 }}>✅ Esta empresa já está cadastrada no SIGEC-ELOS</div>
+                      <div style={{ fontSize:13, color:'#166534', lineHeight:1.55, marginBottom:12 }}>
+                        <strong>{existingSupplier.razao_social || 'A empresa'}</strong> já tem acesso e processo em andamento — não é preciso cadastrar de novo.
+                        Entre com o login da empresa{existingSupplier.ownerEmailMasked ? <> (<strong>{existingSupplier.ownerEmailMasked}</strong>)</> : ''}.
+                      </div>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                        <Button variant="orange" onClick={() => navigate('/login')}>Entrar →</Button>
+                        <Button variant="neutral" onClick={() => navigate('/login?esqueci=1')}>Esqueci minha senha</Button>
+                      </div>
+                      <div style={{ fontSize:12, color:'#4b5563', marginTop:12, lineHeight:1.5 }}>
+                        Outra pessoa da empresa precisa de acesso? Peça ao responsável para incluí-la em <strong>Equipe</strong>, ou fale com o suporte:
+                        suporte@eqpitech.com.br · WhatsApp (11) 5039-6769.
+                      </div>
+                    </div>
+                  )}
+                  {existingSupplier && !existingSupplier.alreadyIn && !isExistingActive && (existingSupplier.activeElsewhere ? (
                     <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#1e40af', fontFamily:'DM Sans,sans-serif' }}>
                       🏅 Sua empresa já tem homologação vigente no ELOS. O processo com <strong>{termsSrc?.sender_name || clientQuote?.cliente || 'este cliente'}</strong> é um processo novo: escolha as categorias, aceite os termos{isSubsidiado ? '' : ' e conclua o pagamento'}. Os documentos válidos que você já enviou são aproveitados.
                     </div>
-                  ) : (
+                  ) : !existingSupplier.hasOwner && (
                     <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
                       ⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.
                     </div>
@@ -497,7 +518,7 @@ export default function SupplierOnboarding() {
                       🔐 Esta empresa veio do HOC. O acesso ao ELOS é liberado para os e-mails cadastrados lá{existingSupplier.migrationEmailsMasked.length ? <> (<strong>{existingSupplier.migrationEmailsMasked.join(', ')}</strong>)</> : ''} — use um deles na etapa <strong>Conta</strong>. Outro e-mail? Fale com o suporte: <strong>suporte@eqpitech.com.br</strong>.
                     </div>
                   )}
-                  {existingSupplier?.hasOwner && (
+                  {existingSupplier?.hasOwner && !existingSupplier.alreadyIn && (
                     <div style={{ background:'#f8f9fb', border:'1px solid #e2e4ef', borderRadius:12, padding:'10px 14px', marginTop:10, fontSize:12.5, color:'#374151', fontFamily:'DM Sans,sans-serif' }}>
                       🔐 Esta empresa já tem acesso ao ELOS{existingSupplier.ownerEmailMasked ? <> (<strong>{existingSupplier.ownerEmailMasked}</strong>)</> : ''}. Na etapa <strong>Conta</strong>, entre com esse login — não é preciso criar outro.
                     </div>
