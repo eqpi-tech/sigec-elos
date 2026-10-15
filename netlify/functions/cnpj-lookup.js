@@ -57,6 +57,68 @@ function filterActiveSanctions(list) {
   })
 }
 
+// ── Reserva da consulta à Receita (15/10): a BrasilAPI caiu (503) com o
+// cadastro de fornecedor em uso. Fontes GRATUITAS na ordem: CNPJá (aberta) e
+// ReceitaWS, convertidas para o formato da BrasilAPI — o resto do fluxo
+// (sócios, CNAEs, Simples, endereço) não muda. Só entram se a BrasilAPI falhar.
+const soDigitos = (v) => String(v || '').replace(/\D/g, '')
+const fetchJson = async (url, ms = 8000) => {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms)
+  try {
+    const r = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'SIGEC-ELOS/1.0' }, signal: ctl.signal })
+    return r.ok ? await r.json() : null
+  } catch { return null } finally { clearTimeout(t) }
+}
+function fromCnpja(d) {
+  if (!d?.company?.name) return null
+  const a = d.address || {}, ph = (d.phones || [])[0]
+  return {
+    cnpj: d.taxId, razao_social: d.company.name, nome_fantasia: d.alias || '',
+    descricao_situacao_cadastral: String(d.status?.text || '').toUpperCase(),
+    data_inicio_atividade: d.founded || null, capital_social: d.company.equity ?? null,
+    porte: d.company.size?.text || null, natureza_juridica: d.company.nature?.text || null,
+    cnae_fiscal: d.mainActivity?.id || null, cnae_fiscal_descricao: d.mainActivity?.text || '',
+    cnaes_secundarios: (d.sideActivities || []).map(x => ({ codigo: x.id, descricao: x.text })),
+    qsa: (d.company.members || []).map(m => ({
+      nome_socio: m.person?.name, qualificacao_socio: m.role?.text || 'Sócio',
+      identificador_de_socio: m.person?.type === 'LEGAL' ? 1 : 2,
+      cnpj_cpf_do_socio: m.person?.type === 'LEGAL' ? m.person?.taxId : '',
+    })),
+    opcao_pelo_simples: !!d.company.simples?.optant, data_opcao_pelo_simples: d.company.simples?.since || null,
+    data_exclusao_do_simples: null, opcao_pelo_mei: !!d.company.simei?.optant,
+    cep: a.zip || '', logradouro: a.street || '', numero: a.number || '', complemento: a.details || '',
+    bairro: a.district || '', municipio: String(a.city || '').toUpperCase(), uf: a.state || '',
+    descricao_tipo_de_logradouro: '', ddd_telefone_1: ph ? `${ph.area}${ph.number}` : '',
+    _fonte: 'CNPJá',
+  }
+}
+function fromReceitaws(d) {
+  if (!d?.nome || d.status === 'ERROR') return null
+  const br = (v) => { const m = String(v || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null }
+  const ap = (d.atividade_principal || [])[0] || {}
+  return {
+    cnpj: soDigitos(d.cnpj), razao_social: d.nome, nome_fantasia: d.fantasia || '',
+    descricao_situacao_cadastral: String(d.situacao || '').toUpperCase(),
+    data_inicio_atividade: br(d.abertura), capital_social: d.capital_social ? Number(d.capital_social) : null,
+    porte: d.porte || null, natureza_juridica: d.natureza_juridica || null,
+    cnae_fiscal: soDigitos(ap.code) ? Number(soDigitos(ap.code)) : null, cnae_fiscal_descricao: ap.text || '',
+    cnaes_secundarios: (d.atividades_secundarias || []).filter(x => soDigitos(x.code) && soDigitos(x.code) !== '0000000')
+      .map(x => ({ codigo: Number(soDigitos(x.code)), descricao: x.text })),
+    qsa: (d.qsa || []).map(q => ({ nome_socio: q.nome, qualificacao_socio: q.qual || 'Sócio', identificador_de_socio: 2, cnpj_cpf_do_socio: '' })),
+    opcao_pelo_simples: !!d.simples?.optante, data_opcao_pelo_simples: br(d.simples?.data_opcao),
+    data_exclusao_do_simples: br(d.simples?.data_exclusao), opcao_pelo_mei: !!d.simei?.optante,
+    cep: soDigitos(d.cep), logradouro: d.logradouro || '', numero: d.numero || '', complemento: d.complemento || '',
+    bairro: d.bairro || '', municipio: d.municipio || '', uf: d.uf || '', descricao_tipo_de_logradouro: '',
+    ddd_telefone_1: soDigitos(String(d.telefone || '').split('/')[0]),
+    _fonte: 'ReceitaWS',
+  }
+}
+async function cnpjReserva(cnpj) {
+  if (!/^\d{14}$/.test(cnpj)) return null          // reservas só aceitam CNPJ numérico
+  return fromCnpja(await fetchJson(`https://open.cnpja.com/office/${cnpj}`))
+      || fromReceitaws(await fetchJson(`https://receitaws.com.br/v1/cnpj/${cnpj}`))
+}
+
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -93,6 +155,10 @@ exports.handler = async (event) => {
     let cnpjData = null
     if (cnpjRes.status === 'fulfilled' && cnpjRes.value.ok) {
       try { cnpjData = await cnpjRes.value.json() } catch {}
+    }
+    if (!cnpjData?.razao_social) {
+      const reserva = await cnpjReserva(cnpj)
+      if (reserva) { cnpjData = reserva; console.warn(`[cnpj-lookup] BrasilAPI indisponível — dados da ${reserva._fonte}`) }
     }
 
     // Sanções — captura o raw para logging e diagnóstico
