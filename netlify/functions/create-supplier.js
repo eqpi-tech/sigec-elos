@@ -444,6 +444,15 @@ exports.handler = async (event) => {
           .not('status', 'in', '(REGISTERED,CANCELLED)')   // cancelado (patch_103) não vincula
           .select('id, client_id, flow_id, subsidiado')
         if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id, linkedInv[0].subsidiado === true)
+        // 15/10 (caso BRH/VIXPAR): outros convites ABERTOS do mesmo cliente para
+        // este CNPJ (ex.: um para cada pessoa da empresa) ficam cadastrados
+        // também — senão seguem "não aceito" e geram lembretes a quem já entrou
+        if (linkedInv?.[0]?.client_id) {
+          await supabaseAdmin.from('invitations')
+            .update({ status: 'REGISTERED', supplier_id: supplier.id })
+            .eq('client_id', linkedInv[0].client_id).eq('supplier_cnpj', cleanCnpj)
+            .is('hoc_id', null).in('status', ['SENT', 'VIEWED'])
+        }
 
         // Trilha de aceite da coleção de termos (patch_073): grava quem
         // aceitou o quê, em qual versão, quando e de qual IP

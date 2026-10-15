@@ -221,6 +221,10 @@ export default function SupplierOnboarding() {
         }
       }
       if (!result.cnpj || !result.cnpj.cnpj) {
+        // 15/10 (caso BRH/VIXPAR): empresa que JÁ está no ELOS não depende da
+        // Receita para seguir (a BrasilAPI caiu e o cadastro dizia "CNPJ não
+        // encontrado" para uma empresa com processo) — segue com os dados do banco
+        if (db.isSupplier) { setStep(1); return }
         setLookupError('❌  CNPJ não encontrado na Receita Federal. Verifique o número digitado.')
         return
       }
