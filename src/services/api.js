@@ -1883,6 +1883,18 @@ export const clientApi = {
   },
 }
 
+// ── Log do processo na visão do cliente (patch_144) ──────────────────────────
+// Só o log do processo DESTE cliente: registros do HOC dos processos dele,
+// eventos do processo no ELOS e mudanças de cadastro do fornecedor.
+export const clientLogApi = {
+  get: async (supplierId, { dateFrom, dateTo, description } = {}) => {
+    const { data, error } = await supabase.rpc('client_process_log', {
+      p_supplier: supplierId, p_from: dateFrom || null, p_to: dateTo || null, p_q: description || null })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+}
+
 // ── Documentos do processo (patch_139) ───────────────────────────────────────
 // Fonte ÚNICA para fornecedor, cliente e backoffice: PJ exigido pelo fluxo +
 // mobilidade (PF) por posto/pessoa, com os totais. O banco confere o acesso e

@@ -3,6 +3,7 @@ import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED, processDocsApi } from '../../services/api.js'
 import ProcessDocuments, { ProcessDocsSummary, effectiveStatus } from '../../components/ProcessDocuments.jsx'
+import ProcessLog from '../../components/ProcessLog.jsx'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
@@ -278,11 +279,6 @@ export function BackofficeAnalysis() {
   // Cartas de exceção do processo (patch_051)
   const [exLetters,     setExLetters]     = useState([])
   // Log do Processo
-  const [logData,       setLogData]       = useState([])
-  const [logLoading,    setLogLoading]    = useState(false)
-  const [logDateFrom,   setLogDateFrom]   = useState('')
-  const [logDateTo,     setLogDateTo]     = useState('')
-  const [logDesc,       setLogDesc]       = useState('')
   // Convites recebidos pelo fornecedor
   const [inviteLog,     setInviteLog]     = useState([])
   // Categorias: expandir/recolher "Ver mais" + expandir docs por categoria
@@ -833,15 +829,6 @@ export function BackofficeAnalysis() {
       const d = new Date(); d.setFullYear(d.getFullYear() + 1)
       setApproveExpiry(d.toISOString().slice(0, 10))
     }
-  }
-
-  const fetchLog = async () => {
-    setLogLoading(true)
-    try {
-      const rows = await adminApi.getProcessLog(id, { dateFrom: logDateFrom, dateTo: logDateTo, description: logDesc })
-      setLogData(rows)
-    } catch(e) { console.error(e) }
-    finally { setLogLoading(false) }
   }
 
   const handleDocApprove = async () => {
@@ -1530,7 +1517,7 @@ export function BackofficeAnalysis() {
                 ['log','Log do Processo'],
                 ['convites','Convites'],
               ].map(([tab,label])=>(
-                <button key={tab} onClick={()=>{ setActiveTab(tab); if(tab==='log' && logData.length===0) fetchLog() }}
+                <button key={tab} onClick={()=>{ setActiveTab(tab) }}
                   style={{ padding:'8px 18px',background:'none',border:'none',borderBottom:`2px solid ${activeTab===tab?'#2E3192':'transparent'}`,color:activeTab===tab?'#2E3192':'#9B9B9B',fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,cursor:'pointer',marginBottom:-1,whiteSpace:'nowrap' }}>
                   {label}{tab==='questionario'&&qaAnswers.length>0?` (${qaAnswers.length})`:''}
                   {tab==='banco'&&bankData?.bank_name?` ✓`:''}
@@ -1865,85 +1852,8 @@ export function BackofficeAnalysis() {
               </div>
             )}
 
-            {/* ── Tab: Log do Processo ──────────────────────────────────────── */}
-            {activeTab === 'log' && (
-              <div>
-                {/* Filtros */}
-                <div style={{ display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end' }}>
-                  <div>
-                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Data início</label>
-                    <input type="date" value={logDateFrom} onChange={e=>setLogDateFrom(e.target.value)}
-                      style={{ padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12 }}/>
-                  </div>
-                  <div>
-                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Data fim</label>
-                    <input type="date" value={logDateTo} onChange={e=>setLogDateTo(e.target.value)}
-                      style={{ padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12 }}/>
-                  </div>
-                  <div style={{ flex:1,minWidth:160 }}>
-                    <label style={{ display:'block',fontSize:11,fontWeight:700,color:'#9B9B9B',fontFamily:'Montserrat,sans-serif',textTransform:'uppercase',letterSpacing:.5,marginBottom:4 }}>Descrição</label>
-                    <input value={logDesc} onChange={e=>setLogDesc(e.target.value)} placeholder="Filtrar por ação ou descrição..."
-                      style={{ width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e2e4ef',fontFamily:'DM Sans,sans-serif',fontSize:12,boxSizing:'border-box' }}/>
-                  </div>
-                  <Button variant="primary" size="sm" disabled={logLoading} onClick={fetchLog}>
-                    {logLoading ? <Spinner size={14}/> : '🔍 Pesquisar'}
-                  </Button>
-                </div>
-
-                {logLoading ? (
-                  <div style={{ textAlign:'center',padding:32 }}><Spinner size={32}/></div>
-                ) : logData.length === 0 ? (
-                  <div style={{ textAlign:'center',padding:'32px',color:'#9B9B9B',fontFamily:'DM Sans,sans-serif',fontSize:13 }}>
-                    {logData.length === 0 && !logLoading ? 'Clique em Pesquisar para carregar o histórico.' : 'Nenhum evento encontrado para os filtros aplicados.'}
-                  </div>
-                ) : (
-                  <div style={{ display:'flex',flexDirection:'column',gap:0 }}>
-                    {logData.map((entry,i) => {
-                      const ACTION_MAP = {
-                        ANALYSIS_STARTED:       { label:'Análise iniciada',       color:'#2E3192', icon:'🔍' },
-                        SEAL_APPROVED:          { label:'Homologação aprovada',    color:'#22c55e', icon:'✅' },
-                        SEAL_REJECTED:          { label:'Homologação rejeitada',   color:'#ef4444', icon:'❌' },
-                        SEAL_REVERTED:          { label:'Análise revertida',       color:'#f59e0b', icon:'↩️' },
-                        DOCUMENT_DECISION_REVERTED: { label:'Decisão de documento revertida', color:'#f59e0b', icon:'↩️' },
-                        SEAL_AUTO_APPROVED:     { label:'Aprovação automática',    color:'#22c55e', icon:'⚡' },
-                        SEAL_AUTO_REJECTED:     { label:'Rejeição automática',     color:'#ef4444', icon:'⚡' },
-                        PROCESS_REOPENED:       { label:'Processo reaberto (reenvio)', color:'#2E3192', icon:'↻' },
-                        MFA_RESET:              { label:'Verificação em 2 etapas resetada', color:'#f59e0b', icon:'🔐' },
-                        DOCUMENT_REPLACED:      { label:'Documento substituído',   color:'#2E3192', icon:'🔄' },
-                        DOCUMENT_EXPIRY_CHANGED:{ label:'Vencimento alterado',     color:'#2E3192', icon:'📅' },
-                        HOC_LOG:                { label:'Registro HOC',            color:'#64748b', icon:'📜' },
-                      }
-                      const info    = ACTION_MAP[entry.action] || { label: entry.action, color:'#9B9B9B', icon:'📋' }
-                      const meta    = entry.metadata || {}
-                      const dt      = new Date(entry.created_at)
-                      const dateStr = dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-                      let detail    = ''
-                      if (meta.reason)       detail = `Motivo: ${meta.reason}`
-                      if (meta.score)        detail = `Score: ${meta.score}%`
-                      if (meta.level)        detail = (detail ? detail + ' · ' : '') + `Nível: ${meta.level}`
-                      if (meta.razao_social) detail = (detail ? detail + ' · ' : '') + meta.razao_social
-                      if (meta.label)        detail = (detail ? detail + ' · ' : '') + meta.label
-                      // Registros migrados do HOC: descrição original + autor
-                      if (meta.descricao)    detail = meta.descricao
-                      const autor = meta.autor || null
-                      return (
-                        <div key={i} style={{ display:'flex',gap:12,padding:'12px 0',borderBottom:i<logData.length-1?'1px solid #f0f2f8':'' }}>
-                          <div style={{ width:32,height:32,borderRadius:8,background:`${info.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,marginTop:2 }}>
-                            {info.icon}
-                          </div>
-                          {/* minWidth 0 + overflowWrap: descrição longa do HOC (ex.: DRE) não sai da caixa (05/10) */}
-                          <div style={{ flex:1,minWidth:0,overflowWrap:'anywhere' }}>
-                            <div style={{ fontFamily:'Montserrat,sans-serif',fontWeight:700,fontSize:13,color:info.color }}>{info.label}</div>
-                            {detail && <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:12,color:'#64748b',marginTop:2,whiteSpace:'pre-wrap' }}>{detail}</div>}
-                            <div style={{ fontFamily:'DM Sans,sans-serif',fontSize:11,color:'#9B9B9B',marginTop:3 }}>{dateStr}{autor ? ` · por ${autor}` : ''}</div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* ── Tab: Log do Processo — componente comum com o cliente (15/10) ── */}
+            {activeTab === 'log' && <ProcessLog fetcher={(f) => adminApi.getProcessLog(id, f)}/>}
 
             {/* ── Tab: Convites recebidos ──────────────────────────────────── */}
             {activeTab === 'convites' && (
