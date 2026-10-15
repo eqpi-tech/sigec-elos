@@ -9,6 +9,7 @@ import { can } from '../../lib/permissions.js'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 // CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
 import { normalizeCnpj, formatCnpj } from '../../lib/cnpj.js'
+import { exportXlsx, dataBR } from '../../lib/exportXlsx.js'
 
 const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado', EXPIRED:'Expirado' }
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B', EXPIRED:'#64748b' }
@@ -122,6 +123,22 @@ export default function ClientInvitations() {
     return true
   })
   const conta = (fn) => invites.filter(fn).length
+  // ⬇ Excel da lista FILTRADA (o que está na tela) — pedido dos clientes, 15/10
+  const exportar = () => exportXlsx('convites', 'Convites', filtered.map(inv => ({
+    'Fornecedor': inv.supplier_razao_social || '',
+    'CNPJ': formatCnpj(inv.supplier_cnpj || ''),
+    'E-mail': inv.supplier_email || '',
+    'Contato': inv.contato || '',
+    'Situação': STATUS_LABEL[inv.status] || inv.status || '',
+    'Nível': inv.flow_id ? (flowNames[inv.flow_id] || '') : '',
+    'Custeio': inv.subsidiado ? 'Subsidiado' : 'Pago pelo fornecedor',
+    'Origem': inv.hoc_id ? 'Histórico do HOC' : 'ELOS',
+    'Enviado em': dataBR(inv.created_at),
+    'Lembretes enviados': inv.reminder_count || 0,
+    'Escopo': inv.escopo || '',
+    'Cancelado em': inv.status === 'CANCELLED' ? dataBR(inv.cancelled_at) : '',
+    'Motivo do cancelamento': inv.status === 'CANCELLED' ? (inv.cancel_reason || '') : '',
+  })))
   const niveisInv = [...new Set(invites.map(i => i.flow_id || 'sem'))]
   const filtrosAtivos = !!search || !!fDe || !!fAte || fStatus.length + fNivel.length + fCust.length + fDest.length + fOrig.length > 0
   const limparFiltros = () => { setSearch(''); setFStatus([]); setFNivel([]); setFCust([]); setFDest([]); setFOrig([]); setFDe(''); setFAte('') }
@@ -232,6 +249,14 @@ export default function ClientInvitations() {
           <input type="date" value={fAte} onChange={e => setFAte(e.target.value)} style={{ ...inp, width:160, padding:'6px 10px' }}/>
         </div>
       </FilterPanel>
+
+      {!loading && filtered.length > 0 && (
+        <div style={{ display:'flex', justifyContent:'flex-end', margin:'-4px 0 12px' }}>
+          <Button variant="neutral" size="sm" onClick={exportar} title="Exporta a lista com os filtros aplicados">
+            ⬇ Exportar Excel ({filtered.length})
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner size={36}/></div>

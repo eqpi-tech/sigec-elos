@@ -6,7 +6,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
 import { supabase } from '../../lib/supabase.js'
-import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
+import { normalizeCnpj, looksLikeCnpj, formatCnpj } from '../../lib/cnpj.js'
+import { exportXlsx, dataBR } from '../../lib/exportXlsx.js'
 import { PageHeader, Card, ScoreBar, Spinner, EmptyState, Button } from '../../components/ui.jsx'
 import BuyerMarketplace from '../buyer/Marketplace.jsx'
 import PreRegistrationsReport from './PreRegistrations.jsx'
@@ -172,6 +173,27 @@ export default function ClientSuppliers() {
     return true
   })
   const conta = (fn) => mySuppliers.filter(fn).length
+
+  // ⬇ Excel da lista FILTRADA (o que está na tela) — pedido dos clientes, 15/10
+  const exportarMeus = () => exportXlsx('fornecedores', 'Meus fornecedores', filteredMine.map(item => {
+    const seal = item.seal || {}, sup = item.supplier || {}
+    const sit = seal.client_suspended_at ? 'Inativado por mim' : (SITUACAO.find(o => o.value === situacaoDe(item))?.label || seal.status || '')
+    return {
+      'Razão social': sup.razao_social || item.inviteRazaoSocial || '',
+      'CNPJ': formatCnpj(sup.cnpj || item.inviteCnpj || ''),
+      'Situação': sit,
+      'Motivo (reprovação/suspensão)': isSealRejected(seal) || seal.status === 'SUSPENDED' ? (sealStatusReason(seal) || '') : '',
+      'Nível': item.flowId ? (flowNames[item.flowId] || '') : '',
+      'Custeio': item.subsidiado ? 'Subsidiado' : 'Pago pelo fornecedor',
+      'Homologado em': dataBR(seal.status === 'ACTIVE' ? seal.issued_at : null),
+      'Validade': dataBR(seal.expires_at),
+      'Convidado em': dataBR(item.invitedAt),
+      'Cidade': sup.city || '', 'UF': sup.state || '',
+      'Escopo': item.escopo || '', 'Tipo': item.tipo || '',
+      'Carta de exceção': item.cartaExcecao ? 'Sim' : '',
+      'Análise prioritária': seal.status === 'PENDING' && seal.priority_requested_at ? 'Sim' : '',
+    }
+  }))
   const niveis = [...new Set(mySuppliers.map(i => i.flowId || 'sem'))]
 
   const myIds = new Set(mySuppliers.map(s => s.supplierId).filter(Boolean))
@@ -286,6 +308,13 @@ export default function ClientSuppliers() {
               ].filter(o => o.count > 0)}/>
           </FilterPanel>
 
+          {filteredMine.length > 0 && (
+            <div style={{ display:'flex', justifyContent:'flex-end', margin:'-4px 0 12px' }}>
+              <Button variant="neutral" size="sm" onClick={exportarMeus} title="Exporta a lista com os filtros aplicados">
+                ⬇ Exportar Excel ({filteredMine.length})
+              </Button>
+            </div>
+          )}
           {filteredMine.length === 0 ? (
             <EmptyState icon="🏭" title="Nenhum fornecedor encontrado"
               subtitle={filtrosAtivos ? 'Ajuste os filtros.' : 'Seus fornecedores aparecem aqui após o vínculo de homologação.'} />
