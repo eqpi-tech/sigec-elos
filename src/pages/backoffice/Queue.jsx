@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED, processDocsApi } from '../../services/api.js'
+import { adminApi, documentApi, questionnaireApi, assertivaApi, mobilityApi, routeBApi, ROUTE_B_ENABLED, processDocsApi, bankApi } from '../../services/api.js'
 import ProcessDocuments, { ProcessDocsSummary, effectiveStatus } from '../../components/ProcessDocuments.jsx'
 import ProcessLog from '../../components/ProcessLog.jsx'
 import { Badge, Button, Card, ScoreBar, StatusDot, Spinner, PageHeader, SectionTitle, EmptyState } from '../../components/ui.jsx'
@@ -936,25 +936,25 @@ export function BackofficeAnalysis() {
   }
 
   // ── Dados Bancários ──────────────────────────────────────────────────────────
+  // 16/10 (caso HAVI): a equipe digitava e clicava "Aprovar documento" — os
+  // dados não iam para o banco e não havia confirmação de que salvou
   const saveBankData = async () => {
-    if (!bankData) return
+    if (!bankApi.hasData(bankData)) { alert('Preencha os dados bancários antes de salvar.'); return false }
     setBankSaving(true)
     try {
-      const userId = (await supabase.auth.getUser()).data.user?.id
-      const { error } = await supabase.from('supplier_bank_accounts').upsert(
-        { ...bankData, supplier_id: id, verified_by: userId, verified_at: new Date().toISOString() },
-        { onConflict: 'supplier_id' }
-      )
-      if (error) throw error
-    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+      setBankData(await bankApi.save(id, bankData))
+      return true
+    } catch (e) { alert('Erro ao salvar os dados bancários: ' + e.message); return false }
     finally { setBankSaving(false) }
   }
 
-  const extractBankWithAI = async () => {
-    const bankDoc = data?.documents?.find(d =>
-      (d.label?.toLowerCase().includes('banco') || d.label?.toLowerCase().includes('conta') || d.label?.toLowerCase().includes('bancár')) && d.storage_path
-    ) || data?.documents?.find(d => d.storage_path && d.status !== 'MISSING')
-    if (!bankDoc?.storage_path) { alert('Nenhum documento com arquivo encontrado para análise.'); return }
+  // lê o documento ABERTO no modal; sem ele, o comprovante bancário (tipo 10) —
+  // a busca antiga por "conta" no nome pegava o Balanço ("assinatura do contador")
+  const extractBankWithAI = async (docAlvo) => {
+    const bankDoc = (docAlvo?.storage_path && docAlvo)
+      || data?.documents?.find(d => String(d.type) === '10' && d.storage_path)
+      || data?.documents?.find(d => getDocAiType(d) === 'bank' && d.storage_path)
+    if (!bankDoc?.storage_path) { alert('Nenhum comprovante bancário com arquivo encontrado para análise.'); return }
     setBankAiLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -965,9 +965,9 @@ export function BackofficeAnalysis() {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
-      if (result.extracted) setBankData(prev => ({ ...(prev || {}), ...result.extracted }))
-      if (result.warning) alert('⚠️ ' + result.warning)
-    } catch (e) { alert('Erro na extração: ' + e.message) }
+      if (result.extracted) setBankData(prev => ({ ...(prev || {}), ...Object.fromEntries(Object.entries(result.extracted).filter(([, v]) => v != null && v !== '')) }))
+      if (result.warning) alert('⚠️ ' + result.warning + ' Digite os dados e clique em Salvar.')
+    } catch (e) { alert('Erro na extração: ' + e.message + ' — digite os dados e clique em Salvar.') }
     finally { setBankAiLoading(false) }
   }
 
@@ -1725,7 +1725,7 @@ export function BackofficeAnalysis() {
               <div>
                 <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
                   <SectionTitle style={{ marginBottom:0 }}>Dados Bancários</SectionTitle>
-                  <Button variant="neutral" size="sm" disabled={bankAiLoading} onClick={extractBankWithAI}>
+                  <Button variant="neutral" size="sm" disabled={bankAiLoading} onClick={() => extractBankWithAI()}>
                     {bankAiLoading ? <><Spinner size={14}/> Extraindo...</> : '🤖 Extrair com IA'}
                   </Button>
                 </div>
@@ -2209,7 +2209,7 @@ export function BackofficeAnalysis() {
               }}>👁 Ver documento</Button>
               <Button variant="primary" size="sm"
                 disabled={docAiModal.extractType==='bank' ? bankAiLoading : dreAiLoading}
-                onClick={() => docAiModal.extractType==='bank' ? extractBankWithAI() : extractDreWithAI(docAiModal.doc.storage_path)}>
+                onClick={() => docAiModal.extractType==='bank' ? extractBankWithAI(docAiModal.doc) : extractDreWithAI(docAiModal.doc.storage_path)}>
                 {(docAiModal.extractType==='bank' ? bankAiLoading : dreAiLoading)
                   ? <><Spinner size={14}/> Extraindo...</>
                   : '🤖 Extrair com IA'}
@@ -2236,6 +2236,12 @@ export function BackofficeAnalysis() {
               </div>
             )}
 
+            {docAiModal.extractType === 'bank' && bankData?.verified_at && (
+              <div style={{ fontSize:12,color:'#15803d',fontFamily:'DM Sans,sans-serif',fontWeight:600 }}>
+                ✓ Dados bancários salvos em {new Date(bankData.verified_at).toLocaleString('pt-BR')}
+              </div>
+            )}
+
             {/* Campos DRE */}
             {docAiModal.extractType === 'dre' && dreEditing && (
               <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
@@ -2255,7 +2261,13 @@ export function BackofficeAnalysis() {
                 onClick={()=>{ docAiModal.extractType==='bank' ? saveBankData() : saveDre() }}>
                 {(docAiModal.extractType==='bank'?bankSaving:dreSaving) ? <Spinner size={14}/> : '💾 Salvar dados'}
               </Button>
-              <Button variant="success" full onClick={()=>{ setDocAiModal(null); openApproveModal(docAiModal.doc) }}>
+              <Button variant="success" full disabled={bankSaving} onClick={async()=>{
+                // banco: o que foi digitado é gravado junto com a aprovação
+                if (docAiModal.extractType==='bank') {
+                  if (!bankApi.hasData(bankData)) { alert('Preencha e salve os dados bancários antes de aprovar o comprovante.'); return }
+                  if (!(await saveBankData())) return
+                }
+                setDocAiModal(null); openApproveModal(docAiModal.doc) }}>
                 ✓ Aprovar documento
               </Button>
             </div>

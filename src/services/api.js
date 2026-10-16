@@ -2186,3 +2186,23 @@ export const invitationsApi = {
     return data
   },
 }
+
+// Dados bancários verificados pelo analista (16/10, caso HAVI): campos vazios
+// viram null, tipo de conta normalizado (CHECK corrente/poupanca) e a linha
+// gravada é devolvida para a tela confirmar que salvou
+export const bankApi = {
+  BANK_FIELDS: ['bank_name', 'bank_code', 'bank_agency', 'bank_account', 'account_type', 'pix_key'],
+  hasData(d) { return bankApi.BANK_FIELDS.some((k) => String(d?.[k] ?? '').trim()) },
+  async save(supplierId, d) {
+    const row = {}
+    for (const k of bankApi.BANK_FIELDS) row[k] = String(d?.[k] ?? '').trim() || null
+    const t = (row.account_type || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    row.account_type = t.startsWith('poup') ? 'poupanca' : t ? 'corrente' : null
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('supplier_bank_accounts')
+      .upsert({ ...row, supplier_id: supplierId, verified_by: user?.id, verified_at: new Date().toISOString() }, { onConflict: 'supplier_id' })
+      .select().single()
+    if (error) throw new Error(error.message)
+    return data
+  },
+}
