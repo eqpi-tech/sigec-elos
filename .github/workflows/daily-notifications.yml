@@ -84,6 +84,21 @@ jobs:
             exit 1
           fi
 
+  stripe-conciliacao:
+    name: Conciliação de pagamentos do Stripe (boleto pago sem aviso)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chama Netlify Function
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/.netlify/functions/stripe-reconcile")
+          echo "stripe-reconcile: $response"
+          if [ "$(echo "$response" | tail -1)" != "200" ]; then
+            echo "❌ Falha na conciliação do Stripe"
+            exit 1
+          fi
+
   nfe-emissao:
     name: Emissão de NFSe pendentes (varredura)
     runs-on: ubuntu-latest

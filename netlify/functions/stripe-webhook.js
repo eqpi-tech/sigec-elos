@@ -15,61 +15,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY // service_role para bypassar RLS
 )
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' }
-  }
-
-  const sig           = event.headers['stripe-signature']
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
-
-  let stripeEvent
-  try {
-    stripeEvent = stripe.webhooks.constructEvent(event.body, sig, webhookSecret)
-  } catch (err) {
-    console.error('Webhook signature error:', err.message)
-    return { statusCode: 400, body: `Webhook Error: ${err.message}` }
-  }
-
-  const { type, data } = stripeEvent
-
-  try {
-    // ── Pagamento efetuado com sucesso ──────────────────────────────
-    // boleto expirou sem pagamento: encerra o plano provisório
-    if (type === 'checkout.session.async_payment_failed') {
-      const session = data.object
-      await supabase.from('plans').update({ status: 'CANCELED' })
-        .eq('stripe_session_id', session.id).eq('status', 'PENDING')
-      console.log(`❌ Pagamento assíncrono falhou/expirou (${session.id})`)
-      return { statusCode: 200, body: JSON.stringify({ received: true }) }
-    }
-
-    // async_payment_succeeded = boleto COMPENSOU: mesma ativação do completed
-    if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
-      const session = data.object
-      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId, clientId } = session.metadata
-
-      // BOLETO (21/09): completed dispara na EMISSÃO do voucher com
-      // payment_status='unpaid' — sem esta guarda o plano ativava sem
-      // pagamento. Registra o plano como PENDING e espera a compensação
-      // (async_payment_succeeded) para ativar de verdade.
-      if (type === 'checkout.session.completed' && session.payment_status && session.payment_status !== 'paid') {
-        if (supplierId && planFor !== 'buyer') {
-          await supabase.from('plans').upsert({
-            supplier_id: supplierId,
-            type: planType || 'homologado',
-            cnae_count: Number(cnaeCount || 1),
-            price_yearly: Number(priceYearly || 0),
-            stripe_session_id: session.id,
-            stripe_customer_id: session.customer || null,
-            status: 'PENDING',
-            starts_at: new Date().toISOString(),
-          }, { onConflict: 'supplier_id' })
-            .then(({ error: e }) => e && console.error('[boleto-pending]', e.message))
-        }
-        console.log(`⏳ Pagamento assíncrono aguardando compensação (${session.id}) — nada liberado`)
-        return { statusCode: 200, body: JSON.stringify({ received: true }) }
-      }
+// Ativação de um checkout PAGO (cartão/PIX na hora; boleto na compensação).
+// Extraída do handler (16/10) para a conciliação (stripe-reconcile) usar a
+// mesma regra quando o aviso do Stripe não chega.
+async function activatePaidSession(session) {
+      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId, clientId } = session.metadata || {}
 
       // ── CASO: Comprador Pro ──────────────────────────────────────
       if (planFor === 'buyer' && buyerUserId) {
@@ -130,6 +80,7 @@ exports.handler = async (event) => {
         status:             'ACTIVE',
         starts_at:          new Date().toISOString(),
         ends_at:            endsAt,
+        source:             'STRIPE',
       }, { onConflict: 'supplier_id' })
 
       if (planErr) console.error('Plan upsert error:', planErr)
@@ -237,6 +188,66 @@ exports.handler = async (event) => {
     } catch (emailErr) {
       console.warn('Welcome email error (não crítico):', emailErr.message)
     }
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+}
+
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' }
+  }
+
+  const sig           = event.headers['stripe-signature']
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+
+  let stripeEvent
+  try {
+    stripeEvent = stripe.webhooks.constructEvent(event.body, sig, webhookSecret)
+  } catch (err) {
+    console.error('Webhook signature error:', err.message)
+    return { statusCode: 400, body: `Webhook Error: ${err.message}` }
+  }
+
+  const { type, data } = stripeEvent
+
+  try {
+    // ── Pagamento efetuado com sucesso ──────────────────────────────
+    // boleto expirou sem pagamento: encerra o plano provisório
+    if (type === 'checkout.session.async_payment_failed') {
+      const session = data.object
+      await supabase.from('plans').update({ status: 'CANCELED' })
+        .eq('stripe_session_id', session.id).eq('status', 'PENDING')
+      console.log(`❌ Pagamento assíncrono falhou/expirou (${session.id})`)
+      return { statusCode: 200, body: JSON.stringify({ received: true }) }
+    }
+
+    // async_payment_succeeded = boleto COMPENSOU: mesma ativação do completed
+    if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
+      const session = data.object
+      const { supplierId, planType, cnaeCount, priceYearly, planFor, buyerUserId, clientId } = session.metadata
+
+      // BOLETO (21/09): completed dispara na EMISSÃO do voucher com
+      // payment_status='unpaid' — sem esta guarda o plano ativava sem
+      // pagamento. Registra o plano como PENDING e espera a compensação
+      // (async_payment_succeeded) para ativar de verdade.
+      if (type === 'checkout.session.completed' && session.payment_status && session.payment_status !== 'paid') {
+        if (supplierId && planFor !== 'buyer') {
+          await supabase.from('plans').upsert({
+            supplier_id: supplierId,
+            type: planType || 'homologado',
+            cnae_count: Number(cnaeCount || 1),
+            price_yearly: Number(priceYearly || 0),
+            stripe_session_id: session.id,
+            stripe_customer_id: session.customer || null,
+            status: 'PENDING',
+            starts_at: new Date().toISOString(),
+            source: 'STRIPE',   // pagamento no ELOS (antes ficava a origem HOC da linha antiga)
+          }, { onConflict: 'supplier_id' })
+            .then(({ error: e }) => e && console.error('[boleto-pending]', e.message))
+        }
+        console.log(`⏳ Pagamento assíncrono aguardando compensação (${session.id}) — nada liberado`)
+        return { statusCode: 200, body: JSON.stringify({ received: true }) }
+      }
+      return await activatePaidSession(session)
     }
 
     // ── Assinatura cancelada ────────────────────────────────────────
@@ -254,6 +265,13 @@ exports.handler = async (event) => {
             .from('plans').select('supplier_id, type').eq('stripe_sub_id', subId).maybeSingle()
           supplierId = plan?.supplier_id || null
           planType   = plan?.type || null
+          // 16/10 (caso HAVI): a fatura chega antes do checkout.session.completed
+          // gravar o plano — busca o fornecedor na sessão do checkout
+          if (!supplierId) {
+            const ss = await stripe.checkout.sessions.list({ subscription: subId, limit: 1 })
+            supplierId = ss.data?.[0]?.metadata?.supplierId || null
+            planType   = planType || ss.data?.[0]?.metadata?.planType || null
+          }
         }
         const amount = invoice.amount_paid ?? 0
         const desc   = `Serviço de Análise Cadastral — Assinatura SIGEC-ELOS${planType ? ` (${planType})` : ''}`
@@ -356,3 +374,5 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: 'Internal error' }
   }
 }
+
+exports.activatePaidSession = activatePaidSession
