@@ -99,19 +99,47 @@ exports.handler = async (event) => {
     const startedAt = Date.now()
     const budgetLeft = () => 20000 - (Date.now() - startedAt)
     let renovacoes = 0
+    // REGRA DO LUIZ (16/10): só fornecedor NASCIDO NO ELOS (suppliers.hoc_id
+    // nulo) — fornecedor do HOC, mesmo com processo no ELOS, fica fora até a
+    // migração oficial do cliente (nenhum migrado ainda)
+    const nascidosNoElos = async (ids) => {
+      const set = new Set(); const uniq = [...new Set(ids)]
+      for (let i = 0; i < uniq.length; i += 200) {
+        const { data } = await supabase.from('suppliers').select('id').in('id', uniq.slice(i, i + 200)).is('hoc_id', null)
+        for (const r of data || []) set.add(r.id)
+      }
+      return set
+    }
+
+    // 16/10 (caso LITUR): documento que JÁ venceu vira EXPIRED — antes ninguém
+    // marcava e ele ficava "vence em breve" para sempre
+    {
+      const { data: venc } = await supabase.from('documents').select('id, supplier_id')
+        .is('hoc_arquivo_id', null).in('status', ['VALID', 'EXPIRING']).lt('expires_at', today)
+      const elosSet = await nascidosNoElos((venc || []).map(d => d.supplier_id))
+      const ids = (venc || []).filter(d => elosSet.has(d.supplier_id) && (!eligible.size || eligible.has(d.supplier_id))).map(d => d.id)
+      for (let i = 0; i < ids.length; i += 200)
+        await supabase.from('documents').update({ status: 'EXPIRED' }).in('id', ids.slice(i, i + 200)).in('status', ['VALID', 'EXPIRING'])
+      if (ids.length) console.log(`⌛ ${ids.length} documento(s) de origem ELOS marcados como vencidos`)
+    }
+
     if (routeA.enabled()) {
       const in7d = new Date(now.getTime() + 7 * 864e5)
+      // 16/10: também o que JÁ venceu (até 90 dias) e o enviado à mão — a Rota A
+      // busca de novo qualquer documento que ela sabe obter na fonte oficial
+      const desde = new Date(now.getTime() - 90 * 864e5).toISOString()
       const { data: vencendo } = await supabase
         .from('documents')
         .select('type, supplier_id')
         .in('type', Object.keys(routeA.ROUTE_A))
-        .eq('source', 'AUTO')
         .is('hoc_arquivo_id', null)
-        .in('status', ['VALID', 'EXPIRING'])
+        .in('status', ['VALID', 'EXPIRING', 'EXPIRED'])
         .lte('expires_at', in7d.toISOString())
-        .gte('expires_at', today)
+        .gte('expires_at', desde)
       const porFornecedor = new Map()
+      const elosRenov = await nascidosNoElos((vencendo || []).map(d => d.supplier_id))
       for (const d of vencendo || []) {
+        if (!elosRenov.has(d.supplier_id)) continue   // só nascido no ELOS (regra 16/10)
         if (eligible.size && !eligible.has(d.supplier_id)) continue
         if (!porFornecedor.has(d.supplier_id)) porFornecedor.set(d.supplier_id, new Set())
         porFornecedor.get(d.supplier_id).add(d.type)
@@ -137,7 +165,7 @@ exports.handler = async (event) => {
             const { error: jErr } = job
               ? await supabase.from('auto_collect_jobs').update({
                   status: 'queued', attempts: 0, next_attempt_at: new Date().toISOString(),
-                  last_error: 'renovação automática (vence em até 7 dias)', finished_at: null,
+                  last_error: 'renovação automática (vencido ou vence em até 7 dias)', finished_at: null,
                 }).eq('id', job.id)
               : await supabase.from('auto_collect_jobs').insert({ supplier_id: supplierId, seal_id: selo.id, doc_type: tipo })
             if (jErr) console.warn(`  ✗ renovação ${tipo} fornecedor ${supplierId}:`, jErr.message)
