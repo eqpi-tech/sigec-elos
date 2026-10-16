@@ -51,15 +51,18 @@ exports.handler = async (event) => {
   const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token)
   if (authErr || !user) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Token inválido' }) }
 
+  // 16/10 (patch_145): também uma VERSÃO do histórico (?historyId=) — o arquivo
+  // de cada envio fica guardado; mesma autorização do documento atual
   const documentId = event.queryStringParameters?.documentId
-  if (!documentId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'documentId obrigatório' }) }
+  const historyId  = event.queryStringParameters?.historyId
+  if (!documentId && !historyId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'documentId ou historyId obrigatório' }) }
 
   try {
-    const { data: doc } = await supabaseAdmin
-      .from('documents')
-      .select('id, supplier_id, hoc_arquivo_id, storage_path, label')
-      .eq('id', documentId)
-      .maybeSingle()
+    const { data: doc } = historyId
+      ? await supabaseAdmin.from('document_history')
+          .select('id, supplier_id, hoc_arquivo_id, storage_path, label').eq('id', historyId).maybeSingle()
+      : await supabaseAdmin.from('documents')
+          .select('id, supplier_id, hoc_arquivo_id, storage_path, label').eq('id', documentId).maybeSingle()
     if (!doc) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Documento não encontrado' }) }
 
     // ── Autorização ─────────────────────────────────────────
@@ -122,7 +125,8 @@ exports.handler = async (event) => {
       .upload(storagePath, inflated, { contentType: mime, upsert: true })
     if (upErr) throw new Error(`Falha ao cachear no Storage: ${upErr.message}`)
 
-    await supabaseAdmin.from('documents').update({ storage_path: storagePath }).eq('id', doc.id)
+    // versão do histórico não mexe no documento atual
+    if (!historyId) await supabaseAdmin.from('documents').update({ storage_path: storagePath }).eq('id', doc.id)
 
     const { data: signed, error: signErr } = await supabaseAdmin.storage
       .from('documents')

@@ -3,6 +3,7 @@ import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal, routeAApi, ROUTE_A_ENABLED, processDocsApi } from '../../services/api.js'
 import { DOC_STATUS, ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
+import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { hasAction } from '../../lib/modules.js'
 import { Button, Card, Spinner, PageHeader, SectionTitle, StatusDot } from '../../components/ui.jsx'
@@ -66,6 +67,13 @@ export default function SupplierDocuments() {
   const [docGroups, setDocGroups] = useState([]) // [{ key, title, ids:Set, sealId }] — um por processo/cliente
   // resumo de cada processo pela fonte única (patch_139): PJ + PF, mesmos números do cliente e do backoffice
   const [procByKey, setProcByKey] = useState({})
+  // patch_145: documentos que NÃO aceitam novo arquivo agora (processo já na fila)
+  const [docLocks, setDocLocks] = useState(new Set())
+  const [histDoc, setHistDoc]   = useState(null)
+  const loadLocks = () => supabase.rpc('supplier_doc_locks', { p_supplier: user.supplierId })
+    .then(({ data }) => setDocLocks(new Set((data || []).map(String)))).catch(() => {})
+  // antes da fila: troca qualquer documento já enviado (vira nova versão)
+  const canReplace = (up, status) => !!up && up.source !== 'AUTO' && ['PENDING', 'VALID'].includes(status) && !docLocks.has(String(up.type))
   const groupsRef = useRef([])   // última lista de processos (o estado ainda não atualizou no fim do loadAll)
   const loadProcSummaries = async (groups) => {
     if (groups) groupsRef.current = groups
@@ -123,7 +131,7 @@ export default function SupplierDocuments() {
         supabase.rpc('supplier_ready_for_analysis', { p_supplier: user.supplierId }),
         mobilityApi.pendingFor(cnpj, user.supplierId),
       ])
-      loadProcSummaries()
+      loadProcSummaries(); loadLocks()
       setCompletion(prev => ({
         ready: rdy === true,
         mobComplete: mob.complete,
@@ -586,10 +594,15 @@ export default function SupplierDocuments() {
                 {isIsentoMarked ? '✓ Isento' : 'Isento'}
               </button>
             )}
-            {/* Upload: MISSING/REJECTED/EXPIRED/EXPIRING + permissão de perfil (acao:enviar_documentos) */}
-            {UPLOADABLE.includes(status) && !hasAction(user, 'acao:enviar_documentos') ? (
+            {up && (
+              <Button variant="neutral" size="sm" title="Histórico e versões do documento"
+                onClick={() => setHistDoc({ supplier_id: user.supplierId, type: String(doc.id), label: doc.name })}>🕓</Button>
+            )}
+            {/* Upload: MISSING/REJECTED/EXPIRED/EXPIRING + permissão de perfil (acao:enviar_documentos);
+                antes da fila também troca o já enviado (patch_145) */}
+            {(UPLOADABLE.includes(status) || canReplace(up, status)) && !hasAction(user, 'acao:enviar_documentos') ? (
               <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap' }} title="Seu perfil não permite enviar documentos">sem permissão</span>
-            ) : UPLOADABLE.includes(status) ? (
+            ) : (UPLOADABLE.includes(status) || canReplace(up, status)) ? (
               <>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.docx,.zip"
                   ref={el => fileRefs.current[doc.id] = el}
@@ -600,12 +613,13 @@ export default function SupplierDocuments() {
                   <Button variant="orange" size="sm"
                     onClick={() => fileRefs.current[doc.id]?.click()}
                     disabled={isIsentoMarked}>
-                    {status === 'EXPIRING' ? '↑ Renovar' : '↑ Enviar'}
+                    {status === 'EXPIRING' ? '↑ Renovar' : UPLOADABLE.includes(status) ? '↑ Enviar' : '↻ Substituir'}
                   </Button>
                 )}
               </>
             ) : status === 'PENDING' ? (
-              <span style={{ fontSize:10, color:'#f59e0b', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>Em análise</span>
+              <span style={{ fontSize:10, color:'#f59e0b', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}
+                title="O processo já está na fila de análise: o documento só pode ser reenviado se for reprovado">Na análise</span>
             ) : status === 'VALID' ? (
               <span style={{ fontSize:10, color:'#22c55e', fontFamily:'DM Sans,sans-serif', fontWeight:600, whiteSpace:'nowrap' }}>✓ Aprovado</span>
             ) : status === 'NOT_APPLICABLE' ? (
@@ -651,13 +665,17 @@ export default function SupplierDocuments() {
                   {up?.storage_path && (
                     <Button variant="neutral" size="sm" onClick={() => handleViewDoc(up)}>👁 Ver</Button>
                   )}
-                  {UPLOADABLE.includes(status) && (
+                  {up && (
+                    <Button variant="neutral" size="sm" title="Histórico e versões do documento"
+                      onClick={() => setHistDoc({ supplier_id: user.supplierId, type: typeKey, label: m.documents_catalog?.name || 'Documento' })}>🕓</Button>
+                  )}
+                  {(UPLOADABLE.includes(status) || canReplace(up, status)) && (
                     hasAction(user, 'acao:enviar_documentos') ? (
                       <>
                         <input type="file" id={inputId} accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display:'none' }}
                           onChange={e => handleMobUpload(typeKey, label, e.target.files[0], { personId, postId })}/>
                         {busy ? <Spinner size={18}/> : (
-                          <Button variant="orange" size="sm" onClick={() => document.getElementById(inputId)?.click()}>{status === 'EXPIRING' ? '↑ Renovar' : '↑ Enviar'}</Button>
+                          <Button variant="orange" size="sm" onClick={() => document.getElementById(inputId)?.click()}>{status === 'EXPIRING' ? '↑ Renovar' : UPLOADABLE.includes(status) ? '↑ Enviar' : '↻ Substituir'}</Button>
                         )}
                       </>
                     ) : <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>sem permissão</span>
@@ -807,6 +825,7 @@ export default function SupplierDocuments() {
       )}
 
       <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
+      {histDoc && <DocHistoryModal doc={histDoc} onClose={() => setHistDoc(null)}/>}
 
       {/* Fechou a fase: docs + questionário + mobilidade completos e processo
           aguardando a análise da EQPI (pedido 25/09). Enviar ≠ aprovar: o

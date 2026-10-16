@@ -332,8 +332,13 @@ export const documentApi = {
     const isHtml = /\.html?$/i.test(path || '')
     const w = isHtml ? window.open('', '_blank') : null   // abre já no clique (bloqueio de pop-up)
     try {
-      if (!path) { window.open(await documentApi.getHocFileUrl(doc.id), '_blank'); return }
-      const url = await documentApi.getSignedUrl(path)
+      // 16/10: documento passa pelo servidor (get-hoc-file), que confere o acesso
+      // pelo FORNECEDOR — o link assinado no navegador dependia da pasta de quem
+      // enviou e o cliente não abria arquivo enviado por outro membro da equipe
+      let url
+      if (doc?.id && !doc?.letter_path) url = await documentApi.getHocFileUrl(doc.id)
+      else if (!path) { window.open(await documentApi.getHocFileUrl(doc.id), '_blank'); return }
+      else url = await documentApi.getSignedUrl(path)
       if (!isHtml) { window.open(url, '_blank'); return }
       const html = await (await fetch(url)).text()
       const titulo = String(doc.label || 'Comprovante').replace(/[<>&"]/g, '')
@@ -358,6 +363,17 @@ iframe{border:0;width:100%;height:calc(100% - 34px);background:#fff}</style></he
       .createSignedUrl(storagePath, 3600)
     if (error) throw new Error(error.message)
     return data.signedUrl
+  },
+
+  // arquivo de uma VERSÃO do histórico (patch_145) — mesma autorização do atual
+  viewVersion: async (historyId) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`/.netlify/functions/get-hoc-file?historyId=${historyId}`, {
+      headers: { Authorization: `Bearer ${session?.access_token}` },
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Erro ao abrir arquivo')
+    window.open(data.url, '_blank')
   },
 
   // Arquivos migrados do HOC (S3 privado) — URL pré-assinada via function

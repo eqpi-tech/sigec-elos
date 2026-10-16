@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
 import { clientApi, documentApi , processDocsApi, clientLogApi } from '../../services/api.js'
 import ProcessLog from '../../components/ProcessLog.jsx'
+import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import ProcessDocuments, { ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj } from '../../lib/cnpj.js'
@@ -351,12 +352,8 @@ export default function ClientSupplierProcess() {
   const [supReady, setSupReady] = useState(null)  // fornecedor completou docs+questionário? (patch_074)
   const [procDocs, setProcDocs] = useState(null)  // documentos do processo — fonte única (patch_139)
   const [procDocsErr, setProcDocsErr] = useState(false)
+  const [histDoc, setHistDoc] = useState(null)   // histórico de versões (patch_145)
 
-  useEffect(() => {
-    if (!supplierId) return
-    supabase.rpc('supplier_ready_for_analysis', { p_supplier: supplierId })
-      .then(({ data: r }) => setSupReady(r === true)).catch(() => {})
-  }, [supplierId])
 
   useEffect(() => {
     if (!user?.clientId || !supplierId) return
@@ -371,6 +368,9 @@ export default function ClientSupplierProcess() {
   useEffect(() => {
     if (!mySealId) return
     processDocsApi.get(mySealId).then(setProcDocs).catch(() => setProcDocsErr(true))
+    // "Aguardando fornecedor": o processo DESTE cliente está na fila? (patch_145)
+    supabase.rpc('client_seal_in_queue', { p_seal: mySealId })
+      .then(({ data: r }) => setSupReady(r === true)).catch(() => {})
   }, [mySealId])
 
   useEffect(() => {
@@ -668,7 +668,9 @@ export default function ClientSupplierProcess() {
         <Card style={{ borderRadius:14, padding:'20px 24px' }}>
           <SectionTitle>Documentos do processo{procDocs.seal?.client_name ? ` · ${procDocs.seal.client_name}` : ''}</SectionTitle>
           <ProcessDocuments data={procDocs} canView={hasAction(user, 'acao:ver_documentos')}
-            onView={async (doc) => { try { await documentApi.view(doc) } catch { alert('Erro ao abrir documento') } }}/>
+            onView={async (doc) => { try { await documentApi.view(doc) } catch { alert('Erro ao abrir documento') } }}
+            onHistory={hasAction(user, 'acao:ver_documentos') ? (doc, item) => setHistDoc({ supplier_id: supplierId, type: doc.type, label: item.name }) : undefined}/>
+          {histDoc && <DocHistoryModal doc={histDoc} onClose={() => setHistDoc(null)}/>}
         </Card>
       )}
       {tab === 'Documentos' && !procDocs && !procDocsErr && mySealId && (
