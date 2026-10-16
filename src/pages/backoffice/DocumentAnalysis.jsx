@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminApi, documentApi, routeBApi, ROUTE_A_ENABLED, ROUTE_B_ENABLED } from '../../services/api.js'
+import { adminApi, documentApi, routeBApi, bankApi, ROUTE_A_ENABLED, ROUTE_B_ENABLED } from '../../services/api.js'
 import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { supabase } from '../../lib/supabase.js'
 import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
@@ -74,6 +74,12 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
   const [dreData,   setDreData]   = useState({ year: new Date().getFullYear() - 1 })
   const [aiLoading, setAiLoading] = useState(false)
   const [saving,    setSaving]    = useState(false)
+  // dados já gravados: o salvar grava os 6 campos, sem isso apagaria o que existe
+  useEffect(() => {
+    if (extractType !== 'bank' || !doc?.supplier_id) return
+    supabase.from('supplier_bank_accounts').select('*').eq('supplier_id', doc.supplier_id).maybeSingle()
+      .then(({ data }) => { if (data) setBankData(p => ({ ...data, ...p })) })
+  }, [doc?.supplier_id, extractType])
 
   async function extractWithAI() {
     setAiLoading(true)
@@ -105,11 +111,8 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id
       if (extractType === 'bank') {
-        const { error } = await supabase.from('supplier_bank_accounts').upsert(
-          { ...bankData, supplier_id: doc.supplier_id, verified_by: userId, verified_at: new Date().toISOString() },
-          { onConflict: 'supplier_id' }
-        )
-        if (error) throw error
+        if (!bankApi.hasData(bankData)) { alert('Preencha os dados bancários antes de salvar.'); return false }
+        setBankData(await bankApi.save(doc.supplier_id, bankData))
       } else {
         const clean = { ...dreData }
         for (const k of ['receita','ativo','passivo','lucro','ebitda','estoque'])
@@ -121,7 +124,8 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
         if (error) throw error
       }
       alert('Dados salvos com sucesso!')
-    } catch (e) { alert('Erro ao salvar: ' + e.message) }
+      return true
+    } catch (e) { alert('Erro ao salvar: ' + e.message); return false }
     finally { setSaving(false) }
   }
 
@@ -201,7 +205,13 @@ function DocAiModal({ doc, extractType, onApprove, onClose }) {
           <Button variant="neutral" full disabled={saving} onClick={saveData}>
             {saving ? <Spinner size={14}/> : '💾 Salvar dados'}
           </Button>
-          <Button variant="success" full onClick={() => { onApprove(doc); onClose() }}>
+          <Button variant="success" full disabled={saving} onClick={async () => {
+            // 16/10 (caso HAVI): o que foi digitado é gravado junto com a aprovação
+            if (extractType === 'bank') {
+              if (!bankApi.hasData(bankData)) { alert('Preencha e salve os dados bancários antes de aprovar o comprovante.'); return }
+              if (!(await saveData())) return
+            }
+            onApprove(doc); onClose() }}>
             ✓ Aprovar documento
           </Button>
         </div>
