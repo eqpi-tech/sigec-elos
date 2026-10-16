@@ -4,9 +4,9 @@
 // do que falta (documentos exigidos + questionário), até completar ou
 // atingir 5 lembretes (depois a cobrança volta a ser manual do analista).
 //
-// Escopo deliberado: SÓ processos nativos do ELOS (hoc_process_id IS NULL)
-// de clientes ativos — os espelhados do HOC já são cobrados por lá e
-// disparar e-mail em massa para migrados confundiria.
+// Escopo deliberado: processos do ELOS (hoc_process_id IS NULL) e, a partir
+// da virada, os do HOC de clientes já migrados (patch_146) — de clientes
+// ativos. Os do HOC de cliente não migrado continuam cobrados pelo HOC.
 //
 // Disparo: workflow daily-notifications (Bearer CRON_SECRET). Background
 // function (15 min) com teto de e-mails por execução.
@@ -14,7 +14,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
-const { requiredDocsForSeal, mobilityTodo } = require('./lib/required_docs.js')
+const { requiredDocsForSeal, mobilityTodo, filtroAutomacao } = require('./lib/required_docs.js')
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -88,12 +88,13 @@ exports.handler = async (event) => {
   const deadline = Date.now() + 12 * 60 * 1000
   let sent = 0, skipped = 0
   try {
-    // processos ELOS em aberto de clientes ativos
+    // processos em aberto nas filas automáticas (patch_146), de clientes ativos
+    const filtro = await filtroAutomacao(supabase)
     const { data: seals } = await supabase
       .from('seals')
       .select('id, supplier_id, client_id, flow_id, created_at, released_at, clients(active, nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
       .eq('status', 'PENDING')
-      .is('hoc_process_id', null)
+      .or(filtro)
       .limit(500)
 
     // e-mails de login em lote (fallback: e-mail de cadastro — regra nº 14)

@@ -8,7 +8,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl, env } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
-const { requiredDocsForSeal } = require('./lib/required_docs.js')
+const { requiredDocsForSeal, filtroAutomacao, docsDaAutomacao } = require('./lib/required_docs.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
 // Usamos fetch direto para a API do Resend.
@@ -92,35 +92,31 @@ exports.handler = async (event) => {
     // pela fonte oficial que vence em ≤7 dias volta para a fila da Rota A: o
     // coletor consulta de novo e deixa o novo documento "Em análise" com a
     // sugestão para o analista (nada é aprovado sozinho).
-    // REGRA DO LUIZ (12/10): só ORIGEM ELOS entra na esteira — documento
-    // espelhado do HOC (hoc_arquivo_id) e processo do HOC (hoc_process_id)
-    // ficam fora até a migração de todos os clientes. Processo precisa estar
-    // liberado (pago ou subsidiado) e operável (ativo ou em análise).
+    // REGRA DO LUIZ (16/10, patch_146): o que decide é o PROCESSO, não onde o
+    // fornecedor nasceu — processo do ELOS sempre; processo do HOC só depois que
+    // o cliente dele for migrado oficialmente. O documento entra quando algum
+    // processo nas filas automáticas o exige. Processo precisa estar liberado
+    // (pago ou subsidiado) e operável (ativo ou em análise).
+    const porIds = async (ids, cols) => {
+      const out = []
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await supabase.from('documents').select(cols).in('id', ids.slice(i, i + 200))
+        if (error) throw new Error(error.message)
+        out.push(...(data || []))
+      }
+      return out
+    }
     const startedAt = Date.now()
     const budgetLeft = () => 20000 - (Date.now() - startedAt)
     let renovacoes = 0
-    // REGRA DO LUIZ (16/10): só fornecedor NASCIDO NO ELOS (suppliers.hoc_id
-    // nulo) — fornecedor do HOC, mesmo com processo no ELOS, fica fora até a
-    // migração oficial do cliente (nenhum migrado ainda)
-    const nascidosNoElos = async (ids) => {
-      const set = new Set(); const uniq = [...new Set(ids)]
-      for (let i = 0; i < uniq.length; i += 200) {
-        const { data } = await supabase.from('suppliers').select('id').in('id', uniq.slice(i, i + 200)).is('hoc_id', null)
-        for (const r of data || []) set.add(r.id)
-      }
-      return set
-    }
-
     // 16/10 (caso LITUR): documento que JÁ venceu vira EXPIRED — antes ninguém
     // marcava e ele ficava "vence em breve" para sempre
     {
-      const { data: venc } = await supabase.from('documents').select('id, supplier_id')
-        .is('hoc_arquivo_id', null).in('status', ['VALID', 'EXPIRING']).lt('expires_at', today)
-      const elosSet = await nascidosNoElos((venc || []).map(d => d.supplier_id))
-      const ids = (venc || []).filter(d => elosSet.has(d.supplier_id) && (!eligible.size || eligible.has(d.supplier_id))).map(d => d.id)
+      const venc = await porIds(await docsDaAutomacao(supabase, { statuses: ['VALID', 'EXPIRING'], before: today }), 'id, supplier_id')
+      const ids = venc.filter(d => !eligible.size || eligible.has(d.supplier_id)).map(d => d.id)
       for (let i = 0; i < ids.length; i += 200)
         await supabase.from('documents').update({ status: 'EXPIRED' }).in('id', ids.slice(i, i + 200)).in('status', ['VALID', 'EXPIRING'])
-      if (ids.length) console.log(`⌛ ${ids.length} documento(s) de origem ELOS marcados como vencidos`)
+      if (ids.length) console.log(`⌛ ${ids.length} documento(s) de processos nas filas automáticas marcados como vencidos`)
     }
 
     if (routeA.enabled()) {
@@ -128,18 +124,12 @@ exports.handler = async (event) => {
       // 16/10: também o que JÁ venceu (até 90 dias) e o enviado à mão — a Rota A
       // busca de novo qualquer documento que ela sabe obter na fonte oficial
       const desde = new Date(now.getTime() - 90 * 864e5).toISOString()
-      const { data: vencendo } = await supabase
-        .from('documents')
-        .select('type, supplier_id')
-        .in('type', Object.keys(routeA.ROUTE_A))
-        .is('hoc_arquivo_id', null)
-        .in('status', ['VALID', 'EXPIRING', 'EXPIRED'])
-        .lte('expires_at', in7d.toISOString())
-        .gte('expires_at', desde)
+      const vencendo = await porIds(await docsDaAutomacao(supabase, {
+        statuses: ['VALID', 'EXPIRING', 'EXPIRED'], from: desde, to: in7d.toISOString(), types: Object.keys(routeA.ROUTE_A),
+      }), 'id, type, supplier_id')
       const porFornecedor = new Map()
-      const elosRenov = await nascidosNoElos((vencendo || []).map(d => d.supplier_id))
-      for (const d of vencendo || []) {
-        if (!elosRenov.has(d.supplier_id)) continue   // só nascido no ELOS (regra 16/10)
+      const filtro = await filtroAutomacao(supabase)
+      for (const d of vencendo) {   // já só documento de processo nas filas automáticas (patch_146)
         if (eligible.size && !eligible.has(d.supplier_id)) continue
         if (!porFornecedor.has(d.supplier_id)) porFornecedor.set(d.supplier_id, new Set())
         porFornecedor.get(d.supplier_id).add(d.type)
@@ -149,7 +139,7 @@ exports.handler = async (event) => {
         if (renovacoes >= MAX_RENOVACOES || budgetLeft() < 8000) break
         const { data: selos } = await supabase.from('seals')
           .select('id, client_id, flow_id')
-          .eq('supplier_id', supplierId).is('hoc_process_id', null)
+          .eq('supplier_id', supplierId).or(filtro).is('client_suspended_at', null)
           .not('released_at', 'is', null).in('status', ['ACTIVE', 'PENDING'])
           .order('created_at')
         const pendentes = new Set(tipos)
@@ -174,7 +164,7 @@ exports.handler = async (event) => {
         }
       }
       if (renovacoes) {
-        console.log(`🔄 ${renovacoes} documento(s) de origem ELOS na esteira de renovação (Rota A)`)
+        console.log(`🔄 ${renovacoes} documento(s) na esteira de renovação (Rota A)`)
         // o cron da Rota A (15 min) processa a fila; o disparo só adianta
         const site = env('ELOS_ENV') === 'production' ? env('URL') : (env('DEPLOY_PRIME_URL') || env('URL'))
         if (site && process.env.CRON_SECRET) {
@@ -189,15 +179,13 @@ exports.handler = async (event) => {
     // Busca documentos VÁLIDOS que vencem nos próximos 30 dias
     // Nota: NÃO tentamos fazer join com auth.users via PostgREST — buscamos e-mails
     // separadamente via auth.admin.getUserById (mais confiável)
-    const { data: expiringDocs, error } = await supabase
-      .from('documents')
-      .select('id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id, email)')
-      .in('status', ['VALID', 'EXPIRING'])   // EXPIRING continua nos marcos 3/1/0
-      .gte('expires_at', today)
-      .lte('expires_at', limit30)
-      .order('expires_at', { ascending: true })
+    // patch_146: só documento de processo nas filas automáticas — o do HOC de
+    // cliente ainda não migrado é avisado pelo HOC (antes saía aviso em dobro);
+    // a seleção no banco também tira o teto de 1.000 linhas (eram 2.500+)
+    const expiringDocs = (await porIds(await docsDaAutomacao(supabase, { statuses: ['VALID', 'EXPIRING'], from: today, to: limit30 }),
+      'id, type, label, expires_at, status, supplier_id, suppliers(id, razao_social, user_id, email)'))   // EXPIRING continua nos marcos 3/1/0
+      .sort((x, y) => new Date(x.expires_at) - new Date(y.expires_at))
 
-    if (error) throw new Error(error.message)
     if (!expiringDocs?.length) {
       return { statusCode: 200, body: JSON.stringify({ message: 'Nenhum documento vencendo em 30 dias', count: 0, renovacoes }) }
     }

@@ -182,4 +182,33 @@ async function mobilityTodo(sb, supplierId, clientId) {
   return groups.filter(g => g.peopleMissing || g.docs.length)
 }
 
-module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending, mobilityTodo, shortDocName }
+// Filas automáticas POR PROCESSO (regra do Luiz 16/10, patch_146): entra o
+// processo nascido no ELOS e o do HOC cujo cliente já foi migrado oficialmente
+// (clients.hoc_migrated_at — SPMar/Chemtrade 17/10, MVV/Appian 21/11). Devolve
+// o filtro para .or() nas consultas de seals.
+async function filtroAutomacao(sb) {
+  const { data } = await sb.from('clients').select('id').not('hoc_migrated_at', 'is', null)
+  const ids = (data || []).map((c) => c.id)
+  return ids.length ? `hoc_process_id.is.null,client_id.in.(${ids.join(',')})` : 'hoc_process_id.is.null'
+}
+
+// Dos documentos informados, os exigidos por algum processo nas filas automáticas
+async function docsNaAutomacao(sb, docIds) {
+  const set = new Set(); const uniq = [...new Set(docIds)]
+  for (let i = 0; i < uniq.length; i += 500) {
+    const { data, error } = await sb.rpc('automation_doc_ids', { p_ids: uniq.slice(i, i + 500) })
+    if (error) throw new Error(`automation_doc_ids: ${error.message}`)
+    for (const r of data || []) set.add(typeof r === 'string' ? r : r.automation_doc_ids || Object.values(r)[0])
+  }
+  return set
+}
+
+// Seleção feita no banco (patch_146): documentos nas filas automáticas por
+// status/validade — sem o teto de 1.000 linhas do PostgREST
+async function docsDaAutomacao(sb, { statuses, from = null, to = null, before = null, types = null }) {
+  const { data, error } = await sb.rpc('automation_docs', { p_statuses: statuses, p_from: from, p_to: to, p_before: before, p_types: types })
+  if (error) throw new Error(`automation_docs: ${error.message}`)
+  return (data || []).map((r) => (typeof r === 'string' ? r : r.automation_docs || Object.values(r)[0]))
+}
+
+module.exports = { requiredDocsForSeal, flowRequiredDocs, mobilityPending, mobilityTodo, shortDocName, filtroAutomacao, docsNaAutomacao, docsDaAutomacao }

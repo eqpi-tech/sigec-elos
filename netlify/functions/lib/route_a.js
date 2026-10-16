@@ -5,7 +5,7 @@
 // Ligado só com ROUTE_A_ENABLED=true (staging); em produção fica inerte.
 
 const registry = require('./connectors/index.js')
-const { requiredDocsForSeal } = require('./required_docs.js')
+const { requiredDocsForSeal, filtroAutomacao } = require('./required_docs.js')
 
 // validade: 'fonte' = a data que a própria certidão informa; {anos|meses} =
 // contada da coleta (regra do cliente); null = sem regra do cliente — o
@@ -161,14 +161,14 @@ function custo(c, raw) {
 }
 
 // Enfileira a coleta para os processos abertos do ELOS de um fornecedor.
-// Chamado ao fim do cadastro. Processos do HOC nunca entram (CLAUDE.md §7.2).
+// Chamado ao fim do cadastro. Processo do HOC só de cliente já migrado (patch_146).
 async function enqueueRouteA(sb, supplierId) {
   if (!enabled()) return 0
   // trava de pagamento (patch_112): consulta paga só para processo LIBERADO
   // (pagamento confirmado ou subsidiado) — o webhook enfileira na liberação
   const { data: seals } = await sb.from('seals')
     .select('id, client_id, flow_id, status, hoc_process_id')
-    .eq('supplier_id', supplierId).eq('status', 'PENDING').is('hoc_process_id', null)
+    .eq('supplier_id', supplierId).eq('status', 'PENDING').or(await filtroAutomacao(sb))
     .not('released_at', 'is', null)
   let n = 0
   for (const seal of seals || []) {
