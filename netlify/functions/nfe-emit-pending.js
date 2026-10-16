@@ -31,34 +31,27 @@ const PARAMS = {
 }
 
 async function ibgePorCep(cep, municipio, uf) {
+  // 16/10: cada fonte com tempo-limite e tentativa própria — a BrasilAPI caiu
+  // (503/travada) e, num try único, o ViaCEP nem chegava a ser consultado
+  const get = async (url) => {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      return r.ok ? await r.json() : null
+    } catch { return null }
+  }
   const clean = String(cep || '').replace(/\D/g, '')
   if (clean.length === 8) {
-    try {
-      const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${clean}`)
-      if (r.ok) {
-        const d = await r.json()
-        if (d.city_ibge) return String(d.city_ibge)
-        // v2 pode não trazer ibge — tenta v1
-      }
-      const r1 = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
-      if (r1.ok) {
-        const d1 = await r1.json()
-        if (d1.ibge) return String(d1.ibge)
-      }
-    } catch { /* fallback abaixo */ }
+    const d = await get(`https://brasilapi.com.br/api/cep/v2/${clean}`)
+    if (d?.city_ibge) return String(d.city_ibge)
+    const d1 = await get(`https://viacep.com.br/ws/${clean}/json/`)
+    if (d1?.ibge) return String(d1.ibge)
   }
-  // fallback: IBGE por município/UF
-  try {
-    if (municipio && uf) {
-      const r = await fetch(`https://brasilapi.com.br/api/ibge/municipios/v1/${uf}`)
-      if (r.ok) {
-        const list = await r.json()
-        const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
-        const hit = (list || []).find(m => norm(m.nome) === norm(municipio))
-        if (hit?.codigo_ibge) return String(hit.codigo_ibge).slice(0, 7)
-      }
-    }
-  } catch { /* sem IBGE */ }
+  if (municipio && uf) {
+    const list = await get(`https://brasilapi.com.br/api/ibge/municipios/v1/${uf}`)
+    const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+    const hit = (list || []).find(m => norm(m.nome) === norm(municipio))
+    if (hit?.codigo_ibge) return String(hit.codigo_ibge).slice(0, 7)
+  }
   return null
 }
 
