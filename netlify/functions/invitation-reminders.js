@@ -105,7 +105,7 @@ exports.handler = async (event) => {
                       Concluir meu Cadastro →
                     </a>
                   </div>
-                  <p style="color:#9B9B9B;font-size:12px">Dúvidas? <a href="mailto:comercial@eqpitech.com.br" style="color:#2E3192">comercial@eqpitech.com.br</a></p>
+                  <p style="color:#9B9B9B;font-size:12px">Dúvidas sobre o cadastro? Suporte SIGEC-ELOS: <a href="mailto:suporte@eqpitech.com.br" style="color:#2E3192">suporte@eqpitech.com.br</a> · WhatsApp (11) 5039-6769</p>
                 </div>
                 <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">
                   EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br
