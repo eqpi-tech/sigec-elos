@@ -15,6 +15,9 @@ const ROUTE_A = {
   '37':    { connector: 'receita_cadastro', validade: { anos: 1 } },
   '62':    { connector: 'receita_simples',  validade: { anos: 1 } },
   '10001': { connector: 'sintegra',         validade: { anos: 1 } },
+  // Inscrição Estadual (16/10, Luiz): Sintegra da UF; se a fonte falhar fica com
+  // a EQPI — nunca é pedida ao fornecedor (DOCS_SO_EQPI, patch_148)
+  '15':    { connector: 'sintegra',         validade: { anos: 1 } },
   '42':    { connector: 'pgfn_cnd',         validade: 'fonte', positivaEfeitoNegativa: true },
   '7':     { connector: 'fgts_crf',         validade: 'fonte' },
   '8':     { connector: 'cndt',             validade: 'fonte', positivaEfeitoNegativa: true },
@@ -189,4 +192,7 @@ function connectorFor(docType) {
   return cfg ? registry[cfg.connector] : null
 }
 
-module.exports = { ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin }
+// obtidos pela EQPI e nunca pedidos ao fornecedor (mesma lista de doc_so_eqpi() no banco)
+const DOCS_SO_EQPI = ['15']
+
+module.exports = { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin }

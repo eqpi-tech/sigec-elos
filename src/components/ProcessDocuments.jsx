@@ -18,7 +18,10 @@ export const DOC_STATUS = {
   NOT_APPLICABLE: { bg:'#f8fafc', bd:'#e2e8f0', color:'#64748b', label:'Não se aplica' },
 }
 const OK = ['VALID', 'EXPIRING', 'NOT_APPLICABLE']
-const RESP_LABEL = { cliente: 'Responsabilidade do cliente', interna: 'Captado pela EQPI' }
+const RESP_LABEL = { cliente: 'Responsabilidade do cliente', interna: 'Captado pela EQPI', eqpi: 'Obtido pela EQPI' }
+// Documentos que a EQPI obtém e NUNCA pede ao fornecedor (patch_148 — Inscrição
+// Estadual pelo Sintegra; se a fonte falhar, fica com a equipe). Mesma lista de doc_so_eqpi()
+export const DOCS_SO_EQPI = ['15']
 
 // VALID que vence em até 30 dias aparece como "Vence em breve" (mesma regra das telas)
 export function effectiveStatus(item) {
@@ -48,7 +51,7 @@ export function DocRow({ item, ctx, renderActions, renderDetails, onView, canVie
         <div style={{ fontSize:12.5, fontWeight:600, color:'#1a1c5e', fontFamily:'DM Sans,sans-serif' }}>{item.name}</div>
         <div style={{ display:'flex', gap:6, marginTop:3, alignItems:'center', flexWrap:'wrap', fontFamily:'DM Sans,sans-serif' }}>
           <span style={pill(cfg)}>{cfg.label}</span>
-          {RESP_LABEL[item.responsibility] && (item.responsibility !== 'interna' || st !== 'MISSING') && <span style={{ fontSize:10, color:'#6b7280', background:'#f1f5f9', padding:'1px 7px', borderRadius:20 }}>{RESP_LABEL[item.responsibility]}</span>}
+          {RESP_LABEL[item.responsibility] && (item.responsibility !== 'interna' || (st !== 'MISSING' && d?.source !== 'MANUAL')) && <span style={{ fontSize:10, color:'#6b7280', background:'#f1f5f9', padding:'1px 7px', borderRadius:20 }}>{RESP_LABEL[item.responsibility]}</span>}
           {(item.auto_collect || d?.source === 'AUTO') && <span style={{ fontSize:10, color:'#2E3192', background:'#eef0ff', padding:'1px 7px', borderRadius:20 }}>⚡ Auto-coletado</span>}
           {d?.submitted_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>enviado {fmt(d.submitted_at)}</span>}
           {d?.expires_at && <span style={{ fontSize:10, color:'#9B9B9B' }}>validade {fmt(d.expires_at)}</span>}
