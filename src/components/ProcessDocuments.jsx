@@ -36,7 +36,7 @@ const fmt = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : null)
 const pill = (cfg) => ({ fontSize:10, fontWeight:700, color:cfg.color, background:`${cfg.color}18`, padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' })
 const sectionTitle = { fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, color:'#9B9B9B', textTransform:'uppercase', letterSpacing:.5, margin:'4px 0 8px' }
 
-export function DocRow({ item, ctx, renderActions, renderDetails, onView, canView }) {
+export function DocRow({ item, ctx, renderActions, renderDetails, onView, canView, onHistory }) {
   const st = effectiveStatus(item)
   const cfg = DOC_STATUS[st] || DOC_STATUS.MISSING
   const d = item.document
@@ -57,6 +57,7 @@ export function DocRow({ item, ctx, renderActions, renderDetails, onView, canVie
         {renderDetails?.(item, ctx)}
       </div>
       {canView && temArquivo && onView && <Button variant="neutral" size="sm" onClick={() => onView(d, item)}>👁 Ver</Button>}
+      {onHistory && d && <Button variant="neutral" size="sm" title="Histórico e versões do documento" onClick={() => onHistory(d, item)}>🕓</Button>}
       {renderActions?.(item, { ...ctx, status: st })}
     </div>
   )
@@ -96,7 +97,7 @@ export function ProcessDocsSummary({ totals, compact = false }) {
   )
 }
 
-function PostCard({ post, renderActions, renderDetails, renderPostFooter, renderPersonExtra, onView, canView, defaultOpen }) {
+function PostCard({ post, renderActions, renderDetails, renderPostFooter, renderPersonExtra, onView, canView, onHistory, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen)
   const slots = [...post.post_docs, ...post.people.flatMap(p => p.docs)]
   const ok = slots.filter(s => OK.includes(effectiveStatus(s))).length
@@ -123,7 +124,7 @@ function PostCard({ post, renderActions, renderDetails, renderPostFooter, render
         <div style={{ padding:'14px 16px', borderTop:'1px solid #f0f0f5' }}>
           {post.post_docs.length > 0 && <>
             <div style={sectionTitle}>Documentos do posto</div>
-            {post.post_docs.map(it => <DocRow key={it.key} item={it} ctx={{ post }} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView}/>)}
+            {post.post_docs.map(it => <DocRow key={it.key} item={it} ctx={{ post }} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView} onHistory={onHistory}/>)}
           </>}
           <div style={{ ...sectionTitle, marginTop:12 }}>Colaboradores ({post.people_count}/{post.qty_people})</div>
           {post.people_count < post.qty_people && (
@@ -143,7 +144,7 @@ function PostCard({ post, renderActions, renderDetails, renderPostFooter, render
                   </span>
                   {renderPersonExtra?.(pe, post)}
                 </div>
-                {pe.docs.map(it => <DocRow key={it.key} item={it} ctx={{ post, person: pe }} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView}/>)}
+                {pe.docs.map(it => <DocRow key={it.key} item={it} ctx={{ post, person: pe }} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView} onHistory={onHistory}/>)}
               </div>
             )
           })}
@@ -155,7 +156,7 @@ function PostCard({ post, renderActions, renderDetails, renderPostFooter, render
 }
 
 // data = retorno da RPC process_documents
-export default function ProcessDocuments({ data, renderActions, renderDetails, renderPostFooter, renderPersonExtra, onView, canView = true, showSummary = true, pjFilter }) {
+export default function ProcessDocuments({ data, renderActions, renderDetails, renderPostFooter, renderPersonExtra, onView, canView = true, showSummary = true, pjFilter, onHistory }) {
   if (!data) return null
   const pj = pjFilter ? data.pj.filter(pjFilter) : data.pj
   return (
@@ -163,11 +164,11 @@ export default function ProcessDocuments({ data, renderActions, renderDetails, r
       {showSummary && <ProcessDocsSummary totals={data.totals}/>}
       <div style={sectionTitle}>Documentos da empresa (PJ) · {pj.filter(i => !i.extra && OK.includes(effectiveStatus(i))).length}/{pj.filter(i => !i.extra).length} aprovados</div>
       {pj.length === 0 && <div style={{ fontSize:12.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>Nenhum documento exigido neste processo.</div>}
-      {pj.map(it => <DocRow key={it.key} item={it} ctx={{}} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView}/>)}
+      {pj.map(it => <DocRow key={it.key} item={it} ctx={{}} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView} onHistory={onHistory}/>)}
       {data.mobility.length > 0 && <>
         <div style={{ ...sectionTitle, marginTop:18 }}>👷 Mobilidade (PF) · {data.mobility.length} posto{data.mobility.length > 1 ? 's' : ''}{data.masked ? ' · dados pessoais mascarados' : ''}</div>
         {data.mobility.map(p => (
-          <PostCard key={p.post_id} post={p} renderActions={renderActions} renderDetails={renderDetails} renderPostFooter={renderPostFooter} renderPersonExtra={renderPersonExtra}
+          <PostCard key={p.post_id} post={p} renderActions={renderActions} renderDetails={renderDetails} onHistory={onHistory} renderPostFooter={renderPostFooter} renderPersonExtra={renderPersonExtra}
             onView={onView} canView={canView} defaultOpen={data.mobility.length === 1}/>
         ))}
       </>}

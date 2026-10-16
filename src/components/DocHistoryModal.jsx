@@ -3,6 +3,8 @@
 // pela fila de análise — antes existia só no processo (paridade 25/09).
 //
 // Props: doc ({ supplier_id, type, label }) · onClose()
+// 16/10 (patch_145): cada envio é uma VERSÃO com o arquivo guardado — "Ver
+// arquivo" abre o daquela versão (backoffice, fornecedor e cliente).
 import { useState, useEffect } from 'react'
 import { documentApi } from '../services/api.js'
 import { Button, Spinner } from './ui.jsx'
@@ -12,6 +14,12 @@ const EV_COLOR = { CREATED:'#64748b', UPLOADED:'#2E3192', APPROVED:'#22c55e', RE
 
 export default function DocHistoryModal({ doc, onClose }) {
   const [entries, setEntries] = useState(null)
+  const [abrindo, setAbrindo] = useState(null)
+  const verVersao = async (h) => {
+    setAbrindo(h.id)
+    try { await documentApi.viewVersion(h.id) } catch (e) { alert(e.message || 'Erro ao abrir arquivo') }
+    setAbrindo(null)
+  }
 
   useEffect(() => {
     let alive = true
@@ -36,20 +44,33 @@ export default function DocHistoryModal({ doc, onClose }) {
           <div style={{ display:'flex', justifyContent:'center', padding:30 }}><Spinner size={28}/></div>
         ) : entries.length === 0 ? (
           <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', padding:'16px 0' }}>
-            Sem eventos registrados. O histórico passa a ser gravado a partir do patch_029.
+            Sem eventos registrados para este documento.
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
-            {entries.map(h => (
+            {(() => {
+              // numera as versões (cada arquivo novo), da mais antiga para a atual
+              const chave = (h) => h.storage_path || (h.hoc_arquivo_id ? `hoc:${h.hoc_arquivo_id}` : null)
+              const asc = [...entries].reverse(); const versao = {}; let n = 0, ult = null
+              for (const h of asc) { const k = chave(h); if (k && k !== ult) { n++; versao[h.id] = n; ult = k } }
+              return entries.map(h => ({ ...h, _versao: versao[h.id], _temArquivo: !!chave(h) }))
+            })().map(h => (
               <div key={h.id} style={{ borderLeft:`3px solid ${EV_COLOR[h.event]||'#64748b'}`, background:'#f8f9fd', borderRadius:'0 8px 8px 0', padding:'8px 12px' }}>
                 <div style={{ display:'flex', alignItems:'baseline', gap:8, flexWrap:'wrap' }}>
                   <span style={{ fontSize:11, fontWeight:700, color:EV_COLOR[h.event]||'#64748b', fontFamily:'Montserrat,sans-serif' }}>
                     {EV_LABEL[h.event] || h.event}
                   </span>
+                  {h._versao && <span style={{ fontSize:10, fontWeight:700, color:'#2E3192', background:'#eef0ff', padding:'1px 7px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>Versão {h._versao}</span>}
                   <span style={{ flex:1 }}/>
                   <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(h.created_at).toLocaleString('pt-BR')}
                   </span>
+                  {h._versao && (
+                    <button onClick={() => verVersao(h)} disabled={abrindo === h.id}
+                      style={{ border:'1px solid #c7c9e2', background:'#fff', color:'#2E3192', borderRadius:8, padding:'2px 9px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'DM Sans,sans-serif' }}>
+                      {abrindo === h.id ? 'Abrindo…' : '👁 Ver arquivo'}
+                    </button>
+                  )}
                 </div>
                 <div style={{ fontSize:11.5, color:'#64748b', fontFamily:'DM Sans,sans-serif', marginTop:2 }}>
                   {h.expires_at ? `Validade: ${new Date(h.expires_at).toLocaleDateString('pt-BR')}` : 'Sem validade definida'}
