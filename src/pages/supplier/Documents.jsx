@@ -53,6 +53,14 @@ function DocLegend() {
 // Rótulos e cores iguais nas 3 visões (componente comum ProcessDocuments, 14/10)
 const STATUS_CONFIG = DOC_STATUS
 
+// 16/10 (caso LITUR): validade que já passou aparece como "Vencido" (com o botão
+// de envio), mesmo antes de a rotina diária gravar EXPIRED
+const statusEfetivo = (up) => {
+  const st = up?.status || 'MISSING'
+  if (['VALID', 'EXPIRING'].includes(st) && up?.expires_at && new Date(up.expires_at) < new Date(new Date().toDateString())) return 'EXPIRED'
+  return st
+}
+
 // Documento dispensado pelo backoffice conta como satisfeito (mesma regra do score)
 const isSatisfied = (up) => up?.status === 'VALID' || up?.status === 'NOT_APPLICABLE'
 // Status que aceitam envio do arquivo — EXPIRING também (o e-mail de vencimento
@@ -480,7 +488,7 @@ export default function SupplierDocuments() {
 
   const renderDocRow = (doc) => {
     const up      = getDoc(doc.id)
-    const status  = up?.status || 'MISSING'
+    const status  = statusEfetivo(up)
     const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
     const autoType   = AUTO_COLLECT[doc.id]      // 'INSTANT' | undefined
     // com a Rota A, 37 e 62 viram documentos da fonte oficial (e aceitam upload se a fonte falhar)
@@ -645,7 +653,7 @@ export default function SupplierDocuments() {
 
             const mobDocRow = (m, typeKey, label, personId, postId) => {
               const up  = uploaded.find(d => d.type === typeKey)
-              const status = up?.status || 'MISSING'
+              const status = statusEfetivo(up)
               const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
               const busy = uploading === typeKey
               const inputId = `mob-${typeKey}`
