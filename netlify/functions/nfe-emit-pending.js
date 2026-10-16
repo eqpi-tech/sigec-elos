@@ -55,6 +55,12 @@ async function ibgePorCep(cep, municipio, uf) {
   return null
 }
 
+// 16/10: a Prefeitura de São Paulo recusa caracteres fora do conjunto básico
+// (ex.: travessão "—", E1002). Troca os comuns e remove o resto (mantém acentos).
+const textoPrefeitura = (t) => String(t || '')
+  .replace(/[\u2013\u2014\u2212]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+  .replace(/\u2026/g, '...').replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '').replace(/\s+/g, ' ').trim()
+
 function mapearParaNfeIo(sup, inv, codigoIbge) {
   // CPF (11) ou CNPJ numérico/alfanumérico (14); CPF/CNPJ só dígitos seguem iguais
   const cleanCnpj = normalizeCnpj(sup.cnpj)
@@ -68,7 +74,7 @@ function mapearParaNfeIo(sup, inv, codigoIbge) {
   return {
     borrower: {
       type: cleanCnpj.length > 11 ? 'LegalEntity' : 'NaturalPerson',
-      name: sup.razao_social,
+      name: textoPrefeitura(sup.razao_social),
       // numérico segue Number (como sempre); alfanumérico não cabe em Number → string
       federalTaxNumber: /^\d+$/.test(cleanCnpj) ? Number(cleanCnpj) : cleanCnpj,
       municipalTaxNumber: isSaoPauloCapital ? (sup.inscricao_municipal || '') : '',
@@ -76,18 +82,18 @@ function mapearParaNfeIo(sup, inv, codigoIbge) {
       address: {
         country: 'BRA',
         postalCode: cep,
-        street: addr.logradouro || hocEnd.nome_logradouro || '',
+        street: textoPrefeitura(addr.logradouro || hocEnd.nome_logradouro || ''),
         number: addr.numero || hocEnd.numero_endereco || 'S/N',
         additionalInformation: addr.complemento || hocEnd.complemento || '',
-        district: addr.bairro || hocEnd.bairro || '',
+        district: textoPrefeitura(addr.bairro || hocEnd.bairro || ''),
         city: { code: codigoIbge || '', name: municipio },
         state: uf,
       },
     },
     cityServiceCode: PARAMS.codigoServico,
     nbsCode: PARAMS.codigoEcoserv,
-    description: inv.description ||
-      (process.env.NFE_DISCRIMINACAO || 'Serviço de Análise Cadastral — Assinatura SIGEC-ELOS'),
+    description: textoPrefeitura(inv.description ||
+      (process.env.NFE_DISCRIMINACAO || 'Serviço de Análise Cadastral - Assinatura SIGEC-ELOS')),
     servicesAmount: inv.amount_cents / 100,
     ibsCbs: {
       operationIndicator: PARAMS.cIndOp,
