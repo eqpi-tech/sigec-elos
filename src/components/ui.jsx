@@ -29,8 +29,9 @@ const BTN = {
 }
 const SIZES = { sm:{padding:'5px 12px',fontSize:11,borderRadius:8}, md:{padding:'10px 20px',fontSize:13,borderRadius:10}, lg:{padding:'13px 24px',fontSize:14,borderRadius:12} }
 
-export const Button = ({ variant='primary',children,onClick,full=false,size='md',style:s={},disabled=false,type='button' }) => (
-  <button type={type} onClick={onClick} disabled={disabled}
+// title/aria-label repassados (16/10): as dicas dos botões não apareciam
+export const Button = ({ variant='primary',children,onClick,full=false,size='md',style:s={},disabled=false,type='button',title,'aria-label':ariaLabel }) => (
+  <button type={type} onClick={onClick} disabled={disabled} title={title} aria-label={ariaLabel}
     style={{ ...BTN[variant],...SIZES[size],fontFamily:'Montserrat,sans-serif',fontWeight:700,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.6:1,width:full?'100%':'auto',display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6,transition:'all .15s',...s }}>
     {children}
   </button>
