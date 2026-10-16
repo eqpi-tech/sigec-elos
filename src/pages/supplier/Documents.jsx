@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { supplierApi, documentApi, categoriesApi, assertivaApi, mobilityApi, getRequiredTypesBySeal, routeAApi, ROUTE_A_ENABLED, processDocsApi } from '../../services/api.js'
-import { DOC_STATUS, ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
+import { DOC_STATUS, DOCS_SO_EQPI, ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { hasAction } from '../../lib/modules.js'
@@ -488,8 +488,12 @@ export default function SupplierDocuments() {
 
   const renderDocRow = (doc) => {
     const up      = getDoc(doc.id)
+    // patch_148: obtido pela EQPI (Inscrição Estadual) — o fornecedor não envia
+    const soEqpi  = DOCS_SO_EQPI.includes(String(doc.id))
     const status  = statusEfetivo(up)
-    const cfg     = STATUS_CONFIG[status] || STATUS_CONFIG.MISSING
+    const cfg     = soEqpi && ['MISSING', 'REJECTED', 'EXPIRED'].includes(status)
+      ? { bg:'#f8fafc', bd:'#e2e8f0', color:'#64748b', label:'Com a EQPI' }
+      : (STATUS_CONFIG[status] || STATUS_CONFIG.MISSING)
     const autoType   = AUTO_COLLECT[doc.id]      // 'INSTANT' | undefined
     // com a Rota A, 37 e 62 viram documentos da fonte oficial (e aceitam upload se a fonte falhar)
     const isInstant  = autoType === 'INSTANT' && !(ROUTE_A_ENABLED && [37, 62].includes(doc.id))
@@ -498,11 +502,11 @@ export default function SupplierDocuments() {
     const job        = autoJobs[String(doc.id)]
     const coletando  = job && ['queued','running','retry'].includes(job.status) && status === 'MISSING'
     const daFonte    = up?.metadata?.route === 'A'
-    const fonteFalhou = job?.status === 'fallback' && ['MISSING','REJECTED','EXPIRED'].includes(status)
+    const fonteFalhou = !soEqpi && job?.status === 'fallback' && ['MISSING','REJECTED','EXPIRED'].includes(status)
     const busy       = uploading === doc.id
     const busyCollect = collecting === doc.id
     // Inscrição Estadual / Municipal: aceita declaração de ISENÇÃO
-    const isIsentoEligible = ISENTO_KEYWORDS.some(kw => (doc.name||doc.label||'').toLowerCase().includes(kw))
+    const isIsentoEligible = !soEqpi && ISENTO_KEYWORDS.some(kw => (doc.name||doc.label||'').toLowerCase().includes(kw))
     const isIsentoMarked = up?.metadata?.isento === true
 
     return (
@@ -521,6 +525,9 @@ export default function SupplierDocuments() {
           {up?.review_note && <div style={{ fontSize:11,color:'#dc2626',marginTop:2 }}>⚠ {up.review_note}</div>}
           {coletando && (
             <div style={{ fontSize:10, color:'#0369a1', marginTop:2 }}>Estamos buscando este documento para você — não precisa enviar.</div>
+          )}
+          {soEqpi && !coletando && ['MISSING', 'REJECTED', 'EXPIRED'].includes(status) && (
+            <div style={{ fontSize:10, color:'#64748b', marginTop:2 }}>A equipe EQPI obtém este documento — você não precisa enviar.</div>
           )}
           {fonteFalhou && (
             <div style={{ fontSize:10, color:'#b45309', marginTop:2 }}>
@@ -608,7 +615,7 @@ export default function SupplierDocuments() {
             )}
             {/* Upload: MISSING/REJECTED/EXPIRED/EXPIRING + permissão de perfil (acao:enviar_documentos);
                 antes da fila também troca o já enviado (patch_145) */}
-            {(UPLOADABLE.includes(status) || canReplace(up, status)) && !hasAction(user, 'acao:enviar_documentos') ? (
+            {soEqpi ? null : (UPLOADABLE.includes(status) || canReplace(up, status)) && !hasAction(user, 'acao:enviar_documentos') ? (
               <span style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', whiteSpace:'nowrap' }} title="Seu perfil não permite enviar documentos">sem permissão</span>
             ) : (UPLOADABLE.includes(status) || canReplace(up, status)) ? (
               <>

@@ -15,6 +15,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const { requiredDocsForSeal, mobilityTodo, filtroAutomacao } = require('./lib/required_docs.js')
+const { DOCS_SO_EQPI } = require('./lib/route_a.js')
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -162,7 +163,8 @@ exports.handler = async (event) => {
       const { data: respRows } = await supabase.from('documents_catalog')
         .select('id, responsibility').in('id', reqTypes.map(Number).filter((n) => !isNaN(n)))
       const doCliente = new Set((respRows || []).filter((r) => r.responsibility === 'cliente').map((r) => String(r.id)))
-      const missingTypes = reqTypes.filter((t) => !okTypes.has(t) && !doCliente.has(t))
+      // obtido pela EQPI (Inscrição Estadual, patch_148) nunca é cobrado do fornecedor
+      const missingTypes = reqTypes.filter((t) => !okTypes.has(t) && !doCliente.has(t) && !DOCS_SO_EQPI.includes(String(t)))
 
       // questionário do cliente: perguntas obrigatórias sem resposta
       let questPending = false

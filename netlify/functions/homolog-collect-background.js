@@ -11,7 +11,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { downloadReceipt } = require('./lib/infosimples.js')
-const { ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin } = require('./lib/route_a.js')
+const { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin } = require('./lib/route_a.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const { isCnpjComplete, formatCnpj } = require('./lib/cnpj.js')
@@ -83,7 +83,10 @@ async function processar(job, catalogo, prefOverrides) {
     return { status: 'done', last_error: 'documento válido já existente — reaproveitado' }
   }
   // o fornecedor foi mais rápido e já enviou o arquivo: nunca sobrescrever
-  if (atual?.source === 'MANUAL' && atual.storage_path && ['PENDING', 'VALID', 'EXPIRING'].includes(atual.status)) {
+  // (exceto o obtido pela EQPI — patch_148: o fornecedor não devia ter enviado; o
+  // arquivo dele fica no histórico do documento)
+  if (atual?.source === 'MANUAL' && atual.storage_path && ['PENDING', 'VALID', 'EXPIRING'].includes(atual.status)
+      && !DOCS_SO_EQPI.includes(String(job.doc_type))) {
     return { status: 'done', last_error: 'enviado pelo fornecedor antes da coleta' }
   }
 

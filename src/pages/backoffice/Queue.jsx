@@ -604,7 +604,7 @@ export function BackofficeAnalysis() {
   // Fonte única quando há processo: exigidos do processo, sem os de
   // responsabilidade do CLIENTE (o interno não captado é cobrado — 14/10)
   const pendingDocs = procDocs
-    ? procDocs.pj.filter(i => !i.extra && i.responsibility !== 'cliente'
+    ? procDocs.pj.filter(i => !i.extra && !['cliente', 'eqpi'].includes(i.responsibility)   // eqpi: patch_148
         && ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(effectiveStatus(i)))
         .map(i => ({ label: i.name, status: effectiveStatus(i), review_note: i.document?.review_note }))
     : docsView.filter(d => ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING'].includes(d.status))
