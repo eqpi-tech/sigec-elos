@@ -54,6 +54,7 @@ export default function SupplierCertificate() {
           .from('supplier_categories')
           .select('categories(id, name, client_id)')
           .eq('supplier_id', supplierId)
+          .is('rejected_at', null)   // reprovada no processo não vai no certificado (patch_147)
         const cats = (catRows || [])
           .map(r => r.categories)
           .filter(c => c && (seal.client_id ? c.client_id === seal.client_id : !c.client_id))

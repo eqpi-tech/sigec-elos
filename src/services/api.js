@@ -798,7 +798,7 @@ export const adminApi = {
         .limit(1),
       // Busca categorias do fornecedor com nomes para exibição na ficha
       supabase.from('supplier_categories')
-        .select('category_id, categories(id, name, parent_id, codigo, client_id)')
+        .select('category_id, rejected_at, rejection_reason, categories(id, name, parent_id, codigo, client_id)')
         .eq('supplier_id', supplierId),
     ])
 
@@ -925,7 +925,8 @@ export const adminApi = {
     })
 
     let categories = catRes.status === 'fulfilled'
-      ? (catRes.value.data || []).map(r => r.categories).filter(Boolean)
+      ? (catRes.value.data || []).filter(r => r.categories)
+          .map(r => ({ ...r.categories, rejected_at: r.rejected_at, rejection_reason: r.rejection_reason }))   // patch_147
       : []
     // CNAE vinculado à categoria (item 8, 09/09): cópias por cliente não têm
     // código — resolve pela categoria GLOBAL homônima

@@ -1373,7 +1373,13 @@ export function BackofficeAnalysis() {
                       <div key={cat.id} style={{ width:'100%' }}>
                         <button onClick={() => setExpandedCat(isOpen ? null : cat.id)}
                           style={{ display:'flex',alignItems:'center',gap:6,background:isOpen?'rgba(46,49,146,.12)':'rgba(46,49,146,.06)',border:`1px solid ${isOpen?'#2E3192':'rgba(46,49,146,.15)'}`,borderRadius:isOpen?'10px 10px 0 0':20,padding:'4px 12px',cursor:'pointer',textAlign:'left' }}>
-                          <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:isOpen?'#2E3192':'#1a1c5e',fontWeight:600 }}>{cat.name}</span>
+                          <span style={{ fontSize:12,fontFamily:'DM Sans,sans-serif',color:isOpen?'#2E3192':'#1a1c5e',fontWeight:600,textDecoration:cat.rejected_at?'line-through':'none' }}>{cat.name}</span>
+                          {cat.rejected_at && (
+                            <span title={cat.rejection_reason || ''}
+                              style={{ fontSize:10,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#b91c1c',background:'#fee2e2',padding:'1px 8px',borderRadius:20,whiteSpace:'nowrap' }}>
+                              ✕ Reprovada (sem CNAE)
+                            </span>
+                          )}
                           {cat.codigo && (
                             <span title="CNAE vinculado à categoria (apoio à análise da Licença de Operação)"
                               style={{ fontSize:10,fontFamily:'Montserrat,sans-serif',fontWeight:700,color:'#7c3aed',background:'rgba(124,58,237,.08)',padding:'1px 8px',borderRadius:20,whiteSpace:'nowrap' }}>

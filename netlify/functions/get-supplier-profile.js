@@ -76,7 +76,7 @@ exports.handler = async (event) => {
         .maybeSingle(),
       supabase.from('supplier_categories')
         .select('category_id, categories(id, name, parent_id)')
-        .eq('supplier_id', id),
+        .eq('supplier_id', id).is('rejected_at', null),   // reprovada no processo (patch_147)
       // Quadro societário (migrado do HOC / backoffice / legado EQPI)
       supabase.from('supplier_partners')
         .select('nome, tipo, cargo, nacionalidade, participacao, cpf_cnpj, telefone')

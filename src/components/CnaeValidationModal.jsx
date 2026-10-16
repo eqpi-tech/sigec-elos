@@ -6,6 +6,8 @@
 // 16/10 (caso HAVI, 204 categorias): nome da categoria e descrição do CNAE por
 // inteiro, "repetir em todas" a partir do primeiro CNAE escolhido e gravação
 // em lote (uma por CNAE, não uma por categoria).
+// Regra do Luiz (16/10, patch_147): categoria SEM CNAE vinculado fica REPROVADA
+// dentro do processo — o processo segue; não se obriga a vincular todas.
 //
 // Props: supplierId · clientId (filtra categorias do processo; null = todas)
 //        onValidated() → segue para a aprovação do documento · onClose()
@@ -31,7 +33,7 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
       try {
         const [{ data: scRows }, { data: consult }] = await Promise.all([
           supabase.from('supplier_categories')
-            .select('category_id, cnae, categories(id, name, client_id)')
+            .select('category_id, cnae, rejected_at, categories(id, name, client_id)')
             .eq('supplier_id', supplierId),
           supabase.from('cnpj_consultations')
             .select('cnpj_data').eq('supplier_id', supplierId)
@@ -42,7 +44,7 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
         const all = (scRows || []).filter(r => r.categories)
         const doProcesso = clientId ? all.filter(r => r.categories.client_id === clientId) : all
         const lista = (doProcesso.length ? doProcesso : all)
-          .map(r => ({ id: r.category_id, name: r.categories.name, cnae: r.cnae || '' }))
+          .map(r => ({ id: r.category_id, name: r.categories.name, cnae: r.cnae || '', reprovada: !!r.rejected_at }))
         setCats(lista)
 
         const cd = consult?.cnpj_data || {}
@@ -64,18 +66,24 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
   const repetir = (substituir) => setCats(p => p.map(x => (substituir || !x.cnae) ? { ...x, cnae: ultimo } : x))
 
   async function confirmar() {
-    const faltam = cats.filter(c => !c.cnae)
-    if (faltam.length) { setError(`Vincule um CNAE a todas as categorias (faltam ${faltam.length}).`); return }
+    const semVinculo = cats.filter(c => !c.cnae)
+    if (semVinculo.length && !confirm(
+      `${semVinculo.length} de ${cats.length} categoria(s) sem CNAE ficarão REPROVADAS neste processo ` +
+      `(a atividade do fornecedor não cobre a categoria). O processo segue normalmente. Confirmar?`)) return
     setSaving(true); setError('')
     try {
       const { data: { user: adminUser } } = await supabase.auth.getUser()
-      const porCnae = new Map()
-      for (const c of cats) porCnae.set(c.cnae, [...(porCnae.get(c.cnae) || []), c.id])
-      for (const [cnae, ids] of porCnae) {
+      const agora = new Date().toISOString()
+      const grupos = new Map()   // uma gravação por CNAE (e uma para as reprovadas)
+      for (const c of cats) grupos.set(c.cnae, [...(grupos.get(c.cnae) || []), c.id])
+      for (const [cnae, ids] of grupos) {
+        const campos = cnae
+          ? { cnae, cnae_validated_at: agora, cnae_validated_by: adminUser?.id, rejected_at: null, rejected_by: null, rejection_reason: null }
+          : { cnae: null, cnae_validated_at: agora, cnae_validated_by: adminUser?.id, rejected_at: agora, rejected_by: adminUser?.id,
+              rejection_reason: 'Sem CNAE compatível — a atividade do fornecedor não cobre a categoria' }
         for (let i = 0; i < ids.length; i += 200) {
           const { error: upErr } = await supabase.from('supplier_categories')
-            .update({ cnae, cnae_validated_at: new Date().toISOString(), cnae_validated_by: adminUser?.id })
-            .eq('supplier_id', supplierId).in('category_id', ids.slice(i, i + 200))
+            .update(campos).eq('supplier_id', supplierId).in('category_id', ids.slice(i, i + 200))
           if (upErr) throw new Error(upErr.message)
         }
       }
@@ -102,6 +110,7 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
           {cats?.length > 0 && (
             <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap', marginTop:12, ...font, fontSize:12.5, color:'#475569' }}>
               <strong style={{ color: semCnae ? '#b45309' : '#15803d' }}>{vinculadas} de {cats.length} categorias vinculadas</strong>
+              {semCnae > 0 && <span style={{ color:'#dc2626' }}>{semCnae} sem CNAE → ficarão reprovadas no processo</span>}
               <label style={{ display:'flex', alignItems:'center', gap:5, cursor:'pointer' }}>
                 <input type="checkbox" checked={soPendentes} onChange={e => setSoPendentes(e.target.checked)}/> mostrar só as sem CNAE
               </label>
@@ -144,9 +153,13 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
                       <option key={op.code} value={op.code}>{op.main ? '★ ' : ''}{fmtCnae(op.code)} — {op.desc}</option>
                     ))}
                   </select>
-                  {o && (
+                  {o ? (
                     <div style={{ ...font, fontSize:11.5, color:'#475569', marginTop:4, lineHeight:1.35 }}>
                       {o.main ? '★ Principal' : 'Secundário'} · {fmtCnae(o.code)} — {o.desc}
+                    </div>
+                  ) : (
+                    <div style={{ ...font, fontSize:11.5, color:'#dc2626', marginTop:4 }}>
+                      {c.reprovada ? '✕ Reprovada no processo (sem CNAE compatível)' : 'Sem CNAE → fica reprovada no processo'}
                     </div>
                   )}
                 </div>
@@ -168,7 +181,7 @@ export default function CnaeValidationModal({ supplierId, clientId = null, onVal
           <div style={{ display:'flex', gap:8 }}>
             <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
             <Button variant="success" full disabled={saving || !cats?.length} onClick={confirmar}>
-              {saving ? '⏳ Salvando...' : '✓ Validar vínculos e aprovar CNAE'}
+              {saving ? '⏳ Salvando...' : semCnae ? `✓ Validar (${semCnae} reprovada${semCnae > 1 ? 's' : ''}) e aprovar CNAE` : '✓ Validar vínculos e aprovar CNAE'}
             </Button>
           </div>
         </div>

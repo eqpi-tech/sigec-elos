@@ -76,9 +76,9 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
   useEffect(() => {
     if (!seal?.id) return
     supabase.from('supplier_categories')
-      .select('category_id, categories!inner(id, name, client_id)')
+      .select('category_id, rejected_at, categories!inner(id, name, client_id)')
       .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
-      .then(({ data }) => setCats((data || []).map(r => r.categories)))
+      .then(({ data }) => setCats((data || []).map(r => ({ ...r.categories, rejected_at: r.rejected_at }))))
     supabase.from('supplier_category_approvals')
       .select('category_id, status, letter_name, approved_at, letter_valid_until, covered_docs')
       .eq('seal_id', seal.id)
@@ -132,7 +132,12 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
             return (
               <div key={cat.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, border:'1px solid #eef0f6' }}>
                 <span style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', flex:1 }}>{cat.name}</span>
-                {l?.status === 'EXCEPTION_APPROVED' && !trocar[cat.id] ? (
+                {cat.rejected_at ? (
+                  // patch_147: reprovada na validação do CNAE — carta de exceção não se aplica
+                  <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b91c1c', background:'#fee2e2', padding:'3px 10px', borderRadius:20 }}>
+                    ✕ Reprovada — a atividade (CNAE) do fornecedor não cobre a categoria
+                  </span>
+                ) : l?.status === 'EXCEPTION_APPROVED' && !trocar[cat.id] ? (
                   <span style={{ display:'flex', alignItems:'center', gap:6 }}>
                     <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>
                       ✓ Exceção vigente{l.letter_valid_until ? ` até ${fmt(l.letter_valid_until)}` : ''}

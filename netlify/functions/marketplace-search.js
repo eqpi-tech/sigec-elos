@@ -41,7 +41,7 @@ exports.handler = async (event) => {
         console.error('[marketplace-search] rpc categorias:', rpcErr.message)
         // fallback: comportamento antigo (só árvore global)
         const { data: catRows } = await supabase
-          .from('supplier_categories').select('supplier_id').in('category_id', categoryIds)
+          .from('supplier_categories').select('supplier_id').in('category_id', categoryIds).is('rejected_at', null)
         allowedSupplierIds = [...new Set((catRows || []).map(r => r.supplier_id))]
       } else {
         allowedSupplierIds = [...new Set((rpcRows || []).map(r => r.supplier_id))]
