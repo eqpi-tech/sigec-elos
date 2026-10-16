@@ -68,12 +68,12 @@ export default function SupplierDocuments() {
   // resumo de cada processo pela fonte única (patch_139): PJ + PF, mesmos números do cliente e do backoffice
   const [procByKey, setProcByKey] = useState({})
   // patch_145: documentos que NÃO aceitam novo arquivo agora (processo já na fila)
-  const [docLocks, setDocLocks] = useState(new Set())
+  const [docLocks, setDocLocks] = useState(null)   // null = ainda carregando (não oferece Substituir)
   const [histDoc, setHistDoc]   = useState(null)
   const loadLocks = () => supabase.rpc('supplier_doc_locks', { p_supplier: user.supplierId })
     .then(({ data }) => setDocLocks(new Set((data || []).map(String)))).catch(() => {})
   // antes da fila: troca qualquer documento já enviado (vira nova versão)
-  const canReplace = (up, status) => !!up && up.source !== 'AUTO' && ['PENDING', 'VALID'].includes(status) && !docLocks.has(String(up.type))
+  const canReplace = (up, status) => !!docLocks && !!up && up.source !== 'AUTO' && ['PENDING', 'VALID'].includes(status) && !docLocks.has(String(up.type))
   const groupsRef = useRef([])   // última lista de processos (o estado ainda não atualizou no fim do loadAll)
   const loadProcSummaries = async (groups) => {
     if (groups) groupsRef.current = groups
