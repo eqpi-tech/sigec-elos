@@ -63,6 +63,17 @@ export default function SupplierPayment() {
         </div>
       )}
 
+      {st.boletoHoc?.length > 0 && (
+        <div style={box('#eff6ff', '#bfdbfe')}>
+          <div style={{ fontFamily: M, fontWeight: 800, fontSize: 15, color: '#1d4ed8' }}>⏳ Boleto já emitido — aguardando compensação</div>
+          <div style={{ fontFamily: D, fontSize: 13.5, color: '#1e3a8a', margin: '6px 0 4px', lineHeight: 1.6 }}>
+            {st.boletoHoc.map(nomeProcesso).join(', ')}: o boleto foi emitido antes da mudança para o SIGEC-ELOS
+            {st.boletoHoc[0].hoc_boleto_due ? ` (vencimento ${new Date(st.boletoHoc[0].hoc_boleto_due + 'T12:00:00').toLocaleDateString('pt-BR')})` : ''}.
+            Não é preciso pagar de novo: assim que o pagamento for confirmado, o processo é liberado automaticamente.
+          </div>
+        </div>
+      )}
+
       {st.boleto ? (
         <div style={box('#eff6ff', '#bfdbfe')}>
           <div style={{ fontFamily: M, fontWeight: 800, fontSize: 15, color: '#1d4ed8' }}>⏳ Boleto emitido — aguardando compensação</div>
@@ -71,7 +82,7 @@ export default function SupplierPayment() {
           </div>
           <Button variant="neutral" disabled={verificando} onClick={carregar}>{verificando ? 'Verificando…' : '↻ Já paguei — verificar agora'}</Button>
         </div>
-      ) : (!st.released || st.pendentes.length > 0) && (
+      ) : (st.pendentes.length > 0 || (!st.released && !st.boletoHoc?.length)) && (
         <div style={box('#fff7ed', '#fed7aa')}>
           <div style={{ fontFamily: M, fontWeight: 800, fontSize: 15, color: '#c2410c' }}>💳 Falta confirmar o pagamento</div>
           <div style={{ fontFamily: D, fontSize: 13.5, color: '#9a3412', margin: '6px 0 10px', lineHeight: 1.6 }}>

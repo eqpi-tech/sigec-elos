@@ -249,9 +249,14 @@ async function resolveClientDeal({ inviteToken, refSlug, refFlowId, supplierId }
   }
   if (!clientId && supplierId) {
     const { data: seal } = await supabaseAdmin.from('seals')
-      .select('client_id, flow_id').eq('supplier_id', supplierId).not('client_id', 'is', null)
+      .select('client_id, flow_id, hoc_boleto_status, hoc_boleto_due').eq('supplier_id', supplierId).not('client_id', 'is', null)
       .eq('status', 'PENDING').is('released_at', null)
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    // boleto emitido no HOC antes da virada (patch_149): conferido todo dia — não cobra de novo
+    if (seal?.hoc_boleto_status === 'A_VENCER') {
+      return { clientId: seal.client_id, flowId: seal.flow_id || null, payer: 'supplier', price: null, clientName: 'Cliente',
+        erro: 'O boleto deste processo já foi emitido antes da mudança para o SIGEC-ELOS. Assim que o pagamento for confirmado, o processo é liberado automaticamente — não é preciso pagar de novo.' }
+    }
     if (seal?.client_id) {
       clientId = seal.client_id; flowId = seal.flow_id || null
       const { data: inv } = await supabaseAdmin.from('invitations').select('subsidiado')
