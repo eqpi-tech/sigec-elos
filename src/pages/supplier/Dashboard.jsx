@@ -328,7 +328,14 @@ export default function SupplierDashboard() {
                   <SealBadge seal={seal} size={mobile ? 'sm' : 'md'} showClient showScore />
                 </div>
                 {/* trava de pagamento (patch_112): processo sem pagamento confirmado */}
-                {seal.effStatus === 'PENDING' && !seal.released_at && !seal.hoc_process_id && (
+                {seal.effStatus === 'PENDING' && !seal.released_at && !seal.hoc_process_id && seal.hoc_boleto_status === 'A_VENCER' && (
+                  <span title="Boleto emitido antes da mudança para o SIGEC-ELOS — liberado automaticamente na compensação"
+                    style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:20, padding:'4px 12px',
+                      fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10.5, color:'#1d4ed8', whiteSpace:'nowrap' }}>
+                    ⏳ Boleto em compensação
+                  </span>
+                )}
+                {seal.effStatus === 'PENDING' && !seal.released_at && !seal.hoc_process_id && seal.hoc_boleto_status !== 'A_VENCER' && (
                   <button onClick={() => navigate('/fornecedor/pagamento')}
                     title="O processo começa depois da confirmação do pagamento"
                     style={{ display:'flex', alignItems:'center', gap:5, background:'#fff7ed',

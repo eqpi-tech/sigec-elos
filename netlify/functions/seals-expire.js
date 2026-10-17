@@ -7,7 +7,8 @@
 //    que estende a validade pelo webhook invoice.payment_succeeded);
 //  - plano avulso do Stripe (sem assinatura) vencido → CANCELED;
 //  - e-mail ao fornecedor: o selo venceu, renove o plano.
-// Processos espelhados do HOC ficam de fora: a validade deles vem do HOC.
+// Processos espelhados do HOC ficam de fora: a validade deles vem do HOC —
+// exceto os de cliente já migrado (patch_149), que vencem aqui sem e-mail.
 
 const { createClient } = require('@supabase/supabase-js')
 const { guardMail } = require('./lib/mail_guard.js')
@@ -68,6 +69,27 @@ exports.handler = async (event) => {
     }
     n++
   }
-  console.log(`[seals-expire] ${n} selo(s) vencido(s)`)
-  return { statusCode: 200, body: JSON.stringify({ vencidos: n }) }
+  // patch_149 (virada 17/10): selo homologado que veio do HOC de cliente JÁ
+  // MIGRADO — a sincronia não o vence mais; vence aqui na data de validade do
+  // HOC, SEM e-mail (não é plano do ELOS: "renove o plano" não se aplica)
+  let migrados = 0
+  const { data: cliMig } = await sb.from('clients').select('id').not('hoc_migrated_at', 'is', null)
+  const idsMig = (cliMig || []).map((c) => c.id)
+  if (idsMig.length) {
+    const hoje = new Date().toISOString().slice(0, 10)
+    const { data: vencHoc } = await sb.from('seals').select('id, supplier_id, seal_name, expires_at')
+      .eq('status', 'ACTIVE').not('hoc_process_id', 'is', null).in('client_id', idsMig)
+      .not('expires_at', 'is', null).lt('expires_at', hoje).limit(500)
+    for (const s of vencHoc || []) {
+      const { error: e2 } = await sb.from('seals').update({ status: 'EXPIRED' }).eq('id', s.id).eq('status', 'ACTIVE')
+      if (e2) { console.warn(`[seals-expire] HOC ${s.id}: ${e2.message}`); continue }
+      await sb.from('audit_log').insert({
+        action: 'SEAL_EXPIRED', entity_type: 'supplier', entity_id: s.supplier_id,
+        metadata: { seal_id: s.id, selo: s.seal_name, venceu_em: s.expires_at, auto: true, origem: 'HOC migrado' },
+      })
+      migrados++
+    }
+  }
+  console.log(`[seals-expire] ${n} selo(s) do ELOS e ${migrados} migrado(s) do HOC vencido(s)`)
+  return { statusCode: 200, body: JSON.stringify({ vencidos: n, migrados_hoc: migrados }) }
 }

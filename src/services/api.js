@@ -87,7 +87,7 @@ export const supplierApi = {
     // Queries separadas para evitar problema de RLS em joins embutidos
     const [supplierRes, sealsRes, plansRes, docsRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', supplierId).single(),
-      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, suspended_reason, rejection_reason, exception, released_at, hoc_process_id, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
+      supabase.from('seals').select('id, seal_name, level, status, score, issued_at, expires_at, client_id, client_suspended_at, client_suspended_reason, suspended_reason, rejection_reason, exception, released_at, hoc_process_id, hoc_boleto_status, hoc_boleto_due, clients(razao_social)').eq('supplier_id', supplierId).order('issued_at', { ascending: false }),
       supabase.from('plans').select('*').eq('supplier_id', supplierId),
       supabase.from('documents').select('*').eq('supplier_id', supplierId).order('created_at', { ascending: false }),
     ])
@@ -592,7 +592,7 @@ export const paymentsApi = {
   paymentStatus: async (supplierId) => {
     if (!supplierId) return { released: true, pendentes: [], boleto: false }
     const [{ data: seals }, { data: plan }, { count: preCount }] = await Promise.all([
-      supabase.from('seals').select('id, status, released_at, hoc_process_id, client_id, seal_name, clients(razao_social, nome_fantasia)').eq('supplier_id', supplierId),
+      supabase.from('seals').select('id, status, released_at, hoc_process_id, hoc_boleto_status, hoc_boleto_due, client_id, seal_name, clients(razao_social, nome_fantasia)').eq('supplier_id', supplierId),
       supabase.from('plans').select('status, type').eq('supplier_id', supplierId).maybeSingle(),
       // pré-cadastro (patch_126): sem processo, acesso limitado — não é "falta pagar"
       supabase.from('client_pre_registrations').select('id', { count: 'exact', head: true }).eq('supplier_id', supplierId),
@@ -601,7 +601,10 @@ export const paymentsApi = {
     return {
       released: lista.some(x => x.released_at),
       preCadastro: !lista.length && (preCount || 0) > 0,
-      pendentes: lista.filter(x => !x.released_at && x.status === 'PENDING'),
+      // boleto emitido no HOC antes da virada (patch_149): conferido todo dia
+      // no HOC — não pode ser pago de novo pelo ELOS enquanto não vence
+      pendentes: lista.filter(x => !x.released_at && x.status === 'PENDING' && x.hoc_boleto_status !== 'A_VENCER'),
+      boletoHoc: lista.filter(x => !x.released_at && x.hoc_boleto_status === 'A_VENCER'),
       boleto: plan?.status === 'PENDING',
       plan: plan || null,
     }

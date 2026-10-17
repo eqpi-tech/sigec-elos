@@ -15,7 +15,15 @@ Uso:
                             [--config hoc_migration_config.json]
 
 Entidades: clients, catalog, categories, category_documents, suppliers,
-           supplier_categories, seals, documents, hoc_log, invitations
+           supplier_categories, seals, documents, hoc_log, invitations,
+           boletos_migrados
+
+Cliente MIGRADO (clients.hoc_migrated_at, virada 17/10 — patch_149): o ELOS
+passa a ser o dono. A sincronia NÃO grava mais processos, categorias, matriz,
+vínculos fornecedor×categoria nem convites dele. Documentos e cadastro do
+fornecedor seguem (são do fornecedor, compartilhados com clientes ainda no HOC).
+boletos_migrados: confere todo dia no HOC (só leitura) o boleto emitido antes da
+virada — compensou → libera o processo no ELOS; venceu → libera o pagamento pelo ELOS.
 (details — sócios/bancários/balanços/questionários — roda semanal via
  migrate_hoc_v2.py --phase details, já idempotente.)
 """
@@ -34,7 +42,7 @@ from migrate_hoc_v2 import (
 
 ALL_ENTITIES = ["clients", "catalog", "categories", "category_documents",
                 "suppliers", "supplier_categories", "seals", "documents", "hoc_log",
-                "invitations"]
+                "invitations", "boletos_migrados"]
 
 # Primeira execução: tabelas GRANDES começam da data da migração v2;
 # as pequenas fazem passada completa (idempotente e barata)
@@ -78,6 +86,24 @@ def run_entity(sb, entity, fn, dry):
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
+
+def migrated_hoc_clients(sb):
+    """hoc_id dos clientes já migrados (o ELOS é o dono; a sincronia não grava)."""
+    return {c["hoc_id"] for c in fetch_all(sb, "clients", "hoc_id,hoc_migrated_at")
+            if c.get("hoc_id") and c.get("hoc_migrated_at")}
+
+
+def categories_of_hoc_clients(my, hoc_client_ids):
+    """ids ELOS (com offset) das categorias desses clientes do HOC."""
+    if not hoc_client_ids:
+        return set()
+    cur = my.cursor()
+    ph = ",".join(["%s"] * len(hoc_client_ids))
+    cur.execute(f"SELECT id FROM categoria WHERE id_cliente IN ({ph})", tuple(hoc_client_ids))
+    ids = {CAT_ID_OFFSET + r[0] for r in cur.fetchall()}
+    cur.close()
+    return ids
+
 
 def strip_none(d):
     """HOC manda quando TEM valor; None não sobrescreve o ELOS."""
@@ -133,7 +159,9 @@ def sync_clients(my, sb, dry):
         # espelha o ativo do HOC (patch_059) — False é valor válido, fora do strip_none
         rec["active"] = bool(row["ativo"])
         if dry: written += 1; continue
-        res = sb.table("clients").select("id").eq("hoc_id", row["id"]).execute()
+        res = sb.table("clients").select("id,hoc_migrated_at").eq("hoc_id", row["id"]).execute()
+        if res.data and res.data[0].get("hoc_migrated_at"):
+            continue   # cliente migrado: o ELOS é o dono do cadastro (patch_149)
         if res.data:
             sb.table("clients").update(rec).eq("id", res.data[0]["id"]).execute()
         elif row["ativo"]:
@@ -176,10 +204,12 @@ def sync_categories(my, sb, dry, wm):
     cur.execute("SELECT id FROM categoria")
     all_ids = {r["id"] for r in cur.fetchall()}
 
+    migrados = migrated_hoc_clients(sb)
+    cats_migrados = categories_of_hoc_clients(my, migrados)
     batch = []
     for row in rows:
         client_id = client_map.get(row["id_cliente"])
-        if not client_id:
+        if not client_id or row["id_cliente"] in migrados:   # cliente migrado: o ELOS é o dono
             continue
         pai = row["id_categoria_pai"]
         batch.append({
@@ -196,7 +226,8 @@ def sync_categories(my, sb, dry, wm):
     if not dry:
         elos = fetch_all(sb, "categories", "id,hoc_id,active")
         elos_client_hoc = {c["hoc_id"]: c for c in elos if c["hoc_id"] and c["id"] >= CAT_ID_OFFSET}
-        gone_ids = [elos_client_hoc[h]["id"] for h in elos_client_hoc if h not in all_ids and elos_client_hoc[h]["active"]]
+        gone_ids = [elos_client_hoc[h]["id"] for h in elos_client_hoc if h not in all_ids and elos_client_hoc[h]["active"]
+                    and elos_client_hoc[h]["id"] not in cats_migrados]
         for chunk in chunks(gone_ids, 200):
             sb.table("categories").update({"active": False}).in_("id", chunk).execute()
             deactivated += len(chunk)
@@ -215,12 +246,16 @@ def sync_category_documents(my, sb, dry, wm):
     cur = my.cursor(dictionary=True)
     cond = "AND (cd.update_date > %s OR cd.create_date > %s)" if wm else ""
     cur.execute(f"""SELECT cd.id_categoria, cd.id_documento, cd.desclassificatorio,
-            cd.update_date, cd.create_date
+            cd.update_date, cd.create_date, c.id_cliente
         FROM categoria_documento cd JOIN categoria c ON c.id = cd.id_categoria
         WHERE 1=1 {cond}""", (wm, wm) if wm else None)
     rows = cur.fetchall()
+    migrados = migrated_hoc_clients(sb)
+    cats_migrados = categories_of_hoc_clients(my, migrados)
     seen, batch = set(), []
     for lk in rows:
+        if lk["id_cliente"] in migrados:   # matriz de cliente migrado: o ELOS é o dono
+            continue
         key = (lk["id_categoria"], lk["id_documento"])
         if key in seen: continue
         seen.add(key)
@@ -239,7 +274,8 @@ def sync_category_documents(my, sb, dry, wm):
         hoc_keys = {(CAT_ID_OFFSET + a, b) for a, b in [(r["id_categoria"], r["id_documento"]) for r in cur.fetchall()]}
         elos = fetch_all(sb, "category_documents", "id,category_id,document_id,required")
         for e in elos:
-            if e["category_id"] >= CAT_ID_OFFSET and e["required"] and (e["category_id"], e["document_id"]) not in hoc_keys:
+            if e["category_id"] >= CAT_ID_OFFSET and e["required"] and (e["category_id"], e["document_id"]) not in hoc_keys \
+                    and e["category_id"] not in cats_migrados:
                 sb.table("category_documents").update({"required": False}).eq("id", e["id"]).execute()
                 removed += 1
     cur.close()
@@ -321,8 +357,10 @@ def sync_supplier_categories(my, sb, dry):
     elos = fetch_all(sb, "supplier_categories", "id,supplier_id,category_id")
     elos_keys = {(e["supplier_id"], e["category_id"]) for e in elos if e["category_id"] >= CAT_ID_OFFSET}
 
-    to_add = [{"supplier_id": a, "category_id": b} for a, b in hoc_keys - elos_keys]
-    to_del = list(elos_keys - hoc_keys)
+    # categorias de cliente migrado: o ELOS é o dono (CNAE, reprovação, escolhas)
+    cats_migrados = categories_of_hoc_clients(my, migrated_hoc_clients(sb))
+    to_add = [{"supplier_id": a, "category_id": b} for a, b in hoc_keys - elos_keys if b not in cats_migrados]
+    to_del = [k for k in elos_keys - hoc_keys if k[1] not in cats_migrados]
     if not dry:
         for chunk in chunks(to_add, 500):
             sb.table("supplier_categories").upsert(chunk, on_conflict="supplier_id,category_id").execute()
@@ -365,9 +403,12 @@ def sync_seals(my, sb, dry, wm):
 
     supplier_map = load_supplier_map_ordered(sb)
     client_map = load_client_map(sb)
+    migrados = migrated_hoc_clients(sb)
     read = len(pairs); written = 0
 
     for f_id, c_id in pairs:
+        if c_id in migrados:   # processo de cliente migrado: o ELOS é o dono (patch_149)
+            continue
         # Processo mais recente REAL do par (18/09): a data_validade do HOC é
         # gravada NA CRIAÇÃO (início+1 ano) e NÃO prova homologação — quem
         # decide é o resultado das categorias (classify_seal). Processo pago/
@@ -625,11 +666,14 @@ def sync_invitations(my, sb, dry):
     def iso(v):
         return v.isoformat() if v else None
 
+    migrados = migrated_hoc_clients(sb)
     alvo, sem_cliente = {}, 0
     for r in rows:
         cid = client_map.get(r["id_cliente"])
         if not cid:
             sem_cliente += 1
+            continue
+        if r["id_cliente"] in migrados:   # histórico já trazido até a virada
             continue
         criado = r["data_criacao"] or r["create_date"]
         st = r["status"]
@@ -683,6 +727,47 @@ def sync_invitations(my, sb, dry):
 
 # ── main ──────────────────────────────────────────────────────────────────
 
+def sync_boletos_migrados(my, sb, dry):
+    """Boleto emitido no HOC antes da virada (seals.hoc_boleto_status='A_VENCER').
+
+    Decisão do Luiz (17/10): conferir todo dia no HOC se houve pagamento.
+      pago no HOC          → processo liberado no ELOS (released_at = data do pagamento)
+      vencido há 5+ dias   → VENCIDO: o fornecedor passa a pagar pelo ELOS
+    (5 dias de tolerância para a compensação bancária). HOC só leitura.
+    """
+    rows = [r for r in fetch_all(sb, "seals", "id,hoc_origin_process_id,hoc_boleto_status,hoc_boleto_due,released_at")
+            if r.get("hoc_boleto_status") == "A_VENCER" and not r.get("released_at") and r.get("hoc_origin_process_id")]
+    if not rows:
+        return 0, 0, None, None
+    cur = my.cursor(dictionary=True)
+    hoje = _dt.date.today()
+    written = 0
+    for r in rows:
+        cur.execute("""SELECT p.boleto_pago, p.data_pagamento AS proc_pago,
+                              MAX(b.data_pagamento) AS pago_em, MAX(b.data_vencimento) AS vence
+                       FROM processo p LEFT JOIN boleto b ON b.id_processo = p.id
+                       WHERE p.id = %s GROUP BY p.id, p.boleto_pago, p.data_pagamento""", (r["hoc_origin_process_id"],))
+        h = cur.fetchone()
+        if not h:
+            continue
+        pago_em = h["pago_em"] or h["proc_pago"]
+        if h["boleto_pago"] or pago_em:
+            quando = (pago_em or datetime.now(timezone.utc))
+            upd = {"hoc_boleto_status": "PAGO", "released_at": quando.isoformat() if hasattr(quando, "isoformat") else str(quando)}
+            log.info(f"  boleto HOC compensado → processo liberado: seal {r['id']} (HOC {r['hoc_origin_process_id']})")
+        else:
+            vence = h["vence"].date() if hasattr(h["vence"], "date") else h["vence"]
+            if not vence or vence + _dt.timedelta(days=5) >= hoje:
+                continue
+            upd = {"hoc_boleto_status": "VENCIDO"}
+            log.info(f"  boleto HOC vencido em {vence} sem pagamento → paga pelo ELOS: seal {r['id']}")
+        if not dry:
+            sb.table("seals").update(upd).eq("id", r["id"]).execute()
+        written += 1
+    cur.close()
+    return len(rows), written, None, None
+
+
 def main():
     ap = argparse.ArgumentParser(description="Sync diário HOC → ELOS")
     ap.add_argument("--dry-run", action="store_true")
@@ -713,6 +798,7 @@ def main():
             "documents":           lambda: sync_documents(my, sb, args.dry_run, wm),
             "hoc_log":             lambda: sync_hoc_log(my, sb, args.dry_run, last_id),
             "invitations":         lambda: sync_invitations(my, sb, args.dry_run),
+            "boletos_migrados":    lambda: sync_boletos_migrados(my, sb, args.dry_run),
         }[entity]
         ok = run_entity(sb, entity, fn, args.dry_run) and ok
 

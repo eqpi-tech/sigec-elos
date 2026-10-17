@@ -184,10 +184,11 @@ async function mobilityTodo(sb, supplierId, clientId) {
 
 // Filas automáticas POR PROCESSO (regra do Luiz 16/10, patch_146): entra o
 // processo nascido no ELOS e o do HOC cujo cliente já foi migrado oficialmente
-// (clients.hoc_migrated_at — SPMar/Chemtrade 17/10, MVV/Appian 21/11). Devolve
+// (clients.hoc_migrated_at — onda A 17/10, onda B 21/11). Devolve
 // o filtro para .or() nas consultas de seals.
 async function filtroAutomacao(sb) {
-  const { data } = await sb.from('clients').select('id').not('hoc_migrated_at', 'is', null)
+  // cliente inativado (patch_149) fica como histórico, mesmo migrado
+  const { data } = await sb.from('clients').select('id').not('hoc_migrated_at', 'is', null).neq('active', false)
   const ids = (data || []).map((c) => c.id)
   return ids.length ? `hoc_process_id.is.null,client_id.in.(${ids.join(',')})` : 'hoc_process_id.is.null'
 }
