@@ -120,6 +120,8 @@ export default function ClientPortal() {
         if (error || !data) { setNotFound(true) }
         else {
           setClient(data)
+          // patch_150: cliente que não recebe novos cadastros → só o acesso de quem já tem conta
+          if (data.accepts_registrations === false) setActiveTab('login')
           // Pacotes = fluxos do cliente com preço NÃO subsidiado definido;
           // sem nenhum preço → mantém os planos padrão ELOS
           supabase.from('client_flows')
@@ -151,6 +153,7 @@ export default function ClientPortal() {
   }, [inviteToken])
 
   const handleRegister = () => {
+    if (fechado) return
     const raw = normalizeCnpj(cnpj)
     if (!isCnpjComplete(raw)) { alert('Informe um CNPJ válido com 14 caracteres.'); return }
     navigate(`/cadastro?cnpj=${raw}&ref=${slug}${chosenFlow ? `&flow=${chosenFlow}` : ''}${inviteToken ? `&token=${inviteToken}` : ''}`)
@@ -205,6 +208,7 @@ export default function ClientPortal() {
     return `rgba(${(n>>16)&0xff},${(n>>8)&0xff},${n&0xff},0.97)`
   })()
   const companyName = client.company_name
+  const fechado = client?.accepts_registrations === false   // patch_150: sem novos cadastros
   const font        = `'Outfit', sans-serif`
   const fontDisplay = `'Playfair Display', serif`
 
@@ -296,9 +300,9 @@ export default function ClientPortal() {
                 style={{ border: '1px solid rgba(255,255,255,0.3)', borderRadius: 10, padding: '9px 20px' }}>
                 Entrar
               </a>
-              <a href="#cadastro" className="btn-primary" style={{ padding: '10px 22px', fontSize: 13 }}>
+              {!fechado && <a href="#cadastro" className="btn-primary" style={{ padding: '10px 22px', fontSize: 13 }}>
                 Quero ser Fornecedor
-              </a>
+              </a>}
             </div>
           )}
           {mobile && (
@@ -361,10 +365,16 @@ export default function ClientPortal() {
 
             <p style={{ fontSize: mobile ? 16 : 18, color: 'rgba(255,255,255,0.65)',
               lineHeight: 1.7, maxWidth: 520, marginBottom: 32 }}>
+              {fechado ? (<>
+                Os processos de homologação da {companyName} agora ficam na plataforma{' '}
+                <strong style={{ color: 'rgba(255,255,255,0.85)' }}>SIGEC-ELOS</strong>.
+                Se a sua empresa já tem cadastro, acesse com o seu e-mail e senha.
+              </>) : (<>
               Cadastre-se na plataforma de pré-homologação{' '}
               <strong style={{ color: 'rgba(255,255,255,0.85)' }}>SIGEC-ELOS</strong>,
               valide sua documentação e torne-se visível para oportunidades de negócio
               com a {companyName}.
+              </>)}
             </p>
 
             {client.badges?.length > 0 && (
@@ -380,7 +390,7 @@ export default function ClientPortal() {
             )}
 
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <a href="#cadastro" className="btn-primary">Iniciar Cadastro</a>
+              <a href="#cadastro" className="btn-primary">{fechado ? 'Acessar Plataforma' : 'Iniciar Cadastro'}</a>
               <a href="#sobre" className="btn-outline">Saiba Mais</a>
             </div>
           </div>
@@ -392,12 +402,12 @@ export default function ClientPortal() {
             padding: 0, overflow: 'hidden',
           }}>
             <div style={{ display: 'flex' }}>
-              <button className="tab-btn" onClick={() => setActiveTab('register')}
+              {!fechado && <button className="tab-btn" onClick={() => setActiveTab('register')}
                 style={{ flex: 1, borderRadius: 0,
                   background: activeTab === 'register' ? accent : 'rgba(255,255,255,0.04)',
                   color: activeTab === 'register' ? '#fff' : 'rgba(255,255,255,0.5)' }}>
                 Quero ser Fornecedor
-              </button>
+              </button>}
               <button className="tab-btn" onClick={() => setActiveTab('login')}
                 style={{ flex: 1, borderRadius: 0,
                   background: activeTab === 'login' ? secondary : 'rgba(255,255,255,0.04)',
@@ -407,7 +417,7 @@ export default function ClientPortal() {
             </div>
 
             <div style={{ padding: '32px 28px' }}>
-              {activeTab === 'register' ? (
+              {activeTab === 'register' && !fechado ? (
                 <>
                   <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 20, lineHeight: 1.6 }}>
                     Informe o CNPJ da sua empresa para iniciar o processo de pré-homologação
@@ -440,7 +450,9 @@ export default function ClientPortal() {
               ) : (
                 <>
                   <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 20, lineHeight: 1.6 }}>
-                    Acesse sua área restrita e mantenha seus documentos atualizados.
+                    {fechado
+                      ? <>A {companyName} não recebe novos cadastros. Quem já tem cadastro acessa a área restrita com o seu e-mail e senha.</>
+                      : 'Acesse sua área restrita e mantenha seus documentos atualizados.'}
                   </p>
                   <button className="btn-primary" onClick={handleLogin}
                     style={{ width: '100%', padding: '16px' }}>
@@ -523,7 +535,7 @@ export default function ClientPortal() {
       </Section>
 
       {/* ═══ COMO FUNCIONA ═══ */}
-      <Section id="processo" dark style={{ background: secondaryDark }}>
+      {!fechado && <Section id="processo" dark style={{ background: secondaryDark }}>
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
           <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: accent, textTransform: 'uppercase' }}>
             Como funciona
@@ -552,8 +564,9 @@ export default function ClientPortal() {
         </div>
       </Section>
 
+      }
       {/* ═══ PLANOS ═══ */}
-      <Section id="planos" style={{ background: '#F7F8FA' }}>
+      {!fechado && <Section id="planos" style={{ background: '#F7F8FA' }}>
         <div style={{ textAlign: 'center', marginBottom: 56 }}>
           <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: accent, textTransform: 'uppercase' }}>
             Licenças SIGEC-ELOS
@@ -630,6 +643,7 @@ export default function ClientPortal() {
         </p>
       </Section>
 
+      }
       {/* ═══ TRUST BAR ═══ */}
       <Section style={{ padding: '48px 24px', background: '#fff', borderTop: '1px solid #E4E7EC' }}>
         <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row',
@@ -659,7 +673,7 @@ export default function ClientPortal() {
       </Section>
 
       {/* ═══ CTA FINAL ═══ */}
-      <Section dark style={{ background: `linear-gradient(135deg, ${secondaryDark}, ${secondary})`, textAlign: 'center', padding: '80px 24px' }}>
+      {!fechado && <Section dark style={{ background: `linear-gradient(135deg, ${secondaryDark}, ${secondary})`, textAlign: 'center', padding: '80px 24px' }}>
         <h2 style={{ fontFamily: fontDisplay, fontSize: mobile ? 28 : 40,
           fontWeight: 700, color: '#fff', marginBottom: 16 }}>
           Pronto para ser fornecedor da {companyName}?
@@ -685,6 +699,7 @@ export default function ClientPortal() {
         </div>
       </Section>
 
+      }
       {/* ═══ FOOTER ═══ */}
       <footer style={{ background: secondaryDark, padding: '40px 24px', textAlign: 'center',
         borderTop: '1px solid rgba(255,255,255,0.05)' }}>

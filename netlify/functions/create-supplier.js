@@ -505,12 +505,16 @@ exports.handler = async (event) => {
     let preClientName = null
     if (ref_slug) {
       try {
-        const { data: lp } = await supabaseAdmin
+        const { data: lpRow } = await supabaseAdmin
           .from('client_landing_pages')
-          .select('client_id')
+          .select('client_id, accepts_registrations')
           .eq('slug', ref_slug)
           .eq('is_active', true)
           .single()
+        // patch_150: portal sem novos cadastros (cliente inativado) não cria
+        // vínculo, convite nem processo — o fornecedor fica só com o próprio cadastro
+        const lp = lpRow?.accepts_registrations === false ? null : lpRow
+        if (lpRow && !lp) console.log(`⛔ portal "${ref_slug}" sem novos cadastros — vínculo com o cliente não criado`)
 
         // já entrou por convite deste cliente (token ou e-mail/CNPJ): o vínculo
         // existe — não cria um 2º convite "espontâneo" nem troca o fluxo
