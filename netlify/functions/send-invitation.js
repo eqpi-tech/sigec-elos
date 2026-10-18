@@ -44,7 +44,10 @@ async function handleBuyerInvitation(body, h) {
   }
   let resolvedFlowId = null
   if (clientId) {
-    const { data: cl } = await supabaseAdmin.from('clients').select('razao_social').eq('id', clientId).maybeSingle()
+    const { data: cl } = await supabaseAdmin.from('clients').select('razao_social, active').eq('id', clientId).maybeSingle()
+    // cliente inativado (ex.: migrado só como histórico, patch_150) não convida
+    if (cl?.active === false)
+      return { statusCode: 403, headers: h, body: JSON.stringify({ error: 'Este cliente está inativo na plataforma e não envia convites.' }) }
     if (cl?.razao_social) senderName = cl.razao_social
     // Fluxo do convite: o informado (validado) ou o padrão do cliente
     if (flowId) {
@@ -174,7 +177,9 @@ async function handleClientInvitation(body, callerUser, h) {
   // Busca nome do convidante
   let senderName = callerUser.email
   if (client_id) {
-    const { data: client } = await supabaseAdmin.from('clients').select('razao_social').eq('id', client_id).maybeSingle()
+    const { data: client } = await supabaseAdmin.from('clients').select('razao_social, active').eq('id', client_id).maybeSingle()
+    if (client?.active === false)   // cliente inativado não convida (patch_150)
+      return { statusCode: 403, headers: h, body: JSON.stringify({ error: 'Este cliente está inativo na plataforma e não envia convites.' }) }
     if (client) senderName = client.razao_social
   } else if (buyer_id) {
     const { data: buyer } = await supabaseAdmin.from('buyers').select('razao_social').eq('id', buyer_id).maybeSingle()
