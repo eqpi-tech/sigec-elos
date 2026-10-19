@@ -100,7 +100,7 @@ function SubscriptionsTab({ data }) {
         <Button variant="neutral" size="sm" onClick={() => downloadXlsx('assinaturas_elos.xlsx', 'Assinaturas',
           ['Fornecedor','CNPJ','Plano','Status','Pagamento','Valor','Pago em','Repasse Stripe (prev.)','Início','Fim','NFSe'],
           stripePlans.map(p => [p.supplier?.razao_social, p.supplier?.cnpj, planLabel(p.type) || p.type, p.status,
-            p.paidFlag ? 'Pago' : 'Cupom/Trial', p.price_yearly ?? '', fmtD(p.paidAt), fmtD(p.repasseAt),
+            p.paidFlag ? 'Pago' : p.status === 'PENDING' ? 'Aguardando pagamento' : 'Cupom/Trial', p.price_yearly ?? '', fmtD(p.paidAt), fmtD(p.repasseAt),
             fmtD(p.starts_at), fmtD(p.ends_at), p.nfse || '']))}>
           ⬇️ Excel
         </Button>
@@ -131,7 +131,9 @@ function SubscriptionsTab({ data }) {
                     </td>
                     <td style={{ padding:'10px' }}>{p.paidFlag
                       ? <span style={{ color:'#15803d', fontWeight:700 }}>💳 Pago</span>
-                      : <span style={{ color:'#92400e', fontWeight:700 }}>🎟️ Cupom/Trial</span>}</td>
+                      : p.status === 'PENDING'
+                        ? <span style={{ color:'#1d4ed8', fontWeight:700 }}>⏳ Aguardando pagamento</span>
+                        : <span style={{ color:'#92400e', fontWeight:700 }}>🎟️ Cupom/Trial</span>}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtBRL(p.price_yearly)}{p.type?.includes('mensal') ? '/mês' : '/ano'}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtD(p.paidAt)}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }} title="Previsão: pagamento + 3 dias úteis">{fmtD(p.repasseAt)}</td>
@@ -148,7 +150,7 @@ function SubscriptionsTab({ data }) {
         </div>
       )}
       <div style={{ ...font, fontSize:11.5, color:'#9B9B9B', marginTop:12 }}>
-        Cupom/Trial = assinatura ativa sem fatura Stripe paga (ex.: FREETRIALELOS). Ao virar a cobrança, passa a "Pago" automaticamente via webhook.
+        Cupom/Trial = assinatura ativa sem fatura Stripe paga (ex.: FREETRIALELOS). Aguardando pagamento = boleto emitido e ainda não compensado. Os dois passam a "Pago" automaticamente via webhook quando o pagamento é confirmado.
       </div>
     </Card>
   )

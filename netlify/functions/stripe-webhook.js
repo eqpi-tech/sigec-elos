@@ -258,7 +258,14 @@ exports.handler = async (event) => {
       const invoice = data.object
       try {
         // resolve o fornecedor via assinatura → plans.stripe_sub_id
-        const subId = invoice.subscription
+        // 19/10: nas versões novas da API do Stripe a assinatura saiu de
+        // invoice.subscription e foi para invoice.parent.subscription_details —
+        // sem isto a nota ficava sem fornecedor e a renovação não estendia o selo
+        const subRef = invoice.subscription
+          || invoice.parent?.subscription_details?.subscription
+          || invoice.lines?.data?.[0]?.parent?.subscription_item_details?.subscription
+          || null
+        const subId = typeof subRef === 'string' ? subRef : subRef?.id || null
         let supplierId = null, planType = null
         if (subId) {
           const { data: plan } = await supabase
@@ -273,6 +280,15 @@ exports.handler = async (event) => {
             planType   = planType || ss.data?.[0]?.metadata?.planType || null
           }
         }
+        // último recurso: o cliente do Stripe já gravado no plano
+        if (!supplierId && invoice.customer) {
+          const cus = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer.id
+          const { data: pc } = await supabase.from('plans').select('supplier_id, type')
+            .eq('stripe_customer_id', cus).order('created_at', { ascending: false }).limit(1).maybeSingle()
+          supplierId = pc?.supplier_id || null
+          planType   = planType || pc?.type || null
+        }
+        if (!supplierId) console.error('[invoice] fornecedor não identificado:', invoice.id, subId)
         const amount = invoice.amount_paid ?? 0
         const desc   = `Serviço de Análise Cadastral — Assinatura SIGEC-ELOS${planType ? ` (${planType})` : ''}`
         const { error: qErr } = await supabase.from('nfe_invoices').upsert({
