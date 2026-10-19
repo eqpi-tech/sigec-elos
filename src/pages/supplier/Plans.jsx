@@ -172,7 +172,7 @@ export default function SupplierPlans() {
 
 
       <div style={{ textAlign:'center', marginTop:16, fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
-        🔒 Pagamento seguro via <strong style={{ color:'#1a1c5e' }}>Stripe</strong> · Boleto, PIX e Cartão em até 12x · Cancele quando quiser
+        🔒 Pagamento seguro via <strong style={{ color:'#1a1c5e' }}>Stripe</strong> · Boleto e Cartão em até 12x · Cancele quando quiser
       </div>
     </div>
   )
