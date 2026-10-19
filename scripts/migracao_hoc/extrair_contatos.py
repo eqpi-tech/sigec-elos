@@ -3,7 +3,9 @@ hoc_migration_contacts (patch_134). Critério (decisão do Luiz, 13/10/2026):
   - usuários de CLIENTE ativos dos 4 clientes;
   - usuários de FORNECEDOR ativos com processo vigente ou aberto há < 1 ano
     (sem pré-cadastro/arquivado) com um dos 4 clientes;
-  - fora: e-mails devolvidos (emails_bounced), status_envio_email = 0, e-mail inválido.
+  - fora: e-mails devolvidos (emails_bounced), status_envio_email = 0, e-mail inválido;
+  - domínio exclusivo de um cliente (app_settings 'dominio_exclusivo_cliente', patch_152):
+    usuário de cliente com esse e-mail só entra no(s) cliente(s) permitido(s).
 Uso: arch -x86_64 python3.12 scripts/migracao_hoc/extrair_contatos.py [--dry-run]
 """
 import json, re, sys, os, csv, subprocess
@@ -62,6 +64,13 @@ if '--dry-run' in sys.argv: sys.exit(0)
 db = [l.split('=', 1)[1].strip().strip('"') for l in open(os.path.join(ROOT, '.env')) if l.startswith('SUPABASE_DB_URL=')][0]
 sql = f"""CREATE TEMP TABLE t (email text, nome text, tipo text, hoc_user_ids int[], hoc_client_ids int[], clientes text[], supplier_hoc_ids int[], hoc_group_id text);
 \\copy t FROM '{out}' csv
+-- domínio exclusivo de um cliente (patch_152, 19/10): usuário de cliente com
+-- esse e-mail só entra na migração do(s) cliente(s) permitido(s)
+UPDATE t SET clientes = array(SELECT n FROM unnest(t.hoc_client_ids, t.clientes) u(i, n) WHERE i = ANY (r.ok)),
+             hoc_client_ids = array(SELECT i FROM unnest(t.hoc_client_ids) i WHERE i = ANY (r.ok))
+  FROM (SELECT d.key dom, array(SELECT c.hoc_id FROM clients c WHERE c.id::text IN (SELECT jsonb_array_elements_text(d.value))) ok
+          FROM app_settings s, jsonb_each(s.value) d WHERE s.key = 'dominio_exclusivo_cliente') r
+ WHERE t.tipo = 'CLIENT' AND lower(split_part(t.email, '@', 2)) = lower(r.dom);
 INSERT INTO hoc_migration_contacts (email, nome, tipo, hoc_user_ids, hoc_client_ids, clientes, supplier_hoc_ids, hoc_group_id)
 SELECT email, nome, tipo, hoc_user_ids, hoc_client_ids, clientes, supplier_hoc_ids, nullif(hoc_group_id,'')::int FROM t
 ON CONFLICT (email) DO UPDATE SET nome = excluded.nome, tipo = excluded.tipo, hoc_user_ids = excluded.hoc_user_ids,
