@@ -184,9 +184,12 @@ exports.handler = async (event) => {
         const { error: dErr } = await supabaseAdmin.auth.admin.mfa.deleteFactor({ id: f.id, userId })
         if (dErr) throw new Error(dErr.message)
       }
+      // navegadores lembrados (patch_151) deixam de valer junto com o reset
+      const { data: revog } = await supabaseAdmin.from('mfa_trusted_devices')
+        .update({ revoked_at: new Date().toISOString() }).eq('user_id', userId).is('revoked_at', null).select('id')
       await supabaseAdmin.from('audit_log').insert({
         user_id: caller.id, action: 'MFA_RESET', entity_type: 'user', entity_id: userId,
-        metadata: { factors_removidos: (fData?.factors || []).length },
+        metadata: { factors_removidos: (fData?.factors || []).length, navegadores_revogados: (revog || []).length },
       })
       return { statusCode:200, headers, body: JSON.stringify({ success:true, removed: (fData?.factors || []).length }) }
     }
