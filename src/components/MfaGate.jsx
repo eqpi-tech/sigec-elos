@@ -8,12 +8,19 @@
 // · com fator, sessão AAL1 → tela de desafio (código de 6 dígitos)
 // · sessão AAL2           → passa direto
 // Perdeu o aparelho: um ADMIN reseta em Backoffice → Usuários.
+// Lembrar o navegador (patch_151, 19/10): depois do código válido o servidor
+// registra este navegador como confiável — backoffice por 30 dias (se marcar a
+// opção), fornecedor/cliente/comprador por 24 horas. Nesse prazo um novo login
+// neste navegador não pede o código. O reset da verificação revoga tudo.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button, Card, Spinner } from './ui.jsx'
 
 const GRACE_DAYS = 30
+const trustKey = (uid) => `elos_mfa_trust:${uid}`
+const lerConfianca = (uid) => { try { return localStorage.getItem(trustKey(uid)) } catch { return null } }
+const gravarConfianca = (uid, t) => { try { t ? localStorage.setItem(trustKey(uid), t) : localStorage.removeItem(trustKey(uid)) } catch { /* noop */ } }
 // pulou nesta sessão? não pergunta de novo a cada navegação
 let skippedThisSession = false
 
@@ -33,6 +40,8 @@ export default function MfaGate({ children }) {
   const [code, setCode]     = useState('')
   const [busy, setBusy]     = useState(false)
   const [error, setError]   = useState('')
+  const [lembrar, setLembrar] = useState(false)    // backoffice: lembrar por 30 dias
+  const isAdmin = user?.role === 'ADMIN'
   // undefined = obrigatório desde já (ADMIN) · 0 = carência vencida · >0 = dias restantes
   const [graceDaysLeft, setGraceDaysLeft] = useState(undefined)
 
@@ -45,7 +54,16 @@ export default function MfaGate({ children }) {
         // já tem fator verificado — precisa do código (carência não se aplica)
         const { data: f } = await supabase.auth.mfa.listFactors()
         const totp = (f?.totp || [])[0]
-        if (totp) { setFactorId(totp.id); setState('challenge'); return }
+        if (totp) {
+          // navegador lembrado (patch_151): o servidor confere o token e o prazo
+          const t = lerConfianca(user?.id)
+          if (t) {
+            const { data: ok } = await supabase.rpc('mfa_device_trusted', { p_token: t })
+            if (ok) { setState('ok'); return }
+            gravarConfianca(user?.id, null)
+          }
+          setFactorId(totp.id); setState('challenge'); return
+        }
       }
       // sem fator: carência de 30 dias do 1º acesso — ADMIN não tem
       if (user?.role !== 'ADMIN') {
@@ -91,6 +109,11 @@ export default function MfaGate({ children }) {
     try {
       const { error: err } = await supabase.auth.mfa.challengeAndVerify({ factorId: fId, code: code.trim() })
       if (err) throw err
+      // lembrar este navegador: backoffice só se marcou; demais perfis por 24h
+      try {
+        const { data: conf } = await supabase.rpc('mfa_trust_device', { p_remember: isAdmin ? lembrar : true, p_user_agent: navigator.userAgent })
+        gravarConfianca(user?.id, conf?.token || null)
+      } catch (e2) { console.warn('[mfa] lembrar navegador:', e2.message) }
       setCode(''); setEnroll(null)
       setState('ok')
     } catch (e) {
@@ -123,6 +146,16 @@ export default function MfaGate({ children }) {
               onKeyDown={e => { if (e.key === 'Enter') confirmCode(factorId) }}
               placeholder="000000" style={codeInput}/>
             {error && <div style={{ ...font, fontSize:12, color:'#dc2626', marginTop:8 }}>{error}</div>}
+            {isAdmin ? (
+              <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:12, cursor:'pointer', ...font, fontSize:13, color:'#475569' }}>
+                <input id="mfa-lembrar" type="checkbox" checked={lembrar} onChange={e => setLembrar(e.target.checked)}/>
+                Lembrar este navegador por 30 dias
+              </label>
+            ) : (
+              <div style={{ ...font, fontSize:11.5, color:'#9B9B9B', marginTop:10 }}>
+                Este navegador fica lembrado por 24 horas: um novo login nesse prazo não pede o código.
+              </div>
+            )}
             <div style={{ marginTop:16 }}>
               <Button variant="orange" full disabled={busy || code.length < 6} onClick={() => confirmCode(factorId)}>
                 {busy ? <Spinner size={16}/> : 'Verificar'}
@@ -140,7 +173,7 @@ export default function MfaGate({ children }) {
               (Google Authenticator, Microsoft Authenticator, Authy...).
             </div>
             <div style={{ ...font, fontSize:12, color:'#9B9B9B', marginBottom:18 }}>
-              Leva menos de um minuto e é pedido uma única vez por aparelho de confiança.
+              Leva menos de um minuto. Depois, o código é pedido no login{isAdmin ? ' (ou a cada 30 dias, se você pedir para lembrar o navegador)' : ', no máximo uma vez a cada 24 horas por navegador'}.
             </div>
             {error && <div style={{ ...font, fontSize:12, color:'#dc2626', marginBottom:10 }}>{error}</div>}
             <Button variant="orange" full disabled={busy} onClick={startEnroll}>
@@ -174,6 +207,16 @@ export default function MfaGate({ children }) {
               onKeyDown={e => { if (e.key === 'Enter') confirmCode(enroll.id) }}
               placeholder="000000" style={codeInput}/>
             {error && <div style={{ ...font, fontSize:12, color:'#dc2626', marginTop:8 }}>{error}</div>}
+            {isAdmin ? (
+              <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:12, cursor:'pointer', ...font, fontSize:13, color:'#475569' }}>
+                <input id="mfa-lembrar" type="checkbox" checked={lembrar} onChange={e => setLembrar(e.target.checked)}/>
+                Lembrar este navegador por 30 dias
+              </label>
+            ) : (
+              <div style={{ ...font, fontSize:11.5, color:'#9B9B9B', marginTop:10 }}>
+                Este navegador fica lembrado por 24 horas: um novo login nesse prazo não pede o código.
+              </div>
+            )}
             <div style={{ marginTop:16 }}>
               <Button variant="orange" full disabled={busy || code.length < 6} onClick={() => confirmCode(enroll.id)}>
                 {busy ? <Spinner size={16}/> : 'Confirmar e ativar'}
