@@ -7,9 +7,20 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 exports.handler = async (event) => {
   const bearer = (event.headers?.authorization || '').replace('Bearer ', '')
   if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return { statusCode: 401, body: 'unauthorized' }
-  const { sessions = [] } = JSON.parse(event.body || '{}')
+  const { sessions = [], meios = false } = JSON.parse(event.body || '{}')
   const out = { webhooks: [], sessions: [] }
   try {
+    // 19/10: meios de pagamento da conta (Pix habilitado? país da conta?)
+    if (meios) {
+      const acc = await stripe.accounts.retrieve()
+      out.conta = { pais: acc.country, moeda: acc.default_currency,
+        capacidades: Object.fromEntries(Object.entries(acc.capabilities || {}).filter(([k]) => /pix|boleto|card/.test(k))) }
+      const cfgs = await stripe.paymentMethodConfigurations.list({ limit: 10 })
+      out.configuracoes = cfgs.data.map(c => ({ nome: c.name, padrao: c.is_default, ativa: c.active,
+        pix: c.pix ? { disponivel: c.pix.available, preferencia: c.pix.display_preference?.value } : null,
+        boleto: c.boleto ? { disponivel: c.boleto.available, preferencia: c.boleto.display_preference?.value } : null,
+        cartao: c.card ? { disponivel: c.card.available, preferencia: c.card.display_preference?.value } : null }))
+    }
     const eps = await stripe.webhookEndpoints.list({ limit: 20 })
     out.webhooks = eps.data.map(e => ({ url: e.url, status: e.status, events: e.enabled_events }))
     for (const id of sessions.slice(0, 10)) {
@@ -19,7 +30,7 @@ exports.handler = async (event) => {
       const evs = await stripe.events.list({ limit: 20, created: { gte: s.created }, types: [
         'checkout.session.completed', 'checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed'] })
       out.sessions.push({
-        id: s.id, mode: s.mode, status: s.status, payment_status: s.payment_status, amount: (s.amount_total || 0) / 100,
+        id: s.id, mode: s.mode, status: s.status, meios_oferecidos: s.payment_method_types, payment_status: s.payment_status, amount: (s.amount_total || 0) / 100,
         created: new Date(s.created * 1000).toISOString(), email: s.customer_details?.email || s.customer_email,
         metadata: s.metadata, subscription: s.subscription || null,
         payment_intent: { status: pi.status, methods: pi.payment_method_types, charge_paid: !!ch.paid,
