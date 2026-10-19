@@ -108,7 +108,7 @@ export default function SupplierPayment() {
       <Card style={{ borderRadius: 14, padding: '14px 20px' }}>
         <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#1a1c5e', marginBottom: 6 }}>Como funciona</div>
         <div style={{ fontFamily: D, fontSize: 13, color: '#475569', lineHeight: 1.7 }}>
-          💳 Cartão e PIX: acesso liberado assim que o pagamento é aprovado.<br/>
+          💳 Cartão e PIX: acesso liberado assim que o pagamento é aprovado (PIX vale para a homologação com cliente; planos de assinatura são pagos com cartão ou boleto).<br/>
           🧾 Boleto: acesso liberado após a compensação bancária.<br/>
           🏢 Homologação subsidiada pelo cliente: não há pagamento — o acesso é liberado no cadastro.
         </div>

@@ -498,7 +498,7 @@ export default function LandingPage() {
 
           <FadeIn delay={.3}>
             <p style={{ textAlign:'center', marginTop:32, fontSize:13, color:C.grey }}>
-              Pagamento via cartão de crédito, boleto ou PIX pelo Stripe · Cancelamento a qualquer momento
+              Pagamento via cartão de crédito ou boleto pelo Stripe · Cancelamento a qualquer momento
             </p>
           </FadeIn>
         </div>
