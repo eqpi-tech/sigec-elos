@@ -76,7 +76,11 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
   // a fonte respondeu, mas NÃO emitiu a certidão (pendência do fornecedor):
   // não adianta tentar de novo — o fornecedor precisa regularizar ou enviar
   // a certidão que conseguir (ex.: positiva com efeito de negativa)
-  if (parsed?.nao_emitida || d0.conseguiu_emitir_certidao_negativa === false) {
+  // 20/10 (caso CNDT positiva): certidão POSITIVA emitida (com comprovante) não
+  // é "não emitida" — o aviso "não conseguiu emitir a negativa" vem junto. Ela
+  // segue como documento em análise, com a certidão e a sugestão de reprovar.
+  const positivaEmitida = parsed?.result_flag === 'apontamento' && (parsed?.evidence || []).some((e) => e.url)
+  if (!positivaEmitida && (parsed?.nao_emitida || d0.conseguiu_emitir_certidao_negativa === false)) {
     return { indisponivel: true, permanente: true, fornecedor: true,
              motivo: `A fonte não emitiu a certidão: ${String(d0.mensagem || parsed?.headline || '').slice(0, 220)}` }
   }
@@ -106,7 +110,10 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
     .map(([, v]) => v)].join(' ')
   let sugestao = 'revisar', motivo = parsed?.headline || ''
   if (flag === 'nada_consta') sugestao = 'aprovar'
-  else if (flag === 'apontamento') sugestao = 'reprovar'
+  else if (flag === 'apontamento') {
+    sugestao = 'reprovar'
+    motivo = `${motivo || 'certidão POSITIVA'} — o fornecedor precisa regularizar e enviar a certidão negativa (ou positiva com efeito de negativa)`
+  }
   else if (flag === 'verificar' && cfg.positivaEfeitoNegativa && !parsed?.nao_emitida
            && /positiva com efeitos? de negativa/i.test(texto)) {
     sugestao = 'aprovar'                       // regra do cliente: aceita positiva c/ efeito de negativa

@@ -531,8 +531,10 @@ export default function SupplierDocuments() {
           )}
           {fonteFalhou && (
             <div style={{ fontSize:10, color:'#b45309', marginTop:2 }}>
-              Não conseguimos obter este documento na fonte oficial — envie o arquivo, por favor.
-              {/^A fonte /.test(job.last_error || '') && <div style={{ color:'#6b7280', marginTop:1 }}>{job.last_error}</div>}
+              {/^A fonte /.test(job.last_error || '')
+                ? <>A fonte oficial não emitiu este documento para a sua empresa — regularize a pendência junto ao órgão e envie o arquivo.
+                    <div style={{ color:'#6b7280', marginTop:1 }}>{job.last_error}</div></>
+                : 'Não conseguimos obter este documento na fonte oficial — envie o arquivo, por favor.'}
             </div>
           )}
           {/* Indicador de reaproveitamento: documento aprovado previamente e reusado neste processo */}
