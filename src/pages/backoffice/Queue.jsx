@@ -14,6 +14,39 @@ import AutoCollectPanel from '../../components/AutoCollectPanel.jsx'
 import RouteBReview from '../../components/RouteBReview.jsx'
 import AiReviewPanel from '../../components/AiReviewPanel.jsx'
 import { authFetch } from '../../lib/authFetch.js'
+
+// 20/10: o backoffice anexa o documento que falta, foi recusado ou venceu —
+// ex.: obtido pela EQPI quando a busca automática falha (CNDT, Inscrição Estadual)
+function AdminAnexar({ supplierId, docTypeId, label, onDone }) {
+  const [busy, setBusy] = useState(false)
+  const inputId = `anexar-${docTypeId}`
+  async function enviar(file) {
+    if (!file) return
+    if (file.size > 4.5 * 1024 * 1024) { alert('Arquivo acima de 4,5 MB — reduza o tamanho e tente de novo.'); return }
+    setBusy(true)
+    try {
+      const base64 = await new Promise((ok, err) => {
+        const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = err; r.readAsDataURL(file)
+      })
+      const res = await authFetch('/.netlify/functions/client-upload-document', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplierId, docTypeId, file: { name: file.name, mime: file.type, base64 } }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || 'falha no envio')
+      onDone?.()
+    } catch (e) { alert(`Não foi possível anexar ${label || 'o documento'}: ${e.message}`) }
+    finally { setBusy(false) }
+  }
+  return (<>
+    <input id={inputId} type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display:'none' }}
+      onChange={e => { enviar(e.target.files?.[0]); e.target.value = '' }}/>
+    <Button variant="neutral" size="sm" disabled={busy} title="Anexar o arquivo pelo backoffice — entra em análise como os demais"
+      onClick={() => document.getElementById(inputId)?.click()}>
+      {busy ? <Spinner size={14}/> : '📎 Anexar arquivo'}
+    </Button>
+  </>)
+}
 import { sugestaoDoc, decisaoSugerida, motivoSugerido, ORIGEM } from '../../lib/sugestao.js'
 import { siteUrl } from '../../lib/siteUrl.js'
 import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
@@ -1607,7 +1640,18 @@ export function BackofficeAnalysis() {
               <ProcessDocsSummary totals={procDocs.totals}/>
               <ProcessDocuments data={procDocs} showSummary={false} canView={false}
                 renderDetails={(item) => { const doc = fullDoc(item); return doc ? analystDetails(doc) : null }}
-                renderActions={(item) => { const doc = fullDoc(item); return doc ? <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>{analystBar(doc)}</div> : null }}/>
+                renderActions={(item, ctx) => {
+                  const doc = fullDoc(item)
+                  // PJ que falta, foi recusado ou venceu: o backoffice pode anexar (20/10)
+                  const anexa = !item.extra && item.doc_id && !String(item.key || '').startsWith('mob:')
+                    && ['MISSING', 'REJECTED', 'EXPIRED'].includes(ctx?.status)
+                  if (!doc && !anexa) return null
+                  return <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>
+                    {doc && analystBar(doc)}
+                    {anexa && <AdminAnexar supplierId={id} docTypeId={item.doc_id} label={item.name}
+                      onDone={() => setDocActions(p => ({ ...p, [`anexo-${item.doc_id}-${Date.now()}`]: 'UPLOADED' }))}/>}
+                  </div>
+                }}/>
             </>)}
             {!procView && docs.map((doc,i)=>{
               const actn   = docActions[doc.id]
