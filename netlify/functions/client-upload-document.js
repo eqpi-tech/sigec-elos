@@ -3,7 +3,9 @@
 // (documents_catalog.responsibility = 'cliente' — ex.: Laudo Técnico da
 // GETEC no fluxo VIX, doc #10015 "Pode ser anexado por nós?").
 // POST { supplierId, docTypeId, file { name, mime, base64 } }
-// Quem: CLIENT com processo (selo) com o fornecedor, ou ADMIN.
+// Quem: CLIENT com processo (selo) com o fornecedor, ou ADMIN — o backoffice
+// anexa qualquer documento que falte (ex.: obtido pela EQPI quando a busca
+// automática falha, CNDT/IE etc., 20/10).
 // O documento entra PENDING — o backoffice valida como os demais.
 
 const { createClient } = require('@supabase/supabase-js')
@@ -71,11 +73,15 @@ exports.handler = async (event) => {
       status:       'PENDING',
       storage_path: path,
       review_note:  null,
+      hoc_arquivo_id: null,
+      expires_at:   null,
+      submitted_at: new Date().toISOString(),
+      metadata:     { enviado_por: isAdmin ? 'backoffice' : 'cliente', originalName: file.name, mime: file.mime || null, size: buffer.length },
     }, { onConflict: 'supplier_id,type' })
     if (docErr) throw new Error(docErr.message)
 
     await supabaseAdmin.from('audit_log').insert({
-      user_id: user.id, action: 'CLIENT_DOC_UPLOADED',
+      user_id: user.id, action: isAdmin ? 'ADMIN_DOC_UPLOADED' : 'CLIENT_DOC_UPLOADED',
       entity_type: 'supplier', entity_id: supplierId,
       metadata: { doc_type: docTypeId, doc_name: cat.name, file: file.name },
     }).then(null, () => {})   // o builder do Supabase não tem .catch() (29/09)

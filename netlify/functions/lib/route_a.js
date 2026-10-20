@@ -44,6 +44,9 @@ const RETRY_MIN = 15
 // com espera crescente (15, 30, 60, 120, 240 min ≈ 8 h) antes de pedir o arquivo
 const MAX_ATTEMPTS_PAUSADA = 6
 const esperaMin = (tentativa) => RETRY_MIN * 2 ** Math.max(0, tentativa - 1)
+// falha passageira (20/10, sugestão da equipe): 3 tentativas ao longo do dia —
+// agora, +1 h, +2 h — antes de liberar o envio manual
+const esperaDiaMin = (tentativa) => 60 * 2 ** Math.max(0, tentativa - 1)
 
 // datas das fontes vêm como dd/mm/aaaa (às vezes com hora) ou ISO
 function parseData(v) {
@@ -195,4 +198,4 @@ function connectorFor(docType) {
 // obtidos pela EQPI e nunca pedidos ao fornecedor (mesma lista de doc_so_eqpi() no banco)
 const DOCS_SO_EQPI = ['15']
 
-module.exports = { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin }
+module.exports = { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, enqueueRouteA, connectorFor, parseData, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin, esperaDiaMin }

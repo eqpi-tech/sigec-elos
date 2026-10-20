@@ -386,7 +386,17 @@ def _candidate_procs(my, wm_seals, wm_docs):
 def _archived_pairs(my, sb):
     """Pares (fornecedor, cliente) cujo processo espelhado no ELOS (em análise
     ou homologado) foi ARQUIVADO ou desativado no HOC (20/10, revisão do Farol).
-    O arquivamento do HOC não mexe em update_date, então o incremental não via."""
+    O arquivamento do HOC não mexe em update_date, então o incremental não via.
+    Também os HOMOLOGADOS com validade vencida: a regra de vencido do sync_seals
+    só valia quando o processo mudava no HOC (ex.: renovação aberta e não paga)."""
+    hoje = _dt.date.today().isoformat()
+    vencidos, start = [], 0
+    while True:
+        res = (sb.table("seals").select("hoc_process_id").eq("status", "ACTIVE").lt("expires_at", hoje)
+               .not_.is_("hoc_process_id", "null").range(start, start + 999).execute())
+        vencidos += [r["hoc_process_id"] for r in (res.data or [])]
+        if len(res.data or []) < 1000: break
+        start += 1000
     ids, start = [], 0
     while True:
         res = (sb.table("seals").select("hoc_process_id").in_("status", ["PENDING", "ACTIVE"])
@@ -401,6 +411,11 @@ def _archived_pairs(my, sb):
         cur.execute(f"""SELECT p.id_fornecedor, fl.id_cliente FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo
             WHERE p.id IN ({ph}) AND (p.ativo = 0 OR p.data_arquivamento IS NOT NULL)""", tuple(chunk))
         pairs.update((r["id_fornecedor"], r["id_cliente"]) for r in cur.fetchall())
+    for chunk in chunks(sorted(set(vencidos)), 1000):
+        ph = ",".join(["%s"] * len(chunk))
+        cur.execute(f"""SELECT p.id_fornecedor, fl.id_cliente FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo
+            WHERE p.id IN ({ph})""", tuple(chunk))
+        pairs.update((r["id_fornecedor"], r["id_cliente"]) for r in cur.fetchall())
     cur.close()
     return pairs
 
@@ -410,7 +425,7 @@ def sync_seals(my, sb, dry, wm):
     proc_ids = _candidate_procs(my, wm, wm)
     arquivados = _archived_pairs(my, sb)
     if arquivados:
-        log.info(f"  processos espelhados arquivados/inativos no HOC: {len(arquivados)} par(es) reavaliado(s)")
+        log.info(f"  processos espelhados arquivados/inativos no HOC ou homologados vencidos: {len(arquivados)} par(es) reavaliado(s)")
     if not proc_ids and not arquivados:
         return 0, 0, wm, None
     cur = my.cursor(dictionary=True)

@@ -11,7 +11,7 @@
 const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl } = require('./lib/runtime_env.js')
 const { downloadReceipt } = require('./lib/infosimples.js')
-const { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin } = require('./lib/route_a.js')
+const { DOCS_SO_EQPI, ROUTE_A, enabled, avaliar, custo, connectorFor, MAX_ATTEMPTS, MAX_ATTEMPTS_PAUSADA, RETRY_MIN, esperaMin, esperaDiaMin } = require('./lib/route_a.js')
 const { requiredDocsForSeal } = require('./lib/required_docs.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const { isCnpjComplete, formatCnpj } = require('./lib/cnpj.js')
@@ -125,7 +125,7 @@ async function processar(job, catalogo, prefOverrides) {
     return r.permanente || tentativas >= limite
       ? { status: 'fallback', attempts: tentativas, last_error: r.motivo, cost_brl: gasto }
       : { status: 'retry', attempts: tentativas, last_error: r.motivo, cost_brl: gasto,
-          next_attempt_at: new Date(Date.now() + (r.pausada ? esperaMin(tentativas) : RETRY_MIN) * 60000).toISOString() }
+          next_attempt_at: new Date(Date.now() + (r.pausada ? esperaMin(tentativas) : esperaDiaMin(tentativas)) * 60000).toISOString() }
   }
 
   // comprovante oficial vira o arquivo do documento (recibos da Infosimples expiram — baixar já)
@@ -305,7 +305,7 @@ exports.handler = async (event) => {
           const tentativas = job.attempts + 1
           fim = { status: tentativas >= MAX_ATTEMPTS ? 'fallback' : 'retry', attempts: tentativas,
                   last_error: String(e.message).slice(0, 300),
-                  next_attempt_at: new Date(Date.now() + RETRY_MIN * 60000).toISOString() }
+                  next_attempt_at: new Date(Date.now() + esperaDiaMin(tentativas) * 60000).toISOString() }
         }
         const terminal = ['done', 'fallback'].includes(fim.status)
         // histórico da tentativa (evidência no quadro "Coleta automática" — patch_108)
