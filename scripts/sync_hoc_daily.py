@@ -16,7 +16,7 @@ Uso:
 
 Entidades: clients, catalog, categories, category_documents, suppliers,
            supplier_categories, seals, documents, hoc_log, invitations,
-           boletos_migrados
+           boletos_migrados, docs_pendentes_hoc
 
 Cliente MIGRADO (clients.hoc_migrated_at, virada 17/10 — patch_149): o ELOS
 passa a ser o dono. A sincronia NÃO grava mais processos, categorias, matriz,
@@ -42,7 +42,7 @@ from migrate_hoc_v2 import (
 
 ALL_ENTITIES = ["clients", "catalog", "categories", "category_documents",
                 "suppliers", "supplier_categories", "seals", "documents", "hoc_log",
-                "invitations", "boletos_migrados"]
+                "invitations", "boletos_migrados", "docs_pendentes_hoc"]
 
 # Primeira execução: tabelas GRANDES começam da data da migração v2;
 # as pequenas fazem passada completa (idempotente e barata)
@@ -383,14 +383,39 @@ def _candidate_procs(my, wm_seals, wm_docs):
     return ids
 
 
+def _archived_pairs(my, sb):
+    """Pares (fornecedor, cliente) cujo processo espelhado no ELOS (em análise
+    ou homologado) foi ARQUIVADO ou desativado no HOC (20/10, revisão do Farol).
+    O arquivamento do HOC não mexe em update_date, então o incremental não via."""
+    ids, start = [], 0
+    while True:
+        res = (sb.table("seals").select("hoc_process_id").in_("status", ["PENDING", "ACTIVE"])
+               .not_.is_("hoc_process_id", "null").range(start, start + 999).execute())
+        ids += [r["hoc_process_id"] for r in (res.data or [])]
+        if len(res.data or []) < 1000: break
+        start += 1000
+    pairs = set()
+    cur = my.cursor(dictionary=True)
+    for chunk in chunks(sorted(set(ids)), 1000):
+        ph = ",".join(["%s"] * len(chunk))
+        cur.execute(f"""SELECT p.id_fornecedor, fl.id_cliente FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo
+            WHERE p.id IN ({ph}) AND (p.ativo = 0 OR p.data_arquivamento IS NOT NULL)""", tuple(chunk))
+        pairs.update((r["id_fornecedor"], r["id_cliente"]) for r in cur.fetchall())
+    cur.close()
+    return pairs
+
+
 def sync_seals(my, sb, dry, wm):
     wm = wm or INITIAL_WM["seals"]
     proc_ids = _candidate_procs(my, wm, wm)
-    if not proc_ids:
+    arquivados = _archived_pairs(my, sb)
+    if arquivados:
+        log.info(f"  processos espelhados arquivados/inativos no HOC: {len(arquivados)} par(es) reavaliado(s)")
+    if not proc_ids and not arquivados:
         return 0, 0, wm, None
     cur = my.cursor(dictionary=True)
     # pares (fornecedor, cliente) afetados
-    pairs = set()
+    pairs = set(arquivados)
     new_wm = wm
     for chunk in chunks(list(proc_ids), 500):
         ph = ",".join(["%s"] * len(chunk))
@@ -768,6 +793,63 @@ def sync_boletos_migrados(my, sb, dry):
     return len(rows), written, None, None
 
 
+def sync_docs_pendentes_hoc(my, sb, dry):
+    """Documento "Em análise" no ELOS cujo único arquivo é do HOC (20/10, revisão
+    do Farol). sync_documents só grava PENDENTE ou APROVADO vigente: quando o HOC
+    recusava, ou aprovava num processo ainda sem validade, o ELOS ficava com o
+    "Em análise" antigo para sempre. Aqui, todo dia: se o arquivo não está
+    pendente em nenhum processo ATIVO do HOC, o documento recebe a situação da
+    última análise do HOC — O → VALID · NO → REJECTED · VC → EXPIRED.
+    Documento com arquivo enviado no ELOS (storage_path) nunca é tocado."""
+    docs, start = [], 0
+    while True:
+        res = (sb.table("documents").select("id,hoc_arquivo_id,expires_at").eq("status", "PENDING")
+               .not_.is_("hoc_arquivo_id", "null").is_("storage_path", "null").range(start, start + 999).execute())
+        docs += res.data or []
+        if len(res.data or []) < 1000: break
+        start += 1000
+    if not docs:
+        return 0, 0, None, None
+    cur = my.cursor(dictionary=True)
+    estado = {}
+    for chunk in chunks(sorted({d["hoc_arquivo_id"] for d in docs}), 1000):
+        ph = ",".join(["%s"] * len(chunk))
+        cur.execute(f"""SELECT pd.id_arquivo, pd.situacao, pd.data_vencimento, pd.data_analise, pd.id,
+                   (pd.situacao IS NULL AND p.ativo = 1 AND p.data_arquivamento IS NULL AND p.data_fim IS NOT NULL) AS pendente
+            FROM processo_documento pd JOIN processo p ON p.id = pd.id_processo
+            WHERE pd.id_arquivo IN ({ph})""", tuple(chunk))
+        for r in cur.fetchall():
+            e = estado.setdefault(r["id_arquivo"], {"pendente": False, "ultima": None})
+            if r["pendente"]:
+                e["pendente"] = True
+            elif r["situacao"] in ("O", "NO", "VC"):
+                chave = (r["data_analise"] or datetime.min, r["id"])
+                if not e["ultima"] or chave > e["ultima"][0]:
+                    e["ultima"] = (chave, r["situacao"], r["data_vencimento"])
+    cur.close()
+    MAPA = {"O": "VALID", "NO": "REJECTED", "VC": "EXPIRED"}
+    mudancas = {"VALID": 0, "REJECTED": 0, "EXPIRED": 0}
+    for d in docs:
+        e = estado.get(d["hoc_arquivo_id"])
+        if not e or e["pendente"] or not e["ultima"]:
+            continue   # segue pendente no HOC (ou sem análise registrada): mantém
+        _, sit, venc = e["ultima"]
+        novo = MAPA[sit]
+        upd = {"status": novo}
+        if novo == "VALID" and venc:
+            upd["expires_at"] = to_date_str(venc)
+            if to_date_str(venc) < _dt.date.today().isoformat():
+                upd["status"] = novo = "EXPIRED"
+        if novo == "REJECTED":
+            upd["review_note"] = "Recusado na análise do SIGEC-HOC — aguardando novo envio do fornecedor"
+        mudancas[novo] += 1
+        if not dry:
+            sb.table("documents").update(upd).eq("id", d["id"]).eq("status", "PENDING").execute()
+    log.info(f"  docs 'Em análise' só com arquivo do HOC: {len(docs)} conferidos · "
+             f"→ válido {mudancas['VALID']} · recusado {mudancas['REJECTED']} · vencido {mudancas['EXPIRED']}")
+    return len(docs), sum(mudancas.values()), None, None
+
+
 def main():
     ap = argparse.ArgumentParser(description="Sync diário HOC → ELOS")
     ap.add_argument("--dry-run", action="store_true")
@@ -799,6 +881,7 @@ def main():
             "hoc_log":             lambda: sync_hoc_log(my, sb, args.dry_run, last_id),
             "invitations":         lambda: sync_invitations(my, sb, args.dry_run),
             "boletos_migrados":    lambda: sync_boletos_migrados(my, sb, args.dry_run),
+            "docs_pendentes_hoc":  lambda: sync_docs_pendentes_hoc(my, sb, args.dry_run),
         }[entity]
         ok = run_entity(sb, entity, fn, args.dry_run) and ok
 
