@@ -27,7 +27,10 @@ const ROUTE_A = {
   '10039': { connector: 'sefaz_cnd',        validade: 'fonte', positivaEfeitoNegativa: true },
   '6':     { connector: 'pref_cnd',         validade: null },
   '10040': { connector: 'pref_cnd',         validade: null },
-  '10038': { connector: 'pgfn_devedores',   validade: null },
+  // dívida ativa federal (21/10, caso BRH): a CND federal (Receita/PGFN) cobre a
+  // dívida ativa da União e é certidão oficial com PDF — a lista de devedores da
+  // PGFN só gerava um registro de consulta, sem documento oficial
+  '10038': { connector: 'pgfn_cnd',         validade: 'fonte', positivaEfeitoNegativa: true },
   '10002': { connector: 'trabalho_escravo', validade: { meses: 6 } },
   '150':   { connector: 'falencia_rj',      validade: null },
   // fase 1b (28/09): validade da própria certidão (~3 meses)
