@@ -7,9 +7,23 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 exports.handler = async (event) => {
   const bearer = (event.headers?.authorization || '').replace('Bearer ', '')
   if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return { statusCode: 401, body: 'unauthorized' }
-  const { sessions = [], meios = false } = JSON.parse(event.body || '{}')
+  const { sessions = [], meios = false, repasses = false } = JSON.parse(event.body || '{}')
   const out = { webhooks: [], sessions: [] }
   try {
+    // 21/10: datas reais de liberação (available_on) dos últimos pagamentos e o
+    // calendário de repasse da conta — confere a previsão do relatório financeiro
+    if (repasses) {
+      const acc = await stripe.accounts.retrieve()
+      out.calendario = acc.settings?.payouts?.schedule || null
+      const bts = await stripe.balanceTransactions.list({ limit: 40, type: 'charge', expand: ['data.source'] })
+      out.liberacoes = bts.data.map(b => ({
+        criado: new Date(b.created * 1000).toISOString(), disponivel: new Date(b.available_on * 1000).toISOString(),
+        dias: Math.round((b.available_on - b.created) / 86400), valor: b.amount / 100, liquido: b.net / 100, taxa: b.fee / 100,
+        meio: b.source?.payment_method_details?.type || null,
+        pais_cartao: b.source?.payment_method_details?.card?.country || null, status: b.status }))
+      const pos = await stripe.payouts.list({ limit: 10 })
+      out.repasses = pos.data.map(p => ({ valor: p.amount / 100, chegada: new Date(p.arrival_date * 1000).toISOString().slice(0, 10), status: p.status }))
+    }
     // 19/10: meios de pagamento da conta (Pix habilitado? país da conta?)
     if (meios) {
       const acc = await stripe.accounts.retrieve()
