@@ -74,9 +74,13 @@ def hoc_processos(cli):
              (SELECT GROUP_CONCAT(COALESCE(pc.resultado, '') SEPARATOR '|') FROM processo_categorias pc WHERE pc.id_processo = p.id) resultados
       FROM processo p JOIN fluxo fl ON fl.id = p.id_fluxo JOIN fornecedor f ON f.id = p.id_fornecedor
       WHERE fl.id_cliente = %s AND p.ativo = 1 AND p.data_arquivamento IS NULL
-        AND p.id = (SELECT MAX(p2.id) FROM processo p2 JOIN fluxo f2 ON f2.id = p2.id_fluxo
+        -- 21/10 (caso fornecedor com 5 processos abertos): prefere o processo PAGO ou
+        -- subsidiado; só sem nenhum pago vale o mais recente (antes: sempre o mais recente)
+        AND p.id = (SELECT p2.id FROM processo p2 JOIN fluxo f2 ON f2.id = p2.id_fluxo
                     WHERE p2.id_fornecedor = p.id_fornecedor AND f2.id_cliente = fl.id_cliente
-                      AND p2.ativo = 1 AND p2.data_arquivamento IS NULL)""", (cli,))
+                      AND p2.ativo = 1 AND p2.data_arquivamento IS NULL
+                    ORDER BY (p2.boleto_pago = 1 OR p2.subsidiado = 1 OR p2.subsidio_interno = 1
+                              OR p2.forma_pagamento = 'WT') DESC, p2.id DESC LIMIT 1)""", (cli,))
     out = cur.fetchall(); my.close()
     return out
 
