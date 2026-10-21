@@ -8,7 +8,20 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase.js'
 import { Card, KpiCard, Spinner, PageHeader, SectionTitle, Button } from '../../components/ui.jsx'
 import { planLabel, planName } from '../../lib/planLabels.js'
-import { getHolidaySet, addBusinessDays } from '../../lib/businessDays.js'
+import { getHolidaySet, addBusinessDays, adjustToBusinessDay } from '../../lib/businessDays.js'
+
+// Repasse do Stripe no Brasil (21/10, conferido na conta: repasse diário,
+// delay 30 dias): cartão nacional 30 dias corridos · cartão internacional 5 ·
+// Pix e boleto 2 dias úteis. Vale a data que o Stripe informou no pagamento
+// (stripe_available_on); sem ela, estima pelo meio (sem o meio: regra do cartão).
+const MEIO_PT = { card: 'Cartão', boleto: 'Boleto', pix: 'Pix' }
+function previsaoRepasse(n, holidays) {
+  if (!n?.paid_at) return null
+  if (n.stripe_available_on) return adjustToBusinessDay(new Date(n.stripe_available_on), holidays)
+  const pago = new Date(n.paid_at)
+  if (n.payment_method === 'boleto' || n.payment_method === 'pix') return addBusinessDays(pago, 2, holidays)
+  return adjustToBusinessDay(new Date(pago.getTime() + 30 * 864e5), holidays)
+}
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
 import BcCostsTab from './BcCosts.jsx'
@@ -98,9 +111,9 @@ function SubscriptionsTab({ data }) {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <SectionTitle>Assinaturas via Stripe</SectionTitle>
         <Button variant="neutral" size="sm" onClick={() => downloadXlsx('assinaturas_elos.xlsx', 'Assinaturas',
-          ['Fornecedor','CNPJ','Plano','Status','Pagamento','Valor','Pago em','Repasse Stripe (prev.)','Início','Fim','NFSe'],
+          ['Fornecedor','CNPJ','Plano','Status','Pagamento','Meio','Valor','Pago em','Repasse Stripe (prev.)','Início','Fim','NFSe'],
           stripePlans.map(p => [p.supplier?.razao_social, p.supplier?.cnpj, planLabel(p.type) || p.type, p.status,
-            p.paidFlag ? 'Pago' : p.status === 'PENDING' ? 'Aguardando pagamento' : 'Cupom/Trial', p.price_yearly ?? '', fmtD(p.paidAt), fmtD(p.repasseAt),
+            p.paidFlag ? 'Pago' : p.status === 'PENDING' ? 'Aguardando pagamento' : 'Cupom/Trial', p.meio || '', p.price_yearly ?? '', fmtD(p.paidAt), fmtD(p.repasseAt),
             fmtD(p.starts_at), fmtD(p.ends_at), p.nfse || '']))}>
           ⬇️ Excel
         </Button>
@@ -136,7 +149,11 @@ function SubscriptionsTab({ data }) {
                         : <span style={{ color:'#92400e', fontWeight:700 }}>🎟️ Cupom/Trial</span>}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtBRL(p.price_yearly)}{p.type?.includes('mensal') ? '/mês' : '/ano'}</td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>{fmtD(p.paidAt)}</td>
-                    <td style={{ padding:'10px', whiteSpace:'nowrap' }} title="Previsão: pagamento + 3 dias úteis">{fmtD(p.repasseAt)}</td>
+                    <td style={{ padding:'10px', whiteSpace:'nowrap' }}
+                      title={p.repasseConfirmado ? 'Data de liberação informada pelo Stripe' : 'Estimativa: cartão 30 dias corridos · Pix e boleto 2 dias úteis'}>
+                      {fmtD(p.repasseAt)}{p.repasseAt && !p.repasseConfirmado ? ' *' : ''}
+                      {p.meio && <div style={{ fontSize:10, color:'#9B9B9B' }}>{p.meio}</div>}
+                    </td>
                     <td style={{ padding:'10px', whiteSpace:'nowrap' }}>
                       {fmtD(p.starts_at)} → {fmtD(p.ends_at)}
                       {expiring && <span title="Renova/vence em até 30 dias" style={{ marginLeft:6 }}>⏰</span>}
@@ -150,7 +167,7 @@ function SubscriptionsTab({ data }) {
         </div>
       )}
       <div style={{ ...font, fontSize:11.5, color:'#9B9B9B', marginTop:12 }}>
-        Cupom/Trial = assinatura ativa sem fatura Stripe paga (ex.: FREETRIALELOS). Aguardando pagamento = boleto emitido e ainda não compensado. Os dois passam a "Pago" automaticamente via webhook quando o pagamento é confirmado.
+        Cupom/Trial = assinatura ativa sem fatura Stripe paga (ex.: FREETRIALELOS). Aguardando pagamento = boleto emitido e ainda não compensado. Os dois passam a "Pago" automaticamente via webhook quando o pagamento é confirmado. Repasse: data em que o Stripe libera o valor (cartão 30 dias corridos · Pix e boleto 2 dias úteis; o repasse é diário). * = estimativa pelo meio de pagamento.
       </div>
     </Card>
   )
@@ -273,7 +290,7 @@ export default function BackofficeMetrics() {
           supabase.from('plans')
             .select('id, type, status, price_yearly, starts_at, ends_at, stripe_sub_id, suppliers(razao_social, cnpj)')
             .eq('source', 'STRIPE').order('starts_at', { ascending: false }),
-          supabase.from('nfe_invoices').select('supplier_id, status, amount_cents, numero, paid_at'),
+          supabase.from('nfe_invoices').select('supplier_id, status, amount_cents, numero, paid_at, payment_method, stripe_available_on'),
           supabase.from('suppliers').select('*', { count:'estimated', head:true }),
         ])
         const nfeBySupplier = {}
@@ -293,7 +310,9 @@ export default function BackofficeMetrics() {
           // Data do pagamento (fatura Stripe) e previsão do repasse:
           // Stripe não expõe payout aqui → pagamento + 3 dias úteis
           p.paidAt    = paidNfe?.paid_at || null
-          p.repasseAt = p.paidAt ? addBusinessDays(new Date(p.paidAt), 3, holidays) : null
+          p.repasseAt = previsaoRepasse(paidNfe, holidays)
+          p.meio      = MEIO_PT[paidNfe?.payment_method] || paidNfe?.payment_method || null
+          p.repasseConfirmado = !!paidNfe?.stripe_available_on
           const emitted = list.find(n => n.status === 'EMITTED' && n.numero)
           p.nfse = emitted ? `nº ${emitted.numero}` : null
         }

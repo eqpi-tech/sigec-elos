@@ -6,6 +6,29 @@
 //          customer.subscription.deleted, invoice.payment_failed
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+
+// 21/10: meio de pagamento e data em que o Stripe libera o valor para repasse
+// (cartão nacional 30 dias, Pix/boleto 2 dias úteis) — vai para o relatório
+// financeiro. Melhor esforço: sem os dados, o relatório estima pelo meio.
+async function liberacaoStripe({ paymentIntent, charge }) {
+  try {
+    let ch = null
+    if (paymentIntent) {
+      const pi = await stripe.paymentIntents.retrieve(typeof paymentIntent === 'string' ? paymentIntent : paymentIntent.id,
+        { expand: ['latest_charge.balance_transaction'] })
+      ch = pi.latest_charge
+    } else if (charge) {
+      ch = await stripe.charges.retrieve(typeof charge === 'string' ? charge : charge.id, { expand: ['balance_transaction'] })
+    }
+    if (!ch || typeof ch === 'string') return {}
+    const bt = ch.balance_transaction
+    return {
+      payment_method: ch.payment_method_details?.type || null,
+      stripe_available_on: bt && typeof bt === 'object' && bt.available_on ? new Date(bt.available_on * 1000).toISOString() : null,
+    }
+  } catch (e) { console.warn('[liberacao]', e.message); return {} }
+}
+exports.liberacaoStripe = liberacaoStripe
 const { functionsUrl, env } = require('./lib/runtime_env.js')
 const routeA = require('./lib/route_a.js')   // Rota A (staging; inerte sem ROUTE_A_ENABLED)
 const { createClient } = require('@supabase/supabase-js')
@@ -62,6 +85,7 @@ async function activatePaidSession(session) {
           plan_type: planType || 'homologado',
           description: 'Serviço de Análise Cadastral — Homologação SIGEC-ELOS',
           paid_at: new Date().toISOString(), status: 'PENDING',
+          ...(await liberacaoStripe({ paymentIntent: session.payment_intent })),
         }, { onConflict: 'stripe_session_id', ignoreDuplicates: true })
           .then(({ error: e2 }) => e2 && console.error('[nfe-queue]', e2.message))
       }
@@ -301,6 +325,7 @@ exports.handler = async (event) => {
           description:       desc,
           paid_at:           new Date((invoice.status_transitions?.paid_at || invoice.created) * 1000).toISOString(),
           status:            amount > 0 ? 'PENDING' : 'SKIPPED_ZERO',
+          ...(amount > 0 ? await liberacaoStripe({ paymentIntent: invoice.payment_intent, charge: invoice.charge }) : {}),
         }, { onConflict: 'stripe_invoice_id', ignoreDuplicates: true })
         // Renovação (01/10): a fatura paga estende o plano e o selo ELOS até o
         // fim do período cobrado — sem isto o selo vencia com a assinatura em
