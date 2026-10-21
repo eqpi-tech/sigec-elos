@@ -10,7 +10,7 @@
 //   POST { fixWebhook?: true, sessions?: ['cs_live_…'], dryRun?: true }
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const { createClient } = require('@supabase/supabase-js')
-const { activatePaidSession } = require('./stripe-webhook.js')
+const { activatePaidSession, liberacaoStripe } = require('./stripe-webhook.js')
 
 const supabase = createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const EVENTOS_BOLETO = ['checkout.session.async_payment_succeeded', 'checkout.session.async_payment_failed']
@@ -46,6 +46,32 @@ exports.handler = async (event) => {
         if (!body.dryRun) await supabase.from('plans').update({ status: 'CANCELED' }).eq('stripe_session_id', id).eq('status', 'PENDING')
       } else r.acao = 'aguardando pagamento'
       out.conciliados.push(r)
+    }
+    // 3) 21/10: meio de pagamento e data de liberação dos pagamentos que ainda
+    //    não têm (pagamentos anteriores e faturas em que o Stripe não informou)
+    const { data: semLib } = await supabase.from('nfe_invoices')
+      .select('id, stripe_session_id, stripe_invoice_id').eq('source', 'STRIPE').gt('amount_cents', 0)
+      .is('stripe_available_on', null).order('created_at', { ascending: false }).limit(30)
+    out.liberacoes = 0
+    for (const n of semLib || []) {
+      let lib = {}
+      if (n.stripe_session_id) {
+        const s = await stripe.checkout.sessions.retrieve(n.stripe_session_id)
+        lib = await liberacaoStripe({ paymentIntent: s.payment_intent })
+      } else if (n.stripe_invoice_id) {
+        const inv = await stripe.invoices.retrieve(n.stripe_invoice_id)
+        let pi = inv.payment_intent, ch = inv.charge
+        if (!pi && !ch && stripe.invoicePayments) {   // API nova: pagamentos da fatura em invoice_payments
+          const ps = await stripe.invoicePayments.list({ invoice: inv.id, limit: 1 }).catch(() => null)
+          pi = ps?.data?.[0]?.payment?.payment_intent || null
+          ch = ps?.data?.[0]?.payment?.charge || null
+        }
+        lib = await liberacaoStripe({ paymentIntent: pi, charge: ch })
+      }
+      if (lib.stripe_available_on || lib.payment_method) {
+        if (!body.dryRun) await supabase.from('nfe_invoices').update(lib).eq('id', n.id)
+        out.liberacoes++
+      }
     }
     console.log('[stripe-reconcile]', JSON.stringify(out))
     return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(out) }
