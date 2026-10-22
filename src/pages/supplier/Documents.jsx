@@ -101,16 +101,16 @@ export default function SupplierDocuments() {
   // Rota A: doc_type → job da coleta nas fontes oficiais (vazio sem a flag)
   const [autoJobs, setAutoJobs] = useState({})
 
-  // ── Mobilidade (SPEC_MOBILIDADE.md): postos abertos para o CNPJ ──
+  // ── Mobilização (SPEC_MOBILIDADE.md): postos abertos para o CNPJ ──
   const [mobPosts, setMobPosts]   = useState([])
   const [mobPeople, setMobPeople] = useState([])   // pessoas ativas de todos os postos
-  const [mobMatrix, setMobMatrix] = useState([])   // matriz de mobilidade das categorias
+  const [mobMatrix, setMobMatrix] = useState([])   // matriz de mobilização das categorias
   const [mobOpen, setMobOpen]     = useState({})   // post_id → aberto?
   const [personForm, setPersonForm] = useState(null) // { postId, nome, cpf }
   const [personBusy, setPersonBusy] = useState(false)
 
   // Conclusão da homologação: prontidão do servidor (docs + questionário) +
-  // mobilidade completa, com processo aguardando análise (pedido 25/09)
+  // mobilização completa, com processo aguardando análise (pedido 25/09)
   const [completion, setCompletion] = useState(null) // { ready, mobComplete, pendingSeal }
 
   // Reservado para integração futura via proxy residencial (ScrapingBee/Zyte)
@@ -212,7 +212,7 @@ export default function SupplierDocuments() {
       setUploaded(d)
       setAutoJobs(jobs)
 
-      // 3b. Mobilidade: postos abertos para o CNPJ deste fornecedor
+      // 3b. Mobilização: postos abertos para o CNPJ deste fornecedor
       try {
         const posts = await mobilityApi.myPosts(s.cnpj)
         setMobPosts(posts)
@@ -226,7 +226,7 @@ export default function SupplierDocuments() {
           setMobPeople(people)
           setMobOpen(Object.fromEntries(posts.map(p => [p.id, posts.length === 1])))
         }
-      } catch (err) { console.warn('mobilidade:', err.message) }
+      } catch (err) { console.warn('mobilização:', err.message) }
 
       await refreshCompletion(s.cnpj, pendingSealFound)
 
@@ -421,7 +421,7 @@ export default function SupplierDocuments() {
     return r.pj.filter(i => i.doc_id).map(i => ({ id: i.doc_id, name: i.name, auto_collect: i.auto_collect, extra: i.extra }))
   }
 
-  // ── Mobilidade: pessoas e uploads por posto/pessoa ──
+  // ── Mobilização: pessoas e uploads por posto/pessoa ──
   const handleAddPerson = async () => {
     if (!personForm?.nome?.trim() || !personForm?.cpf) return
     setPersonBusy(true)
@@ -649,9 +649,9 @@ export default function SupplierDocuments() {
     )
   }
 
-  // ── Mobilidade: renderizadores — a seção é ancorada DENTRO do card do
+  // ── Mobilização: renderizadores — a seção é ancorada DENTRO do card do
   // processo do cliente dono dos postos (feedback 23/09: precisa ficar claro
-  // a qual processo master os docs de mobilidade pertencem) ──
+  // a qual processo master os docs de mobilização pertencem) ──
   const renderMobPost = (post) => {
             const people     = mobPeople.filter(p => p.post_id === post.id)
             const matrix     = mobMatrix.filter(m => m.category_id === post.category_id)
@@ -814,7 +814,7 @@ export default function SupplierDocuments() {
     return (
       <div style={{ marginTop:18, paddingTop:16, borderTop:'1.5px dashed #c7c9e2' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#1a1c5e' }}>👷 Documentos de Mobilidade</span>
+          <span style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#1a1c5e' }}>👷 Documentos de Mobilização</span>
           <span style={{ fontSize:9.5, fontWeight:700, color:'#2E3192', background:'rgba(46,49,146,.08)', padding:'2px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>parte deste processo</span>
         </div>
         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', margin:'2px 0 12px' }}>
@@ -844,7 +844,7 @@ export default function SupplierDocuments() {
       <PageHeader title="Meus Documentos" subtitle={`${supplier?.razao_social} · ${okCount}/${totCount} documentos válidos`} />
       {histDoc && <DocHistoryModal doc={histDoc} onClose={() => setHistDoc(null)}/>}
 
-      {/* Fechou a fase: docs + questionário + mobilidade completos e processo
+      {/* Fechou a fase: docs + questionário + mobilização completos e processo
           aguardando a análise da EQPI (pedido 25/09). Enviar ≠ aprovar: o
           "Parabéns" fica para o processo aprovado (Dashboard) */}
       {completion?.ready && completion?.mobComplete && completion?.pendingSeal
@@ -967,7 +967,7 @@ export default function SupplierDocuments() {
         </Card>
       )}
 
-      {/* Mobilidade de processos sem card acima — nomeia o processo master */}
+      {/* Mobilização de processos sem card acima — nomeia o processo master */}
       {mobOrphanClientIds.map(cid => {
         const posts = mobPosts.filter(p => p.client_id === cid)
         const cname = posts[0]?.clients?.nome_fantasia || posts[0]?.clients?.razao_social || 'Cliente'

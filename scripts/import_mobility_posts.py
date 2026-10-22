@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Importa postos de mobilidade (SPEC_MOBILIDADE.md §8) das planilhas de postos:
+"""Importa postos de mobilização (SPEC_MOBILIDADE.md §8) das planilhas de postos:
   ~/Downloads/Relatório Vigilância Patrimonial_v2.xlsx
   ~/Downloads/Relatório Limpeza Predial e Veicular_v2.xlsx
 

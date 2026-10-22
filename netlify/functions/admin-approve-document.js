@@ -136,10 +136,10 @@ exports.handler = async (event) => {
     const d = byType[String(t)]
     return !d || ['PENDING', 'MISSING', 'EXPIRING', 'EXPIRED'].includes(d.status)
   })
-  // Mobilidade bloqueia o selo (SPEC_MOBILIDADE §7): pessoas faltando ou
+  // Mobilização bloqueia o selo (SPEC_MOBILIDADE §7): pessoas faltando ou
   // docs de posto/pessoa exigidos não revisados mantêm o processo aberto
   const mob = await mobilityPending(supabaseAdmin, supplierId, procSeal?.client_id)
-    .catch(e => { console.warn('[admin-approve-document] mobilidade:', e.message); return { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0 } })
+    .catch(e => { console.warn('[admin-approve-document] mobilização:', e.message); return { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0 } })
   if (unreviewed.length > 0 || reqTypes.length === 0 || mob.peopleShortfall > 0 || mob.missingOrUnreviewed > 0) {
     // Régua divulgada: "Documento reprovado" é AUTO na reprovação — avisa o
     // fornecedor na hora com o motivo (na finalização, o e-mail de resultado
@@ -329,7 +329,7 @@ exports.handler = async (event) => {
     }
 
   } else {
-    // Rejeição automática (inclui docs de mobilidade rejeitados — o label
+    // Rejeição automática (inclui docs de mobilização rejeitados — o label
     // já carrega pessoa/posto, ex. "ASO — Fulano (Cidade/UF)")
     const mobRejected = (allDocs || []).filter(d =>
       String(d.type).startsWith('mob:') && d.status === 'REJECTED')

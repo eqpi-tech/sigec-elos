@@ -333,7 +333,7 @@ export function BackofficeAnalysis() {
   const [archiving,     setArchiving]     = useState(false)
   const [isArchived,    setIsArchived]    = useState(false)
 
-  // Mobilidade: postos/pessoas/matriz do fornecedor (árvore na aba Documentos)
+  // Mobilização: postos/pessoas/matriz do fornecedor (árvore na aba Documentos)
   const [mob, setMob] = useState(null) // { posts, people, matrix }
   // Documentos do PROCESSO selecionado — fonte única das 3 visões (patch_139)
   const [procDocs, setProcDocs] = useState(null)
@@ -590,7 +590,7 @@ export function BackofficeAnalysis() {
     : autoSeal
   const processClientName = processSeal?.clients?.razao_social || null
 
-  // fonte única (patch_139): PJ + mobilidade do processo, com os totais; recarrega
+  // fonte única (patch_139): PJ + mobilização do processo, com os totais; recarrega
   // depois de cada decisão de documento (docActions) para os números baterem
   const procSealId = procSelKey === 'ALL' ? null : (processSeal?.id || null)
   const docActionsDone = Object.entries(docActions).filter(([, v]) => v !== 'loading').map(([k, v]) => k + v).join()
@@ -600,13 +600,13 @@ export function BackofficeAnalysis() {
     processDocsApi.get(procSealId).then(r => { if (vivo) setProcDocs(r) }).catch(() => { if (vivo) setProcDocs(null) })
     return () => { vivo = false }
   }, [procSealId, docActionsDone])
-  // pendências de MOBILIDADE do processo (entram na trava, no e-mail e no rótulo)
+  // pendências de MOBILIZAÇÃO do processo (entram na trava, no e-mail e no rótulo)
   const mobItems = procDocs ? procDocs.mobility.flatMap(p => [
     ...p.post_docs.map(it => ({ ...it, where: `posto ${p.city}/${p.uf}` })),
     ...p.people.flatMap(pe => pe.docs.map(it => ({ ...it, where: pe.name }))),
   ]) : []
   const mobTodo = mobItems.filter(it => ['MISSING', 'REJECTED', 'EXPIRED'].includes(effectiveStatus(it)))
-  // e-mail ao fornecedor: mobilidade agrupada por posto e por pessoa (mesmo
+  // e-mail ao fornecedor: mobilização agrupada por posto e por pessoa (mesmo
   // formato do lembrete automático — lib/required_docs.js mobilityTodo)
   const shortDocName = (n) => String(n || '').split(/ \(| — /)[0].trim() || String(n || '')
   const aFazer = (it) => ['MISSING', 'REJECTED', 'EXPIRED'].includes(effectiveStatus(it))
@@ -620,7 +620,7 @@ export function BackofficeAnalysis() {
   // Documentos do PROCESSO selecionado: com 2+ clientes as exigências vêm
   // separadas por matriz (required_by); 'ALL' mostra a união de todos
   const procKey  = procSelKey === 'ALL' ? null : (processSeal ? (processSeal.client_id || '__ELOS__') : null)
-  // docs de mobilidade (type 'mob:...') saem da lista plana — ganham a árvore
+  // docs de mobilização (type 'mob:...') saem da lista plana — ganham a árvore
   // posto → pessoa abaixo, espelhando a tela do fornecedor (24/09)
   const docsView = (data?.documents || []).filter(d => !String(d.type).startsWith('mob:'))
     .filter(d => !procKey || !d.required_by || d.required_by.includes(procKey))
@@ -661,7 +661,7 @@ export function BackofficeAnalysis() {
     }
     const nMob = mobGroups.length
     if (!pendingDocs.length && !questPend && !nMob) { alert('Nenhuma pendência para solicitar.'); return }
-    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${nMob ? ` + ${nMob} pendência(s) de mobilidade` : ''}${questPend ? ' + questionário' : ''} pendente(s)?`)) return
+    if (!window.confirm(`Enviar e-mail ao fornecedor solicitando ${pendingDocs.length} documento(s)${nMob ? ` + ${nMob} pendência(s) de mobilização` : ''}${questPend ? ' + questionário' : ''} pendente(s)?`)) return
     setProcessing(true)
     try {
       const questRow = questPend ? `<tr><td style="padding:8px;border:1px solid #e2e8f0;font-size:13px">📋 Questionário de homologação</td>
@@ -746,10 +746,10 @@ export function BackofficeAnalysis() {
       alert(`Não é possível homologar: ${hardBlocked.length} documento(s) obrigatório(s) ainda não enviado(s):\n${hardBlocked.map(d=>d.label).join('\n')}`)
       return
     }
-    // mobilidade (PF) também é exigida pelo fluxo (14/10): pessoas e documentos
+    // mobilização (PF) também é exigida pelo fluxo (14/10): pessoas e documentos
     const mobMissing = mobTodo.filter(it => effectiveStatus(it) === 'MISSING')
     if (mobShortfall > 0 || mobMissing.length > 0) {
-      alert(`Não é possível homologar: a mobilidade (PF) está incompleta.\n${mobShortfall ? `· ${mobShortfall} pessoa(s) a cadastrar nos postos\n` : ''}${mobMissing.length ? `· ${mobMissing.length} documento(s) de PF não enviado(s)` : ''}`)
+      alert(`Não é possível homologar: a mobilização (PF) está incompleta.\n${mobShortfall ? `· ${mobShortfall} pessoa(s) a cadastrar nos postos\n` : ''}${mobMissing.length ? `· ${mobMissing.length} documento(s) de PF não enviado(s)` : ''}`)
       return
     }
     setProcessing(true)
@@ -1635,7 +1635,7 @@ export function BackofficeAnalysis() {
             <AutoCollectPanel supplierId={id} sealId={procSelKey === 'ALL' ? null : processSeal?.id} docs={docs}/>
             <AiReviewPanel reviews={aiReviews.filter(r => docs.some(d => d.id === r.document_id))}/>
             {/* visão do PROCESSO — a mesma do fornecedor e do cliente (patch_139):
-                PJ exigido + mobilidade (PF), com as ferramentas do analista */}
+                PJ exigido + mobilização (PF), com as ferramentas do analista */}
             {procView && (<>
               <ProcessDocsSummary totals={procDocs.totals}/>
               <ProcessDocuments data={procDocs} showSummary={false} canView={false}
@@ -1681,7 +1681,7 @@ export function BackofficeAnalysis() {
               )
             })}
 
-            {/* ── Documentos de Mobilidade: árvore posto → pessoa (espelho da
+            {/* ── Documentos de Mobilização: árvore posto → pessoa (espelho da
                  tela do fornecedor); aprovar/rejeitar = mesmas ações dos docs
                  PJ (mesma linha de documents por baixo) ── */}
             {!procView && mob?.posts?.length > 0 && (() => {
@@ -1724,7 +1724,7 @@ export function BackofficeAnalysis() {
               return (
                 <div style={{ marginTop:20, paddingTop:16, borderTop:'1.5px dashed #c7c9e2' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-                    <SectionTitle style={{ marginBottom:0 }}>👷 Documentos de Mobilidade</SectionTitle>
+                    <SectionTitle style={{ marginBottom:0 }}>👷 Documentos de Mobilização</SectionTitle>
                     <span style={{ fontSize:10,fontWeight:700,color:'#2E3192',background:'rgba(46,49,146,.08)',padding:'2px 8px',borderRadius:20,fontFamily:'Montserrat,sans-serif' }}>
                       {mob.posts.length} posto{mob.posts.length>1?'s':''}
                     </span>
@@ -2093,7 +2093,7 @@ export function BackofficeAnalysis() {
                 <Button variant="success" full size="lg" style={{ borderRadius:10 }} disabled={processing} onClick={handleApprove}>
                   {processing ? '⏳...'
                     : hardBlocked.length > 0 ? `🚫 ${hardBlocked.length} doc(s) impeditivo(s)`
-                    : (mobShortfall > 0 || mobTodo.some(it => effectiveStatus(it) === 'MISSING')) ? '🚫 Mobilidade (PF) incompleta'
+                    : (mobShortfall > 0 || mobTodo.some(it => effectiveStatus(it) === 'MISSING')) ? '🚫 Mobilização (PF) incompleta'
                     : level === 'verificado' ? '✅ Emitir ELOS Verificado'
                     : processClientName ? `✅ Homologar — ${processClientName}`
                     : '✅ Aprovar Homologação'}

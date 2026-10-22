@@ -1,6 +1,6 @@
 // Documentos do processo — o MESMO visual para fornecedor, cliente e backoffice
 // (pedido do Luiz, 14/10: ajuda o suporte). Os dados vêm de uma fonte só, a
-// RPC process_documents (patch_139): PJ exigido pelo fluxo + mobilidade (PF)
+// RPC process_documents (patch_139): PJ exigido pelo fluxo + mobilização (PF)
 // por posto e por pessoa, com os totais. Cada tela só muda as AÇÕES de cada
 // linha (renderActions): o fornecedor envia, o backoffice aprova/reprova e o
 // cliente visualiza. Para o cliente, nome e CPF das pessoas já chegam
@@ -86,7 +86,7 @@ export function ProcessDocsSummary({ totals, compact = false }) {
       </div>
       <div style={{ display:'flex', gap:14, marginTop:8, flexWrap:'wrap', fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#374151' }}>
         {itens.map(([l, v, c]) => <span key={l}><strong style={{ color:c }}>{v}</strong> {l.toLowerCase()}</span>)}
-        {t.people_shortfall > 0 && <span><strong style={{ color:'#ef4444' }}>{t.people_shortfall}</strong> pessoa{t.people_shortfall > 1 ? 's' : ''} a cadastrar (mobilidade)</span>}
+        {t.people_shortfall > 0 && <span><strong style={{ color:'#ef4444' }}>{t.people_shortfall}</strong> pessoa{t.people_shortfall > 1 ? 's' : ''} a cadastrar (mobilização)</span>}
       </div>
       {!t.complete && (t.supplier_todo > 0 || t.people_shortfall > 0 || t.client_todo > 0) && (
         <div style={{ marginTop:6, fontFamily:'DM Sans,sans-serif', fontSize:11.5, color:'#6b7280' }}>
@@ -169,7 +169,7 @@ export default function ProcessDocuments({ data, renderActions, renderDetails, r
       {pj.length === 0 && <div style={{ fontSize:12.5, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:10 }}>Nenhum documento exigido neste processo.</div>}
       {pj.map(it => <DocRow key={it.key} item={it} ctx={{}} renderActions={renderActions} renderDetails={renderDetails} onView={onView} canView={canView} onHistory={onHistory}/>)}
       {data.mobility.length > 0 && <>
-        <div style={{ ...sectionTitle, marginTop:18 }}>👷 Mobilidade (PF) · {data.mobility.length} posto{data.mobility.length > 1 ? 's' : ''}{data.masked ? ' · dados pessoais mascarados' : ''}</div>
+        <div style={{ ...sectionTitle, marginTop:18 }}>👷 Mobilização (PF) · {data.mobility.length} posto{data.mobility.length > 1 ? 's' : ''}{data.masked ? ' · dados pessoais mascarados' : ''}</div>
         {data.mobility.map(p => (
           <PostCard key={p.post_id} post={p} renderActions={renderActions} renderDetails={renderDetails} onHistory={onHistory} renderPostFooter={renderPostFooter} renderPersonExtra={renderPersonExtra}
             onView={onView} canView={canView} defaultOpen={data.mobility.length === 1}/>
