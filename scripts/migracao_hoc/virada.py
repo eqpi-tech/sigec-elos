@@ -167,6 +167,8 @@ def main():
         nome = ('Homologado – ' if alvo['status'] == 'ACTIVE' else 'Em análise – ') + cli['nome']
         if alvo['hoc']:
             campos = {'status': alvo['status'], 'hoc_process_id': p['proc'], 'hoc_origin_process_id': p['proc'],
+                      # patch_156: subsidiado no HOC → cobrável do cliente quando entrar na esteira
+                      'hoc_subsidized': bool(p['subsidiado'] or p['subsidio_interno']),
                       'expires_at': alvo['expira'], 'hoc_expiry_date': str(val) if val else None,
                       'seal_name': nome if alvo['status'] != 'EXPIRED' else None, 'seal_type': 'homologado',
                       'suspended_reason': alvo['motivo'], 'hoc_boleto_status': None, 'hoc_boleto_due': None}

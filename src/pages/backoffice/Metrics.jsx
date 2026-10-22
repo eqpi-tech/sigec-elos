@@ -73,14 +73,14 @@ function OverviewTab({ data }) {
   }, 0)
   const paid   = active.filter(p => p.paidFlag)
   const coupon = active.filter(p => !p.paidFlag)
-  const subsPendentes = subsidized.filter(r => r.status !== 'ACTIVE').length
+  const subsAbertos = subsidized.filter(r => !r.pago_em).length
 
   return (
     <>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
         <KpiCard label="Assinaturas Stripe" value={active.length} sub={`${paid.length} pagas · ${coupon.length} cupom/trial`} subColor="#2E3192" icon="💳" iconBg="rgba(46,49,146,.1)"/>
         <KpiCard label="MRR (Stripe)" value={fmtBRL(mrr)} sub="Assinaturas ativas" subColor="#22c55e" icon="💰" iconBg="rgba(244,126,47,.1)"/>
-        <KpiCard label="Homologações subsidiadas" value={subsidized.length} sub={subsPendentes ? `${subsPendentes} em processo` : 'faturáveis ao cliente'} subColor="#f59e0b" icon="🤝" iconBg="rgba(245,158,11,.1)"/>
+        <KpiCard label="Subsidiados cobráveis" value={subsidized.length} sub={subsAbertos ? `${subsAbertos} em aberto (cliente não pagou)` : 'todos pagos pelo cliente'} subColor="#f59e0b" icon="🤝" iconBg="rgba(245,158,11,.1)"/>
         <KpiCard label="Fornecedores" value={supplierCount.toLocaleString('pt-BR')} sub={`${sealCounts.activeSuppliers.toLocaleString('pt-BR')} homologados`} subColor="#9B9B9B" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
       </div>
       <Card style={{ borderRadius:16, padding:'20px 24px' }}>
@@ -174,86 +174,151 @@ function SubscriptionsTab({ data }) {
 }
 
 // ── Aba 3: Subsidiados (faturamento ao cliente) ────────────────────────────
-function SubsidizedTab({ data, period, setPeriod }) {
+// Regra do Luiz (22/10, patch_156/157): processo subsidiado é cobrável do
+// cliente quando ENTRA NA ESTEIRA (envio completo + questionário),
+// independentemente do resultado. Clientes do ELOS e migrados do HOC (só o que
+// entrou depois da migração). O financeiro dá baixa quando o cliente paga.
+function SubsidizedTab({ data, period, setPeriod, reload }) {
   const { subsidized } = data
   const [clientFilter, setClientFilter] = useState('')
-  const clientNames = useMemo(() => [...new Set(subsidized.map(r => r.clientName).filter(Boolean))].sort(), [subsidized])
+  const [pagFilter, setPagFilter] = useState('aberto')        // aberto | pago | todos
+  const [sel, setSel] = useState(() => new Set())
+  const [baixa, setBaixa] = useState(null)                     // { paid_on, reference } — formulário aberto
+  const [salvando, setSalvando] = useState(false)
+  const [msg, setMsg] = useState('')
+  const clientNames = useMemo(() => [...new Set(subsidized.map(r => r.client_name).filter(Boolean))].sort(), [subsidized])
   const filtered = useMemo(() => subsidized.filter(r => {
-    if (clientFilter && r.clientName !== clientFilter) return false
-    if (!period.from && !period.to) return true
-    const d = r.issued_at ? r.issued_at.slice(0, 10) : null
+    if (clientFilter && r.client_name !== clientFilter) return false
+    if (pagFilter === 'aberto' && r.pago_em) return false
+    if (pagFilter === 'pago' && !r.pago_em) return false
+    const d = r.queued_at ? r.queued_at.slice(0, 10) : null
     if (period.from && (!d || d < period.from)) return false
     if (period.to && (!d || d > period.to)) return false
     return true
-  }), [subsidized, period, clientFilter])
+  }), [subsidized, period, clientFilter, pagFilter])
 
   const byClient = useMemo(() => {
     const map = {}
     for (const r of filtered) {
-      const k = r.clientName || '—'
-      ;(map[k] = map[k] || { rows: [], total: 0 })
+      const k = r.client_name || '—'
+      ;(map[k] = map[k] || { rows: [], total: 0, aberto: 0 })
       map[k].rows.push(r)
       map[k].total += Number(r.valor || 0)
+      if (!r.pago_em) map[k].aberto += Number(r.valor || 0)
     }
     return map
   }, [filtered])
 
   const grandTotal = filtered.reduce((s, r) => s + Number(r.valor || 0), 0)
+  const grandAberto = filtered.filter(r => !r.pago_em).reduce((s, r) => s + Number(r.valor || 0), 0)
+  const selecionados = filtered.filter(r => sel.has(r.seal_id))
+  const toggle = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const inp = { padding:'8px 10px', borderRadius:10, border:'1px solid #e2e4ef', ...font, fontSize:13 }
+
+  async function registrarBaixa() {
+    if (!baixa?.paid_on) { setMsg('Informe a data do pagamento.'); return }
+    setSalvando(true); setMsg('')
+    const { data: n, error } = await supabase.rpc('admin_subsidized_settle',
+      { p_seals: selecionados.map(r => r.seal_id), p_paid_on: baixa.paid_on, p_reference: baixa.reference || null })
+    setSalvando(false)
+    if (error) { setMsg('Não foi possível registrar: ' + error.message); return }
+    setMsg(`Pagamento registrado em ${n} processo(s).`); setBaixa(null); setSel(new Set()); reload()
+  }
+  async function desfazer() {
+    setSalvando(true); setMsg('')
+    const { data: n, error } = await supabase.rpc('admin_subsidized_unsettle', { p_seals: selecionados.map(r => r.seal_id) })
+    setSalvando(false)
+    if (error) { setMsg('Não foi possível desfazer: ' + error.message); return }
+    setMsg(`Baixa desfeita em ${n} processo(s).`); setSel(new Set()); reload()
+  }
 
   return (
     <Card style={{ borderRadius:16, padding:'20px 24px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:6 }}>
         <SectionTitle>Homologações subsidiadas — faturar ao cliente</SectionTitle>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={inp}>
+          <select id="sub-cliente" value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={inp}>
             <option value="">Todos os clientes</option>
             {clientNames.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
-          <input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} style={inp}/>
+          <select id="sub-pagamento" value={pagFilter} onChange={e => { setPagFilter(e.target.value); setSel(new Set()) }} style={inp}>
+            <option value="aberto">Em aberto</option>
+            <option value="pago">Pagos pelo cliente</option>
+            <option value="todos">Todos</option>
+          </select>
+          <input id="sub-de" type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} style={inp}/>
           <span style={{ ...font, fontSize:12, color:'#9B9B9B' }}>até</span>
-          <input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} style={inp}/>
+          <input id="sub-ate" type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} style={inp}/>
           <Button variant="neutral" size="sm" onClick={() => {
             const slug = (clientFilter || 'todos_clientes').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '')
             const periodo = period.from || period.to ? `_${period.from || 'inicio'}_a_${period.to || 'hoje'}` : ''
             downloadXlsx(`subsidiados_${slug}${periodo}.xlsx`, clientFilter || 'Subsidiados',
-              ['Cliente','Fornecedor','CNPJ','Fluxo','Status do selo','Homologado em','Valor subsidiado'],
-              filtered.map(r => [r.clientName, r.supplierName, r.cnpj, r.flowName, r.status, fmtD(r.issued_at), r.valor ?? '']))
+              ['Cliente','Fornecedor','CNPJ','Fluxo','Entrou na esteira','Resultado','Valor','Pago pelo cliente em','Referência do pagamento'],
+              filtered.map(r => [r.client_name, r.supplier_name, r.cnpj, r.flow_name, fmtD(r.queued_at), r.resultado, r.valor ?? '', r.pago_em ? fmtD(r.pago_em + 'T12:00:00') : '', r.referencia || '']))
           }}>
             ⬇️ Excel p/ financeiro
           </Button>
         </div>
       </div>
-      <div style={{ ...font, fontSize:12, color:'#9B9B9B', marginBottom:16 }}>
-        Convites subsidiados com processo vinculado a fluxo — valor = preço subsidiado do fluxo. O período filtra pela data de homologação (issued_at).
+      <div style={{ ...font, fontSize:12, color:'#9B9B9B', marginBottom:14, lineHeight:1.5 }}>
+        Cobrável do cliente: processo subsidiado que <strong>entrou na esteira</strong> (envio de documentos completo e questionário respondido), seja qual for o resultado da homologação.
+        Clientes do ELOS e clientes migrados do HOC (só o que entrou na esteira depois da migração). O período filtra pela data de entrada na esteira. Valor = preço subsidiado do fluxo.
       </div>
+
+      {selecionados.length > 0 && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'10px 14px', borderRadius:12, background:'#eef2ff', border:'1px solid #c7d2fe', marginBottom:14, ...font, fontSize:13 }}>
+          <strong>{selecionados.length} selecionado(s) · {fmtBRL(selecionados.reduce((s, r) => s + Number(r.valor || 0), 0))}</strong>
+          {baixa ? (<>
+            <label style={{ display:'flex', alignItems:'center', gap:6 }}>Pago em
+              <input id="baixa-data" type="date" value={baixa.paid_on} onChange={e => setBaixa(b => ({ ...b, paid_on: e.target.value }))} style={inp}/></label>
+            <input id="baixa-ref" placeholder="Referência (nota fiscal, boleto, fatura)" value={baixa.reference}
+              onChange={e => setBaixa(b => ({ ...b, reference: e.target.value }))} style={{ ...inp, minWidth:240 }}/>
+            <Button variant="success" size="sm" disabled={salvando} onClick={registrarBaixa}>{salvando ? '⏳' : '✓ Registrar pagamento'}</Button>
+            <Button variant="neutral" size="sm" onClick={() => setBaixa(null)}>Cancelar</Button>
+          </>) : (<>
+            <Button variant="primary" size="sm" onClick={() => setBaixa({ paid_on: new Date().toISOString().slice(0, 10), reference: '' })}>💰 Dar baixa (cliente pagou)</Button>
+            {selecionados.some(r => r.pago_em) && <Button variant="neutral" size="sm" disabled={salvando} onClick={desfazer}>Desfazer baixa</Button>}
+          </>)}
+        </div>
+      )}
+      {msg && <div style={{ ...font, fontSize:12.5, color: msg.startsWith('Não') ? '#dc2626' : '#15803d', marginBottom:10 }}>{msg}</div>}
 
       {!filtered.length ? (
         <div style={{ ...font, fontSize:13, color:'#9B9B9B', padding:'16px 0' }}>
-          Nenhuma homologação subsidiada {period.from || period.to ? 'no período' : 'ainda'} — as do lote VIX aparecerão aqui automaticamente.
+          Nenhum processo subsidiado {pagFilter === 'aberto' ? 'em aberto ' : pagFilter === 'pago' ? 'pago ' : ''}{period.from || period.to ? 'no período' : ''}.
         </div>
       ) : (
         <>
           {Object.entries(byClient).map(([client, g]) => (
             <div key={client} style={{ marginBottom:20 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6, gap:10, flexWrap:'wrap' }}>
                 <span style={{ ...titleF, fontWeight:800, fontSize:14, color:'#1a1c5e' }}>🏢 {client} <span style={{ fontWeight:400, fontSize:12, color:'#9B9B9B' }}>({g.rows.length})</span></span>
-                <span style={{ ...titleF, fontWeight:900, fontSize:14, color:'#15803d' }}>{fmtBRL(g.total)}</span>
+                <span style={{ ...titleF, fontWeight:900, fontSize:14, color:'#15803d' }}>{fmtBRL(g.total)}{g.aberto > 0 && g.aberto !== g.total ? <span style={{ fontWeight:600, fontSize:12, color:'#b45309' }}> · em aberto {fmtBRL(g.aberto)}</span> : ''}</span>
               </div>
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', ...font, fontSize:12.5 }}>
+                  <thead>
+                    <tr style={{ color:'#9B9B9B', fontSize:11, textAlign:'left' }}>
+                      <th style={{ padding:'4px 10px', width:28 }}></th><th style={{ padding:'4px 10px' }}>Fornecedor</th><th style={{ padding:'4px 10px' }}>Fluxo</th>
+                      <th style={{ padding:'4px 10px' }}>Entrou na esteira</th><th style={{ padding:'4px 10px' }}>Resultado</th>
+                      <th style={{ padding:'4px 10px' }}>Pagamento do cliente</th><th style={{ padding:'4px 10px', textAlign:'right' }}>Valor</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {g.rows.map(r => (
-                      <tr key={r.sealId} style={{ borderBottom:'1px solid #f1f2f8' }}>
-                        <td style={{ padding:'7px 10px', fontWeight:600, color:'#1a1c5e' }}>{r.supplierName}<span style={{ fontWeight:400, color:'#9B9B9B', marginLeft:8, fontSize:11 }}>{r.cnpj}</span></td>
-                        <td style={{ padding:'7px 10px' }}>{r.flowName || <em style={{ color:'#dc2626' }}>sem fluxo</em>}</td>
+                      <tr key={r.seal_id} style={{ borderBottom:'1px solid #f1f2f8', background: sel.has(r.seal_id) ? '#f5f7ff' : 'transparent' }}>
+                        <td style={{ padding:'7px 10px' }}><input id={`sel-${r.seal_id}`} type="checkbox" checked={sel.has(r.seal_id)} onChange={() => toggle(r.seal_id)} aria-label={`Selecionar ${r.supplier_name}`}/></td>
+                        <td style={{ padding:'7px 10px', fontWeight:600, color:'#1a1c5e' }}>{r.supplier_name}<span style={{ fontWeight:400, color:'#9B9B9B', marginLeft:8, fontSize:11 }}>{r.cnpj}</span></td>
+                        <td style={{ padding:'7px 10px' }}>{r.flow_name || <em style={{ color:'#dc2626' }}>sem fluxo</em>}</td>
+                        <td style={{ padding:'7px 10px', whiteSpace:'nowrap' }}>{fmtD(r.queued_at)}</td>
                         <td style={{ padding:'7px 10px' }}>
                           <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 9px', borderRadius:20, ...titleF,
-                            color: r.status==='ACTIVE' ? '#15803d' : '#92400e', background: r.status==='ACTIVE' ? '#dcfce7' : '#fef3c7' }}>
-                            {r.status === 'ACTIVE' ? 'Homologado' : r.status}
-                          </span>
+                            color: r.resultado==='Homologado' ? '#15803d' : r.resultado==='Reprovado' ? '#b91c1c' : '#92400e',
+                            background: r.resultado==='Homologado' ? '#dcfce7' : r.resultado==='Reprovado' ? '#fee2e2' : '#fef3c7' }}>{r.resultado}</span>
                         </td>
-                        <td style={{ padding:'7px 10px', whiteSpace:'nowrap' }}>{fmtD(r.issued_at)}</td>
+                        <td style={{ padding:'7px 10px', whiteSpace:'nowrap' }}>{r.pago_em
+                          ? <span style={{ color:'#15803d', fontWeight:700 }}>✓ Pago em {fmtD(r.pago_em + 'T12:00:00')}{r.referencia ? <span style={{ fontWeight:400, color:'#64748b' }}> · {r.referencia}</span> : ''}</span>
+                          : <span style={{ color:'#b45309', fontWeight:700 }}>Em aberto</span>}</td>
                         <td style={{ padding:'7px 10px', textAlign:'right', fontWeight:700, whiteSpace:'nowrap' }}>{r.valor != null ? fmtBRL(r.valor) : <em style={{ color:'#dc2626' }}>sem preço</em>}</td>
                       </tr>
                     ))}
@@ -263,7 +328,8 @@ function SubsidizedTab({ data, period, setPeriod }) {
             </div>
           ))}
           <div style={{ textAlign:'right', ...titleF, fontWeight:900, fontSize:16, color:'#1a1c5e', borderTop:'2px solid #e2e4ef', paddingTop:12 }}>
-            Total do período: <span style={{ color:'#15803d' }}>{fmtBRL(grandTotal)}</span>
+            Total: <span style={{ color:'#15803d' }}>{fmtBRL(grandTotal)}</span>
+            {grandAberto > 0 && grandAberto !== grandTotal && <span style={{ fontSize:13, color:'#b45309' }}> · em aberto {fmtBRL(grandAberto)}</span>}
           </div>
         </>
       )}
@@ -281,6 +347,7 @@ export default function BackofficeMetrics() {
   const [error, setError]   = useState('')
   const firstOfMonth = new Date(); firstOfMonth.setDate(1)
   const [period, setPeriod] = useState({ from: firstOfMonth.toISOString().slice(0, 10), to: '' })
+  const [reloadKey, setReloadKey] = useState(0)   // recarrega depois de uma baixa de pagamento
 
   useEffect(() => {
     (async () => {
@@ -322,39 +389,10 @@ export default function BackofficeMetrics() {
         const byStatus = rpc?.seals_by_status || {}
         const exactSuppliers = rpc?.suppliers_total
 
-        // Subsidiados: convites subsidiado=true com selo do mesmo (fornecedor, cliente)
-        const subInvites = await fetchAllRows(() => supabase.from('invitations')
-          .select('supplier_id, client_id, flow_id')
-          .eq('subsidiado', true).not('supplier_id', 'is', null).not('client_id', 'is', null)
-          .order('id'))
-        const pairKey = r => `${r.supplier_id}|${r.client_id}`
-        const invByPair = {}
-        for (const i of subInvites) invByPair[pairKey(i)] = i
-
-        let subsidized = []
-        if (subInvites.length) {
-          const supplierIds = [...new Set(subInvites.map(i => i.supplier_id))]
-          let seals = []
-          for (let i = 0; i < supplierIds.length; i += 100) {
-            const chunk = await fetchAllRows(() => supabase.from('seals')
-              .select('id, supplier_id, client_id, status, issued_at, flow_id, clients(razao_social), suppliers(razao_social, cnpj), client_flows(name, price, price_subsidized)')
-              .in('supplier_id', supplierIds.slice(i, i + 100)).not('client_id', 'is', null)
-              .order('id'))
-            seals = seals.concat(chunk)
-          }
-          subsidized = seals
-            .filter(s => invByPair[pairKey(s)])
-            .map(s => ({
-              sealId:       s.id,
-              clientName:   s.clients?.razao_social,
-              supplierName: s.suppliers?.razao_social,
-              cnpj:         s.suppliers?.cnpj,
-              status:       s.status,
-              issued_at:    s.issued_at,
-              flowName:     s.client_flows?.name || null,
-              valor:        s.client_flows ? (s.client_flows.price_subsidized ?? s.client_flows.price) : null,
-            }))
-        }
+        // Subsidiados (patch_156/157): regra de cobrança calculada no banco
+        const { data: subRows, error: subErr } = await supabase.rpc('admin_subsidized_billing')
+        if (subErr) console.warn('[subsidiados]', subErr.message)
+        const subsidized = subRows || []
 
         setData({
           stripePlans,
@@ -364,7 +402,7 @@ export default function BackofficeMetrics() {
         })
       } catch (e) { setError(e.message) }
     })()
-  }, [])
+  }, [reloadKey])
 
   if (error) return <div style={{ padding:40, ...font, color:'#dc2626' }}>Erro: {error}</div>
   if (!data) return <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'50vh' }}><Spinner size={48}/></div>
@@ -382,7 +420,7 @@ export default function BackofficeMetrics() {
       </div>
       {tab === 'geral'        && <OverviewTab data={data}/>}
       {tab === 'assinaturas'  && <SubscriptionsTab data={data}/>}
-      {tab === 'subsidiados'  && <SubsidizedTab data={data} period={period} setPeriod={setPeriod}/>}
+      {tab === 'subsidiados'  && <SubsidizedTab data={data} period={period} setPeriod={setPeriod} reload={() => setReloadKey(k => k + 1)}/>}
       {tab === 'custos' && podeCustos && <BcCostsTab/>}
       {tab === 'custos_captura' && podeCustos && <CaptureCostsTab/>}
       {tab === 'custos_ia' && podeCustos && <AiCostsTab/>}
