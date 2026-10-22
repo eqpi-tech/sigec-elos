@@ -65,11 +65,11 @@ async function requiredDocsBase(sb, supplierId, seal) {
   return [...union]
 }
 
-// ── Mobilidade (SPEC_MOBILIDADE.md §7 — bloqueia o selo) ──────────────────
-// Pendências de mobilidade do fornecedor no cliente do selo:
+// ── Mobilização (SPEC_MOBILIDADE.md §7 — bloqueia o selo) ──────────────────
+// Pendências de mobilização do fornecedor no cliente do selo:
 // · pessoas cadastradas < qty_people em algum posto ativo → processo aberto
 // · slot exigido (doc por pessoa ativa / por posto) sem linha VALID/N.A.
-// O doc de mobilidade é um `documents` comum com type
+// O doc de mobilização é um `documents` comum com type
 // 'mob:<docId>:p:<personId>' | 'mob:<docId>:s:<postId>'.
 async function mobilityPending(sb, supplierId, clientId) {
   const empty = { peopleShortfall: 0, missingOrUnreviewed: 0, rejected: 0, slots: 0, notSent: 0 }
@@ -132,7 +132,7 @@ async function mobilityPending(sb, supplierId, clientId) {
 // "ASO — Atestado de Saúde Ocupacional" → "ASO"
 const shortDocName = (n) => String(n || '').split(/ \(| — /)[0].trim() || String(n || '')
 
-// Pendências de mobilidade AGRUPADAS para os e-mails ao fornecedor (14/10):
+// Pendências de mobilização AGRUPADAS para os e-mails ao fornecedor (14/10):
 // um item por posto (pessoas a cadastrar + docs do posto) e um por pessoa
 // (docs dela). Só o que o fornecedor precisa fazer: sem envio, vencido ou
 // reprovado — em análise não entra.

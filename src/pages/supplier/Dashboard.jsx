@@ -81,8 +81,8 @@ export default function SupplierDashboard() {
         }
       } catch { /* não crítico */ }
 
-      // Mobilidade (docs de PF por posto/pessoa) também conta para 'concluiu
-      // a parte dele' — o SQL de prontidão ainda não enxerga mobilidade
+      // Mobilização (docs de PF por posto/pessoa) também conta para 'concluiu
+      // a parte dele' — o SQL de prontidão ainda não enxerga mobilização
       try {
         setMobPend(await mobilityApi.pendingFor(s.cnpj, user.supplierId))
       } catch { /* não crítico */ }
@@ -230,7 +230,7 @@ export default function SupplierDashboard() {
           </div>
         )
       })()}
-      {/* Concluiu a parte dele (docs + questionário + mobilidade) e o processo
+      {/* Concluiu a parte dele (docs + questionário + mobilização) e o processo
           está aguardando a análise da EQPI — confirmação visual do fechamento
           da fase, além do e-mail (pedido 25/09). Ainda NÃO é aprovação. */}
       {ready === true && docsMissing === 0 && questPending === 0

@@ -1,6 +1,6 @@
 // Demo · fichas do processo fiéis às telas reais (refresh 30/09):
 //  - fornecedor: processo (Visão Geral / Documentos / Histórico) e Meus
-//    Documentos (envio, emitir na fonte, automáticos, mobilidade)
+//    Documentos (envio, emitir na fonte, automáticos, mobilização)
 //  - cliente: ficha do fornecedor (Resumo / Documentos / Questionários /
 //    Inteligência CNPJ, documentos da sua responsabilidade, carta de exceção)
 //  - comprador: perfil do fornecedor (contatos mascarados, só a situação dos docs)
@@ -202,10 +202,10 @@ export function DemoSupplierDocumentosFicha() {
         <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
           ⚡ Auto = coletado automaticamente · 🌐 Emitir = abre o site oficial · 📊 Emitir = gera relatório automático · PDF, JPG ou PNG · Máx 10MB
         </div>
-        {/* Mobilidade: parte deste processo */}
+        {/* Mobilização: parte deste processo */}
         <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1.5px dashed #c7c9e2' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontFamily: M, fontWeight: 800, fontSize: 14, color: '#1a1c5e' }}>👷 Documentos de Mobilidade</span>
+            <span style={{ fontFamily: M, fontWeight: 800, fontSize: 14, color: '#1a1c5e' }}>👷 Documentos de Mobilização</span>
             <span style={pill('#2E3192', 'rgba(46,49,146,.08)')}>parte deste processo</span>
           </div>
           <div style={{ fontFamily: D, fontSize: 12, color: '#64748b', marginBottom: 10 }}>

@@ -224,7 +224,7 @@ Menu **Financeiro**:
 
 - **Fluxos de categorias:** os pacotes (níveis) de homologação, cada um com o preço **não subsidiado** e **subsidiado** e as categorias que inclui; um fluxo é o **padrão**;
 - **Matriz de documentos:** os documentos exigidos por categoria, e quais são **desclassificatórios** (suspendem o selo se vencidos);
-- **Mobilidade:** postos de trabalho e documentos por pessoa e por posto.
+- **Mobilização:** postos de trabalho e documentos por pessoa e por posto.
 
 ![Fluxos](img/backoffice/14-fluxos.jpg)
 
@@ -271,7 +271,7 @@ Registros do HOC são sobrescritos pela sincronização da madrugada. Corrija no
 Só entram na fila os fornecedores que completaram a parte deles (documentos, questionário e pagamento). Use o limite de análise **— Fora da fila também —** para ver todos.
 
 **Aprovei o último documento e o processo não foi homologado.**
-Verifique se há documento reprovado ou de mobilidade pendente — o aviso depois de salvar diz o que falta. Processo sem pagamento confirmado também não pode ser homologado.
+Verifique se há documento reprovado ou de mobilização pendente — o aviso depois de salvar diz o que falta. Processo sem pagamento confirmado também não pode ser homologado.
 
 **Um fornecedor perdeu o celular da verificação em duas etapas.**
 Em **Usuários**, use **Reset MFA**.

@@ -501,7 +501,7 @@ function MatrixTab({ clientId, categories, setError }) {
   )
 }
 
-// ── ABA 3: Mobilidade (matriz de docs PF + postos por CNPJ) ───────────────
+// ── ABA 3: Mobilização (matriz de docs PF + postos por CNPJ) ───────────────
 // SPEC_MOBILIDADE.md: docs de pessoa/posto por categoria + slots de postos
 // abertos por CNPJ (o fornecedor vê a árvore ao se cadastrar).
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
@@ -524,7 +524,7 @@ function PostFormModal({ post, categories, onSave, onClose, busy }) {
       <div style={{ background:'#fff', borderRadius:16, padding:'24px 28px', width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
           <h3 style={{ ...titleF, fontWeight:800, fontSize:16, color:'#1a1c5e', margin:0 }}>
-            {post ? 'Editar Posto' : 'Novo Posto de Mobilidade'}
+            {post ? 'Editar Posto' : 'Novo Posto de Mobilização'}
           </h3>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:18, lineHeight:1 }}>✕</button>
         </div>
@@ -609,11 +609,11 @@ function MobilidadeTab({ clientId, categories, setError }) {
   const [catDocs, setCatDocs]   = useState({})
   const [addSearch, setAddSearch] = useState('')
   const [busy, setBusy]         = useState(false)
-  const [matrixCatIds, setMatrixCatIds] = useState(new Set()) // categorias do cliente COM matriz de mobilidade
+  const [matrixCatIds, setMatrixCatIds] = useState(new Set()) // categorias do cliente COM matriz de mobilização
   const [catSearch, setCatSearch] = useState('')              // busca p/ montar matriz numa categoria nova
 
   const catMap = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories])
-  // categorias com matriz de mobilidade OU com postos — as relevantes para a aba
+  // categorias com matriz de mobilização OU com postos — as relevantes para a aba
   const mobCatIds = useMemo(() => new Set(posts.map(p => p.category_id)), [posts])
 
   const loadPosts = useCallback(async () => {
@@ -638,7 +638,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
     supabase.from('documents_catalog').select('id, name').order('name')
       .then(({ data }) => setCatalog(data || []))
   }, [])
-  // categorias DESTE cliente que já têm matriz de mobilidade (join no servidor)
+  // categorias DESTE cliente que já têm matriz de mobilização (join no servidor)
   useEffect(() => {
     fetchAll(supabase.from('category_mobility_documents')
       .select('category_id, categories!inner(client_id)')
@@ -675,7 +675,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
     setPosts(p => p.map(x => x.id === post.id ? { ...x, active: !x.active } : x))
   }
 
-  // ── matriz de mobilidade ──
+  // ── matriz de mobilização ──
   async function toggleExpand(catId) {
     if (expanded === catId) { setExpanded(null); return }
     setExpanded(catId); setAddSearch('')
@@ -729,8 +729,8 @@ function MobilidadeTab({ clientId, categories, setError }) {
       || p.site_city.toLowerCase().includes(q))
   }, [posts, filter, catMap])
 
-  // Só categorias de mobilidade do cliente (com postos ou matriz) aparecem —
-  // cliente sem mobilidade (ex. sem postos) vê o painel vazio, não a lista
+  // Só categorias de mobilização do cliente (com postos ou matriz) aparecem —
+  // cliente sem mobilização (ex. sem postos) vê o painel vazio, não a lista
   // inteira de categorias (feedback 23/09). Categoria nova entra pela busca.
   const [extraCats, setExtraCats] = useState(new Set())
   const matrizCats = useMemo(() =>
@@ -748,7 +748,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
   return (
     <div>
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        {[['postos','📍 Postos'],['matriz','🧩 Matriz de Mobilidade']].map(([k, l]) => (
+        {[['postos','📍 Postos'],['matriz','🧩 Matriz de Mobilização']].map(([k, l]) => (
           <button key={k} onClick={() => setPanel(k)}
             style={{ padding:'8px 16px', borderRadius:20, border: panel===k ? 'none' : '1px solid #e2e4ef', background: panel===k ? '#2E3192' : '#fff', cursor:'pointer', ...titleF, fontWeight:700, fontSize:12, color: panel===k ? '#fff' : '#9B9B9B' }}>
             {l}
@@ -813,7 +813,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
           </div>
           <div style={{ position:'relative', marginBottom:12 }}>
             <input value={catSearch} onChange={e => setCatSearch(e.target.value)}
-              placeholder="➕ Buscar categoria do cliente para montar a matriz de mobilidade..."
+              placeholder="➕ Buscar categoria do cliente para montar a matriz de mobilização..."
               style={{ ...inputCss, maxWidth:480, border:'1px dashed #2E319266', background:'rgba(46,49,146,.02)' }}/>
             {catSearch.trim() && (
               <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, width:'100%', maxWidth:480, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:150, maxHeight:240, overflowY:'auto' }}>
@@ -831,7 +831,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
           </div>
           {matrizCats.length === 0 && (
             <div style={{ padding:'24px 0', textAlign:'center', ...font, fontSize:13, color:'#9B9B9B' }}>
-              Este cliente não tem categorias com mobilidade. Cadastre postos ou busque uma categoria acima para montar a matriz.
+              Este cliente não tem categorias com mobilização. Cadastre postos ou busque uma categoria acima para montar a matriz.
             </div>
           )}
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
@@ -850,7 +850,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
                     <div style={{ padding:'4px 16px 16px', borderTop:'1px solid #f0f0f5' }}>
                       <div style={{ position:'relative', margin:'12px 0' }}>
                         <input value={addSearch} onChange={e => setAddSearch(e.target.value)}
-                          placeholder="➕ Adicionar documento de mobilidade a esta categoria..."
+                          placeholder="➕ Adicionar documento de mobilização a esta categoria..."
                           style={{ ...inputCss, border:'1px dashed #2E319266', background:'rgba(46,49,146,.02)' }}/>
                         {addSearch.trim() && (
                           <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, background:'#fff', border:'1px solid #e2e4ef', borderRadius:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)', zIndex:100, maxHeight:240, overflowY:'auto' }}>
@@ -868,7 +868,7 @@ function MobilidadeTab({ clientId, categories, setError }) {
                       </div>
                       {docs.length === 0 ? (
                         <div style={{ padding:'10px 0', ...font, fontSize:13, color:'#9B9B9B', textAlign:'center' }}>
-                          Nenhum documento de mobilidade nesta categoria
+                          Nenhum documento de mobilização nesta categoria
                         </div>
                       ) : (
                         <>
@@ -962,7 +962,7 @@ export default function BackofficeClientDocumentFlows() {
       ) : (
         <>
           <div style={{ display:'flex', gap:8, marginBottom:20, borderBottom:'1px solid #e2e4ef' }}>
-            {[['fluxos','📂 Fluxos de Categorias'],['matriz','🧩 Matriz de Documentos'],['mobilidade','👷 Mobilidade']].map(([k, l]) => (
+            {[['fluxos','📂 Fluxos de Categorias'],['matriz','🧩 Matriz de Documentos'],['mobilização','👷 Mobilização']].map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)}
                 style={{ padding:'10px 18px', border:'none', borderBottom: tab===k ? '2.5px solid #2E3192' : '2.5px solid transparent', background:'none', cursor:'pointer', ...titleF, fontWeight:700, fontSize:13, color: tab===k ? '#2E3192' : '#9B9B9B' }}>
                 {l}

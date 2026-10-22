@@ -34,9 +34,9 @@ O script lê a produção apenas com `pg_dump` (nada é escrito lá) e se recusa
 rodar se o destino for o mesmo host da produção.
 
 **Copia** (configuração do negócio, sem dado pessoal): catálogo de documentos,
-categorias, matriz PJ, matriz de mobilidade, clientes, fluxos por cliente,
+categorias, matriz PJ, matriz de mobilização, clientes, fluxos por cliente,
 termos, landing pages, questionários, feriados, perfis de acesso, motivos de
-reprovação, banners, `bc_config`, postos de mobilidade e CNAEs.
+reprovação, banners, `bc_config`, postos de mobilização e CNAEs.
 
 **Não copia**: fornecedores, sócios, documentos enviados, convites, selos,
 planos, perfis de usuário, `audit_log`, consultas de CNPJ, relatórios do BC

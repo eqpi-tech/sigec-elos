@@ -39,7 +39,7 @@ async function sendEmail(to, subject, html) {
   if (!res.ok) throw new Error(`Resend ${res.status}`)
 }
 
-// mobilidade agrupada (14/10): um item por posto e um por pessoa
+// mobilização agrupada (14/10): um item por posto e um por pessoa
 const ST_MARCA = { REJECTED: ' (reprovado)', EXPIRED: ' (vencido)' }
 function mobLis(groups) {
   return (groups || []).map((g) => {
@@ -58,7 +58,7 @@ function buildHtml(clientName, missingDocs, questPending, mobGroups = []) {
   <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
     <p>Sua homologação${clientName ? ` com <strong>${clientName}</strong>` : ''} está quase lá — falta pouco para o processo entrar em análise:</p>
     ${missingDocs.length ? `<p><strong>Documentos da empresa:</strong></p><ul style="padding-left:18px">${docsLis}</ul>` : ''}
-    ${mobGroups.length ? `<p><strong>Mobilidade (postos e colaboradores):</strong></p><ul style="padding-left:18px">${mobLis(mobGroups)}</ul>` : ''}
+    ${mobGroups.length ? `<p><strong>Mobilização (postos e colaboradores):</strong></p><ul style="padding-left:18px">${mobLis(mobGroups)}</ul>` : ''}
     ${questPending ? `<p>❓ <strong>Questionário do cliente</strong> aguardando suas respostas.</p>` : ''}
     <p>Assim que tudo estiver enviado, o processo entra automaticamente na fila de análise.</p>
     <p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Completar agora</a></p>
@@ -151,7 +151,7 @@ exports.handler = async (event) => {
       // pendências de documentos: exigidos sem envio (REJECTED/EXPIRED contam
       // como pendente — o fornecedor precisa reenviar)
       const reqTypes = (await requiredDocsForSeal(supabase, seal.supplier_id, seal)).map(String)
-      // mobilidade (PF) também é exigida pelo fluxo (14/10): agrupada por posto e por pessoa
+      // mobilização (PF) também é exigida pelo fluxo (14/10): agrupada por posto e por pessoa
       const mobGroups = seal.client_id ? await mobilityTodo(supabase, seal.supplier_id, seal.client_id) : []
       if (!reqTypes.length && !mobGroups.length) { skipped++; continue }
       const { data: docs } = await supabase

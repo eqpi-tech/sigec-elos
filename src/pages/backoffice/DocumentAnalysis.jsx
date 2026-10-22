@@ -558,7 +558,7 @@ export default function DocumentAnalysis() {
       setDocStatus(p => ({ ...p, [docId]: status }))
       setRows(p => p.map(d => d.id === docId ? { ...d, status, expires_at: expiry || d.expires_at, review_note: note || d.review_note } : d))
       if (result.mobilityPending > 0) {
-        setNotice(`Documentos da empresa em ordem, mas faltam ${result.mobilityPending} pendência(s) de mobilidade `
+        setNotice(`Documentos da empresa em ordem, mas faltam ${result.mobilityPending} pendência(s) de mobilização `
           + '(colaboradores ou documentos de pessoa física) — a homologação não foi emitida.')
         adminApi.getMobilityPending().then(setMobPend).catch(() => {})
       } else if (result.autoFinalized) {
@@ -868,7 +868,7 @@ export default function DocumentAnalysis() {
             <span style={{ fontSize:20 }}>👷</span>
             <div style={{ flex:1, minWidth:240 }}>
               <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:13, color:'#92400e' }}>
-                {mobPend.length} processo{mobPend.length>1?'s':''} com documentos de mobilidade (PF) pendentes
+                {mobPend.length} processo{mobPend.length>1?'s':''} com documentos de mobilização (PF) pendentes
               </div>
               <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#92400e', marginTop:2 }}>
                 Estes processos <strong>não estão prontos</strong>: faltam colaboradores cadastrados ou documentos
@@ -991,7 +991,7 @@ export default function DocumentAnalysis() {
                     </div>
                     <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                       {doc.source === 'AUTO' ? '⚡ Auto' : '📎 Manual'}
-                      {String(doc.type).startsWith('mob:') && ' · 👷 Mobilidade'}
+                      {String(doc.type).startsWith('mob:') && ' · 👷 Mobilização'}
                       {doc.review_note && ` · ${doc.review_note}`}
                     </div>
                     <RouteABadge doc={doc} compact/>

@@ -400,7 +400,7 @@ export function DemoAdminProcesso() {
                 ['Alvará de Funcionamento', 'Regra do cliente + checklist', '✕ reprovar — vencido (pág. 1)'], ['Contrato Social', 'Regra do cliente + checklist', '✓ aprovar — 5/5 itens atendidos']])}
               {docs.map((d) => docRow(d))}
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1.5px dashed #c7c9e2' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><SectionTitle style={{ marginBottom: 0 }}>👷 Documentos de Mobilidade</SectionTitle><span style={pill('#2E3192', 'rgba(46,49,146,.08)')}>1 posto</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><SectionTitle style={{ marginBottom: 0 }}>👷 Documentos de Mobilização</SectionTitle><span style={pill('#2E3192', 'rgba(46,49,146,.08)')}>1 posto</span></div>
                 <div style={{ border: '1px solid #e2e4ef', borderRadius: 12, padding: '10px 14px' }}>
                   <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>📍 {mob.posto} — {mob.cidade}/{mob.uf}</div>
                   <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginBottom: 8 }}>Processo {FICHA.cliente} · {mob.funcao} · {mob.postos} postos / {mob.pessoas} pessoas · {mob.colaboradores.length}/{mob.pessoas} cadastradas</div>

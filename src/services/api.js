@@ -1148,7 +1148,7 @@ export const adminApi = {
     return data || []
   },
 
-  // Pendências de MOBILIDADE (documentos de PF): documento que o fornecedor
+  // Pendências de MOBILIZAÇÃO (documentos de PF): documento que o fornecedor
   // ainda não enviou não tem linha em documents, então não aparece na esteira
   // — este RPC revela os processos operáveis com pessoas/documentos de PF
   // faltando, para nada parecer pronto sem estar (patch_097)
@@ -1399,7 +1399,7 @@ export const categoriesApi = {
   },
 }
 
-// ── Mobilidade (SPEC_MOBILIDADE.md) ──────────────────────────────────────────
+// ── Mobilização (SPEC_MOBILIDADE.md) ──────────────────────────────────────────
 // Documentos de PF por posto/pessoa. O upload é um `documents` comum com
 // type composto: 'mob:<docId>:p:<personId>' (escopo pessoa) ou
 // 'mob:<docId>:s:<postId>' (escopo posto) — respeita o UNIQUE(supplier,type).
@@ -1436,7 +1436,7 @@ export const mobilityApi = {
     return data || []
   },
 
-  // Matriz de mobilidade das categorias dos postos
+  // Matriz de mobilização das categorias dos postos
   matrixFor: async (categoryIds) => {
     if (!categoryIds.length) return []
     const { data, error } = await supabase
@@ -1478,7 +1478,7 @@ export const mobilityApi = {
     if (error) throw new Error(error.message)
   },
 
-  // Completude da mobilidade do fornecedor — mesma regra do servidor
+  // Completude da mobilização do fornecedor — mesma regra do servidor
   // (lib/required_docs.js mobilityPending): pessoas cadastradas >= vagas e
   // todos os docs exigidos (pessoa/posto) aprovados. Fornecedor sem posto
   // aberto é 'completo' por definição. Usado nos avisos das telas.
@@ -1917,7 +1917,7 @@ export const clientLogApi = {
 
 // ── Documentos do processo (patch_139) ───────────────────────────────────────
 // Fonte ÚNICA para fornecedor, cliente e backoffice: PJ exigido pelo fluxo +
-// mobilidade (PF) por posto/pessoa, com os totais. O banco confere o acesso e
+// mobilização (PF) por posto/pessoa, com os totais. O banco confere o acesso e
 // mascara nome/CPF para o cliente.
 export const processDocsApi = {
   get: async (sealId) => {

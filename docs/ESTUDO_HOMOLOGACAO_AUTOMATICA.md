@@ -63,8 +63,8 @@ tempo real — o SLA é de 3 dias úteis.
 | Suprimentos N2 | 6,7 | 42% | R$ 0,97 | R$ 0,65 | R$ 1,62 | **R$ 1,62 – 2,59** | ~48 min (R$ 48) | ~4 min (R$ 4) |
 | Suprimentos N3 | 8,0 + 6,8 mob. | 92% (PJ) | R$ 2,10 | R$ 1,98 | R$ 4,94 | **R$ 4,08 – 7,04** | ~116 min (R$ 116)¹ | ~8 min (R$ 8) |
 
-¹ N3 inclui 1 posto de mobilidade com 2 pessoas (PCMSO, PGR, arma + ASO, CNV e
-curso por pessoa). A mobilidade é nova, então o "hoje" é o custo manual
+¹ N3 inclui 1 posto de mobilização com 2 pessoas (PCMSO, PGR, arma + ASO, CNV e
+curso por pessoa). A mobilização é nova, então o "hoje" é o custo manual
 equivalente. Cada pessoa a mais no posto soma ~R$ 0,30 de IA (Sonnet 5, Batch).
 
 Onde está o custo de IA: documentos longos. PCMSO e PGR (~40 páginas) custam
@@ -135,7 +135,7 @@ estruturada e Batch API.
   internacional** (LGPD art. 33): exige base legal e contrato de tratamento com o
   fornecedor da IA. Minimização: **mascarar CPF/RG antes do envio** — as regras
   precisam de nomes e qualificação, não de documento de identidade.
-- **Mobilidade é dado sensível.** ASO é dado de saúde (LGPD art. 11), e CNV/CNH
+- **Mobilização é dado sensível.** ASO é dado de saúde (LGPD art. 11), e CNV/CNH
   identificam pessoas. **Na fase de testes com a Anthropic, usar só documentos
   sintéticos ou anonimizados**; ASO/CNV/CNH reais apenas no modelo próprio.
 - **Recomendação de arquitetura**: híbrido por sensibilidade — modelo próprio
@@ -256,7 +256,7 @@ automação.
 | Custo do analista | R$ 60/hora com encargos | premissa |
 | Tempo de análise hoje | A 4 min · curto 6 · médio 12 · longo 25 · C 15 | premissa — medir no histórico |
 | Documentos de IA que vão a revisão | 20% na fase inicial | premissa — cai conforme os tipos são promovidos |
-| Posto de mobilidade típico | 2 pessoas | mediana da importação dos postos |
+| Posto de mobilização típico | 2 pessoas | mediana da importação dos postos |
 
 As premissas de tempo humano e de tokens são estimativas: devem ser medidas no
 staging (tempo real de análise no histórico e contagem de tokens de documentos
