@@ -33,6 +33,20 @@ const { functionsUrl, env } = require('./lib/runtime_env.js')
 const routeA = require('./lib/route_a.js')   // Rota A (staging; inerte sem ROUTE_A_ENABLED)
 const { createClient } = require('@supabase/supabase-js')
 
+// Tentativa imediata de emitir a NFSe (o cron diário é a rede de segurança).
+// 23/10: era um fetch sem await — a função devolvia a resposta e congelava
+// antes de a chamada sair, então nenhuma nota saía na hora (só no cron).
+// Espera o envio por até 4 s; a emissão segue na invocação dela.
+async function dispararEmissaoNfe() {
+  try {
+    await fetch(`${functionsUrl()}/.netlify/functions/nfe-emit-pending`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
+      signal: AbortSignal.timeout(4000),
+    })
+  } catch { /* timeout/rede: o cron diário emite */ }
+}
+
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY // service_role para bypassar RLS
@@ -88,6 +102,7 @@ async function activatePaidSession(session) {
           ...(await liberacaoStripe({ paymentIntent: session.payment_intent })),
         }, { onConflict: 'stripe_session_id', ignoreDuplicates: true })
           .then(({ error: e2 }) => e2 && console.error('[nfe-queue]', e2.message))
+        await dispararEmissaoNfe()
       }
 
       const endsAt = new Date(Date.now() + (isMensal ? 30 : 365) * 24 * 60 * 60 * 1000).toISOString()
@@ -355,13 +370,7 @@ exports.handler = async (event) => {
           else if (br?.length) console.log(`✅ Comprador Pro renovado até ${fim.slice(0, 10)} (${br.length})`)
         }
         if (qErr) console.error('[nfe-queue]', qErr.message)
-        else if (amount > 0) {
-          // tentativa imediata de emissão (o cron diário é a rede de segurança)
-          fetch(`${functionsUrl()}/.netlify/functions/nfe-emit-pending`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
-          }).catch(() => {})
-        }
+        else if (amount > 0) await dispararEmissaoNfe()
         console.log(`🧾 NFSe enfileirada: invoice ${invoice.id} · R$ ${(amount/100).toFixed(2)} · ${amount > 0 ? 'PENDING' : 'SKIPPED_ZERO (cupom)'}`)
       } catch (e) { console.error('[nfe-queue]', e.message) }
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
