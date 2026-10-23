@@ -34,26 +34,29 @@ async function consultaTransparencia(recurso, params = {}, { maxPaginas = 3 } = 
   return all
 }
 
-// Regra conservadora de sanção ATIVA (mesma do cnpj-lookup.js em produção):
-// ativa só com situação explícita 'Ativo'/'Vigente' OU dataFimSancao futura.
-// Registros sem nenhum dos dois = histórico.
+// Sanção ATIVA (23/10): situação 'Ativo'/'Vigente', OU data de fim futura, OU
+// SEM data de fim ("Sem informação" — ex.: Declaração de Inidoneidade sem
+// prazo determinado, que vale até a reabilitação). Antes, sem data de fim era
+// tratado como histórico e uma inidônea passava como "nada consta". Amostra
+// do CEIS (23/10): os únicos registros sem fim eram inidoneidade sem prazo.
+function parseFimSancao(raw) {
+  const s = String(raw || '').trim()
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]))
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return null                                   // vazio, "Sem informação"…
+}
+function sancaoAtiva(s, today = new Date()) {
+  const hoje = new Date(today); hoje.setHours(0, 0, 0, 0)
+  const situacao = (s?.situacaoDoSancionado || '').toLowerCase().trim()
+  if (situacao === 'ativo' || situacao === 'vigente') return true
+  const fim = parseFimSancao(s?.dataFimSancao)
+  return !fim || fim >= hoje
+}
 function filterActiveSanctions(list) {
   if (!Array.isArray(list)) return []
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  return list.filter((s) => {
-    const situacao = (s.situacaoDoSancionado || '').toLowerCase().trim()
-    if (situacao === 'ativo' || situacao === 'vigente') return true
-    const rawFim = s.dataFimSancao
-    if (!rawFim) return false
-    try {
-      let end
-      if (String(rawFim).includes('/')) {
-        const [d, m, y] = String(rawFim).split('/')
-        end = new Date(Number(y), Number(m) - 1, Number(d))
-      } else end = new Date(rawFim)
-      return !isNaN(end.getTime()) && end >= today
-    } catch { return false }
-  })
+  return list.filter((s) => sancaoAtiva(s))
 }
 
 // garante que o registro é do CNPJ consultado (a API pode devolver o grupo
@@ -66,4 +69,4 @@ function onlyExactCnpj(list, cnpj14) {
   })
 }
 
-module.exports = { consultaTransparencia, filterActiveSanctions, onlyExactCnpj }
+module.exports = { consultaTransparencia, filterActiveSanctions, sancaoAtiva, onlyExactCnpj }
