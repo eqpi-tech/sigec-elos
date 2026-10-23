@@ -7,12 +7,12 @@ const NAVS = {
   SUPPLIER: [
     { key:'dashboard',    label:'Dashboard',    icon:'⊞' },
     { key:'documentos',   label:'Documentos',   icon:'📋' },
-    { key:'questionario', label:'Questionário', icon:'❓' },
-    { key:'planos',       label:'Meu Plano',    icon:'⭐' },
+    { key:'questionario', label:'Questionários', icon:'❓' },
     { key:'categorias',   label:'Categorias',   icon:'📦' },
     { key:'dados',        label:'Meus Dados',   icon:'🏢' },
-    { key:'clientes',     label:'Clientes ELOS', icon:'🤝' },
     { key:'equipe',       label:'Equipe',       icon:'👥' },
+    { key:'clientes',     label:'Clientes ELOS', icon:'🤝' },
+    { key:'planos',       label:'Meu Plano',    icon:'⭐' },
   ],
   BUYER: [
     { key:'marketplace', label:'Marketplace', icon:'🔍' },
@@ -21,14 +21,14 @@ const NAVS = {
   ],
   CLIENT: [
     { key:'dashboard',      label:'Dashboard',      icon:'⊞' },
+    { key:'relatorios',     label:'Relatórios',     icon:'📈' },
     { key:'fornecedores',   label:'Fornecedores',   icon:'🏭' },
+    { key:'questionarios',  label:'Questionários',  icon:'📋' },
+    { key:'compliance',     label:'Compliance',     icon:'🛡️' },
     { key:'convites',       label:'Convites',       icon:'🤝' },
     { key:'rfq',            label:'Cotações (RFQ)', icon:'💬' },
-    { key:'questionarios',  label:'Questionários',  icon:'📋' },
-    { key:'relatorios',     label:'Relatórios',     icon:'📈' },
-    { key:'compliance',     label:'Compliance',     icon:'🛡️' },
-    { key:'configuracoes',  label:'Configurações',  icon:'⚙️' },
     { key:'equipe',         label:'Equipe',         icon:'👥' },
+    { key:'configuracoes',  label:'Configurações',  icon:'⚙️' },
   ],
   // Backoffice EQPI (refresh 30/09): os itens que o comercial apresenta
   ADMIN: [

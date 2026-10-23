@@ -7,17 +7,18 @@ import { supabase } from '../lib/supabase.js'
 
 const NAVS = {
   SUPPLIER: [
+    // ordem do menu definida pelo Luiz (23/10)
     { path:'/fornecedor',               label:'Dashboard',   icon:'⊞',  module:'dashboard' },
     { path:'/fornecedor/documentos',    label:'Documentos',  icon:'📋', module:'documentos' },
-    { path:'/fornecedor/questionario',  label:'Questionário',icon:'❓', module:'questionario' },
-    { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐', module:'plano' },
+    { path:'/fornecedor/questionario',  label:'Questionários',icon:'❓', module:'questionario' },
     { path:'/fornecedor/categorias',    label:'Categorias',  icon:'📦', module:'categorias' },
     { path:'/fornecedor/dados',         label:'Meus Dados',  icon:'🏢', module:'meus_dados' },
+    { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥', module:'equipe' },
     { path:'/fornecedor/clientes',      label:'Clientes ELOS', icon:'🤝', module:'clientes_elos' },
     // cotações dos clientes (patch_102) — módulo do Dashboard: perfis
     // personalizados já existentes não conhecem uma chave nova
     { path:'/fornecedor/cotacoes',      label:'Cotações',    icon:'💬', module:'dashboard' },
-    { path:'/fornecedor/equipe',        label:'Equipe',      icon:'👥', module:'equipe' },
+    { path:'/fornecedor/planos',        label:'Meu Plano',   icon:'⭐', module:'plano' },
   ],
   BUYER: [
     { path:'/comprador',             label:'Marketplace',     icon:'🔍', module:'marketplace' },
@@ -28,13 +29,15 @@ const NAVS = {
     { path:'/comprador/plano',       label:'Meu Plano',       icon:'⭐', module:'plano' },
   ],
   CLIENT: [
+    // ordem do menu definida pelo Luiz (23/10)
     { path:'/cliente',                label:'Dashboard',       icon:'⊞',  module:'dashboard' },
+    { path:'/cliente/relatorios',     label:'Relatórios',      icon:'📈', module:'relatorios' },
     { path:'/cliente/fornecedores',   label:'Fornecedores',    icon:'🏭', module:'fornecedores' },
+    { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋', module:'questionarios' },
+    { path:'/cliente/compliance',     label:'Compliance',      icon:'🛡️', module:'compliance' },
     { path:'/cliente/convites',       label:'Convites',        icon:'🤝', module:'convites' },
     { path:'/cliente/rfq',            label:'Cotações (RFQ)',  icon:'💬', module:'rfq' },
-    { path:'/cliente/questionarios',  label:'Questionários',   icon:'📋', module:'questionarios' },
-    { path:'/cliente/relatorios',     label:'Relatórios',      icon:'📈', module:'relatorios' },
-    { path:'/cliente/compliance',     label:'Compliance',      icon:'🛡️', module:'compliance' },
+    { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
     {
       key:'config', label:'Configurações', icon:'⚙️', module:'configuracoes',
       children: [
@@ -42,7 +45,6 @@ const NAVS = {
         { path:'/cliente/termos',        label:'Termos e Aceites',       icon:'📜', desc:'Textos e documentos que o fornecedor aceita' },
       ],
     },
-    { path:'/cliente/equipe',         label:'Equipe',          icon:'👥', module:'equipe' },
   ],
   ADMIN: [
     { path:'/backoffice', label:'Início', icon:'⊞', module:'inicio' },
