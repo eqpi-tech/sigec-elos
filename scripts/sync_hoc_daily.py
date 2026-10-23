@@ -825,6 +825,26 @@ def sync_docs_pendentes_hoc(my, sb, dry):
         start += 1000
     if not docs:
         return 0, 0, None, None
+    # fornecedor com processo em aberto em cliente MIGRADO: quem analisa é o ELOS
+    # (23/10 — o HOC desativa o cliente migrado e os processos dele deixariam de
+    # contar como pendentes lá, trazendo a análise antiga do HOC para cá)
+    migr = [c["id"] for c in fetch_all(sb, "clients", "id,hoc_migrated_at") if c.get("hoc_migrated_at")]
+    do_elos = set()
+    if migr:
+        for chunk in chunks(migr, 100):
+            res = sb.table("seals").select("supplier_id").in_("client_id", chunk).eq("status", "PENDING").execute()
+            do_elos.update(r["supplier_id"] for r in (res.data or []))
+    if do_elos:
+        sup_of = {}
+        for chunk in chunks([d["id"] for d in docs], 200):
+            for r in (sb.table("documents").select("id,supplier_id").in_("id", chunk).execute().data or []):
+                sup_of[r["id"]] = r["supplier_id"]
+        antes = len(docs)
+        docs = [d for d in docs if sup_of.get(d["id"]) not in do_elos]
+        if antes != len(docs):
+            log.info(f"  {antes - len(docs)} doc(s) de fornecedor com processo aberto em cliente migrado — decididos no ELOS")
+    if not docs:
+        return 0, 0, None, None
     cur = my.cursor(dictionary=True)
     estado = {}
     for chunk in chunks(sorted({d["hoc_arquivo_id"] for d in docs}), 1000):
