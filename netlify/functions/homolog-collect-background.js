@@ -227,8 +227,17 @@ async function avisarFornecedor(sealId) {
   if (ja?.length) return
 
   const { data: seal } = await sb.from('seals')
-    .select('id, supplier_id, client_id, flow_id, clients(nome_fantasia, razao_social), suppliers(razao_social, email, user_id)')
+    .select('id, supplier_id, client_id, flow_id, status, clients(nome_fantasia, razao_social, active), suppliers(razao_social, email, user_id)')
     .eq('id', sealId).single()
+  // 23/10: o aviso é do INÍCIO da homologação — nunca para processo já
+  // homologado (renovação/consulta avulsa) nem de cliente desativado. Antes, a
+  // consulta do CEIS em processos homologados da Chemtrade avisou o fornecedor
+  // de "documentos que faltam" num processo concluído.
+  if (seal.status !== 'PENDING' || (seal.client_id && seal.clients?.active === false)) {
+    await sb.from('audit_log').insert({ action: 'AUTO_COLLECT_DONE', entity_type: 'seal', entity_id: sealId,
+      metadata: { email_enviado: false, motivo: `sem aviso: processo ${seal.status}${seal.clients?.active === false ? ' de cliente desativado' : ''}` } })
+    return
+  }
   const exigidos = (await requiredDocsForSeal(sb, seal.supplier_id, seal)).map(String)
   const [{ data: docs }, { data: cat }] = await Promise.all([
     sb.from('documents').select('type, status, metadata').eq('supplier_id', seal.supplier_id).in('type', exigidos),
