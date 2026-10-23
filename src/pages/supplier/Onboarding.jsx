@@ -858,7 +858,7 @@ export default function SupplierOnboarding() {
                   <Button variant="orange" full size="lg" style={{ borderRadius:12, fontSize:15 }} disabled={loading} onClick={handlePayment}>
                     {loading ? <><Spinner size={16} /> Aguarde...</> : '🔐 Pagar com segurança via Stripe →'}
                   </Button>
-                  <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{clientQuote ? 'Boleto, PIX ou Cartão de crédito' : 'Boleto ou Cartão de crédito'} · Parcelamento em até 12x</div>
+                  <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>{clientQuote ? 'Boleto, PIX ou Cartão de crédito' : 'Boleto ou Cartão de crédito · Planos mensais ou anuais'}</div>
                   <button onClick={() => setStep(4)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>{clientQuote ? '← Voltar' : '← Alterar plano'}</button>
                 </div>
               )}
