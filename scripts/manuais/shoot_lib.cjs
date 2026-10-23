@@ -5,6 +5,16 @@ const { chromium } = require(path.join(ROOT, 'node_modules/playwright-core'))
 const BASE = process.env.MANUAL_BASE || 'https://staging--sigec-elos.netlify.app'
 const SENHA = 'ManualElos#2026'
 const OUT = (manual) => path.join(ROOT, 'docs/manuais/img', manual)
+// Nomes reais que o staging copia da produção (clientes etc.) e NÃO podem
+// aparecer nos manuais: trocados por um nome neutro antes de cada foto. A lista
+// fica fora do repositório — variável MANUAIS_OCULTAR no .env (separada por ;)
+const OCULTAR = (() => {
+  try {
+    const env = require('fs').readFileSync(path.join(ROOT, '.env'), 'utf8')
+    const m = env.match(/^MANUAIS_OCULTAR=(.*)$/m)
+    return (process.env.MANUAIS_OCULTAR || (m ? m[1] : '')).replace(/^["']|["']$/g, '').split(';').map(t => t.trim()).filter(Boolean)
+  } catch { return [] }
+})()
 
 async function browser() { return chromium.launch({ channel: 'chrome' }) }
 async function contexto(b) {
@@ -41,6 +51,12 @@ async function foto(p, manual, nome, { full = false, sel = null, clip = null } =
   await p.evaluate(() => document.querySelectorAll('body *').forEach(el => {
     if (getComputedStyle(el).position === 'fixed' && /Primeiros passos|Tour concluído/.test(el.innerText || '')) el.style.display = 'none'
   })).catch(() => {})
+  if (OCULTAR.length) await p.evaluate((termos) => {
+    const re = new RegExp(termos.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi')
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (re.test(n.nodeValue)) { re.lastIndex = 0; n.nodeValue = n.nodeValue.replace(re, 'Cliente Exemplo') }
+    document.querySelectorAll('input, textarea').forEach(el => { if (re.test(el.value)) { re.lastIndex = 0; el.value = el.value.replace(re, 'Cliente Exemplo') } })
+  }, OCULTAR).catch(() => {})
   if (sel) await p.locator(sel).first().screenshot({ path: arq, type: 'jpeg', quality: 82 })
   else await p.screenshot({ path: arq, type: 'jpeg', quality: 82, fullPage: full, clip: clip || undefined })
   console.log('  ✓', manual + '/' + nome)

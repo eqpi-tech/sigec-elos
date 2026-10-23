@@ -13,6 +13,7 @@ const BETA = 'e1a00000-0000-4000-8000-000000000103', DELTA = 'e1a00000-0000-4000
   await borrar(p, 'Ver Perfil'); await foto(p, M, '05-todos-fornecedores')
   await ir(p, `/cliente/fornecedor/${BETA}`); await foto(p, M, '06-processo-resumo', { full: true })
   await clicar(p, 'Documentos'); await foto(p, M, '07-processo-documentos')
+  await clicar(p, 'Log do Processo'); await clicar(p, 'Pesquisar', 4000); await foto(p, M, '18-processo-log', { full: true })
   await ir(p, `/cliente/fornecedor/${DELTA}`); await foto(p, M, '08-processo-reprovado-carta', { full: true })
   await ir(p, '/cliente/convites'); await foto(p, M, '09-convites', { full: true })
   await clicar(p, '+ Novo Convite'); await clicar(p, 'Enviar convite para solicitar homologação'); await foto(p, M, '10-novo-convite', { full: true })

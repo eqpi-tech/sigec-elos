@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button, Spinner } from '../../components/ui.jsx'
+import { PRIMATUS } from './demoData.js'
 
 const STEPS = ['Empresa', 'Categorias', 'Conta', 'Termos', 'Plano', 'Pagamento']
 
-const DEMO_CNPJ       = '34.218.904/0001-72'
-const DEMO_COMPANY    = { razao_social:'Primatus Serviços Técnicos Ltda', situacao:'ATIVA', municipio:'São Paulo', uf:'SP', cnae:'Manutenção e reparação de equipamentos industriais', fundacao:'2012-03-10' }
+const DEMO_CNPJ       = PRIMATUS.cnpj
+const DEMO_COMPANY    = { razao_social:PRIMATUS.razao, situacao:'ATIVA', municipio:PRIMATUS.endereco.cidade, uf:PRIMATUS.endereco.uf }
+// as mesmas 4 categorias da Primatus nas demais telas
 const DEMO_CATEGORIES = [
   { id:1, name:'Manutenção Industrial',     checked:true  },
   { id:2, name:'Serviços Elétricos',        checked:true  },
   { id:3, name:'Automação & Controle',      checked:true  },
+  { id:9, name:'Caldeiraria',               checked:true  },
   { id:4, name:'Construção Civil',          checked:false },
   { id:5, name:'Logística e Transporte',    checked:false },
   { id:6, name:'TI e Telecomunicações',     checked:false },
@@ -43,7 +46,7 @@ export default function DemoSupplierOnboarding({ onComplete }) {
   const [looking,    setLooking]    = useState(false)
   const [cnpjOk,     setCnpjOk]     = useState(false)
   const [cats,       setCats]       = useState(DEMO_CATEGORIES)
-  const [planType,   setPlanType]   = useState('homologado')
+  const [planType,   setPlanType]   = useState('verificado')
   const [billing,    setBilling]    = useState('anual')
   const [terms1,     setTerms1]     = useState(false)
   const [terms2,     setTerms2]     = useState(false)
@@ -88,7 +91,9 @@ export default function DemoSupplierOnboarding({ onComplete }) {
             <div style={{ fontSize:64, marginBottom:16 }}>🎉</div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:22, color:'#15803d', marginBottom:8 }}>Cadastro concluído!</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#374151', lineHeight:1.6, marginBottom:8 }}>
-              Pagamento confirmado. Seu Selo <strong>{planType === 'homologado' ? 'ELOS Homologado' : 'ELOS Verificado'}</strong> foi ativado.
+              {planType === 'homologado'
+                ? <>Pagamento confirmado. Seu processo <strong>ELOS Homologado</strong> foi liberado — envie os documentos para a análise da EQPI.</>
+                : <>Pagamento confirmado. Seu Selo <strong>ELOS Verificado</strong> foi ativado.</>}
             </div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B', marginBottom:28 }}>
               Credenciais de acesso enviadas para <strong>{email}</strong>
@@ -262,7 +267,7 @@ export default function DemoSupplierOnboarding({ onComplete }) {
                   <span style={{ fontSize:28 }}>🔵</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>ELOS Verificado</div>
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Verificação automática · Vitrine imediata · Perfil Comprador incluso</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Verificação automática via Receita Federal · Perfil público no marketplace · Perfil Comprador Free incluído · Alertas de vencimento</div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#2E3192' }}>R$ 199<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
@@ -288,7 +293,7 @@ export default function DemoSupplierOnboarding({ onComplete }) {
                   <span style={{ fontSize:28 }}>🏅</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:15, color:'#1a1c5e' }}>ELOS Homologado</div>
-                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Análise humana EQPI · Selo Bronze/Prata/Ouro · Prioridade no marketplace</div>
+                    <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:2 }}>Tudo do Verificado + análise humana pelo backoffice EQPI · Prioridade de exibição no marketplace · Relatório Assertiva · Elegível para processos de homologação de clientes</div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
                     <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:900, fontSize:18, color:'#F47E2F' }}>R$ 690<span style={{ fontSize:11, fontWeight:400, color:'#9B9B9B' }}>/ano</span></div>
@@ -326,7 +331,7 @@ export default function DemoSupplierOnboarding({ onComplete }) {
               <Button variant="orange" full size="lg" style={{ borderRadius:12, fontSize:15 }} disabled={paying} onClick={handlePay}>
                 {paying ? <><Spinner size={16}/> Processando pagamento...</> : '🔐 Pagar com segurança via Stripe →'}
               </Button>
-              <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Boleto, PIX ou Cartão de crédito · Parcelamento em até 12x</div>
+              <div style={{ textAlign:'center', marginTop:12, fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>Boleto ou Cartão de crédito · Parcelamento em até 12x</div>
               <button onClick={() => setStep(4)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:12, fontFamily:'DM Sans,sans-serif', marginTop:8, display:'block', margin:'8px auto 0' }}>← Alterar plano</button>
             </div>
           )}

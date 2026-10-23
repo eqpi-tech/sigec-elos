@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
 import DemoNavbar               from './demo/DemoNavbar.jsx'
 import DemoSupplierOnboarding   from './demo/DemoSupplierOnboarding.jsx'
 import DemoSupplierDashboard    from './demo/DemoSupplierDashboard.jsx'
@@ -10,11 +10,12 @@ import DemoConvites             from './demo/DemoConvites.jsx'
 import DemoClientQuestionarios  from './demo/DemoClientQuestionarios.jsx'
 import {
   DemoSupplierQuestionario, DemoSupplierCategorias, DemoSupplierMeusDados,
-  DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig,
+  DemoSupplierClientesElos, DemoTeam, DemoPlano, DemoClientConfig, DemoClientTerms, DemoHelp,
   DemoSupplierCertificado, DemoPortalLanding, DemoPortalLogin,
 } from './demo/DemoExtraScreens.jsx'
 import { DemoClientRelatorios, DemoClientCompliance } from './demo/DemoNewScreens.jsx'
-import { DemoSupplierProcessoFicha, DemoSupplierDocumentosFicha, DemoClientProcesso, DemoBuyerFicha } from './demo/DemoFichas.jsx'
+import { DemoSupplierProcessoFicha, DemoSupplierDocumentosFicha, DemoClientProcesso, DemoSupplierProfile } from './demo/DemoFichas.jsx'
+import { DemoSupplierCotacoes, DemoBuyerCotacoes } from './demo/DemoQuotations.jsx'
 // Backoffice EQPI: acesso restrito por código (validado em demo-unlock) e
 // carregado sob demanda — não vai no pacote principal do /demo, que é público
 const DemoBackofficeScreen = lazy(() => import('./demo/DemoBackoffice.jsx'))
@@ -49,8 +50,8 @@ const PROFILES = [
     label: 'Comprador',
     icon: '🔍',
     name: 'Ricardo Mendes',
-    company: 'Horizonte Mineração S/A',
-    desc: 'Busque fornecedores verificados no Marketplace, envie convites e cotações RFQ.',
+    company: 'Construtora Meridiano · Pro',
+    desc: 'Comprador Pro: busque fornecedores verificados no Marketplace, veja os contatos completos, envie convites e cotações.',
     color: '#7c3aed',
     bg: '#f5f3ff',
   },
@@ -172,8 +173,10 @@ function ProfileSelector({ onSelect }) {
   )
 }
 
-// ── Screen routing ────────────────────────────────────────────────────────────
-function renderScreen(profile, screen, navigate) {
+// ── Screen routing ────────────────────────────────────────────────────────
+// navigate(tela, params) — params leva o contexto (ex.: fornecedor do perfil)
+function renderScreen(profile, screen, navigate, params) {
+  if (screen === 'ajuda') return <DemoHelp role={profile}/>
   if (profile === 'SUPPLIER') {
     if (screen === 'documentos')   return <DemoSupplierDocumentosFicha/>
     if (screen === 'processo')     return <DemoSupplierProcessoFicha navigate={navigate}/>
@@ -184,23 +187,26 @@ function renderScreen(profile, screen, navigate) {
     if (screen === 'dados')        return <DemoSupplierMeusDados/>
     if (screen === 'clientes')     return <DemoSupplierClientesElos/>
     if (screen === 'equipe')       return <DemoTeam role="SUPPLIER"/>
+    if (screen === 'cotacoes')     return <DemoSupplierCotacoes/>
     return <DemoSupplierDashboard navigate={navigate}/>
   }
   if (profile === 'BUYER') {
     if (screen === 'convites') return <DemoConvites profile="BUYER" navigate={navigate}/>
-    if (screen === 'perfil')   return <DemoBuyerFicha navigate={navigate}/>
-    if (screen === 'rfq')      return <DemoRFQ profile="BUYER" navigate={navigate}/>
+    if (screen === 'perfil')   return <DemoSupplierProfile role="BUYER" supplierId={params.supplierId} navigate={navigate}/>
+    if (screen === 'cotacoes') return <DemoBuyerCotacoes navigate={navigate}/>
     if (screen === 'plano')    return <DemoPlano role="BUYER"/>
     return <DemoBuyerMarketplace navigate={navigate}/>
   }
   if (profile === 'CLIENT') {
-    if (screen === 'fornecedores')  return <DemoClientFornecedores navigate={navigate}/>
+    if (screen === 'fornecedores')  return <DemoClientFornecedores navigate={navigate} initialTab={params.tab}/>
+    if (screen === 'perfil_fornecedor') return <DemoSupplierProfile role="CLIENT" supplierId={params.supplierId} supplier={params.supplier} backTab={params.tab} navigate={navigate}/>
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
-    if (screen === 'rfq')           return <DemoRFQ profile="CLIENT" navigate={navigate}/>
-    if (screen === 'questionarios')  return <DemoClientQuestionarios navigate={navigate}/>
+    if (screen === 'rfq')           return <DemoRFQ navigate={navigate}/>
+    if (screen === 'questionarios') return <DemoClientQuestionarios/>
     if (screen === 'relatorios')    return <DemoClientRelatorios/>
     if (screen === 'compliance')    return <DemoClientCompliance/>
     if (screen === 'configuracoes') return <DemoClientConfig navigate={navigate}/>
+    if (screen === 'termos')        return <DemoClientTerms/>
     if (screen === 'equipe')        return <DemoTeam role="CLIENT"/>
     if (screen === 'processo')      return <DemoClientProcesso navigate={navigate}/>
     return <DemoClientDashboard navigate={navigate}/>
@@ -221,22 +227,28 @@ function renderScreen(profile, screen, navigate) {
 export default function DemoPage() {
   const [profile, setProfile] = useState(null)
   const [screen,  setScreen]  = useState('dashboard')
+  const [params,  setParams]  = useState({})
+
+  const navigate = useCallback((s, p = {}) => {
+    setScreen(s); setParams(p || {})
+    try { window.scrollTo(0, 0) } catch { /* sem window em pré-visualização */ }
+  }, [])
 
   const handleSelect = (p) => {
     setProfile(p)
-    setScreen(p === 'BUYER' ? 'marketplace' : 'dashboard')
+    navigate(p === 'BUYER' ? 'marketplace' : 'dashboard')
   }
 
   const handleExit = () => {
     setProfile(null)
-    setScreen('dashboard')
+    navigate('dashboard')
   }
 
   // Novo Fornecedor: onboarding full-screen, depois muda para SUPPLIER
   if (profile === 'NEW_SUPPLIER') {
     return (
       <DemoSupplierOnboarding
-        onComplete={() => { setProfile('SUPPLIER'); setScreen('dashboard') }}
+        onComplete={() => { setProfile('SUPPLIER'); navigate('dashboard') }}
       />
     )
   }
@@ -244,13 +256,13 @@ export default function DemoPage() {
   if (!profile) return <ProfileSelector onSelect={handleSelect}/>
 
   // Portal white-label fake: tela cheia, sem a navbar do demo (parece real)
-  if (profile === 'CLIENT' && screen === 'portal_landing') return <DemoPortalLanding navigate={setScreen}/>
-  if (profile === 'CLIENT' && screen === 'portal_login')   return <DemoPortalLogin   navigate={setScreen}/>
+  if (profile === 'CLIENT' && screen === 'portal_landing') return <DemoPortalLanding navigate={navigate}/>
+  if (profile === 'CLIENT' && screen === 'portal_login')   return <DemoPortalLogin   navigate={navigate}/>
 
   return (
     <div style={{ minHeight:'100vh', background:'#f4f5f9' }}>
-      <DemoNavbar role={profile} screen={screen} navigate={setScreen} onExit={handleExit}/>
-      {renderScreen(profile, screen, setScreen)}
+      <DemoNavbar role={profile} screen={screen} navigate={navigate} onExit={handleExit}/>
+      {renderScreen(profile, screen, navigate, params)}
     </div>
   )
 }

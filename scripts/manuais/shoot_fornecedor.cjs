@@ -55,5 +55,6 @@ const RECEITA = {
   await ir(p, '/fornecedor/equipe', 5000); await foto(p, M, '17-equipe')
   await ir(p, '/fornecedor/planos', 5000); await foto(p, M, '18-planos')
   await ir(p, '/conta', 4000); await foto(p, M, '19-minha-conta')
+  await ir(p, '/ajuda', 4000); await foto(p, M, '21-ajuda')
   await b.close()
 })()

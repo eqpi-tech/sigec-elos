@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, ScoreBar, Spinner } from '../../components/ui.jsx'
 import { DEMO_MARKETPLACE } from './demoData.js'
+import { BuyerRFQModal } from './DemoQuotations.jsx'
 
 const STATES  = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
 const SIZES   = ['MEI','ME','EPP','Médio','Grande']
@@ -47,7 +48,10 @@ function CapitalSlider({ min, max, onMin, onMax }) {
   )
 }
 
-export default function DemoBuyerMarketplace({ navigate }) {
+// mode CLIENT: aba "Todos os Fornecedores" do cliente (mesma busca; a RFQ do
+// cliente é por categoria — o botão só abre Cotações (RFQ))
+export default function DemoBuyerMarketplace({ navigate, mode = 'BUYER' }) {
+  const isClient = mode === 'CLIENT'
   const [q,           setQ]           = useState('')
   const [cnae,        setCnae]        = useState('')
   const [city,        setCity]        = useState('')
@@ -89,7 +93,7 @@ export default function DemoBuyerMarketplace({ navigate }) {
   }
 
   const results = DEMO_MARKETPLACE.filter(s => {
-    if (q && !s.razao_social.toLowerCase().includes(q.toLowerCase())) return false
+    if (q && !s.razao_social.toLowerCase().includes(q.toLowerCase()) && !s.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')) return false
     if (sts.length && !sts.includes(s.state)) return false
     if (sizes.length && !sizes.includes(s.porte)) return false
     if (sealType !== 'Todos' && s.sealType !== sealType) return false
@@ -202,11 +206,15 @@ export default function DemoBuyerMarketplace({ navigate }) {
               <strong style={{ color:'#1a1c5e' }}>{results.length}</strong> fornecedor{results.length!==1?'es':''} encontrado{results.length!==1?'s':''}.
             </div>
             <div style={{ display:'flex', gap:8 }}>
-              {selectedList.length > 0 && (
-                <Button variant="orange" size="sm" onClick={() => navigate('rfq')}>
+              {selectedList.length > 0 && (isClient ? (
+                <span title="A cotação do cliente é enviada por categoria — os fornecedores selecionados aqui não são incluídos">
+                  <Button variant="orange" size="sm" onClick={() => navigate('rfq')}>📝 Ir para Cotações (RFQ)</Button>
+                </span>
+              ) : (
+                <Button variant="orange" size="sm" onClick={() => setShowRfq(true)}>
                   📝 Cotação ({selectedList.length})
                 </Button>
-              )}
+              ))}
               <button onClick={reset} style={{ padding:'6px 14px', borderRadius:8, background:'#EEF0FF', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, border:'none', cursor:'pointer' }}>
                 Limpar busca
               </button>
@@ -244,7 +252,6 @@ export default function DemoBuyerMarketplace({ navigate }) {
             {results.map(s => {
               const isSel  = !!selected[s.id]
               const badge  = sealBadge(s)
-              const scoreC = s.score>=90?'#22c55e':s.score>=70?'#f59e0b':'#ef4444'
               const initials = s.razao_social.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()
               return (
                 <div key={s.id}
@@ -259,7 +266,7 @@ export default function DemoBuyerMarketplace({ navigate }) {
                       </div>
                       <div style={{ minWidth:0 }}>
                         <div style={{ fontSize:13, fontWeight:700, color:'#1a1c5e', fontFamily:'Montserrat,sans-serif', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.razao_social}</div>
-                        <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>{s.city} · {s.state}</div>
+                        <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>{s.city} · {s.state} · {s.cnpj}</div>
                       </div>
                     </div>
                     <span style={{ fontSize:10, fontWeight:700, color:badge.color, background:`${badge.color}18`, padding:'3px 8px', borderRadius:20, fontFamily:'Montserrat,sans-serif', flexShrink:0, marginLeft:8, whiteSpace:'nowrap' }}>
@@ -281,7 +288,7 @@ export default function DemoBuyerMarketplace({ navigate }) {
 
                   <div style={{ display:'flex', gap:8 }}>
                     <Button variant="primary" size="sm" style={{ flex:1, justifyContent:'center', borderRadius:8 }}
-                      onClick={() => s.sealType && navigate('perfil')}>Ver Perfil</Button>
+                      onClick={() => isClient ? navigate('perfil_fornecedor', { supplierId: s.id, tab: 'todos' }) : navigate('perfil', { supplierId: s.id })}>Ver Perfil</Button>
                     <button onClick={() => setSelected(m => { const n={...m}; if(n[s.id]) delete n[s.id]; else n[s.id]=s; return n })}
                       style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${isSel?'#2E3192':'#e2e4ef'}`, background:isSel?'rgba(46,49,146,.1)':'#fff', color:isSel?'#2E3192':'#9B9B9B', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>
                       {isSel ? '✓' : '+'}
@@ -293,6 +300,10 @@ export default function DemoBuyerMarketplace({ navigate }) {
           </div>
         )}
       </div>
+      {showRfq && (
+        <BuyerRFQModal suppliers={selectedList} onClose={() => { setShowRfq(false); setSelected({}) }}
+          onOpenList={() => { setShowRfq(false); setSelected({}); navigate('cotacoes') }}/>
+      )}
     </div>
   )
 }

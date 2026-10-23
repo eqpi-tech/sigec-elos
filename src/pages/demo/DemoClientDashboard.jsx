@@ -12,8 +12,10 @@ function formatCnpj(v) {
   return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2}).*/, (_,a,b,c,d,e) => e ? `${a}.${b}.${c}/${d}-${e}` : d ? `${a}.${b}.${c}/${d}` : c ? `${a}.${b}.${c}` : b ? `${a}.${b}` : a)
 }
 
-function InviteModal({ onClose }) {
-  const [form,    setForm]    = useState(EMPTY_FORM)
+// formulário de convite do CLIENTE (com Subsidiado) — também usado pela ficha
+// do fornecedor, pelos interessados e pelos pré-cadastros (prefill)
+export function InviteModal({ onClose, prefill, onSent }) {
+  const [form,    setForm]    = useState({ ...EMPTY_FORM, ...(prefill || {}) })
   const [sending, setSending] = useState(false)
   const [sent,    setSent]    = useState(false)
   const [error,   setError]   = useState('')
@@ -26,7 +28,7 @@ function InviteModal({ onClose }) {
     e.preventDefault()
     if (!form.razao_social || !form.email) { setError('Razão social e e-mail são obrigatórios.'); return }
     setSending(true); setError('')
-    setTimeout(() => { setSending(false); setSent(true) }, 800)
+    setTimeout(() => { setSending(false); setSent(true); onSent?.(form) }, 800)
   }
 
   return (
@@ -167,7 +169,7 @@ export default function DemoClientDashboard({ navigate }) {
           </div>
           <ScoreBar score={c.saudeGeral}/>
         </div>
-        <Button variant="neutral" size="sm">Ver relatório completo →</Button>
+        <Button variant="neutral" size="sm" onClick={() => navigate('relatorios')}>Ver relatório completo →</Button>
       </Card>
 
       {/* Fornecedores recentes */}
@@ -180,7 +182,7 @@ export default function DemoClientDashboard({ navigate }) {
         </div>
         <div style={{ display:'grid', gap:10 }}>
           {recentes.map(inv => (
-            <div key={inv.id} onClick={() => navigate('processo')}
+            <div key={inv.id} onClick={() => navigate(inv.id === 1 ? 'processo' : 'fornecedores')}
               style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', background:'#f8faff', borderRadius:12, border:'1px solid #e2e4ef', cursor:'pointer', transition:'background .15s' }}
               onMouseOver={e => e.currentTarget.style.background='#f0f3ff'}
               onMouseOut={e  => e.currentTarget.style.background='#f8faff'}>

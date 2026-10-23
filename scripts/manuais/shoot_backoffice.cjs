@@ -28,6 +28,11 @@ const CONSTRUTORA = 'e1a00000-0000-4000-8000-000000000101', BETA = 'e1a00000-000
     await clicar(p, '📥 Custos Captura', 4000); await borrarLinhas(p, 'tr'); await foto(p, M, '11-custos-captura', { full: true })
     await clicar(p, '🤖 Custos IA', 4000); await borrarLinhas(p, 'tr'); await foto(p, M, '12-custos-ia', { full: true })
   }
+  if (quer('22')) {
+    await ir(p, '/backoffice/metricas'); await clicar(p, '🤝 Subsidiados', 3000)
+    await p.locator('#sub-de').fill('').catch(() => {}); await p.locator('#sub-pagamento').selectOption('todos').catch(() => {}); await p.waitForTimeout(1500)
+    await borrarLinhas(p, 'tr'); await foto(p, M, '22-financeiro-subsidiados', { full: true })
+  }
   if (quer('13')) { await ir(p, '/backoffice/clientes'); await borrar(p, '✏ Editar'); await foto(p, M, '13-clientes') }
   if (quer('14')) { await ir(p, '/backoffice/fluxo-documentos'); await buscarEscolher(p, 'Buscar cliente', 'Mineradora', 'Mineradora Exemplo'); await foto(p, M, '14-fluxos', { full: true }) }
   if (quer('15')) { await ir(p, '/backoffice/landing-pages'); await buscarEscolher(p, 'Buscar cliente', 'Mineradora', 'Mineradora Exemplo'); await foto(p, M, '15-portais') }
