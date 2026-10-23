@@ -21,40 +21,63 @@ function Barra({ label, value, max, color = '#2E3192' }) {
   )
 }
 
-// ── Cliente · Relatórios ────────────────────────────────────────────────────
+// ── Cliente · Relatórios (src/pages/client/Reports.jsx) ────────────────────
+// Filtro de período Data início / Data fim / Aplicar / Limpar: filtra a série
+// mensal fictícia (que sempre termina no mês corrente)
+const fmtDia = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR')
 export function DemoClientRelatorios() {
   const r = DEMO_CLIENT_REPORTS
-  const maxMes = Math.max(...r.porMes.map(([, v]) => v))
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [periodo, setPeriodo] = useState({ de: '', ate: '' })
+  const comPeriodo = !!(periodo.de || periodo.ate)
+  const txtPeriodo = comPeriodo ? `${periodo.de ? fmtDia(periodo.de) : 'início'} a ${periodo.ate ? fmtDia(periodo.ate) : 'hoje'}` : 'todo o período'
+  const meses = r.porMes.filter(m => (!periodo.de || m.key >= periodo.de.slice(0, 7)) && (!periodo.ate || m.key <= periodo.ate.slice(0, 7)))
+  const maxMes = Math.max(1, ...meses.map(m => m.value))
+  const noPeriodo = meses.reduce((a, m) => a + m.value, 0)
+  const inpData = { padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 13, color: '#1a1c5e' }
+  const lblData = { display: 'block', fontSize: 11, fontWeight: 700, color: '#9B9B9B', fontFamily: M, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 4 }
   return (
     <div style={wrap}>
-      <PageHeader title="Relatórios" subtitle="Visão executiva da sua homologação de fornecedores"/>
+      <PageHeader title="Relatórios" subtitle={`Visão executiva da sua homologação de fornecedores · ${txtPeriodo}`}/>
+      <Card style={{ borderRadius: 14, padding: '14px 18px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div><label style={lblData}>Data início</label><input type="date" value={de} max={ate || undefined} onChange={e => setDe(e.target.value)} style={inpData}/></div>
+        <div><label style={lblData}>Data fim</label><input type="date" value={ate} min={de || undefined} onChange={e => setAte(e.target.value)} style={inpData}/></div>
+        <Button variant="primary" size="sm" onClick={() => setPeriodo({ de, ate })}>Aplicar</Button>
+        {comPeriodo && <Button variant="neutral" size="sm" onClick={() => { setDe(''); setAte(''); setPeriodo({ de: '', ate: '' }) }}>Limpar</Button>}
+        <span style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B' }}>Os indicadores de documentos e processos a vencer são sempre de hoje.</span>
+      </Card>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 12, marginBottom: 18 }}>
-        <KpiCard label="Fornecedores" value={r.kpis.fornecedores} icon="🏭" iconBg="rgba(46,49,146,.1)"/>
+        <KpiCard label={comPeriodo ? 'Homologações no período' : 'Fornecedores'} value={comPeriodo ? noPeriodo : r.kpis.fornecedores} icon="🏭" iconBg="rgba(46,49,146,.1)"/>
         <KpiCard label="Homologados vigentes" value={r.kpis.homologados} icon="🏅" iconBg="rgba(34,197,94,.12)"/>
         <KpiCard label="Em homologação" value={r.kpis.emHomologacao} icon="⏳" iconBg="rgba(245,158,11,.12)"/>
-        <KpiCard label="Docs a vencer (30d)" value={r.kpis.docsAVencer30} icon="📄" iconBg="rgba(244,126,47,.12)"/>
+        <KpiCard label="Docs a vencer (30d) · hoje" value={r.kpis.docsAVencer30} icon="📄" iconBg="rgba(244,126,47,.12)"/>
         <KpiCard label="Processos a vencer (60d)" value={r.kpis.processosAVencer60} icon="📅" iconBg="rgba(124,58,237,.1)"/>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(420px,1fr))', gap: 14 }}>
+        <Card style={{ borderRadius: 16, padding: '18px 22px' }}>
+          <SectionTitle>Situação dos processos{comPeriodo ? ' iniciados no período' : ''}</SectionTitle>
+          {r.situacao.map((s) => <Barra key={s.label} label={s.label} value={s.value} max={r.kpis.fornecedores} color={s.color}/>)}
+        </Card>
         <Card style={{ borderRadius: 16, padding: '18px 22px' }}>
           <SectionTitle>Funil de convites</SectionTitle>
           {r.funil.map((f) => <Barra key={f.label} label={f.label} value={f.value} max={r.funil[0].value}/>)}
         </Card>
         <Card style={{ borderRadius: 16, padding: '18px 22px' }}>
-          <SectionTitle>Situação dos processos</SectionTitle>
-          {r.situacao.map((s) => <Barra key={s.label} label={s.label} value={s.value} max={r.kpis.fornecedores} color={s.color}/>)}
-        </Card>
-        <Card style={{ borderRadius: 16, padding: '18px 22px' }}>
-          <SectionTitle>Homologações por mês</SectionTitle>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 140, paddingTop: 8 }}>
-            {r.porMes.map(([m, v]) => (
-              <div key={m} style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontFamily: M, fontSize: 11, fontWeight: 700, color: '#1a1c5e' }}>{v}</div>
-                <div style={{ height: `${(v / maxMes) * 100}px`, background: '#2E3192', borderRadius: '6px 6px 0 0', marginTop: 4 }}/>
-                <div style={{ fontFamily: D, fontSize: 11, color: '#6b7280', marginTop: 4 }}>{m}</div>
-              </div>
-            ))}
-          </div>
+          <SectionTitle>Homologações por mês{comPeriodo ? '' : ' (últimos 12 meses)'}</SectionTitle>
+          {meses.length === 0 ? (
+            <div style={{ fontFamily: D, fontSize: 13, color: '#9B9B9B', padding: '30px 0', textAlign: 'center' }}>Nenhuma homologação no período.</div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 150, paddingTop: 8 }}>
+              {meses.map((m) => (
+                <div key={m.key} style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                  <div style={{ fontFamily: M, fontSize: 11, fontWeight: 700, color: '#1a1c5e' }}>{m.value}</div>
+                  <div style={{ height: `${(m.value / maxMes) * 100}px`, background: '#2E3192', borderRadius: '6px 6px 0 0', marginTop: 4 }}/>
+                  <div style={{ fontFamily: D, fontSize: 10, color: '#6b7280', marginTop: 4, whiteSpace: 'nowrap' }}>{m.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
         <Card style={{ borderRadius: 16, padding: '18px 22px' }}>
           <SectionTitle>Questionários e cotações</SectionTitle>
@@ -90,7 +113,7 @@ export function DemoClientCompliance() {
         ))}
       </Card>
       <div style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B', marginTop: 10 }}>
-        As regras de alerta são configuradas por pergunta no editor de questionários — cada cliente define o que exige revisão.
+        As regras de alerta são configuradas por pergunta pela equipe EQPI, conforme o que cada cliente define como ponto de revisão.
       </div>
     </div>
   )

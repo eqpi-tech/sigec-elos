@@ -9,26 +9,29 @@
 // o /demo é público e clientes/concorrentes não devem ver a operação.
 // Os dados do backoffice ficam AQUI (não em demoData.js) para não irem no
 // pacote principal do site.
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, Button, KpiCard, PageHeader, SectionTitle } from '../../components/ui.jsx'
-import { FICHA, ROW, Tabs, Toast, Modal, DocViewer, HistoryModal, Field, StatusDot } from './DemoFichaKit.jsx'
+import ProcessLog from '../../components/ProcessLog.jsx'
+import { FICHA, Tabs, Modal, DocViewer, HistoryModal, Field, StatusDot, effStatus, DOC_STATUS, logFetcher, useToast, SO_REAL, InlineConfirm, exportRows, fmt } from './DemoFichaKit.jsx'
+import { pickFile } from './DemoFichas.jsx'
+import { PRIMATUS, HORIZONTE, MERIDIANO, isoD, isoDT, brD, fmtBR, fmtBRDT, addBusinessDaysIso, toBusinessDayIso } from './demoData.js'
 
 // Backoffice · fila de análise de documentos (padrão HOC: envio + 3 dias úteis)
 const DEMO_ADMIN_FILA = [
-  { id: 'f1', fornecedor: 'Primatus Serviços Técnicos Ltda', cnpj: '34.218.904/0001-72', cliente: 'Horizonte Mineração', doc: 'Apólice de Seguro', limite: 'ultrapassada', rota: null },
-  { id: 'f2', fornecedor: 'Ômega Engenharia Ltda', cnpj: '41.090.118/0001-30', cliente: 'Horizonte Mineração', doc: 'Alvará de Funcionamento', limite: 'hoje', rota: { r: 'B', s: 'reprovar', m: 'Documento vencido em 04/09/2026 e de outra filial (0006-51).' } },
+  { id: 'f1', fornecedor: PRIMATUS.razao, cnpj: PRIMATUS.cnpj, cliente: 'Horizonte Mineração', doc: 'Apólice de Seguro de Responsabilidade Civil', limite: 'ultrapassada', rota: null, primatus: true },
+  { id: 'f2', fornecedor: 'Ômega Engenharia Ltda', cnpj: '41.090.118/0001-30', cliente: 'Horizonte Mineração', doc: 'Alvará de Funcionamento', limite: 'hoje', rota: { r: 'B', s: 'reprovar', m: `Documento vencido em ${brD(-19)} e de outra filial (0006-51).` } },
   { id: 'f3', fornecedor: 'TechFix Industrial S.A.', cnpj: '07.332.910/0001-41', cliente: 'Horizonte Mineração', doc: 'CND Tributos Federais', limite: 'hoje', rota: { r: 'A', s: 'aprovar', m: 'Receita/PGFN: certidão negativa emitida na fonte oficial.' } },
   { id: 'f4', fornecedor: 'Sulbras Serviços Ltda', cnpj: '19.554.203/0001-88', cliente: 'Horizonte Mineração', doc: 'CNDT Certidão Trabalhista', limite: 'futura', rota: { r: 'A', s: 'reprovar', m: 'TST: POSITIVA — consta no BNDT (débitos trabalhistas).' } },
-  { id: 'f5', fornecedor: 'Norte Industrial Ltda', cnpj: '28.119.340/0001-55', cliente: 'ELOS', doc: 'Licença de Operação', limite: 'futura', rota: { r: 'B', s: 'aprovar', m: 'LO do órgão ambiental, CNPJ confere, válida até 2028.' } },
+  { id: 'f5', fornecedor: 'Norte Industrial Ltda', cnpj: '28.119.340/0001-55', cliente: 'ELOS', doc: 'Licença de Operação', limite: 'futura', rota: { r: 'B', s: 'aprovar', m: `LO do órgão ambiental, CNPJ confere, válida até ${brD(612)}.` } },
   { id: 'f6', fornecedor: 'BioTech Serviços Ambientais', cnpj: '22.781.604/0001-17', cliente: 'Horizonte Mineração', doc: 'Contrato Social', limite: 'futura', rota: null },
 ]
 
 // Backoffice · convites (telefone informado pelo cliente ao lado do e-mail)
 const DEMO_ADMIN_CONVITES = [
-  { fornecedor: 'Vértice Montagens Ltda', cnpj: '33.901.227/0001-60', email: 'contato@vertice.com.br', telefone: '(31) 98765-4321', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos', status: 'SENT', quando: '29/09 14:27', subsidiado: true },
-  { fornecedor: 'Rota Sul Transportes', cnpj: '10.228.551/0001-02', email: 'comercial@rotasul.com.br', telefone: '', cliente: 'Horizonte Mineração', fluxo: 'Transporte', status: 'VIEWED', quando: '28/09 10:05', subsidiado: false },
-  { fornecedor: 'Primatus Serviços Técnicos Ltda', cnpj: '34.218.904/0001-72', email: 'lucas@primatus.com.br', telefone: '(11) 3421-8900', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos', status: 'ACCEPTED', quando: '15/01 09:12', subsidiado: false },
-  { fornecedor: 'Delta Serviços Gerais', cnpj: '05.448.310/0001-91', email: 'adm@deltaservicos.com.br', telefone: '', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos', status: 'CANCELLED', quando: '20/09 16:40', subsidiado: true },
+  { fornecedor: 'Vértice Montagens Ltda', cnpj: '33.901.227/0001-60', email: 'contato@vertice.com.br', telefone: '(31) 98765-4321', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos – Nível 2', status: 'VIEWED', quando: fmtBRDT(isoDT(-9, '14:27')), subsidiado: true },
+  { fornecedor: 'NovaTech Serviços Ltda', cnpj: '64.123.789/0001-99', email: 'novo@novatech.com.br', telefone: '', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos – Nível 1', status: 'SENT', quando: fmtBRDT(isoDT(-3, '10:05')), subsidiado: false },
+  { fornecedor: PRIMATUS.razao, cnpj: PRIMATUS.cnpj, email: 'lucas@primatus.com.br', telefone: PRIMATUS.telefone, cliente: 'Horizonte Mineração', fluxo: 'Suprimentos – Nível 2', status: 'ACCEPTED', quando: fmtBRDT(isoDT(-51, '09:12')), subsidiado: true },
+  { fornecedor: 'Delta Serviços Gerais Ltda', cnpj: '05.448.310/0001-91', email: 'adm@deltaservicos.com.br', telefone: '', cliente: 'Horizonte Mineração', fluxo: 'Suprimentos – Nível 1', status: 'CANCELLED', quando: fmtBRDT(isoDT(-44, '16:40')), subsidiado: true },
 ]
 
 // Backoffice · BC Report (fontes consultadas e resultado de exemplo)
@@ -39,10 +42,15 @@ const DEMO_BC_FONTES = [
   { grupo: 'Judicial e integridade', fontes: ['Falência e Recuperação Judicial', 'CNJ Improbidade', 'DataJud (processos)', 'CGU Correcional', 'MPF / MPT'] },
   { grupo: 'Ambiental e reputação', fontes: ['IBAMA (embargos)', 'Mídia negativa', 'ICIJ (vazamentos offshore)', 'TSE (candidaturas de sócios)'] },
 ]
+// empresas fictícias conhecidas da demo (o resultado usa o CNPJ digitado)
+const BC_EMPRESAS = {
+  [PRIMATUS.cnpj]: PRIMATUS.razao, '41.090.118/0001-30': 'Ômega Engenharia Ltda', '07.332.910/0001-41': 'TechFix Industrial S.A.',
+  '19.554.203/0001-88': 'Sulbras Serviços Ltda', '28.119.340/0001-55': 'Norte Industrial Ltda', [HORIZONTE.cnpj]: HORIZONTE.razao,
+}
 const DEMO_BC_RESULTADO = {
-  empresa: 'Ômega Engenharia Ltda', cnpj: '41.090.118/0001-30', tipo: 'Full', score: 78, faixa: 'medio',
+  score: 78, faixa: 'medio',
   achados: [
-    { ok: true,  t: 'Situação cadastral ATIVA desde 2009; sócios sem restrição' },
+    { ok: true,  t: 'Situação cadastral ATIVA; sócios sem restrição' },
     { ok: true,  t: 'Sem registros em CEIS, CNEP, CEPIM, OFAC e ONU' },
     { ok: true,  t: 'Certidões federal, FGTS e trabalhista negativas' },
     { ok: false, t: 'CND estadual indisponível na fonte no momento da consulta — faixa limitada a "médio"' },
@@ -132,12 +140,14 @@ export function DemoAdminAnalise({ navigate }) {
   const [feito, setFeito] = useState({})
   const [aceitar, setAceitar] = useState(null)
   const [cli, setCli] = useState('')   // filtro de cliente (produção: 08/10)
+  const [, setToast, ToastEl] = useToast()
   const clientesFila = [...new Set(DEMO_ADMIN_FILA.map((d) => d.cliente))]
   const lista = DEMO_ADMIN_FILA.filter((d) => (!sug || (sug === 'nenhuma' ? !d.rota : d.rota?.s === sug || d.rota?.r === sug)) && (!cli || d.cliente === cli))
   const sel = { padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 13, width: '100%' }
   const lbl = { display: 'block', fontFamily: M, fontWeight: 700, fontSize: 10, color: '#9B9B9B', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }
   return (
     <div style={wrap}>
+      {ToastEl}
       <PageHeader title="Análise de Documentos" subtitle="Aprovação e rejeição em lote · independente de fornecedor"/>
       <Card style={{ borderRadius: 14, padding: '16px 20px', marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
@@ -181,7 +191,7 @@ export function DemoAdminAnalise({ navigate }) {
                 {st === 'VALID' ? '✓ Aprovado' : st === 'REJECTED' ? '✕ Reprovado' : l.label}
               </div>
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <Button variant="neutral" size="sm">👁</Button>
+                <Button variant="neutral" size="sm" title="Ver documento" onClick={() => setToast('ℹ️ Demonstração: abre o arquivo do documento enviado.')}>👁</Button>
                 {!st && d.rota && (
                   <Button variant={d.rota.s === 'aprovar' ? 'success' : 'danger'} size="sm" onClick={() => setAceitar(d)}>
                     {d.rota.s === 'aprovar' ? '✓' : '✕'} Aceitar sugestão
@@ -224,9 +234,103 @@ export function DemoAdminAnalise({ navigate }) {
 // ── Ficha do processo (fiel à tela real do backoffice) ──────────────────────
 const MOTIVOS = ['Documento vencido', 'Documento ilegível ou com baixa qualidade', 'Documento diferente do solicitado', 'CNPJ/Razão social divergente do cadastro', 'Ausência de assinatura', 'Documento incompleto (páginas faltando)']
 const ASSERTIVA = { A: ['Excelente', '#15803d'], B: ['Bom', '#22c55e'], C: ['Médio', '#f59e0b'], D: ['Baixo', '#f97316'], E: ['Alto risco', '#ef4444'], F: ['Altíssimo risco', '#b91c1c'] }
+const agoraBR = () => `${brD(0)} ${new Date().toTimeString().slice(0, 5)}`
+
+// Validação do CNAE — espelha src/components/CnaeValidationModal.jsx: contador,
+// "mostrar só as sem CNAE", repetir o último CNAE, e categoria sem CNAE fica
+// REPROVADA no processo (o processo segue)
+function CnaeModal({ cats, onValidated, onClose }) {
+  const opcoes = [{ code: FICHA.cnaePrincipal.codigo, desc: FICHA.cnaePrincipal.desc, main: true }, ...FICHA.cnaesSec.map(c => ({ code: c.codigo, desc: c.desc, main: false }))]
+  const [lista, setLista] = useState(cats)
+  const [ultimo, setUltimo] = useState('')
+  const [soPendentes, setSoPendentes] = useState(false)
+  const [confirmar, setConfirmar] = useState(null)   // 'todas' | 'validar'
+  const descDe = (code) => opcoes.find(o => o.code === code)
+  const escolher = (nome, cnae) => { setLista(p => p.map(x => (x.nome === nome ? { ...x, cnae } : x))); if (cnae) setUltimo(cnae) }
+  const repetir = (substituir) => { setLista(p => p.map(x => ((substituir || !x.cnae) ? { ...x, cnae: ultimo } : x))); setConfirmar(null) }
+  const vinculadas = lista.filter(c => c.cnae).length
+  const semCnae = lista.length - vinculadas
+  const visiveis = lista.filter(c => !soPendentes || !c.cnae)
+  const ult = descDe(ultimo)
+  const font = { fontFamily: D }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ background: '#fff', borderRadius: 16, maxWidth: 1040, width: '96%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
+        <div style={{ padding: '24px 28px 12px' }}>
+          <div style={{ fontFamily: M, fontWeight: 800, fontSize: 18, color: '#1a1c5e', marginBottom: 4 }}>🧩 Validação do CNAE</div>
+          <div style={{ ...font, fontSize: 13, color: '#64748b' }}>
+            Vincule cada categoria da homologação a um CNAE do fornecedor (principal ou secundário).
+            O vínculo garante que a atividade da empresa cobre a categoria contratada.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 12, ...font, fontSize: 12.5, color: '#475569' }}>
+            <strong style={{ color: semCnae ? '#b45309' : '#15803d' }}>{vinculadas} de {lista.length} categorias vinculadas</strong>
+            {semCnae > 0 && <span style={{ color: '#dc2626' }}>{semCnae} sem CNAE → ficarão reprovadas no processo</span>}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={soPendentes} onChange={e => setSoPendentes(e.target.checked)}/> mostrar só as sem CNAE
+            </label>
+          </div>
+          {ultimo && lista.length > 1 && (
+            <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, background: '#eef2ff', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 320px', ...font, fontSize: 12.5, color: '#1e1b4b', lineHeight: 1.4 }}>
+                Último CNAE escolhido: <strong>{ultimo}</strong>{ult?.desc ? ` — ${ult.desc}` : ''}
+              </div>
+              <Button variant="primary" size="sm" disabled={!semCnae} onClick={() => repetir(false)}>↻ Repetir nas {semCnae} sem CNAE</Button>
+              <Button variant="neutral" size="sm" onClick={() => setConfirmar('todas')}>Aplicar em todas</Button>
+            </div>
+          )}
+          {confirmar === 'todas' && (
+            <InlineConfirm msg={`Aplicar ${ultimo} em TODAS as ${lista.length} categorias, substituindo as já vinculadas?`} confirmLabel="Aplicar em todas"
+              onCancel={() => setConfirmar(null)} onConfirm={() => repetir(true)}/>
+          )}
+        </div>
+        <div style={{ padding: '4px 28px', overflowY: 'auto', flex: 1 }}>
+          {visiveis.map(c => {
+            const o = descDe(c.cnae)
+            return (
+              <div key={c.nome} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.25fr)', gap: 12, alignItems: 'start', padding: '10px 12px', borderRadius: 10, border: '1px solid #eef0f6', marginBottom: 8, background: c.cnae ? 'rgba(34,197,94,.04)' : '#fff' }}>
+                <div style={{ fontSize: 13, ...font, fontWeight: 600, color: '#1a1c5e', lineHeight: 1.35, paddingTop: 6 }}>{c.nome}</div>
+                <div style={{ minWidth: 0 }}>
+                  <select value={c.cnae || ''} onChange={e => escolher(c.nome, e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: `1px solid ${c.cnae ? '#86efac' : '#e2e4ef'}`, ...font, fontSize: 12, background: '#fff' }}>
+                    <option value="">Selecionar CNAE...</option>
+                    {opcoes.map(op => <option key={op.code} value={op.code}>{op.main ? '★ ' : ''}{op.code} — {op.desc}</option>)}
+                  </select>
+                  {o ? (
+                    <div style={{ ...font, fontSize: 11.5, color: '#475569', marginTop: 4, lineHeight: 1.35 }}>{o.main ? '★ Principal' : 'Secundário'} · {o.code} — {o.desc}</div>
+                  ) : (
+                    <div style={{ ...font, fontSize: 11.5, color: '#dc2626', marginTop: 4 }}>{c.reprovada ? '✕ Reprovada no processo (sem CNAE compatível)' : 'Sem CNAE → fica reprovada no processo'}</div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          {!visiveis.length && <div style={{ ...font, fontSize: 13, color: '#15803d', padding: 12 }}>✓ Todas as categorias já têm CNAE.</div>}
+        </div>
+        <div style={{ padding: '12px 28px 22px', borderTop: '1px solid #eef0f6' }}>
+          {confirmar === 'validar' && (
+            <InlineConfirm msg={`${semCnae} de ${lista.length} categoria(s) sem CNAE ficarão REPROVADAS neste processo (a atividade do fornecedor não cobre a categoria). O processo segue normalmente. Confirmar?`}
+              confirmLabel="Confirmar" variant="danger" onCancel={() => setConfirmar(null)} onConfirm={() => onValidated(lista)}/>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
+            <Button variant="success" full onClick={() => (semCnae ? setConfirmar('validar') : onValidated(lista))}>
+              {semCnae ? `✓ Validar (${semCnae} reprovada${semCnae > 1 ? 's' : ''}) e aprovar CNAE` : '✓ Validar vínculos e aprovar CNAE'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function DemoAdminProcesso() {
-  const [docs, setDocs] = useState(FICHA.docs)
+  // a ficha do backoffice começa no momento em que a analista valida o CNAE
+  // (nas demais visões a validação já foi feita: Caldeiraria reprovada)
+  const [docs, setDocs] = useState(() => FICHA.docs.map(d => (d.id === 'd61' ? { ...d, status: 'PENDING', meta: null } : d)))
+  const [cats, setCats] = useState(() => FICHA.categorias.map(c => ({ nome: c.nome, cnae: '', validada: false, reprovada: false })))
+  const [mobPost, setMobPost] = useState(FICHA.mobilizacao.docsPosto)
+  const [mobPessoas, setMobPessoas] = useState(FICHA.mobilizacao.colaboradores)
   const [tab, setTab] = useState('docs')
   const [aberto, setAberto] = useState({ a: false, b: false })
   const [catAberta, setCatAberta] = useState(null)
@@ -239,22 +343,28 @@ export function DemoAdminProcesso() {
   const [reverter, setReverter] = useState(null)     // doc
   const [motivoRev, setMotivoRev] = useState('')
   const [cnae, setCnae] = useState(null)             // doc 61
-  const [vinculos, setVinculos] = useState({})
   const [ia, setIa] = useState(null)                 // { doc, tipo, fase }
   const [banco, setBanco] = useState({ banco: '', compe: '', agencia: '', conta: '', pix: '', tipo: 'Corrente' })
+  const [bancoSalvo, setBancoSalvo] = useState(null)  // 'dd/mm/aaaa hh:mm'
   const [dre, setDre] = useState([])
   const [assertiva, setAssertiva] = useState(true)
-  const [logCarregado, setLogCarregado] = useState(false)
-  const [toast, setToast] = useState('')
-  const umAno = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10) })()
-  const setStatus = (id, status, note = null, expires) => setDocs((ds) => ds.map((d) => (d.id === id ? { ...d, status, note, ...(expires ? { expires } : {}) } : d)))
-  const pendentes = docs.filter((d) => d.status !== 'VALID').length
-  const ok = docs.filter((d) => d.status === 'VALID').length
+  const [, setToast, ToastEl] = useToast()
+  const umAno = isoD(365)
+  const upd = (id, fn) => {
+    const f = (d) => (d.id === id ? fn(d) : d)
+    setDocs(ds => ds.map(f)); setMobPost(ds => ds.map(f)); setMobPessoas(ps => ps.map(p => ({ ...p, docs: p.docs.map(f) })))
+  }
+  const setStatus = (id, status, note = null, expires) => upd(id, (d) => ({ ...d, status, note, ...(expires ? { expires } : {}) }))
+  const pj = docs
+  const okSt = ['VALID', 'EXPIRING', 'NOT_APPLICABLE']
+  const ok = pj.filter(d => okSt.includes(effStatus(d))).length
+  const pendentes = pj.length - ok
   // mesmo score das outras visões (72) e sobe conforme o analista aprova
-  const okInicial = FICHA.docs.filter((d) => d.status === 'VALID').length
-  const score = Math.max(0, Math.min(100, FICHA.score + (ok - okInicial) * 4))
+  const okInicial = FICHA.docs.filter(d => okSt.includes(effStatus(d))).length - 1
+  const score = Math.max(0, Math.min(100, FICHA.score + (ok - okInicial) * 3))
   const lbl = { display: 'block', fontFamily: M, fontWeight: 700, fontSize: 10, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }
   const inp = { width: '100%', padding: '9px 11px', borderRadius: 10, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 13, boxSizing: 'border-box' }
+  const salvarBanco = () => setBancoSalvo(agoraBR())
   const extrair = (tipo) => {
     setIa((x) => ({ ...x, fase: 'extraindo' }))
     setTimeout(() => {
@@ -263,6 +373,7 @@ export function DemoAdminProcesso() {
       setIa((x) => x && { ...x, fase: 'pronto' })
     }, 1600)
   }
+  const anexar = (d) => pickFile(() => { upd(d.id, (x) => ({ ...x, status: 'PENDING', note: null, sent: isoD(0), source: 'MANUAL' })); setToast(`✅ Arquivo anexado pela EQPI — ${d.label} em análise.`) })
   const quadro = (k, icon, titulo, resumo, linhas) => (
     <div style={{ border: '1px solid rgba(46,49,146,.18)', borderRadius: 12, padding: '12px 14px', marginBottom: 12, background: '#fafbff' }}>
       <div onClick={() => setAberto((a) => ({ ...a, [k]: !a[k] }))} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -280,34 +391,43 @@ export function DemoAdminProcesso() {
     </div>
   )
   const botoes = (d) => {
-    const podeDecidir = ['PENDING', 'EXPIRING', 'EXPIRED'].includes(d.status)
+    const st = effStatus(d)
+    const podeDecidir = ['PENDING', 'EXPIRING', 'EXPIRED'].includes(st)
     return (<>
       {(d.kind === 'bank' || d.kind === 'dre') && d.sent
         ? <Button variant="primary" size="sm" onClick={() => setIa({ doc: d, tipo: d.kind, fase: 'inicio' })}>🤖 Analisar</Button>
         : d.sent && <Button variant="neutral" size="sm" onClick={() => setVer(d)}>👁 Ver</Button>}
-      <Button variant="neutral" size="sm" title="Histórico do documento" onClick={() => setHist(d)}>🕓</Button>
-      {podeDecidir && <Button variant="success" size="sm" onClick={() => { if (d.id === 'd61') { setCnae(d); return } setValidade(d.expires && d.expires > new Date().toISOString().slice(0, 10) ? d.expires : umAno); setAprovar(d) }}>✓ Aprovar</Button>}
-      {(podeDecidir || d.status === 'VALID') && <Button variant="danger" size="sm" onClick={() => { setMotivo(''); setRejeitar(d) }}>{d.status === 'VALID' ? '✕ Revogar' : '✕ Rejeitar'}</Button>}
-      {['VALID', 'REJECTED', 'NOT_APPLICABLE'].includes(d.status) && <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise" onClick={() => { setMotivoRev(''); setReverter(d) }}>↩ Reverter decisão</Button>}
+      {d.sent && <Button variant="neutral" size="sm" title="Histórico e versões do documento" onClick={() => setHist(d)}>🕓</Button>}
+      {['MISSING', 'REJECTED', 'EXPIRED'].includes(st) && <Button variant="neutral" size="sm" title="A EQPI anexa o arquivo no lugar do fornecedor" onClick={() => anexar(d)}>📎 Anexar arquivo</Button>}
+      {podeDecidir && <Button variant="success" size="sm" onClick={() => { if (d.id === 'd61') { setCnae(d); return } setValidade(d.expires && d.expires > isoD(0) ? d.expires : umAno); setAprovar(d) }}>✓ Aprovar</Button>}
+      {(podeDecidir || st === 'VALID') && <Button variant="danger" size="sm" onClick={() => { setMotivo(''); setRejeitar(d) }}>{st === 'VALID' ? '✕ Revogar' : '✕ Rejeitar'}</Button>}
+      {['VALID', 'REJECTED', 'NOT_APPLICABLE'].includes(st) && <Button variant="neutral" size="sm" title="Desfaz a decisão e devolve o documento para análise" onClick={() => { setMotivoRev(''); setReverter(d) }}>↩ Reverter decisão</Button>}
     </>)
   }
-  const docRow = (d, extraLabel) => (
-    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, marginBottom: 7, background: (ROW[d.status] || ROW.MISSING).bg, border: `1px solid ${(ROW[d.status] || ROW.MISSING).bd}`, flexWrap: 'wrap' }}>
-      <StatusDot status={d.status}/>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>{d.label}{extraLabel}</div>
-        <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B' }}>
-          {d.status === 'MISSING' ? 'não enviado pelo fornecedor' : d.source === 'AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}{d.expires ? ` · vence ${d.expires}` : ''}{d.meta ? ` · ${d.meta}` : ''}
+  const docRow = (d, extraLabel) => {
+    const st = effStatus(d)
+    const cfg = DOC_STATUS[st] || DOC_STATUS.MISSING
+    return (
+      <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, marginBottom: 7, background: cfg.bg, border: `1px solid ${cfg.bd}`, flexWrap: 'wrap' }}>
+        <StatusDot status={st}/>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>{d.label}{extraLabel}</div>
+          <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 2 }}>
+            <span style={pill(cfg.color, `${cfg.color}18`)}>{cfg.label}</span>
+            {d.soEqpi && <span style={pill('#64748b', '#f1f5f9')}>Obtido pela EQPI</span>}
+            <span>{d.status === 'MISSING' && !d.sent ? (d.soEqpi ? 'a equipe EQPI obtém (Sintegra)' : 'não enviado pelo fornecedor') : d.source === 'AUTO' ? '⚡ Auto-coletado' : 'Upload manual'}{d.expires ? ` · vence ${fmt(d.expires)}` : ''}{d.meta ? ` · ${d.meta}` : ''}</span>
+          </div>
+          {d.note && <div style={{ fontFamily: D, fontSize: 11, color: '#dc2626', marginTop: 2 }}>⚠ {d.note}</div>}
         </div>
-        {d.note && <div style={{ fontFamily: D, fontSize: 11, color: '#dc2626', marginTop: 2 }}>⚠ {d.note}</div>}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{botoes(d)}</div>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{botoes(d)}</div>
-    </div>
-  )
-  const mob = FICHA.mobilidade
+    )
+  }
+  const mob = FICHA.mobilizacao
+  const docCats = docs.filter(d => d.source === 'MANUAL').slice(0, 6)
   return (
     <div style={wrap}>
-      <Toast msg={toast} onDone={() => setToast('')}/>
+      {ToastEl}
       <div style={{ fontFamily: D, fontSize: 13, color: '#2E3192', fontWeight: 600, marginBottom: 12 }}>← Voltar à busca de processos</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(280px,1fr)', gap: 16, alignItems: 'start' }}>
         <div>
@@ -317,13 +437,13 @@ export function DemoAdminProcesso() {
               <div style={{ width: 52, height: 52, borderRadius: 14, background: '#EEF0FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: M, fontWeight: 900, fontSize: 20, color: '#2E3192' }}>P</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: M, fontWeight: 900, fontSize: 18, color: '#1a1c5e' }}>{FICHA.razao}</div>
-                <div style={{ fontFamily: D, fontSize: 12.5, color: '#64748b' }}>{FICHA.cnpj} · {FICHA.cidade}/{FICHA.uf}</div>
-                <div style={{ fontFamily: D, fontSize: 12.5, color: '#2563eb' }}>{FICHA.email}</div>
+                <div style={{ fontFamily: D, fontSize: 12.5, color: '#64748b' }}>{FICHA.cnpj} · {FICHA.cidade}/{FICHA.uf} · {FICHA.endereco.logradouro}</div>
+                <div style={{ fontFamily: D, fontSize: 12.5, color: '#2563eb' }}>{FICHA.email} · {PRIMATUS.telefone}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right' }} title="Score do processo Horizonte (o score geral ELOS da Primatus é 87)">
                 <div style={{ fontFamily: M, fontWeight: 900, fontSize: 30, color: score >= 70 ? '#22c55e' : '#f59e0b' }}>{score}</div>
-                <div style={{ fontFamily: D, fontSize: 10.5, color: '#9B9B9B' }}>Score ELOS</div>
-                <Button variant="neutral" size="sm">📁 Arquivar cadastro</Button>
+                <div style={{ fontFamily: D, fontSize: 10.5, color: '#9B9B9B' }}>Score do processo</div>
+                <Button variant="neutral" size="sm" onClick={() => setToast(SO_REAL)}>📁 Arquivar cadastro</Button>
               </div>
             </div>
           </Card>
@@ -344,24 +464,25 @@ export function DemoAdminProcesso() {
             <div style={{ ...lbl, marginTop: 12 }}>Quadro societário ({FICHA.qsa.length})</div>
             {FICHA.qsa.map((s) => <div key={s.nome} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: D, fontSize: 12.5, padding: '3px 0' }}><strong style={{ color: '#1a1c5e' }}>{s.nome}</strong><span style={{ color: '#64748b' }}>{s.qual} · CPF {s.cpf} · {s.pct}</span></div>)}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-              <span style={lbl}>Sanções CEIS / CNEP (API Transparência)</span><Button variant="danger" size="sm">+ Nova Sanção</Button>
+              <span style={lbl}>Sanções CEIS / CNEP (API Transparência)</span><Button variant="danger" size="sm" onClick={() => setToast(SO_REAL)}>+ Nova Sanção</Button>
             </div>
             <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '8px 12px', fontFamily: D, fontSize: 12.5, color: '#166534' }}>✅ Sem ocorrências em CEIS e CNEP</div>
             <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B', marginTop: 8 }}>Consultado: {FICHA.cnpjData.consultado} · BrasilAPI + Portal da Transparência</div>
           </Card>
           {/* categorias */}
           <Card style={{ borderRadius: 16, padding: '18px 22px', marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><SectionTitle style={{ marginBottom: 0 }}>Categorias de Atuação</SectionTitle><span style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B' }}>{FICHA.categorias.length} categorias</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><SectionTitle style={{ marginBottom: 0 }}>Categorias de Atuação</SectionTitle><span style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B' }}>{cats.length} categorias</span></div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {FICHA.categorias.map((c) => (
-                <button key={c.nome} onClick={() => setCatAberta(catAberta === c.nome ? null : c.nome)} style={{ border: '1px solid #e2e4ef', background: catAberta === c.nome ? 'rgba(46,49,146,.06)' : '#fff', borderRadius: 20, padding: '6px 12px', cursor: 'pointer', fontFamily: D, fontSize: 12.5, color: '#1a1c5e', fontWeight: 600 }}>
-                  {c.nome} <span style={pill('#7c3aed', '#ede9fe')}>CNAE {c.cnae}</span> {catAberta === c.nome ? '▲' : '▾'}
+              {cats.map((c) => (
+                <button key={c.nome} onClick={() => setCatAberta(catAberta === c.nome ? null : c.nome)} style={{ border: `1px solid ${c.reprovada ? '#fecaca' : '#e2e4ef'}`, background: catAberta === c.nome ? 'rgba(46,49,146,.06)' : c.reprovada ? '#fff5f5' : '#fff', borderRadius: 20, padding: '6px 12px', cursor: 'pointer', fontFamily: D, fontSize: 12.5, color: '#1a1c5e', fontWeight: 600 }}>
+                  {c.nome} {c.reprovada ? <span style={pill('#b91c1c', '#fee2e2')}>✕ Reprovada no processo</span> : c.cnae ? <span style={pill('#7c3aed', '#ede9fe')}>CNAE {c.cnae}</span> : <span style={pill('#b45309', '#fef3c7')}>CNAE a validar</span>} {catAberta === c.nome ? '▲' : '▾'}
                 </button>
               ))}
             </div>
             {catAberta && (
               <div style={{ marginTop: 10, background: '#fafbff', border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 12px' }}>
-                {docs.slice(4, 10).map((d) => <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: D, fontSize: 12, padding: '3px 0' }}><span>{d.label}</span><span style={{ color: d.status === 'VALID' ? '#15803d' : d.status === 'REJECTED' ? '#dc2626' : '#b45309', fontWeight: 700 }}>{({ VALID: 'Aprovado', PENDING: 'Pendente', MISSING: 'Ausente', REJECTED: 'Reprovado', EXPIRED: 'Vencido', EXPIRING: 'Vencendo' })[d.status]}</span></div>)}
+                {cats.find(c => c.nome === catAberta)?.reprovada && <div style={{ fontFamily: D, fontSize: 12, color: '#b91c1c', marginBottom: 6 }}>Sem CNAE compatível — a atividade do fornecedor não cobre a categoria. O processo segue com as demais.</div>}
+                {docCats.map((d) => { const cfg = DOC_STATUS[effStatus(d)] || DOC_STATUS.MISSING; return <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', fontFamily: D, fontSize: 12, padding: '3px 0' }}><span>{d.label}</span><span style={{ color: cfg.color, fontWeight: 700 }}>{cfg.label}</span></div> })}
               </div>
             )}
           </Card>
@@ -372,18 +493,18 @@ export function DemoAdminProcesso() {
               <div style={{ flex: 1 }}/><Button variant="neutral" size="sm" onClick={() => { setAssertiva(false); setTimeout(() => setAssertiva(true), 1200) }}>{assertiva ? '↺ Atualizar' : '⏳ Consultando...'}</Button>
             </div>
             {assertiva && (<>
-              <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginBottom: 8 }}>Consultado: 02/09/2026 10:15 · Protocolo: 88412</div>
+              <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginBottom: 8 }}>Consultado: {fmtBRDT(isoDT(-50, '10:15'))} · Protocolo: 88412</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
                 <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 12px' }}><div style={lbl}>Score de Crédito</div><div style={{ fontFamily: M, fontWeight: 900, fontSize: 22, color: ASSERTIVA.B[1] }}>B <span style={{ fontSize: 12 }}>{ASSERTIVA.B[0]}</span></div><div style={{ fontFamily: D, fontSize: 11.5, color: '#64748b' }}>742 pontos</div></div>
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}><div style={lbl}>Protestos</div><div style={{ fontFamily: M, fontWeight: 900, fontSize: 22, color: '#1a1c5e' }}>0</div><div style={{ fontFamily: D, fontSize: 11.5, color: '#64748b' }}>R$ 0,00</div></div>
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px' }}><div style={lbl}>Faturamento Est.</div><div style={{ fontFamily: M, fontWeight: 900, fontSize: 22, color: '#1a1c5e' }}>R$ 6,4 mi</div></div>
               </div>
-              <div style={{ fontFamily: D, fontSize: 11.5, color: '#64748b', marginTop: 8 }}>📋 3 consultas recentes · Última: 28/08/2026</div>
+              <div style={{ fontFamily: D, fontSize: 11.5, color: '#64748b', marginTop: 8 }}>📋 3 consultas recentes · Última: {brD(-54)}</div>
             </>)}
           </Card>
           {/* abas */}
           <Card style={{ borderRadius: 16, padding: '6px 22px 18px' }}>
-            <Tabs value={tab} onChange={setTab} tabs={[['docs', 'Documentos'], ['quest', `Questionário (${FICHA.questionario.length})`], ['banco', `Dados Bancários${banco.banco ? ' ✓' : ''}`], ['dre', `DRE / Financeiro (${dre.length})`], ['log', 'Log do Processo'], ['conv', `Convites (${FICHA.convites.length})`]]}/>
+            <Tabs value={tab} onChange={setTab} tabs={[['docs', 'Documentos'], ['quest', `Questionário (${FICHA.questionario.length})`], ['banco', `Dados Bancários${bancoSalvo ? ' ✓' : ''}`], ['dre', `DRE / Financeiro (${dre.length})`], ['log', 'Log do Processo'], ['conv', `Convites (${FICHA.convites.length})`]]}/>
             {tab === 'docs' && (<>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <SectionTitle style={{ marginBottom: 0 }}>Documentos para Validação</SectionTitle>
@@ -393,9 +514,9 @@ export function DemoAdminProcesso() {
                 <span style={lbl}>Processo:</span>
                 <span style={pill('#2E3192', 'rgba(46,49,146,.1)')}>⏳ Horizonte Mineração</span><span style={pill('#64748b', '#f1f5f9')}>🏅 ELOS</span><span style={pill('#64748b', '#f1f5f9')}>Todos</span>
               </div>
-              {quadro('a', '⚙️', 'Coleta automática nas fontes oficiais (Rota A)', '7 obtidos · 2 com o fornecedor · custo R$ 2,08 · 02/09 10:15 → 10:37', [
+              {quadro('a', '⚙️', 'Coleta automática nas fontes oficiais (Rota A)', `7 obtidos · 2 com o fornecedor · custo R$ 2,08 · ${brD(-50)} 10:15 → 10:37`, [
                 ['CND Federal', 'Receita/PGFN', '✓ sugere aprovar — negativa'], ['CRF FGTS', 'Caixa', '✓ sugere aprovar — regular'], ['CNDT', 'TST', '✓ sugere aprovar — negativa'],
-                ['CND Municipal', 'Prefeitura', '📤 com o fornecedor — prefeitura exige inscrição municipal']])}
+                ['Inscrição Estadual', 'Sintegra', '📤 com a EQPI — fonte indisponível, a equipe obtém'], ['CND Municipal', 'Prefeitura', '📤 com o fornecedor — prefeitura exige inscrição municipal']])}
               {quadro('b', '🤖', 'Pré-análise por IA dos documentos enviados (Rota B)', '2 analisados (1 aprovar · 1 reprovar) · analista concordou em 2/2 · custo R$ 0,12', [
                 ['Alvará de Funcionamento', 'Regra do cliente + checklist', '✕ reprovar — vencido (pág. 1)'], ['Contrato Social', 'Regra do cliente + checklist', '✓ aprovar — 5/5 itens atendidos']])}
               {docs.map((d) => docRow(d))}
@@ -403,28 +524,28 @@ export function DemoAdminProcesso() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><SectionTitle style={{ marginBottom: 0 }}>👷 Documentos de Mobilização</SectionTitle><span style={pill('#2E3192', 'rgba(46,49,146,.08)')}>1 posto</span></div>
                 <div style={{ border: '1px solid #e2e4ef', borderRadius: 12, padding: '10px 14px' }}>
                   <div style={{ fontFamily: M, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>📍 {mob.posto} — {mob.cidade}/{mob.uf}</div>
-                  <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginBottom: 8 }}>Processo {FICHA.cliente} · {mob.funcao} · {mob.postos} postos / {mob.pessoas} pessoas · {mob.colaboradores.length}/{mob.pessoas} cadastradas</div>
-                  {mob.docsPosto.map((d) => docRow({ ...d, sent: d.status !== 'MISSING' ? '2026-09-20' : null, source: 'MANUAL' }, ' — doc. do posto'))}
-                  {mob.colaboradores.map((p) => (
-                    <div key={p.nome} style={{ marginLeft: 10, marginTop: 8 }}>
+                  <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginBottom: 8 }}>Processo {FICHA.cliente} · {mob.funcao} · {mob.postos} postos / {mob.pessoas} pessoas · {mobPessoas.length}/{mob.pessoas} cadastradas</div>
+                  {mobPost.map((d) => docRow({ ...d, source: 'MANUAL' }, ' — doc. do posto'))}
+                  {mobPessoas.map((p) => (
+                    <div key={p.id} style={{ marginLeft: 10, marginTop: 8 }}>
                       <div style={{ fontFamily: D, fontWeight: 700, fontSize: 12.5, color: '#374151', marginBottom: 6 }}>👤 {p.nome} · CPF {p.cpf}</div>
-                      {p.docs.map((d) => docRow({ ...d, sent: d.status !== 'MISSING' ? '2026-09-21' : null, source: 'MANUAL' }))}
+                      {p.docs.map((d) => docRow({ ...d, source: 'MANUAL' }))}
                     </div>
                   ))}
                 </div>
               </div>
             </>)}
-            {tab === 'quest' && FICHA.questionario.map((q) => (
+            {tab === 'quest' && FICHA.questionario.flatMap((qq) => qq.itens.map((q) => (
               <div key={q.q} style={{ border: '1px solid #eef0f6', borderRadius: 10, padding: '9px 12px', marginBottom: 8 }}>
-                <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B' }}>{FICHA.cliente} · {q.titulo}</div>
+                <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B' }}>{FICHA.cliente} · {qq.titulo}</div>
                 <div style={{ fontFamily: D, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>{q.q}</div>
-                <div style={{ fontFamily: D, fontSize: 13, color: q.r === 'Não' ? '#dc2626' : '#15803d' }}>{q.r}</div>
+                <div style={{ fontFamily: D, fontSize: 13, color: q.r ? '#15803d' : '#cbd5e1' }}>{q.r || 'sem resposta'}</div>
               </div>
-            ))}
+            )))}
             {tab === 'banco' && (<>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <SectionTitle style={{ marginBottom: 0 }}>Dados Bancários</SectionTitle>
-                <Button variant="primary" size="sm" onClick={() => { setIa({ doc: docs.find((d) => d.kind === 'bank'), tipo: 'bank', fase: 'inicio' }) }}>🤖 Extrair com IA</Button>
+                <Button variant="primary" size="sm" onClick={() => setIa({ doc: docs.find((d) => d.kind === 'bank'), tipo: 'bank', fase: 'inicio' })}>🤖 Extrair com IA</Button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[['banco', 'Nome do Banco'], ['compe', 'Código COMPE'], ['agencia', 'Agência'], ['conta', 'Conta c/ dígito'], ['pix', 'Chave PIX']].map(([k, l]) => (
@@ -432,7 +553,10 @@ export function DemoAdminProcesso() {
                 ))}
                 <div><span style={lbl}>Tipo de Conta</span><select value={banco.tipo} onChange={(e) => setBanco({ ...banco, tipo: e.target.value })} style={inp}><option>Corrente</option><option>Poupança</option></select></div>
               </div>
-              <div style={{ marginTop: 12 }}><Button variant="primary" size="sm" onClick={() => setToast('✅ Dados bancários salvos.')}>💾 Salvar Dados Bancários</Button></div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Button variant="primary" size="sm" onClick={salvarBanco}>💾 Salvar dados</Button>
+                {bancoSalvo && <span style={{ fontFamily: D, fontSize: 12.5, color: '#15803d', fontWeight: 600 }}>✓ Dados bancários salvos em {bancoSalvo}</span>}
+              </div>
             </>)}
             {tab === 'dre' && (<>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -448,28 +572,12 @@ export function DemoAdminProcesso() {
                 </div>
               ))}
             </>)}
-            {tab === 'log' && (<>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                <input type="date" style={{ ...inp, width: 150 }}/><input type="date" style={{ ...inp, width: 150 }}/>
-                <input placeholder="Filtrar por ação ou descrição..." style={{ ...inp, flex: 1, minWidth: 180 }}/>
-                <Button variant="primary" size="sm" onClick={() => setLogCarregado(true)}>🔍 Pesquisar</Button>
-              </div>
-              {!logCarregado ? <div style={{ fontFamily: D, fontSize: 13, color: '#9B9B9B' }}>Clique em Pesquisar para carregar o histórico.</div> : FICHA.log.map((l) => (
-                <div key={l.quando} style={{ display: 'flex', gap: 10, padding: '9px 0', borderTop: '1px solid #f4f5f9' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 10, background: `${l.cor}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{l.icon}</div>
-                  <div>
-                    <div style={{ fontFamily: M, fontWeight: 700, fontSize: 12.5, color: l.cor }}>{l.label}</div>
-                    <div style={{ fontFamily: D, fontSize: 12.5, color: '#374151' }}>{l.det}</div>
-                    <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B' }}>{l.quando.split(' ')[0].split('-').reverse().join('/')} {l.quando.split(' ')[1]} · por {l.por}</div>
-                  </div>
-                </div>
-              ))}
-            </>)}
+            {tab === 'log' && <ProcessLog fetcher={logFetcher}/>}
             {tab === 'conv' && (<>
               <div style={{ fontFamily: D, fontSize: 12.5, color: '#64748b', marginBottom: 8 }}>{FICHA.convites.length} convites enviados por clientes/compradores</div>
               {FICHA.convites.map((c) => (
                 <div key={c.cliente} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid #f4f5f9', fontFamily: D, fontSize: 13 }}>
-                  🏢 <strong style={{ flex: 1, color: '#1a1c5e' }}>{c.cliente}</strong><span style={{ color: '#9B9B9B', fontSize: 12 }}>{c.quando.split(' ')[0].split('-').reverse().join('/')}</span><span style={pill(c.cor, `${c.cor}18`)}>{c.status}</span>
+                  🏢 <strong style={{ flex: 1, color: '#1a1c5e' }}>{c.cliente}</strong><span style={{ color: '#9B9B9B', fontSize: 12 }}>{fmtBRDT(c.quando)}</span><span style={pill(c.cor, `${c.cor}18`)}>{c.status}</span>
                 </div>
               ))}
             </>)}
@@ -481,7 +589,7 @@ export function DemoAdminProcesso() {
           <div style={{ fontFamily: M, fontWeight: 800, fontSize: 16, color: '#1a1c5e', marginBottom: 12 }}>Decisão de Homologação</div>
           <div style={{ background: pendentes ? '#fff5f5' : '#f0fdf4', border: `1px solid ${pendentes ? '#fecaca' : '#86efac'}`, borderRadius: 12, padding: '10px 12px', textAlign: 'center', marginBottom: 14 }}>
             <div style={{ fontFamily: M, fontWeight: 800, fontSize: 13.5, color: pendentes ? '#dc2626' : '#15803d' }}>{pendentes ? `⚠ ${pendentes} doc(s) pendente(s)` : '✅ Documentação completa'}</div>
-            <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B' }}>{ok}/{docs.length} documentos válidos</div>
+            <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B' }}>{ok}/{pj.length} documentos válidos</div>
           </div>
           <div style={lbl}>Tipo de selo do processo</div>
           <div style={{ border: '1.5px solid #2E3192', borderRadius: 12, padding: '10px 12px', textAlign: 'center', marginBottom: 14 }}>
@@ -489,14 +597,14 @@ export function DemoAdminProcesso() {
             <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B' }}>Selo leva o nome do cliente</div>
           </div>
           <div style={lbl}>Selos deste fornecedor</div>
-          <div style={{ border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 10px', marginBottom: 6, fontFamily: D, fontSize: 12.5 }}>⏳ <strong>Horizonte Mineração</strong> <span style={{ color: '#b45309' }}>· Em análise</span></div>
-          <div style={{ border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 10px', marginBottom: 14, fontFamily: D, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>🏅 <strong style={{ flex: 1 }}>ELOS Verificado</strong><span style={{ color: '#15803d' }}>Ativo · score 87</span><Button variant="neutral" size="sm">🎓 Certificado</Button></div>
+          <div style={{ border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 10px', marginBottom: 6, fontFamily: D, fontSize: 12.5 }}>⏳ <strong>Horizonte Mineração</strong> <span style={{ color: '#b45309' }}>· Em análise · score {score}</span></div>
+          <div style={{ border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 10px', marginBottom: 14, fontFamily: D, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 6 }}>🏅 <strong style={{ flex: 1 }}>ELOS Verificado</strong><span style={{ color: '#15803d' }}>Ativo · score {PRIMATUS.score}</span><Button variant="neutral" size="sm" onClick={() => setToast('ℹ️ Demonstração: abre o certificado do selo ELOS Verificado para impressão.')}>🎓 Certificado</Button></div>
           <div style={lbl}>Motivo de rejeição</div>
           <select style={{ ...inp, marginBottom: 8 }}><option>Selecione ou escreva abaixo...</option>{MOTIVOS.map((m) => <option key={m}>{m}</option>)}</select>
           <textarea rows={2} placeholder="Observações adicionais ou motivo personalizado..." style={{ ...inp, marginBottom: 12, resize: 'vertical' }}/>
           <Button variant="success" full disabled={pendentes > 0} onClick={() => setToast('✅ Homologação aprovada — certificado emitido e fornecedor avisado.')}>{pendentes ? `🚫 ${pendentes} doc(s) impeditivo(s)` : '✅ Homologar — Horizonte Mineração'}</Button>
           <div style={{ height: 8 }}/>
-          <Button variant="danger" full>❌ Rejeitar</Button>
+          <Button variant="danger" full onClick={() => setToast('ℹ️ Demonstração: reprova o processo e envia o motivo ao fornecedor por e-mail.')}>❌ Rejeitar</Button>
           <div style={{ height: 8 }}/>
           <Button variant="neutral" full onClick={() => setToast(`✅ Solicitação de ${pendentes} documento(s) enviada ao fornecedor.`)}>📧 Solicitar Documentos ({pendentes})</Button>
           <div style={{ fontFamily: D, fontSize: 11, color: '#9B9B9B', marginTop: 10 }}>Quando o último documento é analisado, o processo fecha sozinho: todos aprovados → homologado; algum reprovado → o fornecedor recebe o motivo por e-mail.</div>
@@ -505,7 +613,7 @@ export function DemoAdminProcesso() {
 
       {/* modais */}
       <DocViewer doc={ver} onClose={() => setVer(null)}/>
-      <HistoryModal doc={hist} onClose={() => setHist(null)}/>
+      <HistoryModal doc={hist} onClose={() => setHist(null)} onView={(v) => { setHist(null); setVer(v) }}/>
       {aprovar && (
         <Modal onClose={() => setAprovar(null)} max={440}>
           <div style={{ fontFamily: M, fontWeight: 800, fontSize: 18, color: '#15803d' }}>✓ Aprovar Documento</div>
@@ -517,7 +625,7 @@ export function DemoAdminProcesso() {
           <input placeholder="Ex: Documento válido e dentro do prazo" style={{ ...inp, marginBottom: 16 }}/>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button variant="neutral" full onClick={() => setAprovar(null)}>Cancelar</Button>
-            <Button variant="success" full onClick={() => { setStatus(aprovar.id, 'VALID', null, validade); setAprovar(null) }}>✓ Confirmar Aprovação</Button>
+            <Button variant="success" full onClick={() => { setStatus(aprovar.id, 'VALID', null, aprovar.id === 'd61' ? null : validade); setAprovar(null); setToast(`✅ ${aprovar.label} aprovado.`) }}>✓ Confirmar Aprovação</Button>
           </div>
         </Modal>
       )}
@@ -544,29 +652,18 @@ export function DemoAdminProcesso() {
           <textarea rows={3} value={motivoRev} onChange={(e) => setMotivoRev(e.target.value)} placeholder="Motivo da reversão (obrigatório) — ex.: reprovado por engano" style={{ ...inp, marginBottom: 14, resize: 'vertical' }}/>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button variant="neutral" full onClick={() => setReverter(null)}>Cancelar</Button>
-            <Button variant="primary" full disabled={!motivoRev.trim()} onClick={() => { setStatus(reverter.id, 'PENDING'); setReverter(null) }}>↩ Confirmar reversão</Button>
+            <Button variant="primary" full disabled={!motivoRev.trim()} onClick={() => { setStatus(reverter.id, 'PENDING'); setReverter(null); setToast('✅ Decisão revertida — o documento voltou para análise.') }}>↩ Confirmar reversão</Button>
           </div>
         </Modal>
       )}
       {cnae && (
-        <Modal onClose={() => setCnae(null)} max={560}>
-          <div style={{ fontFamily: M, fontWeight: 800, fontSize: 17, color: '#1a1c5e' }}>🧩 Validação do CNAE</div>
-          <div style={{ fontFamily: D, fontSize: 12.5, color: '#64748b', margin: '4px 0 14px' }}>Vincule cada categoria da homologação a um CNAE do fornecedor (principal ou secundário).</div>
-          {FICHA.categorias.map((c) => (
-            <div key={c.nome} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, alignItems: 'center', padding: '6px 8px', borderRadius: 8, background: vinculos[c.nome] ? '#f0fdf4' : 'transparent', marginBottom: 4 }}>
-              <strong style={{ fontFamily: D, fontSize: 12.5, color: '#1a1c5e' }}>{c.nome} →</strong>
-              <select value={vinculos[c.nome] || ''} onChange={(e) => setVinculos((v) => ({ ...v, [c.nome]: e.target.value }))} style={inp}>
-                <option value="">Selecionar CNAE...</option>
-                <option>★ {FICHA.cnaePrincipal.codigo} — {FICHA.cnaePrincipal.desc}</option>
-                {FICHA.cnaesSec.map((s) => <option key={s.codigo}>{s.codigo} — {s.desc}</option>)}
-              </select>
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <Button variant="neutral" full onClick={() => setCnae(null)}>Cancelar</Button>
-            <Button variant="success" full disabled={Object.keys(vinculos).length < FICHA.categorias.length} onClick={() => { setValidade(umAno); setAprovar(cnae); setCnae(null) }}>✓ Validar vínculos e aprovar CNAE</Button>
-          </div>
-        </Modal>
+        <CnaeModal cats={cats} onClose={() => setCnae(null)}
+          onValidated={(lista) => {
+            setCats(lista.map(c => ({ ...c, validada: true, reprovada: !c.cnae })))
+            const rej = lista.filter(c => !c.cnae).length
+            setCnae(null); setValidade(umAno); setAprovar(cnae)
+            if (rej) setToast(`✅ Vínculos salvos — ${rej} categoria${rej > 1 ? 's' : ''} reprovada${rej > 1 ? 's' : ''} no processo (sem CNAE compatível).`)
+          }}/>
       )}
       {ia && (
         <Modal onClose={() => setIa(null)} max={560}>
@@ -591,10 +688,12 @@ export function DemoAdminProcesso() {
               ))}
             </div>
           )}
+          {ia.tipo === 'bank' && bancoSalvo && <div style={{ fontFamily: D, fontSize: 12.5, color: '#15803d', fontWeight: 600, marginTop: 10 }}>✓ Dados bancários salvos em {bancoSalvo}</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <Button variant="neutral" full onClick={() => setIa(null)}>Fechar</Button>
-            <Button variant="primary" full onClick={() => { setIa(null); setToast('✅ Dados salvos.') }}>💾 Salvar dados</Button>
-            <Button variant="success" full onClick={() => { const d = ia.doc; setIa(null); setValidade(umAno); setAprovar(d) }}>✓ Aprovar documento</Button>
+            <Button variant="primary" full onClick={() => { if (ia.tipo === 'bank') salvarBanco(); else setToast('✅ Dados financeiros salvos.') }}>💾 Salvar dados</Button>
+            {/* aprovar sempre salva antes (os dados digitados não se perdem) */}
+            <Button variant="success" full onClick={() => { const d = ia.doc; if (ia.tipo === 'bank') salvarBanco(); setIa(null); setValidade(umAno); setAprovar(d) }}>✓ Aprovar documento</Button>
           </div>
         </Modal>
       )}
@@ -651,7 +750,13 @@ export function DemoAdminBcReport() {
   const [cnpj, setCnpj] = useState('41.090.118/0001-30')
   const [tipo, setTipo] = useState('Full')
   const [fase, setFase] = useState(null)   // null | coletando | pdf | pronto
+  const [emitido, setEmitido] = useState(null)   // { cnpj, tipo, empresa } no momento da emissão
+  const [, setToast, ToastEl] = useToast()
   const emitir = () => {
+    const dig = cnpj.replace(/\D/g, '')
+    if (dig.length !== 14) { setToast('⚠ Informe um CNPJ com 14 dígitos.'); return }
+    const fmtC = dig.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    setEmitido({ cnpj: fmtC, tipo, empresa: BC_EMPRESAS[fmtC] || 'Empresa consultada (demonstração)' })
     setFase('coletando')
     setTimeout(() => setFase('pdf'), 1800)
     setTimeout(() => setFase('pronto'), 3000)
@@ -661,6 +766,7 @@ export function DemoAdminBcReport() {
   const totalFontes = DEMO_BC_FONTES.reduce((a, g) => a + g.fontes.length, 0)
   return (
     <div style={wrap}>
+      {ToastEl}
       <PageHeader title="BC Report" subtitle="Background check automatizado — emita o relatório digitando o CNPJ"/>
       <Card style={{ borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -696,13 +802,13 @@ export function DemoAdminBcReport() {
               <div style={{ fontFamily: D, fontSize: 10, color: '#6b7280' }}>Score EQPI</div>
             </div>
             <div style={{ flex: 1, minWidth: 260 }}>
-              <div style={{ fontFamily: M, fontWeight: 800, fontSize: 16, color: '#1a1c5e' }}>{r.empresa} · BC Report {tipo}</div>
-              <div style={{ fontFamily: D, fontSize: 12, color: '#6b7280' }}>CNPJ {r.cnpj} · <strong style={{ color: faixaCor }}>{faixaLabel}</strong></div>
+              <div style={{ fontFamily: M, fontWeight: 800, fontSize: 16, color: '#1a1c5e' }}>{emitido?.empresa} · BC Report {emitido?.tipo}</div>
+              <div style={{ fontFamily: D, fontSize: 12, color: '#6b7280' }}>CNPJ {emitido?.cnpj} · emitido em {brD(0)} · <strong style={{ color: faixaCor }}>{faixaLabel}</strong></div>
               {r.achados.map((a) => (
                 <div key={a.t} style={{ fontFamily: D, fontSize: 12.5, color: '#374151', marginTop: 5 }}>{a.ok ? '✅' : '⚠️'} {a.t}</div>
               ))}
             </div>
-            <Button variant="primary">📄 Baixar PDF</Button>
+            <Button variant="primary" onClick={() => setToast('ℹ️ Demonstração: no ambiente real baixa o PDF com o índice de evidências anexadas.')}>📄 Baixar PDF</Button>
           </div>
         </Card>
       )}
@@ -722,60 +828,251 @@ export function DemoAdminBcReport() {
   )
 }
 
-// ── Financeiro ──────────────────────────────────────────────────────────────
+// ── Financeiro (src/pages/backoffice/Metrics.jsx) ───────────────────────────
+// Repasse do Stripe: cartão = pagamento + 30 dias corridos (no próximo dia
+// útil) · Pix e boleto = pagamento + 2 dias úteis. * = estimativa pelo meio.
+const fmtBRL = (v) => (v == null ? '—' : `R$ ${Number(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`)
+const repasse = (pago, meio) => (!pago ? null : meio === 'Cartão' ? toBusinessDayIso(addDaysIso(pago, 30)) : addBusinessDaysIso(pago, 2))
+function addDaysIso(iso, n) { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
+const ASSINATURAS = [
+  { id: 's1', fornecedor: PRIMATUS.razao, cnpj: PRIMATUS.cnpj, plano: 'ELOS Verificado · Anual', status: 'ACTIVE', pag: 'pago', meio: 'Cartão', valor: 199, ciclo: '/ano', pago: isoD(-281), ini: isoD(-281), fim: isoD(84), nfse: 'nº 1043' },
+  { id: 's2', fornecedor: 'Delta Caldeiraria Ltda', cnpj: '46.302.118/0001-74', plano: 'ELOS Verificado · Mensal', status: 'ACTIVE', pag: 'pago', meio: 'Pix', valor: 29, ciclo: '/mês', pago: isoD(-1), ini: isoD(-1), fim: isoD(29), nfse: 'nº 1187' },
+  { id: 's3', fornecedor: 'ProServ Facilities S.A.', cnpj: '08.719.553/0001-20', plano: 'ELOS Homologado · Anual', status: 'ACTIVE', pag: 'pago', meio: 'Boleto', valor: 690, ciclo: '/ano', pago: isoD(-3), ini: isoD(-3), fim: isoD(362), nfse: 'nº 1185' },
+  { id: 's4', fornecedor: 'Andaimes Rocha ME', cnpj: '37.051.229/0001-08', plano: 'ELOS Verificado · Anual', status: 'PENDING', pag: 'aguardando', meio: 'Boleto', valor: 199, ciclo: '/ano', pago: null, ini: isoD(-2), fim: isoD(363), nfse: null },
+  { id: 's5', fornecedor: 'Inova Sistemas Ltda', cnpj: '31.774.052/0001-63', plano: 'ELOS Verificado · Anual', status: 'ACTIVE', pag: 'cupom', meio: null, valor: 199, ciclo: '/ano', pago: null, ini: isoD(-20), fim: isoD(10), nfse: null },
+  { id: 's6', fornecedor: `${MERIDIANO.razao} (comprador)`, cnpj: '22.615.380/0001-47', plano: 'ELOS Comprador Pro · Anual', status: 'ACTIVE', pag: 'pago', meio: 'Cartão', valor: 1990, ciclo: '/ano', pago: isoD(-122), ini: isoD(-122), fim: isoD(243), nfse: 'nº 1102' },
+].map(a => ({ ...a, repasse: repasse(a.pago, a.meio) }))
+// processos subsidiados que ENTRARAM NA ESTEIRA (cobráveis seja qual for o resultado)
+const SUBSIDIADOS = [
+  { seal_id: 'z1', client_name: HORIZONTE.razao, supplier_name: PRIMATUS.razao, cnpj: PRIMATUS.cnpj, flow_name: 'Suprimentos – Nível 2', queued_at: isoD(-6), resultado: 'Em análise', valor: 590, pago_em: null, referencia: '' },
+  { seal_id: 'z2', client_name: HORIZONTE.razao, supplier_name: 'Ômega Engenharia Ltda', cnpj: '41.090.118/0001-30', flow_name: 'Suprimentos – Nível 3', queued_at: isoD(-40), resultado: 'Homologado', valor: 690, pago_em: isoD(-12), referencia: 'NF 2291' },
+  { seal_id: 'z3', client_name: HORIZONTE.razao, supplier_name: 'LogFlex Transportes', cnpj: '10.228.551/0001-02', flow_name: 'Suprimentos – Nível 1', queued_at: isoD(-28), resultado: 'Homologado', valor: 450, pago_em: isoD(-12), referencia: 'NF 2291' },
+  { seal_id: 'z4', client_name: HORIZONTE.razao, supplier_name: 'Sulbras Serviços Ltda', cnpj: '19.554.203/0001-88', flow_name: 'Suprimentos – Nível 3', queued_at: isoD(-33), resultado: 'Homologado', valor: 690, pago_em: null, referencia: '' },
+  { seal_id: 'z5', client_name: HORIZONTE.razao, supplier_name: 'Metalmax Ind. Ltda', cnpj: '12.408.771/0001-09', flow_name: 'Suprimentos – Nível 1', queued_at: isoD(-45), resultado: 'Reprovado', valor: 450, pago_em: null, referencia: '' },
+  { seal_id: 'z6', client_name: 'Serra Azul Agroflorestal', supplier_name: 'Delta Caldeiraria Ltda', cnpj: '46.302.118/0001-74', flow_name: 'Agro — Serviços Gerais', queued_at: isoD(-15), resultado: 'Em análise', valor: 520, pago_em: null, referencia: '' },
+  { seal_id: 'z7', client_name: 'Serra Azul Agroflorestal', supplier_name: 'BioTech Serviços Ambientais', cnpj: '22.781.604/0001-17', flow_name: 'Agro — Ambiental', queued_at: isoD(-52), resultado: 'Homologado', valor: 520, pago_em: isoD(-20), referencia: 'Boleto 88231' },
+]
+const TabBtn = ({ active, onClick, children }) => (
+  <button onClick={onClick} style={{ padding: '9px 18px', borderRadius: 10, border: `1.5px solid ${active ? '#2E3192' : '#e2e4ef'}`, background: active ? '#2E3192' : '#fff', color: active ? '#fff' : '#64748b', fontFamily: M, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{children}</button>
+)
+
+function SubsidizedTab({ rows, setRows, toast }) {
+  const [clientFilter, setClientFilter] = useState('')
+  const [pagFilter, setPagFilter] = useState('aberto')
+  const [period, setPeriod] = useState({ from: '', to: '' })
+  const [sel, setSel] = useState(() => new Set())
+  const [baixa, setBaixa] = useState(null)
+  const [msg, setMsg] = useState('')
+  const clientNames = useMemo(() => [...new Set(rows.map(r => r.client_name))].sort(), [rows])
+  const filtered = rows.filter(r => {
+    if (clientFilter && r.client_name !== clientFilter) return false
+    if (pagFilter === 'aberto' && r.pago_em) return false
+    if (pagFilter === 'pago' && !r.pago_em) return false
+    if (period.from && r.queued_at < period.from) return false
+    if (period.to && r.queued_at > period.to) return false
+    return true
+  })
+  const byClient = {}
+  for (const r of filtered) { const g = (byClient[r.client_name] = byClient[r.client_name] || { rows: [], total: 0, aberto: 0 }); g.rows.push(r); g.total += r.valor; if (!r.pago_em) g.aberto += r.valor }
+  const grandTotal = filtered.reduce((a, r) => a + r.valor, 0)
+  const grandAberto = filtered.filter(r => !r.pago_em).reduce((a, r) => a + r.valor, 0)
+  const selecionados = filtered.filter(r => sel.has(r.seal_id))
+  const toggle = (id) => setSel(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const inp = { padding: '8px 10px', borderRadius: 10, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 13 }
+  const registrar = () => {
+    if (!baixa?.paid_on) { setMsg('Informe a data do pagamento.'); return }
+    const ids = new Set(selecionados.map(r => r.seal_id))
+    setRows(p => p.map(r => (ids.has(r.seal_id) ? { ...r, pago_em: baixa.paid_on, referencia: baixa.reference } : r)))
+    setMsg(`Pagamento registrado em ${ids.size} processo(s).`); setBaixa(null); setSel(new Set())
+  }
+  const desfazer = () => {
+    const ids = new Set(selecionados.filter(r => r.pago_em).map(r => r.seal_id))
+    setRows(p => p.map(r => (ids.has(r.seal_id) ? { ...r, pago_em: null, referencia: '' } : r)))
+    setMsg(`Baixa desfeita em ${ids.size} processo(s).`); setSel(new Set())
+  }
+  return (
+    <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+        <SectionTitle>Homologações subsidiadas — faturar ao cliente</SectionTitle>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={inp}>
+            <option value="">Todos os clientes</option>
+            {clientNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <select value={pagFilter} onChange={e => { setPagFilter(e.target.value); setSel(new Set()) }} style={inp}>
+            <option value="aberto">Em aberto</option><option value="pago">Pagos pelo cliente</option><option value="todos">Todos</option>
+          </select>
+          <input type="date" value={period.from} onChange={e => setPeriod(p => ({ ...p, from: e.target.value }))} style={inp} title="Entrou na esteira a partir de"/>
+          <span style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B' }}>até</span>
+          <input type="date" value={period.to} onChange={e => setPeriod(p => ({ ...p, to: e.target.value }))} style={inp} title="Entrou na esteira até"/>
+          <Button variant="neutral" size="sm" onClick={() => exportRows(`subsidiados_${(clientFilter || 'todos_clientes').normalize('NFD').replace(/[^a-zA-Z0-9]+/g, '_')}`, clientFilter || 'Subsidiados', filtered.map(r => ({
+            'Cliente': r.client_name, 'Fornecedor': r.supplier_name, 'CNPJ': r.cnpj, 'Fluxo': r.flow_name, 'Entrou na esteira': fmtBR(r.queued_at),
+            'Resultado': r.resultado, 'Valor': r.valor, 'Pago pelo cliente em': r.pago_em ? fmtBR(r.pago_em) : '', 'Referência do pagamento': r.referencia || '',
+          })), toast)}>⬇️ Excel p/ financeiro</Button>
+        </div>
+      </div>
+      <div style={{ fontFamily: D, fontSize: 12, color: '#9B9B9B', marginBottom: 14, lineHeight: 1.5 }}>
+        Cobrável do cliente: processo subsidiado que <strong>entrou na esteira</strong> (envio de documentos completo e questionário respondido), seja qual for o resultado da homologação.
+        Clientes do ELOS e clientes migrados (só o que entrou na esteira depois da migração). O período filtra pela data de entrada na esteira. Valor = preço subsidiado do fluxo.
+      </div>
+      {selecionados.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderRadius: 12, background: '#eef2ff', border: '1px solid #c7d2fe', marginBottom: 14, fontFamily: D, fontSize: 13 }}>
+          <strong>{selecionados.length} selecionado(s) · {fmtBRL(selecionados.reduce((a, r) => a + r.valor, 0))}</strong>
+          {baixa ? (<>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>Pago em
+              <input type="date" value={baixa.paid_on} onChange={e => setBaixa(b => ({ ...b, paid_on: e.target.value }))} style={inp}/></label>
+            <input placeholder="Referência (nota fiscal, boleto, fatura)" value={baixa.reference} onChange={e => setBaixa(b => ({ ...b, reference: e.target.value }))} style={{ ...inp, minWidth: 240 }}/>
+            <Button variant="success" size="sm" onClick={registrar}>✓ Registrar pagamento</Button>
+            <Button variant="neutral" size="sm" onClick={() => setBaixa(null)}>Cancelar</Button>
+          </>) : (<>
+            <Button variant="primary" size="sm" onClick={() => setBaixa({ paid_on: isoD(0), reference: '' })}>💰 Dar baixa (cliente pagou)</Button>
+            {selecionados.some(r => r.pago_em) && <Button variant="neutral" size="sm" onClick={desfazer}>Desfazer baixa</Button>}
+          </>)}
+        </div>
+      )}
+      {msg && <div style={{ fontFamily: D, fontSize: 12.5, color: msg.startsWith('Informe') ? '#dc2626' : '#15803d', marginBottom: 10 }}>{msg}</div>}
+      {!filtered.length ? (
+        <div style={{ fontFamily: D, fontSize: 13, color: '#9B9B9B', padding: '16px 0' }}>
+          Nenhum processo subsidiado {pagFilter === 'aberto' ? 'em aberto ' : pagFilter === 'pago' ? 'pago ' : ''}{period.from || period.to ? 'no período' : ''}.
+        </div>
+      ) : (<>
+        {Object.entries(byClient).map(([client, g]) => (
+          <div key={client} style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: M, fontWeight: 800, fontSize: 14, color: '#1a1c5e' }}>🏢 {client} <span style={{ fontWeight: 400, fontSize: 12, color: '#9B9B9B' }}>({g.rows.length})</span></span>
+              <span style={{ fontFamily: M, fontWeight: 900, fontSize: 14, color: '#15803d' }}>{fmtBRL(g.total)}{g.aberto > 0 && g.aberto !== g.total ? <span style={{ fontWeight: 600, fontSize: 12, color: '#b45309' }}> · em aberto {fmtBRL(g.aberto)}</span> : ''}</span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: D, fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ color: '#9B9B9B', fontSize: 11, textAlign: 'left' }}>
+                    <th style={{ padding: '4px 10px', width: 28 }}></th><th style={{ padding: '4px 10px' }}>Fornecedor</th><th style={{ padding: '4px 10px' }}>Fluxo</th>
+                    <th style={{ padding: '4px 10px' }}>Entrou na esteira</th><th style={{ padding: '4px 10px' }}>Resultado</th>
+                    <th style={{ padding: '4px 10px' }}>Pagamento do cliente</th><th style={{ padding: '4px 10px', textAlign: 'right' }}>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.rows.map(r => (
+                    <tr key={r.seal_id} style={{ borderBottom: '1px solid #f1f2f8', background: sel.has(r.seal_id) ? '#f5f7ff' : 'transparent' }}>
+                      <td style={{ padding: '7px 10px' }}><input type="checkbox" checked={sel.has(r.seal_id)} onChange={() => toggle(r.seal_id)} aria-label={`Selecionar ${r.supplier_name}`}/></td>
+                      <td style={{ padding: '7px 10px', fontWeight: 600, color: '#1a1c5e' }}>{r.supplier_name}<span style={{ fontWeight: 400, color: '#9B9B9B', marginLeft: 8, fontSize: 11 }}>{r.cnpj}</span></td>
+                      <td style={{ padding: '7px 10px' }}>{r.flow_name}</td>
+                      <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{fmtBR(r.queued_at)}</td>
+                      <td style={{ padding: '7px 10px' }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 9px', borderRadius: 20, fontFamily: M,
+                          color: r.resultado === 'Homologado' ? '#15803d' : r.resultado === 'Reprovado' ? '#b91c1c' : '#92400e',
+                          background: r.resultado === 'Homologado' ? '#dcfce7' : r.resultado === 'Reprovado' ? '#fee2e2' : '#fef3c7' }}>{r.resultado}</span>
+                      </td>
+                      <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{r.pago_em
+                        ? <span style={{ color: '#15803d', fontWeight: 700 }}>✓ Pago em {fmtBR(r.pago_em)}{r.referencia ? <span style={{ fontWeight: 400, color: '#64748b' }}> · {r.referencia}</span> : ''}</span>
+                        : <span style={{ color: '#b45309', fontWeight: 700 }}>Em aberto</span>}</td>
+                      <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmtBRL(r.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+        <div style={{ textAlign: 'right', fontFamily: M, fontWeight: 900, fontSize: 16, color: '#1a1c5e', borderTop: '2px solid #e2e4ef', paddingTop: 12 }}>
+          Total: <span style={{ color: '#15803d' }}>{fmtBRL(grandTotal)}</span>
+          {grandAberto > 0 && grandAberto !== grandTotal && <span style={{ fontSize: 13, color: '#b45309' }}> · em aberto {fmtBRL(grandAberto)}</span>}
+        </div>
+      </>)}
+    </Card>
+  )
+}
+
 export function DemoAdminFinanceiro() {
-  const subs = [
-    ['Primatus Serviços Técnicos', 'ELOS Verificado — anual', 'R$ 199,00', 'Pago · NFS-e emitida', '#15803d'],
-    ['LogFlex Transportes', 'Horizonte — Suprimentos', 'R$ 690,00', 'Pago · repasse previsto 03/10', '#15803d'],
-    ['Inova Sistemas', 'Comprador Pro — mensal', 'R$ 199,00', 'Renova em 12 dias', '#b45309'],
-  ]
+  const [tab, setTab] = useState('geral')
+  const [subs, setSubs] = useState(SUBSIDIADOS)
+  const [, setToast, ToastEl] = useToast()
+  const ativas = ASSINATURAS.filter(a => a.status === 'ACTIVE')
+  const pagas = ativas.filter(a => a.pag === 'pago').length
+  const abertos = subs.filter(r => !r.pago_em).length
+  const soon = isoD(30)
   return (
     <div style={wrap}>
+      {ToastEl}
       <PageHeader title="Financeiro" subtitle="Assinaturas Stripe, homologações subsidiadas e visão operacional · valores ilustrativos"/>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 20 }}>
-        <KpiCard label="MRR (Stripe)" value="R$ 38,4 mil" sub="+12% no mês" icon="💰" iconBg="rgba(244,126,47,.12)"/>
-        <KpiCard label="Assinaturas Stripe" value="312" sub="fornecedores e compradores" icon="💳" iconBg="rgba(46,49,146,.1)"/>
-        <KpiCard label="Homologações subsidiadas" value="46" sub="a faturar aos clientes" icon="🏢" iconBg="rgba(34,197,94,.12)"/>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <TabBtn active={tab === 'geral'} onClick={() => setTab('geral')}>📊 Visão Geral</TabBtn>
+        <TabBtn active={tab === 'assinaturas'} onClick={() => setTab('assinaturas')}>💳 Assinaturas</TabBtn>
+        <TabBtn active={tab === 'subsidiados'} onClick={() => setTab('subsidiados')}>🤝 Subsidiados</TabBtn>
       </div>
-      <Card style={{ borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
-        <SectionTitle>Assinaturas via Stripe</SectionTitle>
-        {subs.map(([f, p, v, s, c]) => (
-          <div key={f} style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.3fr 100px 1.2fr', gap: 10, padding: '9px 0', borderTop: '1px solid #f4f5f9', fontFamily: D, fontSize: 12.5, color: '#374151' }}>
-            <strong style={{ color: '#1a1c5e' }}>{f}</strong><span>{p}</span><span>{v}</span><span style={{ color: c, fontWeight: 600 }}>{s}</span>
-          </div>
-        ))}
-        <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
-          Cada pagamento gera a nota fiscal de serviço automaticamente. Previsão de repasse: pagamento + 3 dias úteis. Aceita cupom de desconto no checkout.
+      {tab === 'geral' && (<>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 20 }}>
+          <KpiCard label="Assinaturas Stripe" value={312} sub={`${pagas * 50 + 12} pagas · ${(ativas.length - pagas) * 14} cupom/trial`} subColor="#2E3192" icon="💳" iconBg="rgba(46,49,146,.1)"/>
+          <KpiCard label="MRR (Stripe)" value="R$ 38,4 mil" sub="Assinaturas ativas" subColor="#22c55e" icon="💰" iconBg="rgba(244,126,47,.12)"/>
+          <KpiCard label="Subsidiados cobráveis" value={subs.length} sub={abertos ? `${abertos} em aberto (cliente não pagou)` : 'todos pagos pelo cliente'} subColor="#f59e0b" icon="🤝" iconBg="rgba(245,158,11,.1)"/>
+          <KpiCard label="Fornecedores" value="12.480" sub="8.912 homologados" subColor="#9B9B9B" icon="🏭" iconBg="rgba(46,49,146,.1)"/>
         </div>
-      </Card>
-      <Card style={{ borderRadius: 16, padding: '20px 24px', marginBottom: 16 }}>
-        <SectionTitle>Custos da operação — mês atual</SectionTitle>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 14 }}>
-          {[['🕵️ Custos BC', 'R$ 412,30', '43 relatórios · listas restritivas e crédito'],
-            ['📥 Captura de documentos', 'R$ 38,60', '214 certidões obtidas nas fontes oficiais'],
-            ['🤖 IA', 'R$ 6,90', '118 pré-análises · concordância do analista 91%']].map(([t, v, s]) => (
-            <div key={t} style={{ background: '#fafbff', border: '1px solid rgba(46,49,146,.12)', borderRadius: 12, padding: '12px 14px' }}>
-              <div style={{ fontFamily: M, fontWeight: 700, fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t} <EmBreve style={{ marginLeft: 4 }}/></div>
-              <div style={{ fontFamily: M, fontWeight: 800, fontSize: 20, color: '#1a1c5e' }}>{v}</div>
-              <div style={{ fontFamily: D, fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{s}</div>
+        <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
+          <SectionTitle>Custos da operação — mês atual</SectionTitle>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 14 }}>
+            {[['🕵️ Custos BC', 'R$ 412,30', '43 relatórios · listas restritivas e crédito'],
+              ['📥 Captura de documentos', 'R$ 38,60', '214 certidões obtidas nas fontes oficiais'],
+              ['🤖 IA', 'R$ 6,90', '118 pré-análises · concordância do analista 91%']].map(([t, v, s]) => (
+              <div key={t} style={{ background: '#fafbff', border: '1px solid rgba(46,49,146,.12)', borderRadius: 12, padding: '12px 14px' }}>
+                <div style={{ fontFamily: M, fontWeight: 700, fontSize: 11, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: 0.5 }}>{t} <EmBreve style={{ marginLeft: 4 }}/></div>
+                <div style={{ fontFamily: M, fontWeight: 800, fontSize: 20, color: '#1a1c5e' }}>{v}</div>
+                <div style={{ fontFamily: D, fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{s}</div>
+              </div>
+            ))}
+          </div>
+          {[['FGTS (CRF)', 62, 'R$ 16,12'], ['CNDT (Justiça do Trabalho)', 58, 'R$ 16,24'], ['CND Federal (PGFN)', 21, 'R$ 6,24'], ['Receita · Cartão CNPJ, Simples · "Lista suja"', 73, 'gratuitas']].map(([f, q, c]) => (
+            <div key={f} style={{ display: 'grid', gridTemplateColumns: '1.6fr 110px 110px', gap: 10, padding: '8px 0', borderTop: '1px solid #f4f5f9', fontFamily: D, fontSize: 12.5, color: '#374151' }}>
+              <span>{f}</span><span>{q} consultas</span><strong style={{ color: '#1a1c5e' }}>{c}</strong>
             </div>
           ))}
-        </div>
-        {[['FGTS (CRF)', 62, 'R$ 16,12'], ['CNDT (Justiça do Trabalho)', 58, 'R$ 16,24'], ['CND Federal (PGFN)', 21, 'R$ 6,24'], ['Receita · Cartão CNPJ, Simples · "Lista suja"', 73, 'gratuitas']].map(([f, q, c]) => (
-          <div key={f} style={{ display: 'grid', gridTemplateColumns: '1.6fr 110px 110px', gap: 10, padding: '8px 0', borderTop: '1px solid #f4f5f9', fontFamily: D, fontSize: 12.5, color: '#374151' }}>
-            <span>{f}</span><span>{q} consultas</span><strong style={{ color: '#1a1c5e' }}>{c}</strong>
+          <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
+            Fonte paga só cobra quando devolve a certidão; documento válido ou enviado pelo fornecedor não gera consulta. A IA tem teto diário de gasto e só sugere — quem decide é o analista.
           </div>
-        ))}
-        <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 8 }}>
-          Fonte paga só cobra quando devolve a certidão; documento válido ou enviado pelo fornecedor não gera consulta. A IA tem teto diário de gasto e só sugere — quem decide é o analista.
-        </div>
-      </Card>
-      <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
-        <SectionTitle>Homologações subsidiadas — faturar ao cliente</SectionTitle>
-        <div style={{ fontFamily: D, fontSize: 12.5, color: '#374151' }}>
-          Horizonte Mineração · 46 fornecedores subsidiados no período · <strong>exportar Excel</strong> para faturamento
-        </div>
-      </Card>
+        </Card>
+      </>)}
+      {tab === 'assinaturas' && (
+        <Card style={{ borderRadius: 16, padding: '20px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <SectionTitle>Assinaturas via Stripe</SectionTitle>
+            <Button variant="neutral" size="sm" onClick={() => exportRows('assinaturas_elos', 'Assinaturas', ASSINATURAS.map(a => ({
+              'Fornecedor': a.fornecedor, 'CNPJ': a.cnpj, 'Plano': a.plano, 'Status': a.status, 'Pagamento': a.pag === 'pago' ? 'Pago' : a.pag === 'aguardando' ? 'Aguardando pagamento' : 'Cupom/Trial',
+              'Meio': a.meio || '', 'Valor': a.valor, 'Pago em': a.pago ? fmtBR(a.pago) : '', 'Repasse Stripe (prev.)': a.repasse ? fmtBR(a.repasse) : '', 'Início': fmtBR(a.ini), 'Fim': fmtBR(a.fim), 'NFSe': a.nfse || '',
+            })), setToast)}>⬇️ Excel</Button>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: D, fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: '#9B9B9B', fontFamily: M, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {['Fornecedor', 'Plano', 'Status', 'Pagamento', 'Meio', 'Valor', 'Pago em', 'Repasse Stripe (prev.)', 'Vigência', 'NFSe'].map(h => <th key={h} style={{ padding: '8px 10px', borderBottom: '1px solid #e2e4ef' }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {ASSINATURAS.map(a => (
+                  <tr key={a.id} style={{ borderBottom: '1px solid #f1f2f8' }}>
+                    <td style={{ padding: 10, fontWeight: 700, color: '#1a1c5e' }}>{a.fornecedor}<div style={{ fontWeight: 400, fontSize: 11, color: '#9B9B9B' }}>{a.cnpj}</div></td>
+                    <td style={{ padding: 10 }}>{a.plano}</td>
+                    <td style={{ padding: 10 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20, fontFamily: M, color: a.status === 'ACTIVE' ? '#15803d' : '#92400e', background: a.status === 'ACTIVE' ? '#dcfce7' : '#fef3c7' }}>{a.status}</span></td>
+                    <td style={{ padding: 10, whiteSpace: 'nowrap' }}>{a.pag === 'pago'
+                      ? <span style={{ color: '#15803d', fontWeight: 700 }}>💳 Pago</span>
+                      : a.pag === 'aguardando' ? <span style={{ color: '#1d4ed8', fontWeight: 700 }}>⏳ Aguardando pagamento</span>
+                      : <span style={{ color: '#92400e', fontWeight: 700 }}>🎟️ Cupom/Trial</span>}</td>
+                    <td style={{ padding: 10 }}>{a.meio || '—'}</td>
+                    <td style={{ padding: 10, whiteSpace: 'nowrap' }}>{fmtBRL(a.valor)}{a.ciclo}</td>
+                    <td style={{ padding: 10, whiteSpace: 'nowrap' }}>{a.pago ? fmtBR(a.pago) : '—'}</td>
+                    <td style={{ padding: 10, whiteSpace: 'nowrap' }} title="Estimativa: cartão 30 dias corridos · Pix e boleto 2 dias úteis">{a.repasse ? `${fmtBR(a.repasse)} *` : '—'}</td>
+                    <td style={{ padding: 10, whiteSpace: 'nowrap' }}>{fmtBR(a.ini)} → {fmtBR(a.fim)}{a.status === 'ACTIVE' && a.fim < soon && <span title="Renova/vence em até 30 dias" style={{ marginLeft: 6 }}>⏰</span>}</td>
+                    <td style={{ padding: 10, fontSize: 12 }}>{a.nfse || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontFamily: D, fontSize: 11.5, color: '#9B9B9B', marginTop: 12 }}>
+            Cupom/Trial = assinatura ativa sem fatura Stripe paga. Aguardando pagamento = boleto emitido e ainda não compensado. Os dois passam a "Pago" automaticamente quando o pagamento é confirmado. Repasse: data em que o Stripe libera o valor (cartão 30 dias corridos · Pix e boleto 2 dias úteis; o repasse é diário). * = estimativa pelo meio de pagamento. Cada pagamento gera a nota fiscal de serviço automaticamente.
+          </div>
+        </Card>
+      )}
+      {tab === 'subsidiados' && <SubsidizedTab rows={subs} setRows={setSubs} toast={setToast}/>}
     </div>
   )
 }

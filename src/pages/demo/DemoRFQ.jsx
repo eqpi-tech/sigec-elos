@@ -1,25 +1,47 @@
 import { useState } from 'react'
 import { Card, Button, Spinner, PageHeader } from '../../components/ui.jsx'
+import { PRIMATUS, isoD, fmtBR } from './demoData.js'
 
-// ── Dados demo ────────────────────────────────────────────────────────────────
+// ── Dados demo (Horizonte Mineração) — as cotações com a Primatus são as
+// mesmas que ela vê na caixa "Cotações" do fornecedor ─────────────────────────
 const DEMO_RFQS = [
-  { id:1, title:'Fornecimento de EPI — T4 2026', category:'Segurança do Trabalho', created:'2026-09-22', deadline:'2026-10-20', sent:8, responded:5, description:'Cotação de equipamentos de proteção individual para operações de campo.' },
-  { id:2, title:'Manutenção Elétrica — Unidade MG', category:'Serviços Elétricos',  created:'2026-09-08', deadline:'2026-09-29', sent:6, responded:6, description:'Serviços de manutenção preventiva e corretiva de painéis elétricos.' },
-  { id:3, title:'Fornecimento de Ferramentas',     category:'Manutenção Industrial', created:'2026-09-15', deadline:null,        sent:4, responded:2, description:'Cotação de ferramentas e consumíveis para manutenção industrial.' },
+  { id:1, title:'Manutenção Elétrica — Unidade Itabira', category:'Serviços Elétricos', created:isoD(-3), deadline:isoD(9), sent:6, description:'Manutenção preventiva e corretiva de painéis elétricos de média tensão (2 subestações). Atendimento em turno, 6 meses, com relatório mensal de inspeção termográfica.' },
+  { id:2, title:'Manutenção preventiva de correias — parada geral', category:'Manutenção Industrial', created:isoD(-12), deadline:isoD(2), sent:4, description:'Parada geral programada das correias TC-01 a TC-04. Escopo: inspeção, troca de roletes danificados e alinhamento.' },
+  { id:3, title:'Manutenção Elétrica — Unidade MG', category:'Serviços Elétricos', created:isoD(-34), deadline:isoD(-14), sent:5, description:'Serviços de manutenção preventiva e corretiva de painéis elétricos.' },
 ]
 
-const DEMO_RESPONSES = [
-  { id:1, razao_social:'Primatus Serviços Técnicos Ltda', city:'São Paulo',      state:'SP', status:'ACCEPTED',  price:28500, message:'Podemos atender ao escopo completo com entrega em até 5 dias úteis.' },
-  { id:2, razao_social:'Ômega Engenharia Ltda',           city:'Belo Horizonte', state:'MG', status:'SENT',      price:null,  message:null },
-  { id:3, razao_social:'TechFix Industrial S.A.',          city:'Campinas',       state:'SP', status:'READ',      price:31200, message:'Proposta incluída. Prazo de execução: 7 dias úteis.' },
-  { id:4, razao_social:'Sulbras Serviços Ltda',            city:'Porto Alegre',   state:'RS', status:'DECLINED',  price:null,  message:'Não temos disponibilidade no período solicitado.' },
-  { id:5, razao_social:'Norte Industrial Ltda',            city:'Parauapebas',    state:'PA', status:'ACCEPTED',  price:26800, message:'Aprovado. Enviamos proposta técnica por e-mail.' },
-]
+// respostas por cotação (Primatus em todas, coerente com a caixa dela)
+const DEMO_RESPONSES = {
+  1: [
+    { id:11, razao_social:PRIMATUS.razao,           city:'São Paulo',      state:'SP', status:'SENT',     price:null,  message:null },
+    { id:12, razao_social:'Ômega Engenharia Ltda',  city:'Belo Horizonte', state:'MG', status:'READ',     price:52300, message:'Equipe dedicada em turno; inclui termografia mensal.' },
+    { id:13, razao_social:'TechFix Industrial S.A.', city:'Campinas',      state:'SP', status:'SENT',     price:null,  message:null },
+    { id:14, razao_social:'Sulbras Serviços Ltda',  city:'Porto Alegre',   state:'RS', status:'DECLINED', price:null,  message:'Não temos disponibilidade no período solicitado.' },
+    { id:15, razao_social:'Norte Industrial Ltda',  city:'Parauapebas',    state:'PA', status:'SENT',     price:null,  message:null },
+    { id:16, razao_social:'LogFlex Transportes',    city:'Santos',         state:'SP', status:'SENT',     price:null,  message:null },
+  ],
+  2: [
+    { id:21, razao_social:PRIMATUS.razao,           city:'São Paulo',      state:'SP', status:'READ',     price:46800, message:'Equipe de 8 técnicos, 5 dias de parada, inclui troca de roletes e alinhamento. Validade da proposta: 30 dias.' },
+    { id:22, razao_social:'Ômega Engenharia Ltda',  city:'Belo Horizonte', state:'MG', status:'SENT',     price:null,  message:null },
+    { id:23, razao_social:'Sulbras Serviços Ltda',  city:'Porto Alegre',   state:'RS', status:'READ',     price:49900, message:'Execução em 6 dias com equipe própria.' },
+    { id:24, razao_social:'Norte Industrial Ltda',  city:'Parauapebas',    state:'PA', status:'SENT',     price:null,  message:null },
+  ],
+  3: [
+    { id:31, razao_social:PRIMATUS.razao,           city:'São Paulo',      state:'SP', status:'ACCEPTED', price:28500, message:'Podemos atender ao escopo completo com mobilização em até 5 dias úteis.' },
+    { id:32, razao_social:'Ômega Engenharia Ltda',  city:'Belo Horizonte', state:'MG', status:'DECLINED', price:31200, message:'Proposta incluída. Prazo de execução: 7 dias úteis.' },
+    { id:33, razao_social:'TechFix Industrial S.A.', city:'Campinas',      state:'SP', status:'DECLINED', price:33900, message:'Execução em 10 dias úteis.' },
+    { id:34, razao_social:'Sulbras Serviços Ltda',  city:'Porto Alegre',   state:'RS', status:'DECLINED', price:null,  message:'Não temos disponibilidade no período solicitado.' },
+    { id:35, razao_social:'LogFlex Transportes',    city:'Santos',         state:'SP', status:'SENT',     price:null,  message:null },
+  ],
+}
+// fornecedores homologados por categoria (determinístico — nada de sorteio a cada render)
+const ELEGIVEIS = { 'Manutenção Industrial':9, 'Serviços Elétricos':6, 'Automação & Controle':4, 'Segurança do Trabalho':5, 'Construção Civil':7, 'Logística':3, 'TI e Telecomunicações':2, 'Gestão Ambiental':4 }
 
 const CATEGORIES = ['Manutenção Industrial','Serviços Elétricos','Automação & Controle','Segurança do Trabalho','Construção Civil','Logística','TI e Telecomunicações','Gestão Ambiental']
 
 const STATUS_COLOR = { SENT:'#9B9B9B', ACCEPTED:'#22c55e', DECLINED:'#ef4444', READ:'#f59e0b' }
 const STATUS_LABEL = { SENT:'Enviada', ACCEPTED:'Aceita', DECLINED:'Recusada', READ:'Visualizada' }
+const respondidasDe = (list) => list.filter(r => r.message || r.price).length
 
 const inp = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, boxSizing:'border-box', outline:'none', color:'#1a1c5e' }
 const lbl = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10, color:'#9B9B9B', letterSpacing:.5, textTransform:'uppercase', marginBottom:5 }
@@ -29,12 +51,12 @@ function NewRFQModal({ onClose, onCreated }) {
   const [form,    setForm]    = useState({ title:'', category:'', description:'', deadline:'' })
   const [saving,  setSaving]  = useState(false)
   const [done,    setDone]    = useState(false)
-  const eligible = form.category ? Math.floor(Math.random() * 8) + 4 : null
+  const eligible = form.category ? (ELEGIVEIS[form.category] ?? 3) : null
 
   const submit = () => {
     if (!form.title || !form.category) return
     setSaving(true)
-    setTimeout(() => { setSaving(false); setDone(true); setTimeout(() => { onCreated(form); onClose() }, 1000) }, 900)
+    setTimeout(() => { setSaving(false); setDone(true); setTimeout(() => { onCreated({ ...form, sent: eligible }); onClose() }, 1000) }, 900)
   }
 
   return (
@@ -73,7 +95,7 @@ function NewRFQModal({ onClose, onCreated }) {
             </div>
             <div style={{ marginBottom:20 }}>
               <span style={lbl}>Prazo para resposta (opcional)</span>
-              <input type="date" value={form.deadline} onChange={e => setForm(p=>({...p, deadline:e.target.value}))} style={inp}/>
+              <input type="date" value={form.deadline} min={isoD(0)} onChange={e => setForm(p=>({...p, deadline:e.target.value}))} style={inp}/>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <Button variant="neutral" full onClick={onClose}>Cancelar</Button>
@@ -89,9 +111,8 @@ function NewRFQModal({ onClose, onCreated }) {
 }
 
 // ── Modal detalhe RFQ ─────────────────────────────────────────────────────────
-function RFQDetailModal({ rfq, onClose }) {
-  const [responses, setResponses] = useState(DEMO_RESPONSES.slice(0, rfq.sent))
-  const respondidas = responses.filter(r => r.message || r.price).length
+function RFQDetailModal({ rfq, responses, setResponses, onClose }) {
+  const respondidas = respondidasDe(responses)
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
@@ -100,7 +121,7 @@ function RFQDetailModal({ rfq, onClose }) {
           <div>
             <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e' }}>{rfq.title}</div>
             <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
-              {rfq.category} · Criado em {rfq.created}{rfq.deadline ? ` · Prazo: ${rfq.deadline}` : ''}
+              {rfq.category} · Criado em {fmtBR(rfq.created)}{rfq.deadline ? ` · Prazo: ${fmtBR(rfq.deadline)}` : ''}
             </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9B9B9B', fontSize:20 }}>✕</button>
@@ -139,9 +160,9 @@ function RFQDetailModal({ rfq, onClose }) {
                 )}
                 {(r.status === 'SENT' || r.status === 'READ') && (
                   <div style={{ display:'flex', gap:6 }}>
-                    <button onClick={() => setResponses(prev => prev.map(x => x.id===r.id ? {...x, status:'ACCEPTED'} : x))}
+                    <button onClick={() => setResponses(responses.map(x => x.id===r.id ? {...x, status:'ACCEPTED'} : x))}
                       style={{ padding:'5px 12px', borderRadius:8, background:'#f0fdf4', border:'1px solid #86efac', color:'#15803d', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>✓ Aceitar</button>
-                    <button onClick={() => setResponses(prev => prev.map(x => x.id===r.id ? {...x, status:'DECLINED'} : x))}
+                    <button onClick={() => setResponses(responses.map(x => x.id===r.id ? {...x, status:'DECLINED'} : x))}
                       style={{ padding:'5px 12px', borderRadius:8, background:'#fef2f2', border:'1px solid #fca5a5', color:'#dc2626', fontSize:11, fontFamily:'Montserrat,sans-serif', fontWeight:700, cursor:'pointer' }}>✕ Recusar</button>
                   </div>
                 )}
@@ -155,12 +176,11 @@ function RFQDetailModal({ rfq, onClose }) {
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
-export default function DemoRFQ({ navigate, profile = 'CLIENT' }) {
+export default function DemoRFQ() {
   const [rfqs,      setRfqs]      = useState(DEMO_RFQS)
+  const [resps,     setResps]     = useState(DEMO_RESPONSES)
   const [showNew,   setShowNew]   = useState(false)
   const [detailRfq, setDetailRfq] = useState(null)
-
-  const backTo = profile === 'BUYER' ? 'marketplace' : 'dashboard'
 
   return (
     <div style={{ padding:'24px 32px', maxWidth:900, margin:'0 auto' }}>
@@ -178,7 +198,7 @@ export default function DemoRFQ({ navigate, profile = 'CLIENT' }) {
               <div style={{ flex:1 }}>
                 <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:14, color:'#1a1c5e' }}>{rfq.title}</div>
                 <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginTop:2 }}>
-                  {rfq.category} · {rfq.created}{rfq.deadline ? ` · Prazo: ${rfq.deadline}` : ''}
+                  {rfq.category} · {fmtBR(rfq.created)}{rfq.deadline ? ` · Prazo: ${fmtBR(rfq.deadline)}` : ''}{rfq.deadline && rfq.deadline < isoD(0) ? ' · encerrada' : ''}
                 </div>
                 {rfq.description && (
                   <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginTop:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:400 }}>{rfq.description}</div>
@@ -186,7 +206,7 @@ export default function DemoRFQ({ navigate, profile = 'CLIENT' }) {
               </div>
               <div style={{ textAlign:'right', flexShrink:0 }}>
                 <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:13, color:'#2E3192' }}>
-                  {rfq.responded}/{rfq.sent} responderam
+                  {respondidasDe(resps[rfq.id] || [])}/{rfq.sent} responderam
                 </div>
                 <div style={{ fontSize:11, color:'#9B9B9B', marginTop:2 }}>Ver respostas →</div>
               </div>
@@ -198,10 +218,10 @@ export default function DemoRFQ({ navigate, profile = 'CLIENT' }) {
       {showNew && (
         <NewRFQModal
           onClose={() => setShowNew(false)}
-          onCreated={f => setRfqs(prev => [{ id:Date.now(), title:f.title, category:f.category, created:new Date().toISOString().slice(0,10), deadline:f.deadline||null, sent:5, responded:0, description:f.description }, ...prev])}
+          onCreated={f => { const id = Date.now(); setResps(p => ({ ...p, [id]: [] })); setRfqs(prev => [{ id, title:f.title, category:f.category, created:isoD(0), deadline:f.deadline||null, sent:f.sent, description:f.description }, ...prev]) }}
         />
       )}
-      {detailRfq && <RFQDetailModal rfq={detailRfq} onClose={() => setDetailRfq(null)}/>}
+      {detailRfq && <RFQDetailModal rfq={detailRfq} responses={resps[detailRfq.id] || []} setResponses={(l) => setResps(p => ({ ...p, [detailRfq.id]: l }))} onClose={() => setDetailRfq(null)}/>}
     </div>
   )
 }

@@ -26,7 +26,9 @@
 3. Informe seu nome, e-mail corporativo e telefone (opcional).
 4. Clique em **Criar conta gratuita**. A senha provisória chega por e-mail; troque-a no primeiro acesso em **Minha Conta**.
 
-Por segurança, a plataforma pede que você ative a **verificação em duas etapas** (código no celular). Você tem 30 dias para ativar.
+Por segurança, a plataforma pede que você ative a **verificação em duas etapas** (código no celular, com aplicativos como Google Authenticator ou Microsoft Authenticator). Você tem **30 dias** para ativar. Depois de digitar um código válido, **este navegador fica lembrado por 24 horas**: um novo login nesse prazo não pede o código. Trocou de celular? Use **Minha Conta → Trocar de aparelho**.
+
+**Na barra do topo:** o botão **?** abre a página **Ajuda** (manuais em PDF e canais de suporte); o seu nome abre **Minha Conta**.
 
 ---
 
@@ -99,7 +101,7 @@ Menu **Meu Plano**.
 | Contatos completos dos fornecedores | — | ✓ |
 | Cotações para fornecedores e acompanhamento das propostas | — | ✓ |
 
-O Pro pode ser **mensal** ou **anual** (o anual sai mais barato). O pagamento é pelo Stripe (cartão). Para cancelar, use o portal de assinatura ou fale com o suporte.
+O Pro pode ser **mensal** ou **anual** (o anual sai mais barato). Clique em **Assinar Pro** e conclua o pagamento pelo Stripe, com **cartão de crédito ou boleto** (no boleto, o plano é ativado quando o banco confirma o pagamento). Para cancelar, use o portal de assinatura do Stripe ou fale com o suporte.
 
 ![Meu Plano](img/comprador/04-plano-free.jpg)
 
@@ -107,10 +109,13 @@ O Pro pode ser **mensal** ou **anual** (o anual sai mais barato). O pagamento é
 
 ## 7. Cotações (Pro)
 
-1. No marketplace, marque os fornecedores e clique em **Cotação**.
+No plano Free, o menu aparece como **Cotações 🔒** e a tela convida a conhecer o Pro.
+
+1. No marketplace, marque os fornecedores e clique em **📝 Cotação**.
 2. Escreva o assunto, a mensagem e, se quiser, o prazo para resposta. Envie (até 200 fornecedores por cotação).
-3. Os fornecedores recebem o pedido na caixa **Cotações** deles e respondem com uma proposta.
-4. Acompanhe no menu **Cotações**: quantos receberam, leram e responderam, e as propostas de cada um.
+3. Os fornecedores recebem o pedido **por e-mail** e na caixa **Cotações** deles, e respondem com uma proposta.
+4. Acompanhe no menu **Cotações**: quantos receberam, leram e responderam, e as propostas de cada um (**Não lida**, **Lida**, **Proposta recebida**).
+5. Em cada proposta, clique em **✓ Aceitar** ou **✕ Recusar**. O fornecedor vê a sua decisão na caixa de cotações dele.
 
 ![Cotações](img/comprador/07-cotacoes.jpg)
 
@@ -121,6 +126,9 @@ O Pro pode ser **mensal** ou **anual** (o anual sai mais barato). O pagamento é
 **Por que os contatos aparecem ocultos?**
 No plano Free os contatos ficam ocultos. Assine o **Pro** para vê-los completos.
 
+**Posso pagar o Pro com Pix?**
+Não. O Pro é uma assinatura, paga com cartão de crédito ou boleto.
+
 **O que significa o selo do fornecedor?**
 **Verificado:** documentação básica conferida (dados da Receita e certidões principais). **Homologado:** documentação completa analisada pela equipe EQPI. **Selos de Cliente:** o fornecedor foi homologado por empresas contratantes da plataforma.
 
@@ -128,8 +136,11 @@ No plano Free os contatos ficam ocultos. Assine o **Pro** para vê-los completos
 Confira em **Convites** se ele visualizou. Você pode reenviar o convite pela ficha.
 
 **Sou fornecedor. Posso usar o marketplace?**
-Sim — todo fornecedor tem o perfil Comprador. Troque o perfil no seletor ao lado do seu nome, no alto da tela.
+Sim — todo fornecedor tem o perfil Comprador. Troque o perfil no seletor ao lado do seu nome, no alto da tela. Se o seu login tem acesso a mais de uma empresa fornecedora, a troca de empresa é feita no seletor de empresa, no perfil Fornecedor.
+
+**Perdi o celular da verificação em duas etapas.**
+Fale com o suporte: a EQPI reseta a verificação e você cadastra o autenticador de novo no próximo acesso.
 
 ---
 
-**Precisa de ajuda?** Escreva para **suporte@eqpitech.com.br**.
+**Precisa de ajuda?** Clique em **?** no alto da tela para abrir a página **Ajuda**, com os manuais e os canais de suporte da EQPI: e-mail **suporte@eqpitech.com.br**, WhatsApp **(11) 5039-6769** e telefone **(11) 2305-3881**.

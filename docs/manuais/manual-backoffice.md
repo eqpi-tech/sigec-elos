@@ -29,23 +29,37 @@
 
 ## 1. Regras que valem para tudo
 
-**Processos do HOC x processos do ELOS.** Enquanto o HOC estiver em operação, os clientes migrados continuam sendo espelhados todas as noites do HOC para o ELOS:
+**Clientes ainda no HOC.** Enquanto um cliente continua sendo operado no HOC, ele é espelhado todas as noites do HOC para o ELOS:
 
-- Tudo o que vem do HOC (clientes, processos, documentos e convites marcados **HOC**) é **mantido pelo HOC**. Uma alteração feita no ELOS nesses registros é **sobrescrita** na sincronização da madrugada. Corrija no HOC.
-- A **automação** (coleta nas fontes oficiais, pré-análise por IA e renovação automática) roda **apenas em processos originados no ELOS**.
+- Tudo o que vem do HOC desse cliente (processos, documentos e convites marcados **HOC**) é **mantido pelo HOC**. Uma alteração feita no ELOS nesses registros é **sobrescrita** na sincronização da madrugada. Corrija no HOC.
 - Convites do HOC são **histórico**: o ELOS não manda lembretes nem reenvia — o HOC cuida disso.
 
-**Trava de pagamento.** O fornecedor só usa a plataforma depois do pagamento confirmado (cartão ou PIX na hora; boleto após a compensação). Convites **subsidiados** entram liberados. Um processo sem pagamento não pode ser homologado — a tela mostra **Aguardando pagamento**.
+**Clientes migrados do HOC.** Depois da migração oficial de um cliente, **o ELOS passa a ser o dono** dele:
 
-**Dados pessoais (LGPD).** O CPF de sócios aparece sempre mascarado. Os contatos de fornecedores são abertos para clientes, para a equipe EQPI, para fornecedores com selo vigente e para compradores Pro; compradores Free veem mascarado.
+- A sincronização **não regrava mais** os processos, as categorias, a matriz de documentos, os vínculos, os convites nem o cadastro desse cliente — as alterações são feitas no ELOS.
+- Processos do HOC que **não estavam pagos** viraram processos do ELOS **aguardando pagamento**, pelo preço do fluxo do cliente. Quem já tinha **boleto do HOC a vencer** não é cobrado de novo: o boleto é conferido todo dia no HOC e o processo é liberado na compensação (o fornecedor vê **Boleto em compensação**); se o boleto vencer, o fornecedor paga pelo ELOS.
+- Cliente que estava **inativado** migrou **só como histórico**: sem análise, fora das rotinas automáticas, e o portal dele não aceita novos cadastros.
+- Desativar no HOC um cliente já migrado **não afeta** o ELOS.
 
-**Prazo de análise.** O padrão é de **3 dias úteis** contados do envio, considerando os feriados cadastrados (veja [Feriados](#15-configurações-gerais)). Só entram na fila os fornecedores que já completaram a parte deles: documentos enviados, questionário respondido e pagamento confirmado.
+**Automação por processo.** A coleta nas fontes oficiais, a renovação automática, os avisos de vencimento e os lembretes de pendência valem pela origem do **processo**: processos nascidos no ELOS, sempre; processos do HOC, só depois da migração oficial do cliente. O processo também precisa estar liberado (pago ou subsidiado) e o cliente, ativo.
+
+**Trava de pagamento.** O fornecedor só usa a plataforma depois do pagamento confirmado: cartão ou Pix na hora (o **Pix vale só para o pagamento único da homologação com um cliente**; os planos de assinatura são pagos com cartão ou boleto); boleto após a compensação. Convites **subsidiados** entram liberados. Um processo sem pagamento não pode ser homologado — a tela mostra **💳 Aguardando pagamento**.
+
+**Entrada na fila — por processo.** Um processo só entra na fila quando o fornecedor enviou tudo o que é dele **naquele processo**: documentos PJ (inclusive o documento interno que a EQPI não conseguiu captar), questionário respondido e **Mobilização** completa (pessoas cadastradas e documentos de PF), além do pagamento confirmado. Documento reprovado ou vencido **não conta** como enviado. A **Inscrição Estadual** (obtida pela EQPI) e os documentos de responsabilidade do **cliente** não seguram a entrada na fila.
+
+**Verificação em duas etapas (MFA).** Para o backoffice é obrigatória desde o primeiro acesso (sem carência). Ao digitar o código, marque **Lembrar este navegador por 30 dias** para não precisar do código a cada login nesse navegador. Fornecedores, clientes e compradores têm **30 dias** para ativar e, depois de um código válido, o navegador fica lembrado por **24 horas**. O **Reset MFA** (em Usuários) também revoga todos os navegadores lembrados do usuário.
+
+**Dados pessoais (LGPD).** O CPF de sócios e de colaboradores aparece sempre mascarado. Os contatos de fornecedores são abertos para clientes, para a equipe EQPI, para fornecedores com selo vigente e para compradores Pro; compradores Free veem mascarado.
+
+**Prazo de análise.** O padrão é de **3 dias úteis** contados do envio, considerando os feriados cadastrados (veja [Feriados](#15-configurações-gerais)).
 
 ---
 
 ## 2. Início e Farol de Análise
 
 A tela **Início** traz os indicadores gerais e o **Farol de Análise**: quantos documentos estão com a data limite ultrapassada, no limite hoje ou com prazo futuro, e a lista dos que pedem atenção.
+
+O Farol (e a lista de Análise de Docs) mostra só documentos **com arquivo para analisar** (no ELOS ou no HOC) e só de processos que estão na fila. Para clientes ainda no HOC, a sincronia confere todo dia os documentos **Em análise** que só têm o arquivo do HOC: o que foi recusado ou aprovado no HOC recebe a situação de lá, e o processo arquivado ou desativado no HOC sai da fila.
 
 ![Início](img/backoffice/01-inicio.jpg)
 
@@ -69,11 +83,13 @@ Menu **Análise → Análise de Docs**. É a bancada principal: a fila de docume
 
 **Exportar página** / **Exportar tudo** geram planilha com a data limite de cada análise.
 
+**Mobilização na lista:** documentos de pessoa física e de posto aparecem com a marca **👷 Mobilização**. O fornecedor que ainda tem colaboradores ou documentos de PF faltando ganha a etiqueta **👷 PF pendente**, e o aviso no alto da tela (**Ver processos**) lista os processos que não estão prontos por causa da Mobilização.
+
 ### Analisar um documento
 
 Na linha do documento:
 
-- **👁** abre o arquivo; **🕓** mostra o histórico.
+- **👁** abre o arquivo; **🕓** mostra o histórico, com as **versões** de cada envio e **Ver arquivo** de cada uma.
 - **✓/✕ Aceitar sugestão** abre a decisão já preenchida com a sugestão da automação.
 - **✏️ Editar** abre a janela completa:
 
@@ -90,10 +106,20 @@ Na janela **Editar Documento**:
 
 Ao reprovar, o vencimento é preenchido com a **nova checagem em 4 meses**.
 
-**Casos especiais:**
+### Validação do CNAE
 
-- **Análise de CNAEs** abre antes a validação dos vínculos entre as atividades e as categorias.
-- **Comprovante bancário e DRE/balanço:** o botão 🤖 extrai os dados com IA (banco, agência, conta; receita, ativo…) para revisar e salvar.
+A **Análise de CNAEs** e o **Simples Nacional** são exigidos em **todo processo**, de qualquer cliente. Aprovar a Análise de CNAEs abre antes a janela **🧩 Validação do CNAE**, que vincula cada categoria do processo a um CNAE do fornecedor (principal ★ ou secundário):
+
+- O contador mostra **x de y categorias vinculadas** e quantas estão sem CNAE; **mostrar só as sem CNAE** filtra as pendentes.
+- Depois de escolher um CNAE, **↻ Repetir nas N sem CNAE** aplica o mesmo CNAE às categorias ainda sem vínculo, e **Aplicar em todas** substitui em todas (pede confirmação).
+- **Não é preciso vincular todas.** A categoria que ficar sem CNAE é gravada como **reprovada dentro do processo** — o processo segue normalmente. O botão mostra quantas ficarão reprovadas.
+- A categoria reprovada aparece **riscada** na ficha (**✕ Reprovada (sem CNAE)**), marcada para o cliente, e sai do certificado, do perfil, das buscas por categoria e das cotações. A carta de exceção não se aplica a ela.
+
+### Dados bancários e DRE
+
+- **Comprovante bancário e DRE/balanço:** o botão **🤖 Analisar** abre a extração por IA (banco, agência, conta; receita, ativo…) para revisar.
+- A IA lê o **documento aberto** na janela (sem ele, o comprovante bancário do fornecedor).
+- Ao **aprovar** o comprovante bancário, os dados digitados são **salvos antes** da aprovação — a tela confirma que salvou. Na aba **Dados Bancários** da ficha, use **💾 Salvar Dados Bancários**.
 
 ---
 
@@ -103,37 +129,53 @@ Abra pelo nome do fornecedor (ou em **Processos**). A ficha reúne:
 
 - Faixas de alerta: **análise prioritária** pedida pelo cliente (com a observação) e **sanções** ativas;
 - **Inteligência CNPJ** (Receita + Portal da Transparência), quadro societário e sanções registradas manualmente (**+ Nova Sanção**);
-- **Categorias de atuação** e **Análise Assertiva** (relatório de crédito — consulta paga, só para processo liberado);
+- **Categorias de atuação** (as reprovadas por CNAE aparecem riscadas) e **Análise Assertiva** (relatório de crédito — consulta paga, só para processo liberado);
 - Abas **Documentos**, **Questionário**, **Dados Bancários**, **DRE / Financeiro**, **Log do Processo** e **Convites**;
 - **Arquivar cadastro** (com motivo) / **Desarquivar**.
 
 ![Ficha do processo](img/backoffice/05-ficha-processo.jpg)
 
-Na aba **Documentos**, escolha o **Processo** (cliente) no seletor para ver só o que aquele fluxo exige. Ações: **Aprovar**, **Rejeitar** / **Revogar**, **Reverter decisão**, **Ver**, histórico.
+### Aba Documentos
 
-O **Log do Processo** registra tudo: análise iniciada, aprovações e reprovações (inclusive automáticas), reversões, substituições, mudanças de vencimento, reaberturas por reenvio.
+Escolha o **Processo** (cliente) no seletor para ver só o que aquele fluxo exige. A aba mostra o processo do mesmo jeito que o fornecedor e o cliente veem:
+
+- o resumo (**Documentação completa** ou os aprovados, em análise, não enviados, reprovados e vencidos, e as pessoas a cadastrar);
+- **Documentos da empresa (PJ)** — os exigidos e, na mesma lista, os documentos enviados **fora da matriz** do processo (que não entram na conta dos exigidos);
+- **👷 Mobilização (PF)** — um cartão por posto, com os documentos do posto, os colaboradores e os documentos de cada pessoa.
+
+Ações em cada linha: **Aprovar**, **Rejeitar** / **Revogar**, **Reverter decisão**, **Ver** e histórico **🕓** (com as versões).
+
+**📎 Anexar arquivo:** documento PJ que **falta**, foi **reprovado** ou **venceu** ganha o botão **📎 Anexar arquivo**. A equipe envia o arquivo **no lugar do fornecedor** (por exemplo, a CNDT ou a Inscrição Estadual obtidas pela EQPI) e o documento entra **em análise** como os demais. Limite de **4,5 MB** (PDF, JPG, PNG ou DOCX).
+
+### Log do Processo
+
+O **Log do Processo** registra tudo: análise iniciada, aprovações e reprovações (inclusive automáticas), reversões, substituições, mudanças de vencimento, reaberturas por reenvio, prioridade, lembretes e coleta automática. O **cliente vê o mesmo log** na ficha dele, filtrado: só o processo com ele (registros do HOC desse processo, análises e decisões no ELOS e alterações no cadastro do fornecedor), sem os eventos internos da EQPI.
 
 ---
 
 ## 5. Automação: coleta nas fontes oficiais e pré-análise por IA
 
-Ambas rodam **só em processos de origem ELOS, liberados** (pagos ou subsidiados), e **nada é aprovado sozinho** — a decisão é sempre do analista.
+A automação vale **por processo** (veja [Regras que valem para tudo](#1-regras-que-valem-para-tudo)): processos do ELOS, e processos do HOC só depois da migração oficial do cliente, sempre **liberados** (pagos ou subsidiados). **Nada é aprovado sozinho** — a decisão é sempre do analista.
 
 ### Coleta nas fontes oficiais (Rota A)
 
-Assim que o processo é liberado, a plataforma busca nas fontes oficiais os documentos públicos que o fluxo exige: Cartão CNPJ, Simples Nacional, Sintegra, CND Federal, FGTS, CNDT, CND estadual e municipal, Dívida Ativa, Lista Suja, falência, IBAMA e alvará da Polícia Federal. O documento entra **Em análise** com o comprovante e uma **sugestão** (aprovar, reprovar ou revisar).
+Assim que o processo é liberado, a plataforma busca nas fontes oficiais os documentos públicos que o fluxo exige: Cartão CNPJ, Simples Nacional, Sintegra e **Inscrição Estadual**, CND Federal, FGTS, CNDT, CND estadual e municipal, Dívida Ativa, Lista Suja, falência, IBAMA e alvará da Polícia Federal. O documento entra **Em análise** com o comprovante e uma **sugestão** (aprovar, reprovar ou revisar).
 
-Na ficha, o painel **Coleta automática nas fontes oficiais** mostra, por documento, a fonte consultada, a situação (obtido, com o fornecedor, nova tentativa, na fila), o resultado, as tentativas e o custo.
+Na ficha, o painel **Coleta automática nas fontes oficiais** mostra, por documento, a fonte consultada, a situação (**Obtido**, **Com o fornecedor**, **Nova tentativa**, **Na fila**, **Consultando**), o resultado, as tentativas e o custo.
 
 ![Coleta automática](img/backoffice/06-ficha-coleta-automatica.jpg)
 
-Quando a fonte não emite (pendência do fornecedor, praça sem serviço), o documento volta para o fornecedor enviar.
+- **Falha passageira da fonte:** a plataforma tenta **3 vezes ao longo do dia** (agora, +1 h, +2 h) antes de liberar o envio manual ao fornecedor.
+- **A fonte não emite** (pendência do fornecedor, praça sem serviço): o documento volta para o fornecedor enviar, com a mensagem da fonte.
+- **Certidão positiva:** quando a fonte emite certidão **positiva** (com o PDF oficial), ela entra como documento **Em análise**, com o comprovante e a **sugestão de reprovar** — o fornecedor precisa regularizar.
+- **Inscrição Estadual:** buscada no Sintegra da UF. Se a fonte falhar, **fica com a EQPI** — nunca é pedida ao fornecedor. Obtenha e use **📎 Anexar arquivo** na ficha.
+- **Dívida ativa federal:** vem da **CND federal oficial** (Receita/PGFN), com PDF.
 
-**Renovação automática:** documento obtido na fonte oficial que vence em até 7 dias é consultado de novo e volta para a fila com a nova sugestão.
+**Renovação automática:** documento que a Rota A sabe buscar é consultado de novo quando vence em até 7 dias ou **já venceu (até 90 dias)** — inclusive o que o fornecedor enviou à mão — e volta para a fila com a nova sugestão.
 
 ### Pré-análise por IA (Rota B)
 
-Para documentos **enviados pelo fornecedor**, a IA lê o arquivo e sugere aprovar, reprovar ou revisar, com a confiança e o checklist conferido (titularidade, validade, regra do documento). O painel **Pré-análise por IA** mostra as análises, a concordância do analista e o custo. Há um **teto diário de gasto**. Em cada documento, **Pré-analisar com IA** ou **↻ reanalisar** pede uma nova leitura.
+Para documentos **enviados pelo fornecedor no ELOS** (arquivos do HOC ficam de fora), a IA lê o arquivo e sugere aprovar, reprovar ou revisar, com a confiança e o checklist conferido (titularidade, validade, regra do documento). O painel **Pré-análise por IA** mostra as análises, a concordância do analista e o custo. Há um **teto diário de gasto**. Em cada documento, **Pré-analisar com IA** ou **↻ reanalisar** pede uma nova leitura.
 
 ---
 
@@ -141,17 +183,21 @@ Para documentos **enviados pelo fornecedor**, a IA lê o arquivo e sugere aprova
 
 No painel **Decisão de Homologação** da ficha:
 
-- **Documentação completa** ou a contagem de pendentes;
+- **Documentação completa** ou a contagem de pendentes (inclusive Mobilização);
 - o selo que será emitido (ELOS Verificado ou Homologado — nome do cliente);
-- **Cartas de exceção** enviadas pelo cliente;
-- **Aprovar Homologação**, **Rejeitar** ou **Solicitar Documentos** (e-mail ao fornecedor com o que falta).
+- **Cartas de exceção** enviadas pelo cliente, com **🏅 Homologar com Exceção**;
+- **Aprovar Homologação**, **Rejeitar** ou **Solicitar Documentos**.
+
+O botão de aprovação fica bloqueado e explica o motivo: **💳 Aguardando pagamento**, **🚫 N doc(s) impeditivo(s)** ou **🚫 Mobilização (PF) incompleta** (faltam pessoas ou documentos de PF).
+
+**📧 Solicitar Documentos** manda um e-mail ao fornecedor com o que falta: documentos PJ (sem os de responsabilidade do cliente e sem os obtidos pela EQPI), questionário pendente e a Mobilização agrupada **por posto e por pessoa** (colaboradores a cadastrar e documentos a enviar).
 
 **Finalização automática:** quando o **último documento** do processo é analisado, o processo fecha sozinho:
 
 - tudo aprovado → selo **Ativo** e e-mail de homologação com o certificado;
 - algum reprovado → processo **Reprovado** e e-mail com as pendências. Quando o fornecedor reenvia, o processo reabre.
 
-Selo já emitido: **Reverter Análise** devolve o processo para a fila e revoga o selo.
+Selo já emitido: **↩ Reverter Análise** devolve o processo para a fila e revoga o selo.
 
 ---
 
@@ -166,6 +212,8 @@ Menu **Análise → Processos**: busca geral de fornecedores por CNPJ ou razão 
 ## 8. Homologados
 
 Menu **Análise → Homologados**: fornecedores com selo, com contadores de ativos, suspensos e reprovados. **Ver Ficha**, **Inativar** (o selo é suspenso e o fornecedor sai do marketplace; motivo obrigatório) e **Reativar**.
+
+A homologação do HOC com **validade vencida** (renovação não paga) é reavaliada todo dia e **deixa de aparecer como homologada**.
 
 ![Homologados](img/backoffice/07-homologados.jpg)
 
@@ -193,12 +241,32 @@ Menu **Análise → Questionários**: crie e mantenha os questionários dos clie
 
 Menu **Financeiro**:
 
-- **Visão Geral** — assinaturas, receita recorrente, homologações subsidiadas, selos por status;
+- **Visão Geral** — assinaturas, receita recorrente, **Subsidiados cobráveis** (com quantos estão **em aberto**, ou seja, o cliente ainda não pagou), selos por status;
 - **Assinaturas** — pagamentos do Stripe, renovações, repasse previsto e nota fiscal;
-- **Subsidiados** — homologações pagas pelos clientes, para faturar (filtro por cliente e período, exportação para o financeiro);
+- **Subsidiados** — homologações pagas pelos clientes, para faturar;
 - **Custos BC**, **Custos Captura** (coleta nas fontes oficiais: custo do mês, por fonte e por cliente) e **Custos IA** (pré-análise: custo do mês, gasto do dia, concordância do analista) — visíveis para quem tem a permissão de custos.
 
 ![Financeiro](img/backoffice/10-financeiro.jpg)
+
+### Assinaturas
+
+A lista mostra fornecedor, plano, status, **Pagamento**, valor, data do pagamento, **Repasse (prev.)** — com o **meio de pagamento** (Cartão, Pix ou Boleto) logo abaixo da data —, vigência e NFSe. A planilha exportada traz também as colunas **Meio** e **Repasse Stripe (prev.)**.
+
+O repasse é a data em que o Stripe libera o valor. Vale a data informada pelo próprio Stripe; sem ela, a data aparece com asterisco (estimativa pelo meio de pagamento): **cartão nacional 30 dias corridos**, **cartão internacional 5 dias**, **Pix e boleto 2 dias úteis**. O repasse do Stripe para a conta é diário.
+
+### Subsidiados
+
+**Regra de cobrança:** o processo subsidiado é **cobrável do cliente quando entra na esteira** — envio de documentos completo (inclusive Mobilização) e questionário respondido —, **seja qual for o resultado** da homologação.
+
+- Entram os clientes do ELOS e os clientes migrados do HOC (só o que entrou na esteira **depois** da migração).
+- Ficam de fora os clientes inativados e os clientes ainda operados no HOC.
+- **Valor** = preço subsidiado do fluxo do processo.
+
+Filtros: cliente, **Em aberto** / **Pagos pelo cliente** / **Todos** e período (pela data de entrada na esteira). Para registrar que o cliente pagou, marque os processos e clique em **💰 Dar baixa (cliente pagou)**, informando a **data do pagamento** e a **referência** (nota fiscal, boleto, fatura). **Desfazer baixa** reverte (fica no histórico).
+
+**⬇️ Excel p/ financeiro** exporta com as colunas: Cliente, Fornecedor, CNPJ, Fluxo, Entrou na esteira, Resultado, Valor, Pago pelo cliente em e Referência do pagamento.
+
+![Subsidiados](img/backoffice/22-financeiro-subsidiados.jpg)
 
 ![Custos de captura](img/backoffice/11-custos-captura.jpg)
 
@@ -214,7 +282,7 @@ Menu **Financeiro**:
 
 ## 13. Clientes: cadastro, fluxos, portais e termos
 
-**Lista de Clientes** — todos os clientes, com o preço da homologação e quem paga (subsidiado ou fornecedor). **Editar** e **Convidar fornecedor**.
+**Lista de Clientes** — todos os clientes, com o preço da homologação e quem paga (subsidiado ou fornecedor). **Editar** e **Convidar fornecedor**. Cliente inativo aparece com a etiqueta **INATIVO (HOC)**: ele não envia convites e o portal dele não aceita novos cadastros (mostra só **Acessar Plataforma**).
 
 ![Lista de clientes](img/backoffice/13-clientes.jpg)
 
@@ -228,7 +296,7 @@ Menu **Financeiro**:
 
 ![Fluxos](img/backoffice/14-fluxos.jpg)
 
-> Para clientes do HOC, matrizes e categorias vêm do HOC — altere lá.
+> **Clientes do HOC:** para clientes ainda operados no HOC, matrizes e categorias vêm do HOC — altere lá. Para **clientes migrados**, o ELOS é o dono: altere aqui.
 
 **Portais White-label** — a página de cadastro com a marca do cliente (mesmo editor que o cliente usa).
 
@@ -240,7 +308,11 @@ Menu **Financeiro**:
 
 ## 14. Usuários e perfis de acesso
 
-**Lista de Usuários** — busca por nome, e-mail ou CNPJ e filtros por papel. Ações: **Editar**, **Reset Senha**, **Reset MFA** (para quem perdeu o celular da verificação em duas etapas), **Bloquear** / **Desbloquear**.
+**Lista de Usuários** — busca por nome, e-mail ou CNPJ e filtros por papel. Cada usuário mostra **todas as empresas** a que tem acesso (fornecedor ou cliente), com **👑** na empresa em que ele é o master. Ações:
+
+- **tornar master** (ao lado da empresa) — torna o usuário o master daquela empresa; o master atual continua na equipe, sem ser master. Fica registrado no histórico;
+- **Editar**, **Reset Senha**, **Bloquear** / **Desbloquear**;
+- **🔐 Reset MFA** — para quem perdeu o celular da verificação em duas etapas. O usuário cadastra o autenticador de novo no próximo acesso, e **todos os navegadores lembrados** dele deixam de valer.
 
 ![Usuários](img/backoffice/16-usuarios.jpg)
 
@@ -265,16 +337,26 @@ Menu **Financeiro**:
 ## 16. Dúvidas frequentes
 
 **Corrigi um dado de um fornecedor do HOC e voltou ao valor antigo.**
-Registros do HOC são sobrescritos pela sincronização da madrugada. Corrija no HOC.
+Isso só acontece com clientes **ainda operados no HOC**: os registros vindos de lá são sobrescritos pela sincronização da madrugada. Corrija no HOC. Para clientes migrados, o ELOS é o dono e a alteração permanece.
 
 **Um processo não aparece na fila.**
-Só entram na fila os fornecedores que completaram a parte deles (documentos, questionário e pagamento). Use o limite de análise **— Fora da fila também —** para ver todos.
+Só entram na fila os processos em que o fornecedor completou a parte dele (documentos, questionário, Mobilização e pagamento). Documento reprovado ou vencido não conta como enviado. Use o limite de análise **— Fora da fila também —** para ver todos.
 
 **Aprovei o último documento e o processo não foi homologado.**
-Verifique se há documento reprovado ou de mobilização pendente — o aviso depois de salvar diz o que falta. Processo sem pagamento confirmado também não pode ser homologado.
+Verifique se há documento reprovado ou de Mobilização pendente — o aviso depois de salvar diz o que falta, e o botão de aprovação mostra o bloqueio (**🚫 Mobilização (PF) incompleta**, doc impeditivo). Processo sem pagamento confirmado também não pode ser homologado.
+
+**Fornecedor quer trocar um documento.**
+Antes de o processo entrar na fila, ele mesmo troca com **↻ Substituir** (vira uma nova versão, e a anterior fica no histórico). Com o processo já na fila, ele só reenvia o documento reprovado ou renova o que vence. Se a troca for necessária nessa fase, a equipe pode reprovar o documento (com o motivo) para liberar o reenvio, ou usar **Substituir documento** na janela Editar quando a própria equipe tem a versão correta.
+
+**A Inscrição Estadual não foi obtida automaticamente.**
+Ela nunca é pedida ao fornecedor: obtenha no Sintegra e use **📎 Anexar arquivo** na ficha.
 
 **Um fornecedor perdeu o celular da verificação em duas etapas.**
-Em **Usuários**, use **Reset MFA**.
+Em **Usuários**, use **Reset MFA** (os navegadores lembrados também são revogados).
 
 **A sugestão da automação está errada.**
 Decida diferente: a sugestão nunca aprova sozinha. Discordâncias ficam registradas e aparecem em Custos IA (concordância do analista).
+
+---
+
+**Ajuda:** o botão **?** no alto da tela abre a página **Ajuda**, com os quatro manuais em PDF e os canais de suporte que são divulgados aos usuários: e-mail **suporte@eqpitech.com.br**, WhatsApp **(11) 5039-6769** e telefone **(11) 2305-3881**.
