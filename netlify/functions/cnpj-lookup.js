@@ -6,56 +6,9 @@ const { createClient } = require('@supabase/supabase-js')
 const { claimRule, mask } = require('./lib/hoc_claim.js')
 const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 
-/**
- * Filtra apenas sanções COMPROVADAMENTE ATIVAS.
- *
- * Regra conservadora (evitar falsos positivos):
- *   Uma sanção só é considerada ATIVA se PELO MENOS UMA das condições abaixo for verdadeira:
- *   a) situacaoDoSancionado é explicitamente "Ativo" ou "Vigente"
- *   b) dataFimSancao existe E é uma data FUTURA (> hoje)
- *
- *   Se ambos os campos estiverem ausentes/nulos, a sanção é tratada como HISTÓRICA
- *   (o Portal da Transparência tem muitos registros antigos sem data de fim registrada).
- *
- * Campos relevantes:
- *   situacaoDoSancionado : "Ativo" | "Inativo" | "" | null
- *   dataFimSancao        : "dd/MM/yyyy" | null
- */
-function filterActiveSanctions(list) {
-  if (!Array.isArray(list)) return []
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  return list.filter(sanction => {
-    const situacao = (sanction.situacaoDoSancionado || '').toLowerCase().trim()
-    const rawFim   = sanction.dataFimSancao
-
-    // Critério A: situação explicitamente ativa
-    const situacaoAtiva = situacao === 'ativo' || situacao === 'vigente'
-
-    // Critério B: data de fim existe e ainda não passou
-    let dataFimFutura = false
-    if (rawFim) {
-      try {
-        let endDate
-        if (rawFim.includes('/')) {
-          const [d, m, y] = rawFim.split('/')
-          endDate = new Date(Number(y), Number(m) - 1, Number(d))
-        } else {
-          endDate = new Date(rawFim)
-        }
-        if (!isNaN(endDate.getTime())) {
-          dataFimFutura = endDate >= today
-        }
-      } catch {}
-    }
-
-    // Sanção ativa SOMENTE se tiver evidência positiva (A ou B)
-    // Registros sem situação E sem data de fim → histórico → NÃO conta
-    return situacaoAtiva || dataFimFutura
-  })
-}
+// Sanções ativas: regra única em lib/transparencia.js (23/10 — sem data de
+// fim conta como ativa; antes uma inidônea sem prazo passava como histórico)
+const { filterActiveSanctions } = require('./lib/transparencia.js')
 
 // ── Reserva da consulta à Receita (15/10): a BrasilAPI caiu (503) com o
 // cadastro de fornecedor em uso. Fontes GRATUITAS na ordem: CNPJá (aberta) e

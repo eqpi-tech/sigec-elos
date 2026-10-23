@@ -3,6 +3,7 @@ const { consultaTransparencia, filterActiveSanctions, onlyExactCnpj } = require(
 
 module.exports = {
   slug: 'ceis',
+  nome: 'CEIS — Portal da Transparência (CGU)',
   route: 'free',
   ttlDays: 1,
   inLight: true, inFull: true,
@@ -30,8 +31,23 @@ module.exports = {
       },
       evidence: [],
       protocol: null,
+      // Rota A (doc 12, 23/10): o CEIS não emite comprovante — o registro da
+      // consulta gerado pelo ELOS lista cada sanção encontrada
+      registro: registro(ativos, todos.filter((t) => !ativos.includes(t))),
     }
   },
+}
+
+function registro(ativos, historico) {
+  const linha = (s) => {
+    const r = resumo(s)
+    const fim = /^\d/.test(String(r.fim || '')) ? r.fim : 'sem data de fim'
+    return [r.tipo, r.orgao, `${r.inicio || '?'} a ${fim}`].filter(Boolean).join(' · ')
+  }
+  const out = { 'Sanções ativas': String(ativos.length), 'Registros históricos': String(historico.length) }
+  ativos.slice(0, 15).forEach((s, i) => { out[`Sanção ativa ${i + 1}`] = linha(s) })
+  historico.slice(0, 10).forEach((s, i) => { out[`Histórico ${i + 1}`] = linha(s) })
+  return out
 }
 
 function resumo(s) {

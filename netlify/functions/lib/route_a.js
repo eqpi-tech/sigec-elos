@@ -37,6 +37,10 @@ const ROUTE_A = {
   '18':    { connector: 'ibama_cr',         validade: 'fonte' },
   // alvará da PF (segurança privada) — validade do próprio alvará
   '166':   { connector: 'pf_seguranca',     validade: 'fonte' },
+  // Cadastro CEIS (23/10): API gratuita do Portal da Transparência; a fonte
+  // não emite comprovante (o ELOS gera o registro da consulta). Validade de
+  // 4 meses da consulta — a mais comum nos CEIS aprovados (799 de 1.341)
+  '12':    { connector: 'ceis',             validade: { meses: 4 }, lista: true },
 }
 
 const { env } = require('./runtime_env.js')
@@ -115,7 +119,10 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
   if (flag === 'nada_consta') sugestao = 'aprovar'
   else if (flag === 'apontamento') {
     sugestao = 'reprovar'
-    motivo = `${motivo || 'certidão POSITIVA'} — o fornecedor precisa regularizar e enviar a certidão negativa (ou positiva com efeito de negativa)`
+    // lista de sanções (CEIS) não tem "certidão negativa" a reenviar
+    motivo = cfg.lista
+      ? `${motivo} — confira as sanções no registro da consulta`
+      : `${motivo || 'certidão POSITIVA'} — o fornecedor precisa regularizar e enviar a certidão negativa (ou positiva com efeito de negativa)`
   }
   else if (flag === 'verificar' && cfg.positivaEfeitoNegativa && !parsed?.nao_emitida
            && /positiva com efeitos? de negativa/i.test(texto)) {
@@ -153,7 +160,7 @@ function avaliar(docType, raw, parsed, agora = new Date()) {
     codigo: parsed?.protocol || d.certidao_codigo || null,
     comprovante: (parsed?.evidence || []).find((e) => e.url)?.url || null,
     resultado: flag,
-    dados: resumoDados(d),
+    dados: parsed?.registro || resumoDados(d),
   }
 }
 

@@ -104,20 +104,15 @@ function filterActiveSanctions(list, supplierCnpj) {
     }
 
     // ── Filtro 2: sanção realmente ativa ─────────────────────────────────
+    // mesma regra de lib/transparencia.js (23/10): SEM data de fim ("Sem
+    // informação" — inidoneidade sem prazo determinado) também é ativa
     const situacao = (s.situacaoDoSancionado || '').toLowerCase().trim()
-    const situacaoAtiva = situacao === 'ativo' || situacao === 'vigente'
-    let dataFimFutura = false
-    if (s.dataFimSancao) {
-      try {
-        let end
-        if (String(s.dataFimSancao).includes('/')) {
-          const [d, m, y] = String(s.dataFimSancao).split('/')
-          end = new Date(Number(y), Number(m) - 1, Number(d))
-        } else { end = new Date(s.dataFimSancao) }
-        if (!isNaN(end.getTime())) dataFimFutura = end >= today
-      } catch {}
-    }
-    return situacaoAtiva || dataFimFutura
+    if (situacao === 'ativo' || situacao === 'vigente') return true
+    const raw = String(s.dataFimSancao || '').trim()
+    const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/) || raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (!m) return true
+    const end = raw.includes('/') ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(+m[1], +m[2] - 1, +m[3])
+    return end >= today
   })
 }
 

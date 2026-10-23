@@ -148,7 +148,8 @@ async function processar(job, catalogo, prefOverrides) {
   // o ELOS gera o registro da consulta, para o analista ter o que abrir
   if (!storage_path) {
     try {
-      const html = registroConsulta({ sup, docNome: catalogo[job.doc_type] || job.doc_type, fonte: ROUTE_A[job.doc_type].connector, r })
+      const html = registroConsulta({ sup, docNome: catalogo[job.doc_type] || job.doc_type,
+        fonte: connectorFor(job.doc_type)?.nome || ROUTE_A[job.doc_type].connector, r })
       const buf = Buffer.from(html, 'utf8')
       storage_path = `${sup.user_id || sup.id}/${job.doc_type}_consulta_${Date.now()}.html`
       const { error: upErr } = await sb.storage.from('documents')
