@@ -225,6 +225,8 @@ Menu **Análise → Convites**: todos os convites da plataforma, com filtros de 
 
 ![Convites](img/backoffice/08-convites.jpg)
 
+**💰 Tornar subsidiado (a pedido do cliente).** Passa um convite "fornecedor paga" para subsidiado, com a mesma regra da tela do cliente: vale na hora se o fornecedor não pagou; com **boleto do ELOS emitido**, fica **agendada** até o vencimento (boleto emitido não pode ser cancelado na Stripe); se já pagou, se o boleto é do HOC ou se o convite é do HOC, não é possível. Fica registrado que a troca foi feita pela EQPI. Se, mesmo assim, cair um pagamento do fornecedor num processo já subsidiado, a nota fiscal fica **retida para revisão** e o suporte recebe um aviso — boleto não tem estorno; decidir com o cliente (crédito ou devolução).
+
 ---
 
 ## 10. Questionários

@@ -241,6 +241,16 @@ Clique em **+ Novo Convite**:
 - **Reenviar** manda o convite de novo; **Cancelar** (com motivo) desativa o link.
 - Convites marcados **HOC** são histórico do sistema anterior e não recebem lembretes pelo ELOS.
 
+### Tornar subsidiado um convite já enviado
+
+Se a sua empresa decidir custear a homologação de um fornecedor convidado como **Subsidiado — Não**, use **💰 Tornar subsidiado** no convite. A tela confere a situação e mostra o valor subsidiado do fluxo antes de você confirmar.
+
+- **Fornecedor ainda não pagou:** a troca vale na hora. O processo é liberado e o fornecedor já pode enviar os documentos (se ainda não se cadastrou, ele já começa sem pagamento).
+- **Boleto emitido e ainda não pago:** boleto emitido não pode ser cancelado. A troca fica **agendada** (etiqueta **SUBSÍDIO AGENDADO** com a data do vencimento) e o fornecedor é avisado para não pagar. Se o boleto vencer sem pagamento, a troca vale sozinha; se o fornecedor pagar mesmo assim, vale o pagamento dele e a sua empresa **não é cobrada**.
+- **Fornecedor já pagou** (cartão, PIX ou boleto compensado): a troca **não é possível**, porque envolveria estorno e cancelamento de nota fiscal.
+- O fornecedor é avisado por e-mail, e a troca aparece no **Log do Processo**.
+- A troca é só nesse sentido (de "fornecedor paga" para subsidiado) e **não pode ser desfeita**. Quem pode fazer depende da permissão **Tornar convite subsidiado** do perfil de acesso.
+
 > **Cliente inativo:** enquanto a sua empresa estiver inativa na plataforma, não é possível enviar convites, e o seu portal não recebe novos cadastros.
 
 ---

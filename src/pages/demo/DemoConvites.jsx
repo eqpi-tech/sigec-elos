@@ -23,9 +23,9 @@ const BUYER_INVITES = [
 const CLIENT_INVITES = [
   { id:1, supplier_razao_social:PRIMATUS.razao,            supplier_cnpj:PRIMATUS.cnpj,        supplier_email:'lucas@primatus.com.br',  status:'REGISTERED', created_at:isoD(-51), subsidiado:true,  contato:'Lucas Andrade', escopo:'Manutenção preventiva de correias transportadoras', nivel:'Suprimentos – Nível 2', lembretes:0 },
   { id:2, supplier_razao_social:'Ômega Engenharia Ltda',    supplier_cnpj:'41.090.118/0001-30', supplier_email:'contato@omega.com.br',   status:'REGISTERED', created_at:isoD(-58), subsidiado:true,  contato:'Ana Costa',     escopo:'Serviços elétricos', nivel:'Suprimentos – Nível 3', lembretes:0 },
-  { id:3, supplier_razao_social:'TechFix Industrial S.A.',  supplier_cnpj:'07.332.910/0001-41', supplier_email:'admin@techfix.com.br',   status:'REGISTERED', created_at:isoD(-30), subsidiado:false, contato:'Marcos Lima',   escopo:'Automação', nivel:'Suprimentos – Nível 2', lembretes:1 },
+  { id:3, supplier_razao_social:'TechFix Industrial S.A.',  supplier_cnpj:'07.332.910/0001-41', supplier_email:'admin@techfix.com.br',   status:'REGISTERED', created_at:isoD(-30), subsidiado:false, contato:'Marcos Lima',   escopo:'Automação', nivel:'Suprimentos – Nível 2', lembretes:1, boletoVence:isoD(2), valorSub:250 },
   { id:4, supplier_razao_social:'Vértice Montagens Ltda',   supplier_cnpj:'33.901.227/0001-60', supplier_email:'contato@vertice.com.br', status:'VIEWED',     created_at:isoD(-9),  subsidiado:true,  contato:'Sérgio Vidal',  escopo:'Montagem industrial', nivel:'Suprimentos – Nível 2', lembretes:1 },
-  { id:5, supplier_razao_social:'NovaTech Serviços Ltda',   supplier_cnpj:'64.123.789/0001-99', supplier_email:'novo@novatech.com.br',   status:'SENT',       created_at:isoD(-3),  subsidiado:false, contato:'',              escopo:'', nivel:'Suprimentos – Nível 1', lembretes:0 },
+  { id:5, supplier_razao_social:'NovaTech Serviços Ltda',   supplier_cnpj:'64.123.789/0001-99', supplier_email:'novo@novatech.com.br',   status:'SENT',       created_at:isoD(-3),  subsidiado:false, contato:'',              escopo:'', nivel:'Suprimentos – Nível 1', lembretes:0, valorSub:150 },
   { id:6, supplier_razao_social:'Delta Serviços Gerais Ltda', supplier_cnpj:'05.448.310/0001-91', supplier_email:'adm@deltaservicos.com.br', status:'CANCELLED', created_at:isoD(-44), subsidiado:true, contato:'', escopo:'Limpeza', nivel:'Suprimentos – Nível 1', lembretes:2 },
 ]
 
@@ -48,6 +48,7 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
   const [fStatus,    setFStatus]    = useState([])
   const [fCust,      setFCust]      = useState([])
   const [, setToast, ToastEl] = useToast()
+  const [subsidiar,  setSubsidiar]  = useState(null)   // tornar subsidiado (feature 26/10)
 
   const filtered = invites.filter(i => {
     const q = search.toLowerCase()
@@ -86,6 +87,37 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
   return (
     <div style={{ padding:'28px 32px', maxWidth:1000, margin:'0 auto' }}>
       {ToastEl}
+      {subsidiar && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:'24px 28px', width:'100%', maxWidth:480, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:16, color:'#1a1c5e', marginBottom:6 }}>Tornar convite subsidiado</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', marginBottom:12 }}><strong>{subsidiar.supplier_razao_social}</strong> · {subsidiar.supplier_email}</div>
+            <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#374151', lineHeight:1.6, marginBottom:14 }}>
+              <strong>A sua empresa passa a custear</strong> a homologação deste fornecedor no fluxo <strong>{subsidiar.nivel}</strong>, pelo valor subsidiado de <strong>{Number(subsidiar.valorSub || 150).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}</strong>, cobrado quando o processo entrar em análise.
+              <ul style={{ margin:'10px 0 0', paddingLeft:18 }}>
+                {subsidiar.boletoVence ? (<>
+                  <li>Já existe um <strong>boleto emitido</strong> para o fornecedor, que vence em <strong>{fmtBR(subsidiar.boletoVence)}</strong>. Boleto emitido não pode ser cancelado.</li>
+                  <li>A troca fica <strong>agendada</strong>: se o boleto vencer sem pagamento, o processo é liberado automaticamente.</li>
+                  <li>Se o fornecedor pagar o boleto mesmo assim, vale o pagamento dele e vocês não são cobrados.</li>
+                </>) : (
+                  <li>{subsidiar.status === 'REGISTERED' ? 'O processo é liberado na hora e o fornecedor já pode enviar os documentos.' : 'Quando o fornecedor se cadastrar, o processo já começa liberado, sem pagamento.'}</li>
+                )}
+                <li>O fornecedor é avisado por e-mail.</li>
+                <li><strong>Não é possível desfazer</strong> esta troca. Se o fornecedor já tiver pago (cartão, PIX ou boleto compensado), a troca não é possível.</li>
+              </ul>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <Button variant="neutral" full onClick={() => setSubsidiar(null)}>Voltar</Button>
+              <Button full onClick={() => {
+                const ag = !!subsidiar.boletoVence
+                setInvites(p => p.map(x => x.id === subsidiar.id ? (ag ? { ...x, agendado: true } : { ...x, subsidiado: true }) : x))
+                setToast(ag ? `⏳ Troca agendada: vale quando o boleto vencer sem pagamento (${fmtBR(subsidiar.boletoVence)}).` : `✅ Convite de ${subsidiar.supplier_razao_social} agora é subsidiado.`)
+                setSubsidiar(null)
+              }}>{subsidiar.boletoVence ? 'Agendar a troca' : 'Confirmar — nós custeamos'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <PageHeader
         title={isBuyer ? 'Convites Enviados' : 'Convites'}
         subtitle={`${invites.length} convite${invites.length!==1?'s':''} enviado${invites.length!==1?'s':''}`}
@@ -135,6 +167,11 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
               <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
                 <span style={{ fontSize:11, fontWeight:700, color:STATUS_COLOR[inv.status], background:`${STATUS_COLOR[inv.status]}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{STATUS_LABEL[inv.status]}</span>
                 {inv.subsidiado && <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>SUBSIDIADO</span>}
+                {inv.agendado && !inv.subsidiado && <span title="Vale quando o boleto emitido vencer sem pagamento" style={{ fontSize:10, background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>SUBSÍDIO AGENDADO · {fmtBR(inv.boletoVence)}</span>}
+                {!isBuyer && !inv.subsidiado && !inv.agendado && inv.status !== 'CANCELLED' && (
+                  <button onClick={() => setSubsidiar(inv)} title="A sua empresa passa a custear a homologação — só enquanto o fornecedor não pagou"
+                    style={{ fontSize:10, color:'#065f46', background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>💰 Tornar subsidiado</button>
+                )}
                 {isBuyer ? (
                   <button onClick={() => inv.supplier_id ? navigate('perfil', { supplierId: inv.supplier_id }) : setToast('ℹ️ A ficha aparece quando o fornecedor concluir o cadastro.')}
                     style={{ padding:'6px 14px', borderRadius:8, background:'rgba(46,49,146,.06)', border:'1px solid rgba(46,49,146,.15)', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12, cursor:'pointer' }}>Ver Ficha</button>
