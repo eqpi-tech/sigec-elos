@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { invitationsApi } from '../../services/api.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
+import SubsidizeInviteModal from '../../components/SubsidizeInviteModal.jsx'
 
 // telefone informado pelo cliente no convite (29/09) — formata quando dá, senão mostra como veio
 const fone = (v) => {
@@ -49,6 +50,7 @@ export default function BackofficeInvitations() {
   const [msg, setMsg]           = useState({ ok:'', err:'' })
   const [detalhe, setDetalhe]   = useState(null)
   const [cancelando, setCancelando] = useState(null)   // { inv, reason, busy }
+  const [subsidiando, setSubsidiando] = useState(null) // { inv } — patch_159, em nome do cliente
   const [ocupado, setOcupado]   = useState(null)
 
   useEffect(() => {
@@ -193,6 +195,9 @@ export default function BackofficeInvitations() {
                       {aberto(inv.status, inv) && <button onClick={() => copiarLink(inv)} style={btn('#2E3192')}>Copiar link</button>}
                       {aberto(inv.status, inv) && <button disabled={ocupado === inv.id} onClick={() => reenviar(inv)} style={btn('#2E3192')}>{ocupado === inv.id ? 'Enviando…' : 'Reenviar'}</button>}
                       {aberto(inv.status, inv) && <button onClick={() => setCancelando({ inv, reason:'', busy:false })} style={btn('#b91c1c')}>Cancelar</button>}
+                      {!inv.hoc_id && !inv.subsidiado && inv.objetivo !== 'contato' && !['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(inv.status) && (
+                        <button onClick={() => setSubsidiando({ inv })} title="A pedido do cliente: ele passa a custear (só se o fornecedor não pagou)" style={btn('#065f46')}>💰 Tornar subsidiado</button>
+                      )}
                       {inv.supplier_id && <button onClick={() => navigate(`/backoffice/analise/${inv.supplier_id}`)} style={btn('#15803d')}>Ver processo →</button>}
                     </div>
                   </div>
@@ -248,6 +253,10 @@ export default function BackofficeInvitations() {
         </div>
       )}
 
+      {subsidiando && (
+        <SubsidizeInviteModal inv={subsidiando.inv} porEqpi onClose={() => setSubsidiando(null)}
+          onDone={(m) => { setSubsidiando(null); avisar(m); carregar() }}/>
+      )}
       {cancelando && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ background:'#fff', borderRadius:20, padding:'24px 28px', width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>

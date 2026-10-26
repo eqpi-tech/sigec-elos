@@ -66,6 +66,7 @@ export default function ProcessLog({ fetcher, note }) {
                         AUTO_COLLECT_DONE:      { label:'Coleta automática de documentos', color:'#2E3192', icon:'⚡' },
                         PRIORITY_REQUESTED:     { label:'Análise prioritária solicitada', color:'#b45309', icon:'⚡' },
                         SEAL_RENAMED:           { label:'Processo renomeado',      color:'#64748b', icon:'✏️' },
+                        INVITATION_SUBSIDIZED:  { label:'Convite passou a ser subsidiado', color:'#065f46', icon:'💰' },
                         SUPPLIER_PROFILE_UPDATED:{ label:'Dados cadastrais atualizados', color:'#2E3192', icon:'🏢' },
                         SUPPLIER_PARTNER_ADDED: { label:'Sócio incluído',          color:'#2E3192', icon:'👤' },
                         SUPPLIER_PARTNER_UPDATED:{ label:'Sócio alterado',         color:'#2E3192', icon:'👤' },

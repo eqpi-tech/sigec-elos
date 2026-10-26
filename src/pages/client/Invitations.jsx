@@ -10,6 +10,7 @@ import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 // CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
 import { normalizeCnpj, formatCnpj } from '../../lib/cnpj.js'
 import { exportXlsx, dataBR } from '../../lib/exportXlsx.js'
+import SubsidizeInviteModal from '../../components/SubsidizeInviteModal.jsx'
 
 const STATUS_LABEL = { SENT:'Enviado', VIEWED:'Visualizado', REGISTERED:'Cadastrado', CANCELLED:'Cancelado', EXPIRED:'Expirado' }
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B', EXPIRED:'#64748b' }
@@ -53,6 +54,8 @@ export default function ClientInvitations() {
   const [flows, setFlows]         = useState([])   // fluxos ativos do cliente (com preço)
   const [subsidioPadrao, setSubsidioPadrao] = useState(false)   // SIM quando o cliente opera subsidiado
   const [cancelando, setCancelando] = useState(null)             // { inv, reason, busy }
+  const [subsidiando, setSubsidiando] = useState(null)           // { inv } — patch_159
+  const [liberados, setLiberados] = useState(new Set())          // fornecedores que já pagaram
   const location = useLocation()
 
   // Razão social do cliente para os templates de mensagem
@@ -96,8 +99,12 @@ export default function ClientInvitations() {
     if (!user?.clientId) return
     setLoading(true)
     try {
-      const data = await invitationsApi.listByClient(user.clientId)
+      const [data, lib] = await Promise.all([
+        invitationsApi.listByClient(user.clientId),
+        invitationsApi.releasedSupplierIds(user.clientId).catch(() => new Set()),
+      ])
       setInvites(data)
+      setLiberados(lib)
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }, [user?.clientId])
@@ -197,6 +204,11 @@ export default function ClientInvitations() {
 
   // convidar/reenviar/cancelar: perfil somente leitura (legado) + ação do perfil
   const podeConvidar = can(user, 'client_invite') && hasAction(user, 'acao:novo_convite')
+  // tornar subsidiado (patch_159): ação própria do perfil; só convite de
+  // homologação do ELOS, não subsidiado, ativo e de fornecedor que não pagou
+  const podeSubsidiar = can(user, 'client_invite') && hasAction(user, 'acao:subsidiar_convite') && subsidioPadrao
+  const subsidiavel = (inv) => podeSubsidiar && !inv.hoc_id && !inv.subsidiado && inv.objetivo !== 'contato'
+    && !['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(inv.status) && !(inv.supplier_id && liberados.has(inv.supplier_id))
 
   const inp  = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
   const lbl  = { display:'block', fontFamily:'Montserrat,sans-serif', fontWeight:600, fontSize:11, color:'#1a1c5e', letterSpacing:.5, marginBottom:6, textTransform:'uppercase' }
@@ -313,6 +325,13 @@ export default function ClientInvitations() {
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(inv.created_at).toLocaleDateString('pt-BR')}
                   </div>
+                  {subsidiavel(inv) && (
+                    <button onClick={() => { setError(''); setSuccess(''); setSubsidiando({ inv }) }}
+                      title="O cliente passa a custear a homologação — só enquanto o fornecedor não pagou"
+                      style={{ fontSize:10, color:'#065f46', background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'DM Sans,sans-serif', fontWeight:600 }}>
+                      💰 Tornar subsidiado
+                    </button>
+                  )}
                   {podeConvidar && !inv.hoc_id && !['REGISTERED', 'CANCELLED', 'EXPIRED'].includes(inv.status) && (
                     <div style={{ display:'flex', gap:6 }}>
                       <button
@@ -354,6 +373,12 @@ export default function ClientInvitations() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tornar subsidiado (patch_159) — só nesse sentido e só sem pagamento */}
+      {subsidiando && (
+        <SubsidizeInviteModal inv={subsidiando.inv} onClose={() => setSubsidiando(null)}
+          onDone={(m) => { setSubsidiando(null); setError(''); setSuccess(m); load() }}/>
       )}
 
       {/* Modal de novo convite */}

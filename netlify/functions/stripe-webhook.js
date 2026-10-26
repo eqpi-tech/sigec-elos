@@ -30,6 +30,7 @@ async function liberacaoStripe({ paymentIntent, charge }) {
 }
 exports.liberacaoStripe = liberacaoStripe
 const { functionsUrl, env } = require('./lib/runtime_env.js')
+const { guardedResend } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')   // Rota A (staging; inerte sem ROUTE_A_ENABLED)
 const { createClient } = require('@supabase/supabase-js')
 
@@ -90,6 +91,20 @@ async function activatePaidSession(session) {
 
       // Mensal = 30 dias; anual = 365 (renovações estendem via webhook/Stripe)
       const isMensal = (planType || '').includes('mensal')
+
+      // 26/10: pagamento do fornecedor num processo que o cliente já tornou
+      // SUBSIDIADO (invitation-subsidize). A troca cancela o boleto na Stripe,
+      // mas um checkout aberto (cartão/PIX) ou um boleto que o banco aceitou
+      // ainda pode cair: o dinheiro entrou, então nada é desfeito aqui — a nota
+      // fica RETIDA para revisão e o backoffice é avisado (boleto não tem estorno).
+      let pagoAposSubsidio = false
+      if (clientId && session.mode === 'payment') {
+        const { data: sub } = await supabase.from('invitations').select('id')
+          .eq('client_id', clientId).eq('supplier_id', supplierId).eq('subsidiado', true).is('hoc_id', null)
+          .not('status', 'in', '(CANCELLED,SUPERSEDED)').limit(1)
+        pagoAposSubsidio = !!sub?.length
+      }
+
       // Pagamento AVULSO (homologação de convidado, mode=payment): NFSe
       if (session.mode === 'payment' && (session.amount_total ?? 0) > 0) {
         await supabase.from('nfe_invoices').upsert({
@@ -98,11 +113,26 @@ async function activatePaidSession(session) {
           amount_cents: session.amount_total, currency: session.currency || 'brl',
           plan_type: planType || 'homologado',
           description: 'Serviço de Análise Cadastral — Homologação SIGEC-ELOS',
-          paid_at: new Date().toISOString(), status: 'PENDING',
+          paid_at: new Date().toISOString(),
+          status: pagoAposSubsidio ? 'NEEDS_REVIEW' : 'PENDING',
+          ...(pagoAposSubsidio ? { log_erro: 'Pago pelo fornecedor DEPOIS de o cliente tornar o convite subsidiado — decidir com o cliente (crédito/devolução) antes de emitir a nota.' } : {}),
           ...(await liberacaoStripe({ paymentIntent: session.payment_intent })),
         }, { onConflict: 'stripe_session_id', ignoreDuplicates: true })
           .then(({ error: e2 }) => e2 && console.error('[nfe-queue]', e2.message))
-        await dispararEmissaoNfe()
+        if (!pagoAposSubsidio) await dispararEmissaoNfe()
+      }
+      if (pagoAposSubsidio) {
+        console.error(`[subsidio] pagamento após subsídio: fornecedor ${supplierId} · cliente ${clientId} · sessão ${session.id}`)
+        await supabase.from('audit_log').insert({ action: 'PAYMENT_AFTER_SUBSIDY', entity_type: 'supplier', entity_id: supplierId,
+          metadata: { client_id: clientId, stripe_session_id: session.id, valor: (session.amount_total ?? 0) / 100 } })
+        if (process.env.RESEND_API_KEY) {
+          await guardedResend('https://api.resend.com/emails', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+            body: JSON.stringify({ from: process.env.EMAIL_FROM || 'SIGEC-ELOS <noreply@eqpitech.com.br>', to: ['suporte@eqpitech.com.br'],
+              subject: '[SIGEC-ELOS] Pagamento do fornecedor em processo já subsidiado — revisar',
+              html: `<p>O fornecedor <strong>${supplierId}</strong> pagou R$ ${((session.amount_total ?? 0) / 100).toFixed(2)} (sessão Stripe ${session.id}) num processo que o cliente <strong>${clientId}</strong> já tinha tornado subsidiado.</p><p>A nota fiscal ficou <strong>retida</strong> (Financeiro → notas em revisão). Decidir com o cliente: crédito ao fornecedor ou devolução. Boleto não tem estorno pela Stripe.</p>` }),
+          }).catch((e) => console.warn('[subsidio] alerta:', e.message))
+        }
       }
 
       const endsAt = new Date(Date.now() + (isMensal ? 30 : 365) * 24 * 60 * 60 * 1000).toISOString()
