@@ -41,9 +41,17 @@ exports.handler = async (event) => {
       if (s.payment_status === 'paid') {
         r.acao = 'ativado'
         if (!body.dryRun) await activatePaidSession(s)
-      } else if (s.status === 'expired' || s.payment_intent?.status === 'canceled') {
+      } else if (s.status === 'expired' || s.payment_intent?.status === 'canceled'
+                 // 26/10: boleto VENCIDO volta o pagamento a requires_payment_method
+                 // (sessão segue 'complete') — antes ficava "aguardando" para sempre
+                 || (s.status === 'complete' && s.payment_intent?.status === 'requires_payment_method')) {
         r.acao = 'encerrado (não pago)'
-        if (!body.dryRun) await supabase.from('plans').update({ status: 'CANCELED' }).eq('stripe_session_id', id).eq('status', 'PENDING')
+        if (!body.dryRun) {
+          await supabase.from('plans').update({ status: 'CANCELED' }).eq('stripe_session_id', id).eq('status', 'PENDING')
+          // troca para subsidiado agendada para este boleto (patch_160)
+          const ag = await require('./lib/subsidy.js').aplicarAgendados(supabase, stripe, id).catch((e) => [{ erro: e.message }])
+          if (ag.length) r.subsidio = ag
+        }
       } else r.acao = 'aguardando pagamento'
       out.conciliados.push(r)
     }

@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { invitationsApi } from '../services/api.js'
 import { Button, Spinner } from './ui.jsx'
 
+const dataBR = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : ''
+
 export default function SubsidizeInviteModal({ inv, porEqpi = false, onClose, onDone }) {
   const [info, setInfo] = useState(null)
   const [erro, setErro] = useState('')
@@ -24,7 +26,9 @@ export default function SubsidizeInviteModal({ inv, porEqpi = false, onClose, on
     setBusy(true); setErro('')
     try {
       const r = await invitationsApi.subsidize(inv.id)
-      onDone?.(`Convite de ${inv.supplier_razao_social} agora é subsidiado${r.boletoCancelado ? ' — o boleto do fornecedor foi cancelado' : ''}. O fornecedor foi avisado por e-mail.`)
+      onDone?.(r.agendado
+        ? `Troca agendada: o convite de ${inv.supplier_razao_social} passa a ser subsidiado assim que o boleto emitido vencer sem pagamento${r.vence ? ` (${dataBR(r.vence)})` : ''}. O fornecedor foi avisado para não pagar.`
+        : `Convite de ${inv.supplier_razao_social} agora é subsidiado. O fornecedor foi avisado por e-mail.`)
     } catch (e) { setErro(e.message); setBusy(false) }
   }
 
@@ -43,9 +47,14 @@ export default function SubsidizeInviteModal({ inv, porEqpi = false, onClose, on
             {info.fluxo ? <> no fluxo <strong>{info.fluxo}</strong></> : ''}, pelo valor subsidiado de{' '}
             <strong>{Number(info.valor).toLocaleString('pt-BR', { style:'currency', currency:'BRL' })}</strong>, cobrado quando o processo entrar em análise.
             <ul style={{ margin:'10px 0 0', paddingLeft:18 }}>
-              {info.boleto && <li>O <strong>boleto já emitido</strong> para o fornecedor será <strong>cancelado</strong>.</li>}
-              <li>{info.cadastrado ? 'O processo é liberado na hora e o fornecedor já pode enviar os documentos.' : 'Quando o fornecedor se cadastrar, o processo já começa liberado, sem pagamento.'}</li>
-              <li>O fornecedor é avisado por e-mail.</li>
+              {info.agendar ? (<>
+                <li>Já existe um <strong>boleto emitido</strong> para o fornecedor{info.vence ? <>, que vence em <strong>{dataBR(info.vence)}</strong></> : ''}. Boleto emitido não pode ser cancelado.</li>
+                <li>A troca fica <strong>agendada</strong>: se o boleto vencer sem pagamento, o processo é liberado automaticamente e o fornecedor é avisado.</li>
+                <li>Se o fornecedor pagar o boleto mesmo assim, vale o pagamento dele e {porEqpi ? 'o cliente não é cobrado' : 'vocês não são cobrados'}.</li>
+              </>) : (
+                <li>{info.cadastrado ? 'O processo é liberado na hora e o fornecedor já pode enviar os documentos.' : 'Quando o fornecedor se cadastrar, o processo já começa liberado, sem pagamento.'}</li>
+              )}
+              <li>O fornecedor é avisado por e-mail{info.agendar ? ' para não pagar o boleto' : ''}.</li>
               <li><strong>Não é possível desfazer</strong> esta troca.</li>
             </ul>
           </div>
@@ -59,7 +68,7 @@ export default function SubsidizeInviteModal({ inv, porEqpi = false, onClose, on
           <Button variant="neutral" full onClick={onClose}>Voltar</Button>
           {info && (
             <Button full disabled={busy} onClick={confirmar}>
-              {busy ? 'Salvando…' : porEqpi ? 'Confirmar — cliente custeia' : 'Confirmar — nós custeamos'}
+              {busy ? 'Salvando…' : info.agendar ? 'Agendar a troca' : porEqpi ? 'Confirmar — cliente custeia' : 'Confirmar — nós custeamos'}
             </Button>
           )}
         </div>

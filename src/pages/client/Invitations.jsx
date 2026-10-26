@@ -208,6 +208,7 @@ export default function ClientInvitations() {
   // homologação do ELOS, não subsidiado, ativo e de fornecedor que não pagou
   const podeSubsidiar = can(user, 'client_invite') && hasAction(user, 'acao:subsidiar_convite') && subsidioPadrao
   const subsidiavel = (inv) => podeSubsidiar && !inv.hoc_id && !inv.subsidiado && inv.objetivo !== 'contato'
+    && !(inv.subsidy_requested_at && !inv.subsidy_voided_at)
     && !['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(inv.status) && !(inv.supplier_id && liberados.has(inv.supplier_id))
 
   const inp  = { width:'100%', padding:'10px 14px', borderRadius:10, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:14, color:'#1a1c5e', boxSizing:'border-box' }
@@ -320,6 +321,11 @@ export default function ClientInvitations() {
                   {inv.subsidiado && (
                     <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
                       SUBSIDIADO
+                    </span>
+                  )}
+                  {inv.subsidy_requested_at && !inv.subsidy_voided_at && !inv.subsidiado && (
+                    <span title="Vale quando o boleto emitido para o fornecedor vencer sem pagamento" style={{ fontSize:10, background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
+                      SUBSÍDIO AGENDADO{inv.subsidy_boleto_due ? ` · ${new Date(inv.subsidy_boleto_due).toLocaleDateString('pt-BR')}` : ''}
                     </span>
                   )}
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>

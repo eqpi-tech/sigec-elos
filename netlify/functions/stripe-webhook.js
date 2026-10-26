@@ -97,6 +97,12 @@ async function activatePaidSession(session) {
       // mas um checkout aberto (cartão/PIX) ou um boleto que o banco aceitou
       // ainda pode cair: o dinheiro entrou, então nada é desfeito aqui — a nota
       // fica RETIDA para revisão e o backoffice é avisado (boleto não tem estorno).
+      // pedido agendado para este boleto (patch_160): o fornecedor pagou — vale o
+      // pagamento dele; o pedido é anulado e o cliente não é cobrado
+      if (session.mode === 'payment') {
+        try { await require('./lib/subsidy.js').anularAgendados(supabase, session.id) }
+        catch (e) { console.error('[subsidio] anular agendados:', e.message) }
+      }
       let pagoAposSubsidio = false
       if (clientId && session.mode === 'payment') {
         const { data: sub } = await supabase.from('invitations').select('id')
@@ -286,6 +292,11 @@ exports.handler = async (event) => {
       await supabase.from('plans').update({ status: 'CANCELED' })
         .eq('stripe_session_id', session.id).eq('status', 'PENDING')
       console.log(`❌ Pagamento assíncrono falhou/expirou (${session.id})`)
+      // troca para subsidiado agendada para este boleto (patch_160): vale agora
+      try {
+        const r = await require('./lib/subsidy.js').aplicarAgendados(supabase, stripe, session.id)
+        if (r.length) console.log('[subsidio] agendados aplicados:', JSON.stringify(r))
+      } catch (e) { console.error('[subsidio] aplicar agendados:', e.message) }
       return { statusCode: 200, body: JSON.stringify({ received: true }) }
     }
 
