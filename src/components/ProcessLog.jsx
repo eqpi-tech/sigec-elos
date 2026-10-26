@@ -67,6 +67,8 @@ export default function ProcessLog({ fetcher, note }) {
                         PRIORITY_REQUESTED:     { label:'Análise prioritária solicitada', color:'#b45309', icon:'⚡' },
                         SEAL_RENAMED:           { label:'Processo renomeado',      color:'#64748b', icon:'✏️' },
                         INVITATION_SUBSIDIZED:  { label:'Convite passou a ser subsidiado', color:'#065f46', icon:'💰' },
+                        INVITATION_SUBSIDY_SCHEDULED: { label:'Subsídio agendado (aguarda o vencimento do boleto)', color:'#92400e', icon:'⏳' },
+                        INVITATION_SUBSIDY_VOIDED:    { label:'Subsídio anulado — o fornecedor pagou o boleto', color:'#64748b', icon:'💳' },
                         SUPPLIER_PROFILE_UPDATED:{ label:'Dados cadastrais atualizados', color:'#2E3192', icon:'🏢' },
                         SUPPLIER_PARTNER_ADDED: { label:'Sócio incluído',          color:'#2E3192', icon:'👤' },
                         SUPPLIER_PARTNER_UPDATED:{ label:'Sócio alterado',         color:'#2E3192', icon:'👤' },

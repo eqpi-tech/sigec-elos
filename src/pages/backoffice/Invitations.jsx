@@ -174,6 +174,7 @@ export default function BackofficeInvitations() {
                         <span style={{ fontSize:10, fontWeight:700, color:st.color, background:`${st.color}18`, padding:'2px 8px', borderRadius:20 }}>{st.label}</span>
                         {inv.hoc_id && <span title={`Convite ${inv.hoc_id} do HOC — histórico; lembretes são do HOC`} style={{ fontSize:10, fontWeight:700, color:'#475569', background:'#f1f5f9', padding:'2px 8px', borderRadius:20 }}>HOC</span>}
                         {inv.subsidiado && <span style={{ fontSize:10, fontWeight:700, color:'#065f46', background:'#d1fae5', padding:'2px 8px', borderRadius:20 }}>SUBSIDIADO</span>}
+                        {inv.subsidy_requested_at && !inv.subsidy_voided_at && !inv.subsidiado && <span title="Vale quando o boleto emitido vencer sem pagamento" style={{ fontSize:10, fontWeight:700, color:'#92400e', background:'#fef3c7', padding:'2px 8px', borderRadius:20 }}>SUBSÍDIO AGENDADO{inv.subsidy_boleto_due ? ` · ${new Date(inv.subsidy_boleto_due).toLocaleDateString('pt-BR')}` : ''}</span>}
                         {inv.objetivo === 'contato' && <span style={{ fontSize:10, fontWeight:700, color:'#6b7280', background:'#f3f4f6', padding:'2px 8px', borderRadius:20 }}>CONTATO</span>}
                       </div>
                       <div style={{ fontSize:12, color:'#6b7280', fontFamily:'DM Sans,sans-serif', marginTop:3 }}>
@@ -195,7 +196,7 @@ export default function BackofficeInvitations() {
                       {aberto(inv.status, inv) && <button onClick={() => copiarLink(inv)} style={btn('#2E3192')}>Copiar link</button>}
                       {aberto(inv.status, inv) && <button disabled={ocupado === inv.id} onClick={() => reenviar(inv)} style={btn('#2E3192')}>{ocupado === inv.id ? 'Enviando…' : 'Reenviar'}</button>}
                       {aberto(inv.status, inv) && <button onClick={() => setCancelando({ inv, reason:'', busy:false })} style={btn('#b91c1c')}>Cancelar</button>}
-                      {!inv.hoc_id && !inv.subsidiado && inv.objetivo !== 'contato' && !['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(inv.status) && (
+                      {!inv.hoc_id && !inv.subsidiado && inv.objetivo !== 'contato' && !(inv.subsidy_requested_at && !inv.subsidy_voided_at) && !['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(inv.status) && (
                         <button onClick={() => setSubsidiando({ inv })} title="A pedido do cliente: ele passa a custear (só se o fornecedor não pagou)" style={btn('#065f46')}>💰 Tornar subsidiado</button>
                       )}
                       {inv.supplier_id && <button onClick={() => navigate(`/backoffice/analise/${inv.supplier_id}`)} style={btn('#15803d')}>Ver processo →</button>}
