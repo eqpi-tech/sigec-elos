@@ -2164,6 +2164,26 @@ export const invitationsApi = {
     return data
   },
 
+  // Convite passa a SUBSIDIADO depois de enviado (patch_159, 26/10) — só
+  // enquanto o fornecedor não pagou; check=true só confere (sem trocar)
+  subsidize: async (inviteId, { check = false } = {}) => {
+    const res = await authFetch(`/.netlify/functions/invitation-subsidize${check ? '?check=1' : ''}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteId }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Não foi possível tornar o convite subsidiado')
+    return data
+  },
+
+  // Fornecedores que já pagaram (processo liberado) — escondem o "Tornar subsidiado"
+  releasedSupplierIds: async (clientId) => {
+    if (!clientId) return new Set()
+    const { data } = await supabase.from('seals').select('supplier_id')
+      .eq('client_id', clientId).not('released_at', 'is', null)
+    return new Set((data || []).map(s => s.supplier_id))
+  },
+
   // Padrão do campo "Subsidiado?" (28/09): SIM quando o cliente opera no
   // modelo subsidiado (algum fluxo ativo com preço subsidiado)
   subsidyDefault: async (clientId) => {

@@ -58,6 +58,7 @@ export const ACTIONS = {
     { key: 'acao:priorizar_analise', module: 'fornecedores', label: 'Priorizar Análise',            icon: '⚡', desc: 'Pedir à EQPI análise prioritária de um processo em análise (urgência)' },
     { key: 'acao:enviar_doc_cliente',module: 'fornecedores', label: 'Enviar documentos do cliente', icon: '📎', desc: 'Anexar documentos de responsabilidade do cliente no processo (ex.: Laudo GETEC — VIX)' },
     { key: 'acao:novo_convite',      module: 'convites',     label: 'Enviar convites',              icon: '✉️', desc: 'Convidar fornecedores (individual e em massa)' },
+    { key: 'acao:subsidiar_convite', module: 'convites',     label: 'Tornar convite subsidiado',    icon: '💰', desc: 'Passar a custear a homologação de um convidado que ainda não pagou (não dá para desfazer)' },
     { key: 'acao:nova_cotacao',      module: 'rfq',          label: 'Criar cotações (RFQ)',         icon: '📝', desc: 'Abrir novas solicitações de cotação' },
   ],
   SUPPLIER: [
