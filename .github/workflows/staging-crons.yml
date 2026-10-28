@@ -19,12 +19,18 @@ jobs:
     steps:
       - name: Dispara o coletor background
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer ${{ secrets.STAGING_CRON_SECRET }}" \
-            "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-collect-background")
-          echo "homolog-collect-background (staging): HTTP $response"
-          # background function responde 202 (aceito)
-          if [ "$response" != "202" ] && [ "$response" != "200" ]; then exit 1; fi
+          # 28/10: a Netlify devolveu 500 passageiro nas duas funções no mesmo
+          # segundo — até 3 tentativas (30 s entre elas) antes de acusar falha
+          for tentativa in 1 2 3; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              -H "Authorization: Bearer ${{ secrets.STAGING_CRON_SECRET }}" \
+              "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-collect-background")
+            echo "homolog-collect-background (staging), tentativa $tentativa: HTTP $response"
+            # background function responde 202 (aceito)
+            if [ "$response" = "202" ] || [ "$response" = "200" ]; then exit 0; fi
+            [ $tentativa -lt 3 ] && sleep 30
+          done
+          exit 1
 
   rota-b-pre-analise:
     name: Pré-análise por IA da Rota B (staging)
@@ -32,8 +38,14 @@ jobs:
     steps:
       - name: Dispara o processador background
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            -H "Authorization: Bearer ${{ secrets.STAGING_CRON_SECRET }}" \
-            "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-ai-review-background")
-          echo "homolog-ai-review-background (staging): HTTP $response"
-          if [ "$response" != "202" ] && [ "$response" != "200" ]; then exit 1; fi
+          # 28/10: a Netlify devolveu 500 passageiro nas duas funções no mesmo
+          # segundo — até 3 tentativas (30 s entre elas) antes de acusar falha
+          for tentativa in 1 2 3; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+              -H "Authorization: Bearer ${{ secrets.STAGING_CRON_SECRET }}" \
+              "https://staging--sigec-elos.netlify.app/.netlify/functions/homolog-ai-review-background")
+            echo "homolog-ai-review-background (staging), tentativa $tentativa: HTTP $response"
+            if [ "$response" = "202" ] || [ "$response" = "200" ]; then exit 0; fi
+            [ $tentativa -lt 3 ] && sleep 30
+          done
+          exit 1
