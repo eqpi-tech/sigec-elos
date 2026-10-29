@@ -1,0 +1,75 @@
+# Execução do go-live de cliente + resumo diário (29/10/2026; 1º uso: VIXPAR, 04/11).
+# Calendário em scripts/comunicados_golive/execucao.py (EXECUCAO e RESUMO).
+# Trava: app_settings 'golive_execucao_<CAMP>' aprovada (--aprovar); sem ela o
+# job avisa o acompanhamento e não faz nada. --pausar desliga a qualquer momento.
+# Secrets: MIGRACAO_DB_URL, RESEND_API_KEY, CRON_SECRET, SITE_URL.
+name: Go-live de cliente — execução e resumo diário
+
+on:
+  # O GitHub atrasa agendamentos em até ~4h30: o 1º disparo é de madrugada e o
+  # script espera até as 09:00 (execução) ou 18:00 (resumo) de Brasília. Os
+  # outros são reserva: a execução só pega o que ainda está PENDENTE e o resumo
+  # sai uma vez por dia.
+  schedule:
+    - cron: '37 8 4 11 *'        # 05:37 BRT 04/11 — execução (espera até 09:00)
+    - cron: '7 11 4 11 *'        # 08:07 BRT — reserva
+    - cron: '7 13 4 11 *'        # 10:07 BRT — reserva
+    - cron: '7 16 4 11 *'        # 13:07 BRT — reserva
+    - cron: '7 17 4-17 11 *'     # 14:07 BRT — resumo diário (espera até 18:00)
+    - cron: '7 20 4-17 11 *'     # 17:07 BRT — reserva do resumo
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: 'executar | resumo'
+        default: 'executar'
+
+concurrency: { group: golive-execucao, cancel-in-progress: false }
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Cliente Postgres
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Execução ou resumo
+        env:
+          MIGRACAO_DB_URL: ${{ secrets.MIGRACAO_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          AGENDA: ${{ github.event.schedule }}
+          ACAO: ${{ github.event.inputs.acao }}
+        run: |
+          case "$AGENDA" in
+            '7 17 4-17 11 *'|'7 20 4-17 11 *') python3 scripts/comunicados_golive/execucao.py --resumo-agendado ;;
+            '') if [ "$ACAO" = "resumo" ]; then python3 scripts/comunicados_golive/execucao.py --resumo-diario
+                else python3 scripts/comunicados_golive/execucao.py --agendado; fi ;;
+            *) python3 scripts/comunicados_golive/execucao.py --agendado ;;
+          esac
+      - name: Alerta de falha
+        if: failure()
+        env:
+          MIGRACAO_DB_URL: ${{ secrets.MIGRACAO_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'EOF'
+          import os, sys, json
+          sys.path.insert(0, 'scripts/comunicados_golive')
+          from enviar import psql, resend, moldura
+          try:
+              v = psql("select value::text from app_settings where key='golive_campanhas'").strip()
+              para = sorted({e for c in (json.loads(v) if v else {}).values() for e in (c.get('alertas') or [])})
+          except BaseException:                         # banco fora: avisa ao menos o suporte
+              para = []
+          para = para or ['suporte@eqpitech.com.br']
+          for e in para:
+              resend(e, '[GO-LIVE] ALERTA — o job do GitHub falhou',
+                     moldura(None, 'Go-live · acompanhamento interno',
+                             f'<p>O job de execução/resumo do go-live falhou. Veja o log: <a href="{os.environ["RUN_URL"]}">{os.environ["RUN_URL"]}</a></p>'
+                             '<p>O que fazer está no runbook (docs/RUNBOOK_GOLIVE.md).</p>'))
+          EOF

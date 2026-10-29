@@ -574,6 +574,25 @@ export const marketplaceApi = {
 
 // ── Payments (Stripe via Netlify Function) ───────────────────────────────────
 export const paymentsApi = {
+  // Termos do cliente no 1º acesso (go-live, supplier-terms.js): só empresas
+  // pré-cadastradas pela EQPI; o aceite vale para todas as empresas do login
+  pendingTerms: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/supplier-terms', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Erro ao carregar os termos')
+    return data.pendentes || []
+  },
+  acceptTerms: async (clientId, aceites) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/.netlify/functions/supplier-terms', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ client_id: clientId, aceites }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'Erro ao registrar o aceite')
+    return data
+  },
   // Trava de pagamento (patch_112): situação de liberação do fornecedor —
   // released = algum processo liberado (pago, subsidiado, HOC ou homologado);
   // pendentes = processos ainda sem pagamento confirmado; boleto = plano

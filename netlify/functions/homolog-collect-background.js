@@ -252,6 +252,16 @@ async function avisarFornecedor(sealId) {
   if (seal.suppliers?.user_id) {
     const { data: u } = await sb.auth.admin.getUserById(seal.suppliers.user_id)
     to = u?.user?.email || to
+    // 29/10 (go-live): login com várias empresas (pré-cadastro — BRMED 107) não
+    // recebe um aviso por processo; o e-mail de acesso e o lembrete de pendências
+    // (agrupado por destinatário) já dizem o que falta em cada empresa
+    const { count: nEmp } = await sb.from('user_roles').select('id', { count: 'exact', head: true })
+      .eq('user_id', seal.suppliers.user_id).eq('role', 'SUPPLIER')
+    if ((nEmp || 0) > 1) {
+      await sb.from('audit_log').insert({ action: 'AUTO_COLLECT_DONE', entity_type: 'seal', entity_id: sealId,
+        metadata: { email_enviado: false, motivo: 'login com várias empresas — aviso consolidado' } })
+      return
+    }
   }
   const cliente = seal.clients?.nome_fantasia || seal.clients?.razao_social
   const lis = (arr) => arr.map((t) => `<li style="margin-bottom:5px">${nome[t] || t}</li>`).join('')

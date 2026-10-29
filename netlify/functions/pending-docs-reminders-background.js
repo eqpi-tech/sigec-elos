@@ -82,6 +82,27 @@ function buildPaymentHtml(razao, clientName) {
   <div style="background:#f8fafc;padding:12px;border-radius:0 0 12px 12px;text-align:center;font-size:11px;color:#9aa1b5">EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br</div></div>`
 }
 
+// várias empresas no mesmo login (29/10): uma linha por empresa
+function buildHtmlVarias(itens) {
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const linhas = itens.slice(0, 150).map((i) => {
+    const partes = []
+    if (i.missingTypes.length) partes.push(`${i.missingTypes.length} documento${i.missingTypes.length > 1 ? 's' : ''}`)
+    if (i.mobGroups.length) partes.push('Mobilização')
+    if (i.questPending) partes.push('questionário')
+    return `<tr><td style="padding:6px 8px;border-bottom:1px solid #eef0f6">${esc(i.seal.suppliers?.razao_social || '')}${i.clientName ? `<div style="font-size:11px;color:#9aa1b5">${esc(i.clientName)}</div>` : ''}</td><td style="padding:6px 8px;border-bottom:1px solid #eef0f6;color:#b45309">${partes.join(' · ')}</td></tr>`
+  }).join('')
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center"><h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:14px;line-height:1.6">
+    <p>Olá! Estas empresas do seu acesso ainda têm pendências para a homologação seguir para a análise:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">${linhas}</table>
+    ${itens.length > 150 ? `<p style="font-size:12px;color:#6b7280">… e mais ${itens.length - 150} empresas.</p>` : ''}
+    <p>No SIGEC-ELOS, escolha a empresa no menu do topo e envie o que falta em <strong>Documentos</strong>. Várias certidões já foram buscadas automaticamente.</p>
+    <p style="text-align:center;margin:22px 0 6px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:12px 28px;border-radius:9px;text-decoration:none;font-weight:bold">Enviar documentos</a></p>
+  </div></div>`
+}
+
 exports.handler = async (event) => {
   const bearer = (event.headers?.authorization || '').replace('Bearer ', '')
   if (!process.env.CRON_SECRET || bearer !== process.env.CRON_SECRET) return { statusCode: 401 }
@@ -106,6 +127,10 @@ exports.handler = async (event) => {
       for (const u of users || []) if (u.email) emailMap[u.id] = u.email
     }
 
+    // 29/10 (go-live VIXPAR): pendências juntadas POR DESTINATÁRIO — um login com
+    // várias empresas (pré-cadastro: BRMED 107) recebe UM e-mail com a lista; com
+    // uma empresa só, o e-mail é o mesmo de antes. Cadência segue por processo.
+    const porDest = new Map()
     for (const seal of seals || []) {
       if (Date.now() > deadline - 20000 || sent >= MAX_EMAILS_PER_RUN) break
       if (seal.clients && seal.clients.active === false) { skipped++; continue }
@@ -190,15 +215,28 @@ exports.handler = async (event) => {
       const nMob = mobGroups.length
       const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
 
+      if (!porDest.has(to)) porDest.set(to, [])
+      porDest.get(to).push({ seal, clientName, missingTypes, missingNames, questPending, mobGroups, lembreteN: (hist?.length || 0) + 1 })
+    }
+
+    for (const [to, itens] of porDest) {
+      if (Date.now() > deadline - 10000 || sent >= MAX_EMAILS_PER_RUN) break
       try {
-        await sendEmail(to, `📋 Faltam ${missingTypes.length + nMob + (questPending ? 1 : 0)} pendência(s) na sua homologação — SIGEC-ELOS`,
-          buildHtml(clientName, missingNames, questPending, mobGroups.slice(0, 20)))
-        await supabase.from('audit_log').insert({
-          action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: seal.id,
-          metadata: { to, missing_docs: missingTypes.length, mob_pessoas: mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: questPending, lembrete_n: (hist?.length || 0) + 1 },
-        })
+        if (itens.length === 1) {
+          const i = itens[0]
+          await sendEmail(to, `📋 Faltam ${i.missingTypes.length + i.mobGroups.length + (i.questPending ? 1 : 0)} pendência(s) na sua homologação — SIGEC-ELOS`,
+            buildHtml(i.clientName, i.missingNames, i.questPending, i.mobGroups.slice(0, 20)))
+        } else {
+          await sendEmail(to, `📋 Pendências em ${itens.length} empresas da sua homologação — SIGEC-ELOS`, buildHtmlVarias(itens))
+        }
+        for (const i of itens) {
+          await supabase.from('audit_log').insert({
+            action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: i.seal.id,
+            metadata: { to, agrupado: itens.length > 1 ? itens.length : undefined, missing_docs: i.missingTypes.length, mob_pessoas: i.mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: i.mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: i.questPending, lembrete_n: i.lembreteN },
+          })
+        }
         sent++
-      } catch (e) { console.warn(`[pending-reminders] ${seal.id}: ${e.message}`) }
+      } catch (e) { console.warn(`[pending-reminders] ${to}: ${e.message}`) }
     }
 
     console.log(`[pending-reminders] enviados=${sent} pulados=${skipped}`)
