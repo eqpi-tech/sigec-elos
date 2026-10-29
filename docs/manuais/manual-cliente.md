@@ -66,20 +66,34 @@ Use **Data início** e **Data fim** e clique em **Aplicar** para ver um período
 - **Seguem o período:** fornecedores e processos iniciados, convites, cotações e homologações por mês.
 - **Mostram sempre a situação atual:** documentos a vencer/vencidos e as respostas dos questionários dos homologados.
 
+**⬇ Exportar Excel** gera a planilha dos indicadores **com o período aplicado**.
+
 ![Relatórios](img/cliente/13-relatorios.jpg)
+
+### Status dos documentos
+
+A aba **📄 Status dos documentos** mostra cada documento exigido nos processos dos seus fornecedores: **situação** (Válido, A vencer, Em análise, Não enviado, Reprovado, Vencido, Não se aplica), **vencimento**, **data de envio** e, quando reprovado, o **motivo**.
+
+- Filtre por **Situação**, **Processo** (homologado, em homologação, suspenso/reprovado), **Nível**, **Responsável** (fornecedor, EQPI ou sua empresa), **documento** e **Vence até**; a busca acha o fornecedor por nome ou CNPJ.
+- **⬇ Exportar Excel (n)** leva **todos** os documentos com os filtros aplicados (a tela mostra os 500 primeiros).
+- Clique em uma linha para abrir o processo do fornecedor.
+
+![Status dos documentos](img/cliente/19-status-documentos.jpg)
 
 ---
 
 ## 4. Meus Fornecedores
 
-Menu **Fornecedores → Meus Fornecedores**. Use a busca (nome ou CNPJ) e os filtros:
+Menu **Fornecedores → Meus Fornecedores**. Cada fornecedor mostra as **categorias** em que atua para a sua empresa (as reprovadas por CNAE em vermelho, com **✕**). Use a busca (nome, CNPJ ou **categoria**) e os filtros:
 
 - **Situação** — Homologado, Em análise, Aguardando pagamento, Reprovado, Suspenso / inativado, Vencido.
 - **Nível** — o fluxo (pacote) de homologação.
 - **Custeio** — Subsidiado (sua empresa paga) ou Pago pelo fornecedor.
 - **Destaques** — **⚡ Prioritários**, Com carta de exceção, Vence em até 60 dias.
 
-**⬇ Exportar Excel (n)** gera a planilha da lista **com os filtros aplicados** (n = quantidade de fornecedores exportados).
+**⬇ Exportar Excel (n)** gera a planilha da lista **com os filtros aplicados** (n = quantidade de fornecedores exportados), com as colunas **Categorias** e **Categorias reprovadas (CNAE)**.
+
+Nos homologados, **🎓 Certificado** abre o certificado de homologação para imprimir ou salvar em PDF.
 
 As abas **Todos os Fornecedores**, **Interessados** e **Pré-cadastros** aparecem conforme o seu perfil de acesso.
 
@@ -104,11 +118,13 @@ As abas **Todos os Fornecedores**, **Interessados** e **Pré-cadastros** aparece
 
 Clique em **Ver Processo** para abrir a ficha do fornecedor:
 
-- **Resumo** — progresso dos documentos, dados do convite (tipo de fornecimento, custeio, datas), dados cadastrais e endereço.
+- **Resumo** — progresso dos documentos, dados do convite (tipo de fornecimento, custeio, datas), **categorias do fornecedor** (com o motivo, quando reprovada por CNAE), dados cadastrais e endereço.
 - **Documentos** — os documentos do processo **com a sua empresa** (só o que o seu fluxo exige), com situação e validade. Com permissão, **👁 Ver** abre o arquivo e **🕓** mostra o histórico, com as **versões** de cada envio e **Ver arquivo** de cada uma. Documentos buscados automaticamente pela plataforma aparecem como **Auto-coletado**.
 - **Questionários** — as respostas do fornecedor.
 - **Inteligência CNPJ** — sanções (CEIS/CNEP), regime tributário, atividades (CNAE) e quadro societário.
 - **Log do Processo** — o histórico do processo (veja abaixo).
+
+No topo da ficha: **🎓 Certificado** (processo homologado) abre o certificado de homologação — o mesmo que o fornecedor recebe, com número verificável em elos.eqpitech.com.br/verificar; e **🔔 Acompanhar** (veja a seção [Acompanhar um fornecedor](#acompanhar-um-fornecedor)).
 
 ![Processo — resumo](img/cliente/06-processo-resumo.jpg)
 
@@ -117,6 +133,8 @@ Clique em **Ver Processo** para abrir a ficha do fornecedor:
 **Documentos de Mobilização:** quando o fornecedor tem mão de obra alocada em postos da sua empresa, a aba **Documentos** mostra também o bloco **👷 Mobilização (PF)**: um cartão por posto, com os documentos do posto, os colaboradores cadastrados e os documentos de cada pessoa. **Nome e CPF dos colaboradores aparecem mascarados.**
 
 **Documentos da sua responsabilidade:** alguns documentos são fornecidos pela sua empresa (por exemplo, um laudo interno). Eles aparecem no bloco **Documentos da sua responsabilidade** — use **📎 Anexar**.
+
+**Questionário de filiais:** quando o fornecedor tem mais de um CNPJ (matriz e filiais), a resposta dada por um deles é copiada automaticamente para os outros CNPJs da mesma raiz que ainda não responderam. Na aba **Questionários**, essas respostas aparecem com **↺ copiada de outra unidade** — a filial pode alterar a resposta a qualquer momento.
 
 **Categoria reprovada por CNAE:** na análise, a EQPI confere se as atividades (CNAE) do fornecedor cobrem cada categoria. A categoria que a atividade não cobre aparece como **"✕ Reprovada — a atividade (CNAE) do fornecedor não cobre a categoria"**. Para ela a carta de exceção não se aplica, e ela não aparece no certificado nem nas buscas e cotações por categoria.
 
@@ -131,6 +149,17 @@ A aba **Log do Processo** mostra o histórico do processo **com a sua empresa** 
 Filtre por **Data início**, **Data fim** e **Descrição** e clique em **🔍 Pesquisar**. Eventos internos da EQPI e processos do fornecedor com outros clientes não aparecem.
 
 ![Log do Processo](img/cliente/18-processo-log.jpg)
+
+### Acompanhar um fornecedor
+
+Clique em **🔔 Acompanhar** (em Meus Fornecedores, na ficha do processo ou no convite) para receber um **e-mail na hora** quando esse fornecedor:
+
+- concluir o cadastro pelo seu convite;
+- enviar tudo e **entrar em análise**;
+- for **homologado**;
+- tiver o processo **reprovado ou suspenso** (com o motivo).
+
+O botão fica **🔔 Acompanhando**; clique de novo para parar. Cada usuário escolhe os fornecedores que quer acompanhar — os avisos vão só para quem marcou. Pelo convite, dá para acompanhar desde antes do cadastro.
 
 ---
 
@@ -155,6 +184,12 @@ Quando um fornecedor tem um documento reprovado ou faltando, mas sua empresa dec
 3. **Anexe a carta** assinada (**📎 Anexar carta**).
 
 A homologação com exceção vale na hora. A plataforma avisa antes do vencimento da carta; com a carta vencida, o processo é suspenso até uma nova carta ou a regularização dos documentos. A carta não vale para categoria reprovada por CNAE.
+
+Com a carta vigente:
+
+- **ver carta** abre o arquivo anexado;
+- **substituir** troca o arquivo e/ou renova a validade (a validade atual já vem preenchida);
+- **excluir** retira a carta (o motivo é obrigatório). Se os documentos da categoria estiverem em dia, a homologação continua valendo; se não, o processo **volta para análise** até a regularização (não é suspenso). A carta excluída fica no histórico, o fornecedor é avisado por e-mail e a exclusão aparece no **Log do Processo**.
 
 ![Processo reprovado e carta de exceção](img/cliente/08-processo-reprovado-carta.jpg)
 
@@ -239,6 +274,7 @@ Clique em **+ Novo Convite**:
 
 - O fornecedor recebe **lembretes automáticos a cada 3 dias, por até 15 dias**, até se cadastrar.
 - **Reenviar** manda o convite de novo; **Cancelar** (com motivo) desativa o link.
+- **🔔 Acompanhar** no convite: você recebe e-mail quando o fornecedor concluir o cadastro e nas etapas seguintes.
 - Convites marcados **HOC** são histórico do sistema anterior e não recebem lembretes pelo ELOS.
 
 ### Tornar subsidiado um convite já enviado

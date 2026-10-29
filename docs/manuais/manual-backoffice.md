@@ -227,6 +227,14 @@ Menu **Análise → Convites**: todos os convites da plataforma, com filtros de 
 
 **💰 Tornar subsidiado (a pedido do cliente).** Passa um convite "fornecedor paga" para subsidiado, com a mesma regra da tela do cliente: vale na hora se o fornecedor não pagou; com **boleto do ELOS emitido**, fica **agendada** até o vencimento (boleto emitido não pode ser cancelado na Stripe); se já pagou, se o boleto é do HOC ou se o convite é do HOC, não é possível. Fica registrado que a troca foi feita pela EQPI. Se, mesmo assim, cair um pagamento do fornecedor num processo já subsidiado, a nota fiscal fica **retida para revisão** e o suporte recebe um aviso — boleto não tem estorno; decidir com o cliente (crédito ou devolução).
 
+**O que o cliente vê e faz no portal (para orientar no suporte):**
+
+- **Categorias** do fornecedor no processo e na lista (com o motivo da reprovação por CNAE) e **🎓 Certificado** dos homologados.
+- **Carta de exceção:** o cliente vê, **substitui** e **exclui** a carta (com motivo). Excluída, a categoria volta a depender dos documentos: em dia, segue homologado; senão, o processo volta para análise (não é suspenso). A carta fica no histórico.
+- **Relatórios → Status dos documentos:** cada documento exigido dos fornecedores dele, com filtros e Excel.
+- **🔔 Acompanhar:** o usuário do cliente recebe e-mail na hora quando o fornecedor conclui o cadastro, entra em análise, é homologado ou reprovado/suspenso (processos do HOC de cliente ainda não migrado não avisam).
+- **Questionário de filiais:** a resposta de um CNPJ é copiada para os outros CNPJs da mesma raiz que ainda não responderam (aviso **↺ copiada de outra unidade**); a filial pode alterar.
+
 ---
 
 ## 10. Questionários
