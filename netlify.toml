@@ -82,6 +82,12 @@
   to   = "/portal/appian/:splat"
   status = 301
   force  = true
+# Manuais em PDF com link público (29/10/2026 — comunicado do go-live VIXPAR)
+[[redirects]]
+  from = "/manual/:m"
+  to   = "/.netlify/functions/manual-publico?m=:m"
+  status = 200
+  force  = true
 [[redirects]]
   from = "/*"
   to   = "/index.html"
