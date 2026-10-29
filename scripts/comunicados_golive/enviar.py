@@ -62,13 +62,31 @@ def lista(itens, ordenada=False):
     tag = 'ol' if ordenada else 'ul'
     return f'<{tag} style="padding-left:20px;margin:6px 0 16px">' + ''.join(f'<li style="margin-bottom:6px">{i}</li>' for i in itens) + f'</{tag}>'
 
-def ola(c): return f"Olá, <strong>{c['razao_social']}</strong>!" if c.get('razao_social') else 'Olá!'
+def ola(c): return f"Olá, <strong>{c['razao_social']}</strong>!" if c.get('razao_social') and (c.get('empresas') or 1) == 1 else 'Olá!'
+
+# patch_169: o texto depende de como a pessoa entra em 04/11
+def modo(c): return c.get('modo') or 'convite'
+def suas(c):
+    n = c.get('empresas') or 1
+    return f'as suas <strong>{n} empresas</strong>' if n > 1 else 'a sua empresa'
 
 def custo(k):
     return ('<p style="background:#f0fdf4;border-left:4px solid #22c55e;padding:10px 14px;border-radius:0 8px 8px 0;margin:16px 0">'
             f'<strong>Sem custo para a sua empresa:</strong> a homologação é custeada pela {k["cliente"]}.</p>') if k['custeio'] == 'cliente' else ''
 
 # ── Comunicado 1 (30/10): o aviso, com o manual ─────────────────────────────
+def passos1(k, c):
+    if modo(c) == 'precadastro':
+        return [f'Para facilitar, a EQPI deixa {suas(c)} <strong>já cadastrada{"s" if (c.get("empresas") or 1) > 1 else ""}</strong> no SIGEC-ELOS, com o processo da {k["cliente"]} aberto;',
+                f'Em <strong>{k["inicio_curto"]}</strong>, você recebe neste e-mail o <strong>seu acesso</strong> — é só criar a senha' + (' e escolher a empresa no menu' if (c.get('empresas') or 1) > 1 else '') + ';',
+                'Na véspera, enviamos um lembrete.']
+    if modo(c) == 'operacional':
+        return [f'Em <strong>{k["inicio_curto"]}</strong>, o responsável pela sua empresa recebe o <strong>convite da {k["cliente"]}</strong>;',
+                'Assim que ele concluir o cadastro, você recebe neste e-mail o <strong>seu acesso</strong> à plataforma;',
+                'Na véspera, enviamos um lembrete.']
+    return [f'Em <strong>{k["inicio_curto"]}</strong>, você recebe neste e-mail o <strong>convite da {k["cliente"]}</strong>, com o link para criar o seu acesso e enviar os documentos;',
+            'Na véspera, enviamos um lembrete.']
+
 def com1(k, c):
     assunto = f"{k['cliente']}: a partir de {k['inicio_curto']}, a homologação de fornecedores é pelo SIGEC-ELOS"
     corpo = f"""<p>{ola(c)}</p>
@@ -80,8 +98,7 @@ def com1(k, c):
         'Aviso antes do vencimento de cada documento;',
         'Várias certidões (CNPJ, FGTS, trabalhista, federal e outras) são obtidas automaticamente nas fontes oficiais — você não precisa enviar.'])}
 <p style="margin-bottom:4px"><strong>Os próximos passos</strong></p>
-{lista([f'Em <strong>{k["inicio_curto"]}</strong>, você recebe neste e-mail o <strong>convite da {k["cliente"]}</strong>, com o link para criar o seu acesso e enviar os documentos;',
-        'Na véspera, enviamos um lembrete.'], ordenada=True)}
+{lista(passos1(k, c), ordenada=True)}
 {custo(k)}
 <p>Para conhecer a plataforma antes, veja o <strong>manual do fornecedor</strong>, com o passo a passo e as imagens das telas:</p>
 {botao('Abrir o manual do fornecedor', MANUAL)}
@@ -90,17 +107,25 @@ def com1(k, c):
 
 # ── Comunicado 2 (03/11): amanhã chega o convite ────────────────────────────
 def com2(k, c):
-    assunto = f"Amanhã ({k['inicio_curto']}): o convite da {k['cliente']} para a sua homologação no SIGEC-ELOS"
+    m = modo(c)
+    o_que = {'precadastro': f'o <strong>seu acesso ao SIGEC-ELOS</strong>, com {suas(c)} já cadastrada{"s" if (c.get("empresas") or 1) > 1 else ""}',
+             'operacional': f'o responsável pela sua empresa recebe o <strong>convite da {k["cliente"]}</strong>; quando ele concluir o cadastro, você recebe o seu acesso',
+             'convite': f'você recebe neste e-mail o <strong>convite da {k["cliente"]}</strong> para a homologação no SIGEC-ELOS'}[m]
+    assunto = (f"Amanhã ({k['inicio_curto']}): o seu acesso ao SIGEC-ELOS para a homologação com a {k['cliente']}" if m == 'precadastro'
+               else f"Amanhã ({k['inicio_curto']}): o convite da {k['cliente']} para a sua homologação no SIGEC-ELOS")
+    primeiro = ('<strong>Criar a sua senha</strong> pelo link do e-mail de acesso' + (' e escolher a empresa no menu' if (c.get('empresas') or 1) > 1 else '') + ';') if m == 'precadastro' \
+        else '<strong>Criar a sua senha</strong> pelo link do e-mail de acesso, que chega depois que o responsável concluir o cadastro;' if m == 'operacional' \
+        else '<strong>Criar o seu acesso</strong> — com o CNPJ e o seu e-mail, em poucos minutos;'
     corpo = f"""<p>{ola(c)}</p>
-<p>Como avisamos, <strong>amanhã, {k['inicio']}</strong>, você recebe neste e-mail o <strong>convite da {k['cliente']}</strong> para a homologação no SIGEC-ELOS.</p>
-<p style="margin-bottom:4px"><strong>Pelo link do convite, você vai:</strong></p>
-{lista(['<strong>Criar o seu acesso</strong> — com o CNPJ e o seu e-mail, em poucos minutos;',
+<p>Como avisamos, <strong>amanhã, {k['inicio']}</strong>, {'chega neste e-mail ' if m == 'precadastro' else ''}{o_que}.</p>
+<p style="margin-bottom:4px"><strong>{'No SIGEC-ELOS, você vai:' if m != 'convite' else 'Pelo link do convite, você vai:'}</strong></p>
+{lista([primeiro,
         '<strong>Ativar a verificação em duas etapas</strong> — um código no celular, para a sua segurança;',
         '<strong>Enviar os documentos</strong> pedidos para a sua atividade e responder o questionário;',
         '<strong>Acompanhar a análise</strong> — avisamos a cada etapa.'], ordenada=True)}
 {custo(k)}
 <p><strong>Para adiantar:</strong> deixe à mão o contrato social e os documentos da empresa.</p>
-<p style="font-size:14px">Não recebeu o convite amanhã? Confira a caixa de spam ou fale com o suporte. Dúvidas no passo a passo:</p>
+<p style="font-size:14px">{'O seu acesso chega por e-mail assim que o responsável concluir o cadastro da empresa. Não chegou? Confira a caixa de spam ou fale com o suporte.' if m == 'operacional' else f"Não recebeu {'o e-mail de acesso' if m == 'precadastro' else 'o convite'} amanhã? Confira a caixa de spam ou fale com o suporte."} Dúvidas no passo a passo:</p>
 {botao('Abrir o manual do fornecedor', MANUAL)}"""
     return assunto, moldura(k, f"Homologação de fornecedores {k['cliente']} · Comunicado 2 de 2", corpo)
 
@@ -113,7 +138,7 @@ def resend(to, assunto, html):
     with urllib.request.urlopen(req, timeout=30) as r: return json.loads(r.read()).get('id')
 
 def contatos(camp):
-    out = psql(f"select coalesce(json_agg(row_to_json(c)),'[]') from (select id, cnpj, razao_social, email, envios from golive_contacts "
+    out = psql(f"select coalesce(json_agg(row_to_json(c)),'[]') from (select id, cnpj, razao_social, email, envios, modo, empresas from golive_contacts "
                f"where campanha={q(camp)} and not excluido order by razao_social) c")
     return json.loads(out or '[]')
 
@@ -176,15 +201,20 @@ def importar(camp, arq):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--teste'); ap.add_argument('--importar', nargs=2); ap.add_argument('--excluir', nargs='+')
+    ap.add_argument('--teste'); ap.add_argument('--variante'); ap.add_argument('--importar', nargs=2); ap.add_argument('--excluir', nargs='+')
     ap.add_argument('--motivo', default='participou dos testes'); ap.add_argument('--resumo')
     ap.add_argument('--validar'); ap.add_argument('--enviar', nargs=2); ap.add_argument('--dry-run', action='store_true'); ap.add_argument('--agendado', action='store_true')
     a = ap.parse_args()
     if a.teste:
-        k = CAMPANHAS['VIX']; c = {'razao_social': 'EMPRESA EXEMPLO LTDA'}
-        for n, f in COMUNICADOS.items():
-            assunto, html = f(k, c)
-            print('teste', n, resend(a.teste, f'[TESTE — comunicado {n}, {"30/10" if n == 1 else "03/11"}] {assunto}', html))
+        k = CAMPANHAS['VIX']
+        variantes = [('convite', {'razao_social': 'EMPRESA EXEMPLO LTDA', 'modo': 'convite', 'empresas': 1}),
+                     ('operacional', {'razao_social': 'EMPRESA EXEMPLO LTDA', 'modo': 'operacional', 'empresas': 1}),
+                     ('pré-cadastro, 107 empresas', {'razao_social': None, 'modo': 'precadastro', 'empresas': 107})]
+        so = [v for v in variantes if not a.variante or a.variante in v[0]]
+        for nome, c in so:
+            for n, f in COMUNICADOS.items():
+                assunto, html = f(k, c)
+                print('teste', nome, n, resend(a.teste, f'[TESTE {nome} — comunicado {n}, {"30/10" if n == 1 else "03/11"}] {assunto}', html))
     elif a.importar: importar(*a.importar)
     elif a.excluir:
         camp, cnpjs = a.excluir[0], [re.sub(r'\D', '', x).zfill(14) for x in a.excluir[1:]]
