@@ -162,12 +162,14 @@ async function handleBuyerInvitation(body, h) {
 }
 
 // ── MODO B: Client/Admin convida empresa ainda não cadastrada ──────────────
-async function handleClientInvitation(body, callerUser, h) {
+// opts.sendEmail=false: só cria o convite (pré-cadastro do go-live, que manda UM
+// e-mail de acesso por pessoa). callerUser.id nulo = rotina do servidor (go-live).
+async function handleClientInvitation(body, callerUser, h, opts = {}) {
   const { razao_social, cnpj, email, telefone, contato, tipo_fornecedor, subsidiado, escopo, client_id, buyer_id, flow_id, invited_by_role = 'CLIENT', objetivo = 'homologacao', message } = body
   if (!razao_social || !email) return { statusCode:400, headers:h, body: JSON.stringify({ error:'razao_social e email são obrigatórios' }) }
 
   // Perfil readonly (patch_030) não envia convites
-  if (invited_by_role === 'CLIENT') {
+  if (invited_by_role === 'CLIENT' && callerUser?.id) {
     const { data: callerRole } = await supabaseAdmin
       .from('user_roles').select('access_profile').eq('user_id', callerUser.id).eq('role', 'CLIENT').maybeSingle()
     if (callerRole?.access_profile === 'readonly')
@@ -243,6 +245,9 @@ async function handleClientInvitation(body, callerUser, h) {
   if (telefone)         invitePayload.telefone         = telefone
   if (contato)          invitePayload.contato          = contato
   if (escopo)           invitePayload.escopo           = escopo
+  // 2º e-mail em diante (go-live 04/11, patch_170): viram usuários Operacional no cadastro
+  if (Array.isArray(body.operational_emails) && body.operational_emails.length)
+    invitePayload.operational_emails = body.operational_emails.map(e => String(e).trim().toLowerCase()).filter(Boolean)
 
   // Reconvite (21/09, pós-demo VIX): convites ABERTOS do mesmo CNPJ+cliente
   // viram SUPERSEDED — a lista do cliente mostra só o vigente e os lembretes
@@ -263,9 +268,10 @@ async function handleClientInvitation(body, callerUser, h) {
   const { data: invite, error: insertErr } = await supabaseAdmin.from('invitations').insert(invitePayload).select('id, token').single()
   if (insertErr) return { statusCode:500, headers:h, body: JSON.stringify({ error: insertErr.message }) }
 
-  await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo, message: invitePayload.message })
+  if (opts.sendEmail !== false)
+    await sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo, message: invitePayload.message })
 
-  return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, message:`Convite enviado para ${email}` }) }
+  return { statusCode:201, headers:h, body: JSON.stringify({ success:true, inviteId: invite.id, ...(callerUser?.id ? {} : { token: invite.token }), message:`Convite enviado para ${email}` }) }
 }
 
 async function sendClientEmail({ invite, email, senderName, razao_social, tipo_fornecedor, subsidiado, escopo, contato, invited_by_role, client_id, objetivo = 'homologacao', message }) {
@@ -439,3 +445,6 @@ exports.handler = async (event) => {
   if (body.supplierId) return handleBuyerInvitation(body, h)
   return handleClientInvitation(body, user, h)
 }
+
+// go-live (golive-run-background.js): cria convites do cliente pelo servidor
+module.exports.handleClientInvitation = handleClientInvitation

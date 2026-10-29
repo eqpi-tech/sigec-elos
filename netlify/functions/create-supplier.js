@@ -8,6 +8,7 @@ const routeA = require('./lib/route_a.js')
 const { env, frontendUrl } = require('./lib/runtime_env.js')
 const { normalizeCnpj, isCnpjComplete } = require('./lib/cnpj.js')
 const { claimRule, canClaim, msgRefused } = require('./lib/hoc_claim.js')
+const { adicionarOperacionais } = require('./lib/supplier_team.js')
 
 exports.handler = async (event) => {
   const headers = {
@@ -30,9 +31,21 @@ exports.handler = async (event) => {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   )
 
-  // Valida o JWT do usuário
+  // Valida o JWT do usuário. 29/10 (go-live): a rotina do servidor
+  // (golive-run-background) cadastra EM NOME do login do pré-cadastro — Bearer
+  // CRON_SECRET + as_user_id — pelo MESMO caminho do cadastro pela tela
   const token = authHeader.slice(7)
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+  let user = null, authError = null
+  const interno = !!process.env.CRON_SECRET && token === process.env.CRON_SECRET
+  if (interno) {
+    let asUser = null
+    try { asUser = JSON.parse(event.body || '{}').as_user_id } catch { /* corpo inválido: cai no 401 */ }
+    const r = asUser ? await supabaseAdmin.auth.admin.getUserById(asUser) : { data: { user: null } }
+    user = r.data?.user || null
+  } else {
+    const r = await supabaseAdmin.auth.getUser(token)
+    user = r.data?.user || null; authError = r.error
+  }
 
   if (authError || !user) {
     return { statusCode: 401, headers, body: JSON.stringify({ error: 'Token inválido ou sessão expirada' }) }
@@ -83,7 +96,16 @@ exports.handler = async (event) => {
       }
       // 13/10 — migrado do HOC SEM login: na lista da migração, só os e-mails
       // ativos no HOC para esta empresa fazem o primeiro acesso (lib/hoc_claim.js)
-      if (!temDono) {
+      // 29/10 (go-live VIXPAR): um convite VÁLIDO de cliente do ELOS para ESTE
+      // CNPJ e ESTE e-mail também libera o primeiro acesso (ex.: Vibra)
+      let conviteLibera = false
+      if (!temDono && invitation_token) {
+        const { data: inv } = await supabaseAdmin.from('invitations').select('supplier_cnpj, supplier_email')
+          .eq('token', invitation_token).is('hoc_id', null).in('status', ['SENT', 'VIEWED']).maybeSingle()
+        conviteLibera = !!inv && normalizeCnpj(inv.supplier_cnpj) === cleanCnpj
+          && String(inv.supplier_email || '').toLowerCase().split(/[;,\s]+/).includes(String(user.email || '').toLowerCase())
+      }
+      if (!temDono && !conviteLibera) {
         const rule = await claimRule(supabaseAdmin, existingSupplier)
         if (!canClaim(rule, user.email)) {
           console.warn(`[create-supplier] reivindicação recusada: user ${user.id} fora da lista HOC do fornecedor ${existingSupplier.id}`)
@@ -442,8 +464,16 @@ exports.handler = async (event) => {
           .eq('token', invitation_token)
           .is('hoc_id', null)
           .not('status', 'in', '(REGISTERED,CANCELLED)')   // cancelado (patch_103) não vincula
-          .select('id, client_id, flow_id, subsidiado')
+          .select('id, client_id, flow_id, subsidiado, operational_emails')
         if (linkedInv?.[0]?.client_id) await ensureClientSeal(linkedInv[0].client_id, linkedInv[0].flow_id, linkedInv[0].subsidiado === true)
+        // 29/10 (go-live): 2º e-mail em diante do convite → usuários Operacional
+        // com acesso próprio. No pré-cadastro (skip_welcome) quem faz é a rotina.
+        if (linkedInv?.[0]?.operational_emails?.length && !body.skip_welcome) {
+          const { data: cl } = await supabaseAdmin.from('clients').select('razao_social, nome_fantasia').eq('id', linkedInv[0].client_id).maybeSingle()
+          const r = await adicionarOperacionais(supabaseAdmin, { supplierId: supplier.id, emails: linkedInv[0].operational_emails,
+            cliente: cl?.nome_fantasia || cl?.razao_social || 'o cliente', razao: razao_social })
+          console.log('[create-supplier] operacionais:', JSON.stringify(r))
+        }
         // 15/10 (caso BRH/VIXPAR): outros convites ABERTOS do mesmo cliente para
         // este CNPJ (ex.: um para cada pessoa da empresa) ficam cadastrados
         // também — senão seguem "não aceito" e geram lembretes a quem já entrou
@@ -591,7 +621,8 @@ exports.handler = async (event) => {
     // 🎉 Bem-vindo pós-cadastro (21/09, pedido pós-demo VIX) — melhor
     // esforço, nunca bloqueia o cadastro. Se veio por convite/portal de
     // cliente, o e-mail cita o cliente e os próximos passos.
-    try {
+    // 29/10: pré-cadastro do go-live (skip_welcome) manda UM e-mail por pessoa
+    if (!body.skip_welcome) try {
       const { data: sealRow } = await supabaseAdmin
         .from('seals').select('clients(nome_fantasia, razao_social)')
         .eq('supplier_id', supplier.id).not('client_id', 'is', null)

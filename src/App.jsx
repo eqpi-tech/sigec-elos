@@ -99,7 +99,7 @@ function AppLayout({ children }) {
 }
 
 function Protect({ roles, perm, module, children }) {
-  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm} module={module}><PaymentGate>{children}</PaymentGate></PermGate></AppLayout></ProtectedRoute>
+  return <ProtectedRoute allowedRoles={roles}><AppLayout><PermGate perm={perm} module={module}><PaymentGate><TermsGate>{children}</TermsGate></PaymentGate></PermGate></AppLayout></ProtectedRoute>
 }
 
 // Trava de pagamento (01/10, patch_112): fornecedor sem processo liberado
@@ -126,6 +126,69 @@ function PaymentGate({ children }) {
   }
   if (!st.released) return <Navigate to="/fornecedor/pagamento" replace/>
   return children
+}
+
+// Termos do cliente no 1º acesso (29/10, go-live): empresas pré-cadastradas
+// pela EQPI não passaram pela etapa de termos do cadastro. Uma vez por login —
+// o aceite vale para todas as empresas dele com o cliente. O Operacional não
+// aceita em nome da empresa (o servidor não devolve pendência para ele).
+// Falha ao carregar nunca bloqueia o uso.
+const TERMS_FREE = ['/conta', '/ajuda']
+function TermsGate({ children }) {
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+  const ativo = user?.role === 'SUPPLIER' && !TERMS_FREE.some(p => pathname.startsWith(p))
+  const [pend, setPend] = useState(null)
+  const [ok, setOk] = useState({})
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  useEffect(() => {
+    if (user?.role !== 'SUPPLIER') return
+    paymentsApi.pendingTerms().then(setPend).catch(() => setPend([]))
+  }, [user?.id])
+  if (!ativo || !pend?.length) return children
+  const t = pend[0]
+  const todos = t.itens.every(it => ok[it.id])
+  const aceitar = async () => {
+    setSalvando(true); setErro('')
+    try {
+      await paymentsApi.acceptTerms(t.client_id, t.itens.map(it => ({ item_id: it.id, version: it.version })))
+      setOk({}); setPend(p => p.slice(1))
+    } catch (e) { setErro(e.message) } finally { setSalvando(false) }
+  }
+  return (
+    <div style={{ maxWidth:720, margin:'32px auto', padding:'0 16px' }}>
+      <div style={{ background:'#fff', borderRadius:16, border:'1px solid #e2e4ef', padding:'28px 26px', boxShadow:'0 4px 20px rgba(46,49,146,.06)' }}>
+        <div style={{ fontFamily:'Montserrat,sans-serif', fontWeight:800, fontSize:20, color:'#1a1c5e', marginBottom:6 }}>Termos da {t.cliente}</div>
+        <div style={{ fontSize:14, color:'#4b5563', lineHeight:1.6, marginBottom:18 }}>
+          Antes de começar, leia e aceite os termos da <strong>{t.cliente}</strong> para a homologação.
+          {t.empresas > 1 && <> O aceite vale para as <strong>{t.empresas} empresas</strong> do seu acesso.</>}
+        </div>
+        {t.itens.map(it => (
+          <label key={it.id} style={{ display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer', marginBottom:10, padding:'12px', background: ok[it.id] ? 'rgba(34,197,94,.05)' : 'rgba(46,49,146,.04)', borderRadius:10, border:`1px solid ${ok[it.id]?'#22c55e':'#e2e4ef'}` }}>
+            <input type="checkbox" checked={!!ok[it.id]} onChange={e => setOk(p => ({ ...p, [it.id]: e.target.checked }))} style={{ marginTop:2, accentColor:'#2E3192' }}/>
+            <span style={{ fontSize:13, color:'#374151', flex:1 }}>
+              Li e aceito o documento <strong>{it.title}</strong>
+              {it.kind === 'DOCUMENT' && it.url && (
+                <> — <a href={it.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color:'#2E3192', fontWeight:700 }}>📄 visualizar PDF</a></>
+              )}
+              {it.kind === 'TEXT' && it.content && (
+                <details style={{ marginTop:6 }} onClick={e => e.stopPropagation()}>
+                  <summary style={{ fontSize:12, color:'#2E3192', fontWeight:700, cursor:'pointer' }}>ler o texto completo</summary>
+                  <pre style={{ fontSize:12, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap', fontFamily:'DM Sans,sans-serif', maxHeight:180, overflowY:'auto', background:'#fff', border:'1px solid #eef0f6', borderRadius:8, padding:10, marginTop:6 }}>{it.content}</pre>
+                </details>
+              )}
+            </span>
+          </label>
+        ))}
+        {erro && <div style={{ color:'#b91c1c', fontSize:13, margin:'8px 0' }}>{erro}</div>}
+        <button disabled={!todos || salvando} onClick={aceitar}
+          style={{ marginTop:12, width:'100%', padding:'13px', borderRadius:10, border:'none', background: todos ? '#F47E2F' : '#e5e7eb', color: todos ? '#fff' : '#9ca3af', fontWeight:700, fontSize:15, cursor: todos ? 'pointer' : 'not-allowed' }}>
+          {salvando ? 'Registrando…' : 'Aceitar e continuar'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // Gates: permissão granular (patch_030) + módulos do perfil (patch_038)
