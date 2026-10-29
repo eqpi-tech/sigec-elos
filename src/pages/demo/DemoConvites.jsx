@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Card, Button, PageHeader, Spinner } from '../../components/ui.jsx'
 import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 import { HORIZONTE, PRIMATUS, isoDT, isoD, fmtBR } from './demoData.js'
-import { useToast, exportRows } from './DemoFichaKit.jsx'
+import { useToast, exportRows, DemoWatchButton } from './DemoFichaKit.jsx'
 import { BuyerObjective } from './DemoFichas.jsx'
 
 const STATUS_COLOR = { SENT:'#f59e0b', VIEWED:'#2563eb', REGISTERED:'#22c55e', CANCELLED:'#9B9B9B' }
@@ -167,6 +167,10 @@ export default function DemoConvites({ profile = 'CLIENT', navigate }) {
               <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:5, flexShrink:0 }}>
                 <span style={{ fontSize:11, fontWeight:700, color:STATUS_COLOR[inv.status], background:`${STATUS_COLOR[inv.status]}18`, padding:'3px 10px', borderRadius:20, fontFamily:'Montserrat,sans-serif' }}>{STATUS_LABEL[inv.status]}</span>
                 {inv.subsidiado && <span style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>SUBSIDIADO</span>}
+                {/* 🔔 Acompanhar: convites de homologação não cancelados (vale desde o convite, pelo CNPJ) */}
+                {!isBuyer && inv.status !== 'CANCELLED' && inv.supplier_cnpj && inv.supplier_cnpj !== '—' && (
+                  <DemoWatchButton cnpj={inv.supplier_cnpj} nome={inv.supplier_razao_social} toast={setToast}/>
+                )}
                 {inv.agendado && !inv.subsidiado && <span title="Vale quando o boleto emitido vencer sem pagamento" style={{ fontSize:10, background:'#fef3c7', color:'#92400e', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>SUBSÍDIO AGENDADO · {fmtBR(inv.boletoVence)}</span>}
                 {!isBuyer && !inv.subsidiado && !inv.agendado && inv.status !== 'CANCELLED' && (
                   <button onClick={() => setSubsidiar(inv)} title="A sua empresa passa a custear a homologação — só enquanto o fornecedor não pagou"

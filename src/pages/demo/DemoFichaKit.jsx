@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import { Button, StatusDot } from '../../components/ui.jsx'
 import { DOC_STATUS } from '../../components/ProcessDocuments.jsx'
 import { exportXlsx } from '../../lib/exportXlsx.js'
-import { PRIMATUS, HORIZONTE, isoD, isoDT, fmtBR, fmtBRDT, DEMO_QUESTIONNAIRES, DEMO_SUPPLIER_ANSWERS, respostaTexto } from './demoData.js'
+import { PRIMATUS, HORIZONTE, isoD, isoDT, fmtBR, fmtBRDT, DEMO_QUESTIONNAIRES, DEMO_SUPPLIER_ANSWERS, DEMO_COPIED_ANSWERS, respostaTexto } from './demoData.js'
 
 export const M = 'Montserrat,sans-serif'
 export const D = 'DM Sans,sans-serif'
@@ -102,7 +102,7 @@ export const FICHA = {
 // respostas dos questionários da Horizonte, agrupadas (cliente e backoffice)
 FICHA.questionario = DEMO_QUESTIONNAIRES.filter(q => q.active).map(q => ({
   titulo: q.title,
-  itens: q.questions.map(qq => ({ q: qq.text, r: respostaTexto(DEMO_SUPPLIER_ANSWERS[qq.id]) })),
+  itens: q.questions.map(qq => ({ q: qq.text, r: respostaTexto(DEMO_SUPPLIER_ANSWERS[qq.id]), copiada: DEMO_COPIED_ANSWERS.includes(qq.id) })),
 }))
 
 // Log do processo no formato do audit_log (mesmo componente ProcessLog das telas reais)
@@ -238,6 +238,33 @@ export function InlineConfirm({ msg, confirmLabel = 'Confirmar', variant = 'prim
       <Button variant="neutral" size="sm" onClick={onCancel}>Cancelar</Button>
       <Button variant={variant} size="sm" onClick={onConfirm}>{confirmLabel}</Button>
     </div>
+  )
+}
+
+// "🔔 Acompanhar" fornecedor (espelha src/components/WatchButton.jsx): o usuário
+// do cliente recebe e-mail sobre o andamento. Chave = CNPJ; o estado fica só na
+// memória da página, compartilhado entre as telas do demo (Meus Fornecedores,
+// processo e Convites) — nada é salvo.
+const WATCHED = new Set(['41090118000130', '07332910000141'])   // Ômega e TechFix
+export function DemoWatchButton({ cnpj, nome, size = 'sm', toast }) {
+  const [, setTick] = useState(0)
+  const c = String(cnpj || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase()
+  if (!c) return null
+  const watched = WATCHED.has(c)
+  const alternar = (e) => {
+    e?.stopPropagation?.()
+    if (watched) WATCHED.delete(c); else WATCHED.add(c)
+    setTick(n => n + 1)
+    toast?.(watched ? `ℹ️ Você deixou de acompanhar ${nome || 'este fornecedor'}.`
+      : `✅ Acompanhando ${nome || 'o fornecedor'} — você recebe e-mail quando ele concluir o cadastro, entrar em análise, for homologado ou reprovado.`)
+  }
+  return (
+    <button onClick={alternar}
+      title={watched ? 'Você recebe e-mail sobre o andamento deste fornecedor — clique para parar' : 'Receber e-mail quando este fornecedor concluir o cadastro, entrar em análise, for homologado ou reprovado'}
+      style={{ fontSize: size === 'sm' ? 10.5 : 12, fontFamily: D, fontWeight: 700, borderRadius: 8, padding: size === 'sm' ? '3px 10px' : '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap',
+        background: watched ? '#eef0ff' : '#fff', color: watched ? '#2E3192' : '#64748b', border: `1px solid ${watched ? '#2E3192' : '#d1d5db'}` }}>
+      {watched ? '🔔 Acompanhando' : '🔔 Acompanhar'}
+    </button>
   )
 }
 
