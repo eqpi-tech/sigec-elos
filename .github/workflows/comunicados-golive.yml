@@ -1,0 +1,31 @@
+# Comunicados de go-live de cliente (29/10/2026; 1º uso: VIXPAR, go-live 04/11).
+# Calendário em scripts/comunicados_golive/enviar.py (CALENDARIO): 30/10 e 03/11.
+# Travas: a lista precisa estar validada com o cliente (--validar) e o manual
+# público no ar; senão o job falha e o GitHub avisa. Quem já recebeu não recebe
+# de novo; excluídos (participantes dos testes) nunca recebem.
+# Secrets: MIGRACAO_DB_URL (banco de produção) e RESEND_API_KEY.
+name: Go-live de cliente — comunicados
+
+on:
+  schedule:
+    - cron: '7 12 30 10 *'     # 09:07 BRT — VIX comunicado 1
+    - cron: '7 12 3 11 *'      # 09:07 BRT — VIX comunicado 2
+  workflow_dispatch:
+
+concurrency: { group: comunicados-golive, cancel-in-progress: false }
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Cliente Postgres
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Envia o comunicado de hoje
+        env:
+          MIGRACAO_DB_URL: ${{ secrets.MIGRACAO_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python3 scripts/comunicados_golive/enviar.py --agendado
