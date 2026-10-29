@@ -246,6 +246,8 @@ Alguns clientes pedem um questionário (por exemplo, de compliance). Menu **Ques
 
 ![Questionário](img/fornecedor/12-questionario.jpg)
 
+**Empresa com filiais (mais de um CNPJ):** a resposta dada por um CNPJ é copiada automaticamente para os outros CNPJs da mesma empresa (mesma raiz de CNPJ) que ainda não responderam. A pergunta aparece com o aviso **↺ Resposta copiada de outra unidade da sua empresa** — confira e altere se, para aquele CNPJ, a resposta for diferente. Depois que você altera e salva, a resposta passa a ser deste CNPJ e não é mais substituída.
+
 ### Quando o processo entra na fila de análise
 
 Cada processo entra na fila da EQPI **sozinho**, quando você completa tudo o que é seu **naquele processo**:

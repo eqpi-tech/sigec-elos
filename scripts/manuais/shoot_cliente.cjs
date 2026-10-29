@@ -20,6 +20,7 @@ const BETA = 'e1a00000-0000-4000-8000-000000000103', DELTA = 'e1a00000-0000-4000
   await ir(p, '/cliente/rfq'); await clicar(p, '+ Nova Cotação'); await foto(p, M, '11-nova-cotacao')
   await ir(p, '/cliente/questionarios'); await foto(p, M, '12-questionarios')
   await ir(p, '/cliente/relatorios'); await foto(p, M, '13-relatorios', { full: true })
+  await clicar(p, '📄 Status dos documentos', 4000); await foto(p, M, '19-status-documentos', { full: true })
   await ir(p, '/cliente/compliance'); await foto(p, M, '14-compliance')
   await ir(p, '/cliente/configuracoes'); await foto(p, M, '15-portal', { full: true })
   await ir(p, '/cliente/termos'); await foto(p, M, '16-termos', { full: true })
