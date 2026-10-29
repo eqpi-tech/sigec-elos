@@ -85,7 +85,7 @@
 # Manuais em PDF com link público (29/10/2026 — comunicado do go-live VIXPAR)
 [[redirects]]
   from = "/manual/:m"
-  to   = "/.netlify/functions/manual-publico?m=:m"
+  to   = "/.netlify/functions/manual-publico/:m"
   status = 200
   force  = true
 [[redirects]]
