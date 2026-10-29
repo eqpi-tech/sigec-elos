@@ -57,11 +57,16 @@ export default function SupplierCertificate() {
           .select('categories(id, name, client_id)')
           .eq('supplier_id', supplierId)
           .is('rejected_at', null)   // reprovada no processo não vai no certificado (patch_147)
-        const cats = (catRows || [])
+        let cats = (catRows || [])
           .map(r => r.categories)
           .filter(c => c && (seal.client_id ? c.client_id === seal.client_id : !c.client_id))
           .map(c => c.name.trim())
           .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        // 30/10: processo sem categoria do cliente → a do fluxo (ex.: ELOS Verificado)
+        if (!cats.length && seal.client_id && seal.flow_id) {
+          const { data: fc } = await supabase.from('client_flow_categories').select('categories(name)').eq('flow_id', seal.flow_id)
+          cats = (fc || []).map(r => r.categories?.name?.trim()).filter(Boolean)
+        }
 
         setData({ seal, supplier, categories: cats })
       } catch (e) { setError(e.message) }

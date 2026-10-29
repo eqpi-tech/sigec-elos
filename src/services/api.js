@@ -1654,6 +1654,25 @@ export const preRegistrationsApi = {
   },
 }
 
+// Categorias do processo de um fornecedor com um cliente (30/10, retorno da
+// Victoria): as que o fornecedor escolheu NAQUELE cliente; sem nenhuma (ex.:
+// fluxos "ELOS Verificado/Homologado", em que o fluxo define a categoria), as
+// categorias do FLUXO do processo — mesma regra de seal_required_doc_ids.
+export const processCategoriesApi = {
+  get: async ({ supplierId, clientId, flowId }) => {
+    const { data } = await supabase.from('supplier_categories')
+      .select('category_id, rejected_at, rejection_reason, categories!inner(id, name, client_id)')
+      .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
+    const proprias = (data || []).map(r => ({ ...r.categories, rejected_at: r.rejected_at, rejection_reason: r.rejection_reason }))
+    if (proprias.length || !flowId) return { cats: proprias, doFluxo: false, fluxo: null }
+    const [{ data: fc }, { data: fl }] = await Promise.all([
+      supabase.from('client_flow_categories').select('categories(id, name, client_id)').eq('flow_id', flowId),
+      supabase.from('client_flows').select('name').eq('id', flowId).maybeSingle(),
+    ])
+    return { cats: (fc || []).map(r => r.categories).filter(Boolean), doFluxo: true, fluxo: fl?.name || null }
+  },
+}
+
 // "Acompanhar" fornecedor (patch_166): CNPJs que o usuário logado acompanha
 export const watchApi = {
   list: async (clientId) => {

@@ -7,7 +7,10 @@ import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, PageHeader, SectionTitle, Button } from '../../components/ui.jsx'
 import { Tile, HBars, LineChart } from '../../components/charts.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { exportXlsx } from '../../lib/exportXlsx.js'
+import { exportXlsxSheets } from '../../lib/exportXlsx.js'
+import { clientApi, invitationsApi } from '../../services/api.js'
+import { SITUACAO, clientSealStatus } from '../../lib/clientSituacao.js'
+import { formatCnpj } from '../../lib/cnpj.js'
 import DocumentsStatusReport from './DocumentsStatusReport.jsx'
 
 const fmt = (n) => (n ?? 0).toLocaleString('pt-BR')
@@ -51,10 +54,46 @@ export default function ClientReports() {
   const cv = d.convites || {}, rfq = d.rfq || {}
   const quests = d.questionarios || []
 
-  // Excel da visão executiva com o período aplicado (29/10)
-  const exportarExecutivo = () => {
+  // Excel da visão executiva com o período aplicado (29/10) — 30/10 (retorno da
+  // Victoria): além dos indicadores, o DETALHE com razão social e CNPJ
+  // (fornecedores, homologações e convites), no período escolhido
+  const [exportando, setExportando] = useState(false)
+  const noPeriodo = (v) => {
+    if (!comPeriodo) return true
+    const dia = v ? String(v).slice(0, 10) : ''
+    return !!dia && (!periodo.de || dia >= periodo.de) && (!periodo.ate || dia <= periodo.ate)
+  }
+  const exportarExecutivo = async () => {
+    setExportando(true)
+    try {
+    const [forn, convs] = await Promise.all([clientApi.getSuppliers(user.clientId), invitationsApi.listByClient(user.clientId)])
+    const dt = (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : '')
+    const linhaForn = (item) => {
+      const seal = item.seal || {}, sup = item.supplier || {}
+      return {
+        'Razão social': sup.razao_social || item.inviteRazaoSocial || '',
+        'CNPJ': formatCnpj(sup.cnpj || item.inviteCnpj || ''),
+        'Situação': seal.client_suspended_at ? 'Inativado pela empresa' : (SITUACAO.find(o => o.value === clientSealStatus(seal))?.label || seal.status || ''),
+        'Nível': item.flowId ? (flowNames[item.flowId] || '') : '',
+        'Custeio': item.subsidiado ? 'Subsidiado' : 'Pago pelo fornecedor',
+        'Categorias': (sup.categorias || []).filter(c => !c.reprovada).map(c => c.nome).join('; '),
+        'Homologado em': seal.status === 'ACTIVE' ? dt(seal.issued_at) : '',
+        'Validade': dt(seal.expires_at),
+        'Convidado em': dt(item.invitedAt),
+        'Cidade': sup.city || '', 'UF': sup.state || '',
+      }
+    }
+    const fornecedores = forn.filter(i => noPeriodo(i.invitedAt || i.seal?.issued_at)).map(linhaForn)
+    const homologacoes = forn.filter(i => i.seal?.status === 'ACTIVE' && noPeriodo(i.seal?.issued_at)).map(linhaForn)
+    const ST = { SENT: 'Enviado', VIEWED: 'Visualizado', REGISTERED: 'Cadastrado', CANCELLED: 'Cancelado', EXPIRED: 'Expirado' }
+    const convites = convs.filter(c => noPeriodo(c.created_at)).map(c => ({
+      'Razão social': c.supplier_razao_social || '', 'CNPJ': formatCnpj(c.supplier_cnpj || ''), 'E-mail': c.supplier_email || '',
+      'Situação': ST[c.status] || c.status, 'Nível': c.flow_id ? (flowNames[c.flow_id] || '') : '',
+      'Custeio': c.subsidiado ? 'Subsidiado' : 'Pago pelo fornecedor', 'Enviado em': dt(c.created_at),
+      'Lembretes': c.reminder_count || 0, 'Origem': c.hoc_id ? 'Histórico do HOC' : 'ELOS',
+    }))
     const L = (secao, indicador, valor) => ({ 'Seção': secao, 'Indicador': indicador, 'Valor': valor ?? 0, 'Período': txtPeriodo })
-    exportXlsx('relatorio-executivo', 'Visão executiva', [
+    const indicadores = [
       L('Fornecedores', comPeriodo ? 'Fornecedores no período' : 'Fornecedores', f.total),
       L('Processos', 'Homologados vigentes', p.homologados), L('Processos', 'Em homologação', p.em_homologacao),
       L('Processos', 'Suspensos', p.suspensos), L('Processos', 'Vencidos', p.vencidos), L('Processos', 'A vencer (60 dias)', p.a_vencer_60d),
@@ -63,7 +102,15 @@ export default function ClientReports() {
       L('Cotações (RFQ)', 'Cotações abertas', rfq.total), L('Cotações (RFQ)', 'Respostas recebidas', rfq.respostas),
       ...(d.homologacoes_por_mes || []).map(r => L('Homologações por mês', String(r.mes).slice(0, 7).split('-').reverse().join('/'), r.n)),
       ...quests.flatMap(q => [L(`Questionário: ${q.titulo}`, 'Responderam', q.respondidos), L(`Questionário: ${q.titulo}`, 'Não responderam', q.nao_respondidos)]),
+    ]
+    exportXlsxSheets('relatorio-executivo', [
+      { name: 'Indicadores', rows: indicadores },
+      { name: comPeriodo ? 'Fornecedores (no período)' : 'Fornecedores', rows: fornecedores },
+      { name: comPeriodo ? 'Homologações (no período)' : 'Homologados', rows: homologacoes },
+      { name: comPeriodo ? 'Convites (no período)' : 'Convites', rows: convites },
     ])
+    } catch (e) { alert('Não foi possível gerar o Excel: ' + e.message) }
+    finally { setExportando(false) }
   }
   const abaBtn = (k, txt) => (
     <button onClick={() => setAba(k)} style={{ padding: '10px 18px', background: 'none', border: 'none', borderBottom: `2px solid ${aba === k ? '#2E3192' : 'transparent'}`, marginBottom: -2,
@@ -87,7 +134,7 @@ export default function ClientReports() {
         <div style={{ flex: 1, minWidth: 220, fontSize: 11.5, color: '#6b7280', fontFamily: 'DM Sans,sans-serif' }}>
           O período vale para processos e fornecedores iniciados, convites, cotações e homologações por mês. Documentos a vencer e questionários mostram a situação atual.
         </div>
-        <Button variant="neutral" size="sm" onClick={exportarExecutivo} title="Exporta os indicadores com o período aplicado">⬇ Exportar Excel</Button>
+        <Button variant="neutral" size="sm" disabled={exportando} onClick={exportarExecutivo} title="Indicadores e o detalhe (fornecedores, homologações e convites, com razão social e CNPJ) no período aplicado">{exportando ? 'Gerando…' : '⬇ Exportar Excel'}</Button>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
