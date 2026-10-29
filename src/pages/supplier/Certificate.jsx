@@ -26,7 +26,8 @@ export default function SupplierCertificate() {
 
   useEffect(() => {
     const isAdmin = user?.role === 'ADMIN'
-    if (!sealId || (!user?.supplierId && !isAdmin)) return
+    const isClient = user?.role === 'CLIENT' && !!user?.clientId   // 29/10: cliente emite o certificado dos homologados dele
+    if (!sealId || (!user?.supplierId && !isAdmin && !isClient)) return
     ;(async () => {
       try {
         // ADMIN (backoffice) emite o certificado de qualquer fornecedor;
@@ -35,13 +36,14 @@ export default function SupplierCertificate() {
           .from('seals')
           .select('*, clients(razao_social, cnpj)')
           .eq('id', sealId)
-        if (!isAdmin) q = q.eq('supplier_id', user.supplierId)
+        if (isClient) q = q.eq('client_id', user.clientId)
+        else if (!isAdmin) q = q.eq('supplier_id', user.supplierId)
         const { data: seal } = await q.maybeSingle()
         if (!seal) throw new Error('Selo não encontrado')
         if (seal.status !== 'ACTIVE' || seal.client_suspended_at)
           throw new Error('O certificado só está disponível para selos ativos.')
 
-        const supplierId = isAdmin ? seal.supplier_id : user.supplierId
+        const supplierId = (isAdmin || isClient) ? seal.supplier_id : user.supplierId
 
         const { data: supplier } = await supabase
           .from('suppliers')
@@ -64,7 +66,7 @@ export default function SupplierCertificate() {
         setData({ seal, supplier, categories: cats })
       } catch (e) { setError(e.message) }
     })()
-  }, [sealId, user?.supplierId])
+  }, [sealId, user?.supplierId, user?.clientId, user?.role])
 
   if (error) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, fontFamily: 'DM Sans,sans-serif', background: '#f4f5f9' }}>

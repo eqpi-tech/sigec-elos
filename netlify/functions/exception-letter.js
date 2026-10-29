@@ -13,6 +13,11 @@
 //         para a mesma categoria substitui a carta (ex.: renovar a validade)
 //   action 'approve' { sealId, note? }
 //       → legado (cartas EXCEPTION_REQUESTED de antes de 28/09): ADMIN ativa
+//   action 'url'     { sealId, categoryId } → link temporário para ver/baixar a carta (29/10)
+//   action 'revoke'  { sealId, categoryId, reason } → o cliente EXCLUI a carta (29/10,
+//       patch_163): fica EXCEPTION_REVOKED no histórico (nada é apagado); documentos
+//       da categoria em dia → segue homologado sem exceção; senão volta para em
+//       análise (PENDING) — não suspende. O fornecedor é avisado.
 
 const { createClient } = require('@supabase/supabase-js')
 const { pendingOfCategory, hojeBR, fmtBR } = require('./lib/exception_cover.js')
@@ -37,8 +42,8 @@ exports.handler = async (event) => {
   let body
   try { body = JSON.parse(event.body) } catch { return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'JSON inválido' }) } }
   const { action, sealId, categoryId, file, note, validUntil } = body
-  if (!sealId || !['upload', 'approve'].includes(action))
-    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "sealId e action ('upload'|'approve') são obrigatórios" }) }
+  if (!sealId || !['upload', 'approve', 'url', 'revoke'].includes(action))
+    return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: "sealId e action ('upload'|'approve'|'url'|'revoke') são obrigatórios" }) }
 
   try {
     const { data: seal } = await supabaseAdmin
@@ -47,10 +52,86 @@ exports.handler = async (event) => {
     if (!seal) throw new Error('Processo (selo) não encontrado')
 
     const { data: roles } = await supabaseAdmin
-      .from('user_roles').select('role, client_id').eq('user_id', user.id)
+      .from('user_roles').select('role, client_id, access_profile').eq('user_id', user.id)
     const isAdmin  = (roles || []).some(r => r.role === 'ADMIN')
     const isOwnerClient = seal.client_id &&
       (roles || []).some(r => r.role === 'CLIENT' && r.client_id === seal.client_id)
+
+    // ── ver/baixar a carta (cliente do processo ou backoffice) ──────────
+    if (action === 'url') {
+      if (!isAdmin && !isOwnerClient)
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Carta de outro cliente' }) }
+      const { data: row } = await supabaseAdmin.from('supplier_category_approvals')
+        .select('letter_path, letter_name').eq('seal_id', sealId).eq('category_id', categoryId).maybeSingle()
+      if (!row?.letter_path) return { statusCode: 404, headers: HEADERS, body: JSON.stringify({ error: 'Carta não encontrada' }) }
+      const { data: s, error: sErr } = await supabaseAdmin.storage.from('documents').createSignedUrl(row.letter_path, 300)
+      if (sErr) throw new Error(sErr.message)
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ url: s.signedUrl, name: row.letter_name }) }
+    }
+
+    // ── excluir a carta (cliente do processo, ou admin em nome dele) ────
+    if (action === 'revoke') {
+      if (!isAdmin && !isOwnerClient)
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Apenas o cliente do processo pode excluir a carta de exceção' }) }
+      if (!isAdmin && (roles || []).some(r => r.role === 'CLIENT' && r.client_id === seal.client_id && r.access_profile === 'readonly'))
+        return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Seu perfil de acesso é somente leitura' }) }
+      const motivo = String(body.reason || '').trim()
+      if (motivo.length < 3) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Informe o motivo da exclusão' }) }
+      const { data: row } = await supabaseAdmin.from('supplier_category_approvals')
+        .select('id, status, letter_name, letter_valid_until, categories(name)').eq('seal_id', sealId).eq('category_id', categoryId).maybeSingle()
+      if (!row || !['EXCEPTION_APPROVED', 'EXCEPTION_REQUESTED'].includes(row.status))
+        return { statusCode: 409, headers: HEADERS, body: JSON.stringify({ error: 'Não há carta vigente nesta categoria' }) }
+      const agora = new Date().toISOString()
+      const { error: rErr } = await supabaseAdmin.from('supplier_category_approvals')
+        .update({ status: 'EXCEPTION_REVOKED', closed_at: agora }).eq('id', row.id).eq('status', row.status)
+      if (rErr) throw new Error(rErr.message)
+
+      // o processo depois da exclusão
+      const pend = await pendingOfCategory(supabaseAdmin, seal.supplier_id, categoryId)
+      const { data: vigentes } = await supabaseAdmin.from('supplier_category_approvals')
+        .select('letter_valid_until, categories(name)').eq('seal_id', sealId).eq('status', 'EXCEPTION_APPROVED')
+      const patch = (vigentes || []).length
+        ? { exception: true, exception_note: `Homologado com Exceção por carta do cliente${seal.clients?.razao_social ? ` ${seal.clients.razao_social}` : ''} — ${(vigentes || []).map((v) => `${v.categories?.name || 'categoria'} (até ${fmtBR(v.letter_valid_until)})`).join(', ')}` }
+        : { exception: false, exception_note: null }
+      const voltaAnalise = pend.length > 0 && seal.status === 'ACTIVE'
+      if (voltaAnalise) patch.status = 'PENDING'
+      const { error: sErr } = await supabaseAdmin.from('seals').update(patch).eq('id', sealId)
+      if (sErr) throw new Error(sErr.message)
+      await supabaseAdmin.rpc('recompute_seal_stage', { p_seal: sealId })
+
+      await supabaseAdmin.from('audit_log').insert({
+        user_id: user.id, action: 'EXCEPTION_LETTER_REVOKED', entity_type: 'supplier', entity_id: seal.supplier_id,
+        metadata: { seal_id: sealId, category_id: categoryId, letter: row.letter_name, motivo, volta_analise: voltaAnalise,
+                    pendentes: pend.map((d) => d.type),
+                    label: `Carta de exceção excluída — ${row.categories?.name || 'categoria'} · Motivo: ${motivo}` },
+      })
+
+      // aviso ao fornecedor: a exceção foi retirada
+      try {
+        const { data: sup } = await supabaseAdmin.from('suppliers').select('razao_social, email, user_id').eq('id', seal.supplier_id).single()
+        let to = sup?.email
+        if (sup?.user_id) { const { data: u } = await supabaseAdmin.auth.admin.getUserById(sup.user_id); to = u?.user?.email || to }
+        const cliente = seal.clients?.razao_social || 'o cliente'
+        const subject = `Carta de exceção retirada — ${sup?.razao_social || ''} · ${row.categories?.name || ''}`
+        const g = guardMail(to, subject)
+        if (!g.skip && process.env.RESEND_API_KEY) {
+          const lista = pend.length ? `<ul style="padding-left:18px">${pend.map((d) => `<li>${d.label}</li>`).join('')}</ul>` : ''
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+            body: JSON.stringify({ from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br', to: g.to, subject: g.subject, html: `<div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto">
+  <div style="background:#2E3192;padding:24px;border-radius:12px 12px 0 0;text-align:center"><h1 style="color:#fff;margin:0;font-size:20px">SIGEC-ELOS</h1></div>
+  <div style="background:#fff;padding:26px;border:1px solid #e2e8f0;border-top:none;color:#374151;font-size:15px;line-height:1.6">
+    <p>A <strong>${cliente}</strong> retirou a carta de exceção da categoria <strong>${row.categories?.name || ''}</strong> da <strong>${sup?.razao_social || ''}</strong>.</p>
+    ${lista ? `<p>A homologação nessa categoria volta a depender destes documentos:</p>${lista}` : '<p>Os documentos da categoria estão em dia — a homologação continua valendo.</p>'}
+    ${lista ? `<p style="text-align:center;margin:24px 0 8px"><a href="${frontendUrl()}/fornecedor/documentos" style="display:inline-block;background:#F47E2F;color:#fff;padding:13px 30px;border-radius:9px;text-decoration:none;font-weight:bold">Enviar documentos</a></p>` : ''}
+  </div></div>` }),
+          })
+        }
+      } catch (e) { console.warn('[exception-letter] e-mail exclusão:', e.message) }
+
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true, volta_analise: voltaAnalise, pendentes: pend }) }
+    }
 
     // ── upload da carta (cliente do processo, ou admin em nome dele) ──
     if (action === 'upload') {

@@ -58,6 +58,41 @@ const DOC_BORDER = { VALID:'#dcfce7', PENDING:'#fed7aa', MISSING:'#e2e4ef', REJE
 const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ', 'Log do Processo']
 
 
+// ── Categorias do fornecedor neste cliente (29/10, pedido VIX) — com a
+//    reprovação por CNAE e o motivo (patch_147) ──────────────────────────
+function SupplierCategories({ supplierId, clientId }) {
+  const [cats, setCats] = useState(null)
+  useEffect(() => {
+    if (!supplierId || !clientId) return
+    supabase.from('supplier_categories')
+      .select('category_id, rejected_at, rejection_reason, categories!inner(id, name, client_id)')
+      .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
+      .then(({ data }) => setCats((data || []).map(r => ({ ...r.categories, rejected_at: r.rejected_at, rejection_reason: r.rejection_reason }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))))
+  }, [supplierId, clientId])
+  if (!cats) return null
+  const aprovadas = cats.filter(c => !c.rejected_at).length
+  return (
+    <Card style={{ borderRadius:14, padding:'18px 20px', gridColumn:'1 / -1' }}>
+      <SectionTitle>Categorias do fornecedor ({aprovadas} de {cats.length} no processo)</SectionTitle>
+      {cats.length === 0 ? (
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>Nenhuma categoria escolhida pelo fornecedor.</div>
+      ) : (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+          {cats.map(c => (
+            <span key={c.id} title={c.rejected_at ? `Reprovada no processo${c.rejection_reason ? ` — ${c.rejection_reason}` : ' — a atividade (CNAE) do fornecedor não cobre a categoria'}` : ''}
+              style={{ fontSize:12, fontFamily:'DM Sans,sans-serif', padding:'5px 12px', borderRadius:20,
+                background: c.rejected_at ? '#fee2e2' : 'rgba(46,49,146,.07)', color: c.rejected_at ? '#b91c1c' : '#2E3192',
+                border:`1px solid ${c.rejected_at ? '#fecaca' : 'rgba(46,49,146,.15)'}` }}>
+              {c.rejected_at ? '✕ ' : ''}{c.name}{c.rejected_at ? ` — reprovada${c.rejection_reason ? `: ${c.rejection_reason}` : ' (CNAE)'}` : ''}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // ── Carta de Exceção: cliente aprova categoria específica mesmo com doc
 //    reprovado/faltante e informa a VALIDADE — vale na hora, sem análise do
 //    backoffice (28/09, patch_101). Vencida sem regularização → suspenso ──
@@ -89,6 +124,44 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
     // processo já homologado sem exceção pendente → seção discreta
   }
   if (!seal || !cats.length) return null
+
+  async function abrirCarta(cat) {
+    try {
+      const resp = await authFetch('/.netlify/functions/exception-letter', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'url', sealId: seal.id, categoryId: cat.id }),
+      })
+      const out = await resp.json()
+      if (!resp.ok) throw new Error(out.error)
+      window.open(out.url, '_blank', 'noopener')
+    } catch (e) { alert('Não foi possível abrir a carta: ' + e.message) }
+  }
+
+  async function excluirCarta(cat) {
+    const motivo = window.prompt(`Excluir a carta de exceção da categoria "${cat.name}"?\n\nSe os documentos da categoria não estiverem em dia, o processo volta para análise. A carta fica no histórico do processo.\n\nMotivo (obrigatório):`)
+    if (motivo == null) return
+    if (motivo.trim().length < 3) { alert('Informe o motivo da exclusão.'); return }
+    setBusy(cat.id)
+    try {
+      const resp = await authFetch('/.netlify/functions/exception-letter', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revoke', sealId: seal.id, categoryId: cat.id, reason: motivo.trim() }),
+      })
+      const out = await resp.json()
+      if (!resp.ok) throw new Error(out.error)
+      setLetters(p => ({ ...p, [cat.id]: { ...p[cat.id], status: 'EXCEPTION_REVOKED' } }))
+      alert(out.volta_analise
+        ? `Carta excluída. O processo voltou para análise — falta regularizar: ${(out.pendentes || []).map(d => d.label).join(', ')}. O fornecedor foi avisado.`
+        : 'Carta excluída. Os documentos da categoria estão em dia — a homologação continua valendo. O fornecedor foi avisado.')
+    } catch (e) { alert('Erro ao excluir a carta: ' + e.message) }
+    finally { setBusy(null) }
+  }
+
+  const substituir = (cat) => {
+    const l = letters[cat.id]
+    if (l?.letter_valid_until && l.letter_valid_until > amanha) setValidade(p => ({ ...p, [cat.id]: String(l.letter_valid_until).slice(0, 10) }))
+    setTrocar(p => ({ ...p, [cat.id]: true }))
+  }
 
   async function upload(cat, file) {
     setBusy(cat.id)
@@ -142,19 +215,31 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
                     <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#15803d', background:'#dcfce7', padding:'3px 10px', borderRadius:20 }}>
                       ✓ Exceção vigente{l.letter_valid_until ? ` até ${fmt(l.letter_valid_until)}` : ''}
                     </span>
-                    {podeCarta && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: true }))} title="Substituir a carta / renovar a validade"
-                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>renovar</button>}
+                    <button onClick={() => abrirCarta(cat)} title={l.letter_name || 'Ver a carta'}
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>ver carta</button>
+                    {podeCarta && <button onClick={() => substituir(cat)} title="Trocar o arquivo da carta e/ou renovar a validade"
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>substituir</button>}
+                    {podeCarta && <button disabled={busy === cat.id} onClick={() => excluirCarta(cat)} title="Excluir a carta — a categoria volta a depender dos documentos"
+                      style={{ fontSize:10, border:'none', background:'none', color:'#b91c1c', cursor:'pointer', textDecoration:'underline' }}>{busy === cat.id ? 'excluindo…' : 'excluir'}</button>}
                   </span>
                 ) : l?.status === 'EXCEPTION_EXPIRED' && !trocar[cat.id] ? (
                   <span style={{ display:'flex', alignItems:'center', gap:6 }}>
                     <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b91c1c', background:'#fee2e2', padding:'3px 10px', borderRadius:20 }}>
                       Carta vencida em {fmt(l.letter_valid_until)} — processo suspenso
                     </span>
+                    <button onClick={() => abrirCarta(cat)}
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>ver carta</button>
                     {podeCarta && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: true }))}
                       style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>nova carta</button>}
                   </span>
                 ) : l?.status === 'EXCEPTION_RESOLVED' && !trocar[cat.id] ? (
                   <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#475569', background:'#f1f5f9', padding:'3px 10px', borderRadius:20 }}>Exceção encerrada — documentos regularizados</span>
+                ) : l?.status === 'EXCEPTION_REVOKED' && !trocar[cat.id] ? (
+                  <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#475569', background:'#f1f5f9', padding:'3px 10px', borderRadius:20 }}>Carta excluída</span>
+                    {podeCarta && <button onClick={() => setTrocar(p => ({ ...p, [cat.id]: true }))}
+                      style={{ fontSize:10, border:'none', background:'none', color:'#2E3192', cursor:'pointer', textDecoration:'underline' }}>nova carta</button>}
+                  </span>
                 ) : l?.status === 'EXCEPTION_REQUESTED' && !trocar[cat.id] ? (
                   <span style={{ fontSize:10, fontWeight:700, fontFamily:'Montserrat,sans-serif', color:'#b45309', background:'#fef3c7', padding:'3px 10px', borderRadius:20 }}>📜 Carta anexada — aguardando backoffice</span>
                 ) : podeCarta ? (
@@ -395,7 +480,9 @@ export default function ClientSupplierProcess() {
   if (error)   return <div style={{ padding:32, color:'#dc2626', fontFamily:'DM Sans,sans-serif' }}>{error}</div>
   if (!data)   return null
 
-  const seal    = data.seals?.[0] || null
+  // 29/10: o processo deste cliente — antes era o 1º selo do fornecedor (podia
+  // ser de outro cliente ou o do ELOS) no cabeçalho e na carta de exceção
+  const seal    = data.seals?.find(s => s.client_id === user?.clientId) || null
   // Selo do processo com ESTE cliente (carrega o flow_id → docs do cliente)
   const mySeal  = data.seals?.find(s => s.client_id === user?.clientId) || seal
   const cnpjC   = data.cnpj_consultation
@@ -477,6 +564,12 @@ export default function ClientSupplierProcess() {
               <div style={{ fontSize:10, background:'#d1fae5', color:'#065f46', borderRadius:20, padding:'2px 8px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>
                 SUBSIDIADO
               </div>
+            )}
+            {seal?.status === 'ACTIVE' && !seal.client_suspended_at && (
+              <button onClick={() => navigate(`/cliente/certificado/${seal.id}`)} title="Certificado de homologação — para imprimir ou salvar em PDF"
+                style={{ display:'flex', alignItems:'center', gap:6, background:'#fff', color:'#2E3192', border:'1.5px solid #2E3192', borderRadius:10, padding:'7px 14px', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>
+                🎓 Certificado
+              </button>
             )}
             {bankDoc && (
               <button onClick={handleOpenBank}
@@ -615,6 +708,8 @@ export default function ClientSupplierProcess() {
               )}
             </div>
           </Card>
+
+          <SupplierCategories supplierId={supplierId} clientId={user?.clientId}/>
 
           {/* Dados gerais do fornecedor */}
           {cnpjDat && (
