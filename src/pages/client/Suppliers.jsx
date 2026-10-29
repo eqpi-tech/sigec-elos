@@ -163,7 +163,9 @@ export default function ClientSuppliers() {
     const cnpj = normalizeCnpj(item.supplier?.cnpj || item.inviteCnpj || '')
     // CNPJ (numérico ou alfanumérico) comparado normalizado nos dois lados, sem minúsculas
     const qCnpj = looksLikeCnpj(mySearch) ? normalizeCnpj(mySearch) : mySearch.replace(/\D/g,'')
-    if (q && !name.includes(q) && !(qCnpj && cnpj.includes(qCnpj))) return false
+    // 29/10: a busca também acha pela categoria do fornecedor (patch_164)
+    const cats = (item.supplier?.categorias || []).map(c => c.nome.toLowerCase())
+    if (q && !name.includes(q) && !(qCnpj && cnpj.includes(qCnpj)) && !cats.some(c => c.includes(q))) return false
     if (fSit.length && !fSit.includes(situacaoDe(item))) return false
     if (fNivel.length && !fNivel.includes(item.flowId || 'sem')) return false
     if (fCust.length && !fCust.includes(item.subsidiado ? 'sim' : 'nao')) return false
@@ -190,6 +192,8 @@ export default function ClientSuppliers() {
       'Convidado em': dataBR(item.invitedAt),
       'Cidade': sup.city || '', 'UF': sup.state || '',
       'Escopo': item.escopo || '', 'Tipo': item.tipo || '',
+      'Categorias': (sup.categorias || []).filter(c => !c.reprovada).map(c => c.nome).join('; '),
+      'Categorias reprovadas (CNAE)': (sup.categorias || []).filter(c => c.reprovada).map(c => c.nome).join('; '),
       'Carta de exceção': item.cartaExcecao ? 'Sim' : '',
       'Análise prioritária': seal.status === 'PENDING' && seal.priority_requested_at ? 'Sim' : '',
     }
@@ -290,7 +294,7 @@ export default function ClientSuppliers() {
         <>
           <FilterPanel total={mySuppliers.length} shown={filteredMine.length} active={filtrosAtivos} onClear={limparFiltros}>
             <input value={mySearch} onChange={e => setMySearch(e.target.value)}
-              placeholder="Buscar por nome ou CNPJ..."
+              placeholder="Buscar por nome, CNPJ ou categoria..."
               style={{ ...inp, width:'100%', boxSizing:'border-box' }} />
             <MultiChips label="Situação" value={fSit} onChange={setFSit}
               options={SITUACAO.map(o => ({ ...o, count: conta(i => situacaoDe(i) === o.value) })).filter(o => o.count > 0)}/>
@@ -365,6 +369,24 @@ export default function ClientSuppliers() {
                           {sup?.city && sup?.state && ` · ${sup.city}/${sup.state}`}
                           {item.tipo && ` · ${item.tipo === 'produto' ? 'Produto' : item.tipo === 'servico' ? 'Serviço' : 'Produto & Serviço'}`}
                         </div>
+                        {/* categorias do fornecedor neste cliente (29/10, patch_164) */}
+                        {sup?.categorias?.length > 0 && (
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
+                            {sup.categorias.slice(0, 4).map(c => (
+                              <span key={c.nome} title={c.reprovada ? 'Reprovada no processo — a atividade (CNAE) não cobre a categoria' : ''}
+                                style={{ fontSize:10, fontFamily:'DM Sans,sans-serif', padding:'2px 8px', borderRadius:20,
+                                  background: c.reprovada ? '#fee2e2' : '#f1f5f9', color: c.reprovada ? '#b91c1c' : '#475569' }}>
+                                {c.reprovada ? '✕ ' : ''}{c.nome}
+                              </span>
+                            ))}
+                            {sup.categorias.length > 4 && (
+                              <span title={sup.categorias.slice(4).map(c => c.nome).join(', ')}
+                                style={{ fontSize:10, fontFamily:'DM Sans,sans-serif', padding:'2px 8px', borderRadius:20, background:'#f1f5f9', color:'#475569' }}>
+                                +{sup.categorias.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {seal?.status === 'ACTIVE' && !isSusp && (
                           <div style={{ maxWidth:280 }}>
                             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
@@ -380,6 +402,11 @@ export default function ClientSuppliers() {
                         <Button variant="primary" size="sm" onClick={() => navigate(`/cliente/fornecedor/${item.supplierId}`)}>
                           Ver Processo →
                         </Button>
+                        {seal?.status === 'ACTIVE' && !isSusp && seal.id && (
+                          <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/certificado/${seal.id}`)} title="Certificado de homologação">
+                            🎓 Certificado
+                          </Button>
+                        )}
                         {/* só processo EM ANÁLISE de verdade (pago/subsidiado ou HOC) */}
                         {seal?.id && seal.status === 'PENDING' && !isSusp && !seal.priority_requested_at
                           && (seal.released_at || seal.hoc_process_id) && hasAction(user, 'acao:priorizar_analise') && (
