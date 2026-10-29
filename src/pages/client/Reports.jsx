@@ -6,6 +6,9 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import { Card, Spinner, PageHeader, SectionTitle, Button } from '../../components/ui.jsx'
 import { Tile, HBars, LineChart } from '../../components/charts.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { exportXlsx } from '../../lib/exportXlsx.js'
+import DocumentsStatusReport from './DocumentsStatusReport.jsx'
 
 const fmt = (n) => (n ?? 0).toLocaleString('pt-BR')
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0)
@@ -18,6 +21,15 @@ export default function ClientReports() {
   const [ate, setAte] = useState('')
   const [periodo, setPeriodo] = useState({ de: '', ate: '' })
   const [loading, setLoading] = useState(false)
+  // 29/10 (pedido VIX): aba do relatório de status dos documentos + Excel da visão executiva
+  const { user } = useAuth()
+  const [aba, setAba] = useState('executivo')
+  const [flowNames, setFlowNames] = useState({})
+  useEffect(() => {
+    if (!user?.clientId) return
+    supabase.from('client_flows').select('id, name').eq('client_id', user.clientId)
+      .then(({ data }) => setFlowNames(Object.fromEntries((data || []).map(f => [f.id, f.name]))))
+  }, [user?.clientId])
 
   useEffect(() => {
     setLoading(true)
@@ -39,9 +51,33 @@ export default function ClientReports() {
   const cv = d.convites || {}, rfq = d.rfq || {}
   const quests = d.questionarios || []
 
+  // Excel da visão executiva com o período aplicado (29/10)
+  const exportarExecutivo = () => {
+    const L = (secao, indicador, valor) => ({ 'Seção': secao, 'Indicador': indicador, 'Valor': valor ?? 0, 'Período': txtPeriodo })
+    exportXlsx('relatorio-executivo', 'Visão executiva', [
+      L('Fornecedores', comPeriodo ? 'Fornecedores no período' : 'Fornecedores', f.total),
+      L('Processos', 'Homologados vigentes', p.homologados), L('Processos', 'Em homologação', p.em_homologacao),
+      L('Processos', 'Suspensos', p.suspensos), L('Processos', 'Vencidos', p.vencidos), L('Processos', 'A vencer (60 dias)', p.a_vencer_60d),
+      L('Documentos (hoje)', 'A vencer (30 dias)', doc.a_vencer_30d), L('Documentos (hoje)', 'Vencidos', doc.vencidos), L('Documentos (hoje)', 'Em análise', doc.em_analise),
+      L('Convites', 'Enviados', cv.total), L('Convites', 'Visualizados', (cv.visualizados || 0) + (cv.cadastrados || 0)), L('Convites', 'Cadastrados', cv.cadastrados),
+      L('Cotações (RFQ)', 'Cotações abertas', rfq.total), L('Cotações (RFQ)', 'Respostas recebidas', rfq.respostas),
+      ...(d.homologacoes_por_mes || []).map(r => L('Homologações por mês', String(r.mes).slice(0, 7).split('-').reverse().join('/'), r.n)),
+      ...quests.flatMap(q => [L(`Questionário: ${q.titulo}`, 'Responderam', q.respondidos), L(`Questionário: ${q.titulo}`, 'Não responderam', q.nao_respondidos)]),
+    ])
+  }
+  const abaBtn = (k, txt) => (
+    <button onClick={() => setAba(k)} style={{ padding: '10px 18px', background: 'none', border: 'none', borderBottom: `2px solid ${aba === k ? '#2E3192' : 'transparent'}`, marginBottom: -2,
+      color: aba === k ? '#2E3192' : '#9B9B9B', fontFamily: 'Montserrat,sans-serif', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{txt}</button>
+  )
+
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      <PageHeader title="Relatórios" subtitle={`Visão executiva da sua homologação de fornecedores · ${txtPeriodo}`} />
+      <PageHeader title="Relatórios" subtitle={aba === 'executivo' ? `Visão executiva da sua homologação de fornecedores · ${txtPeriodo}` : 'Situação de cada documento exigido nos processos dos seus fornecedores'} />
+      <div style={{ display: 'flex', gap: 4, marginBottom: 18, borderBottom: '2px solid #e2e4ef' }}>
+        {abaBtn('executivo', '📊 Visão executiva')}
+        {abaBtn('documentos', '📄 Status dos documentos')}
+      </div>
+      {aba === 'documentos' ? <DocumentsStatusReport flowNames={flowNames} /> : <>
 
       <Card style={{ borderRadius: 14, padding: '14px 18px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div><label style={lblData}>Data início</label><input type="date" value={de} max={ate || undefined} onChange={e => setDe(e.target.value)} style={inpData}/></div>
@@ -51,6 +87,7 @@ export default function ClientReports() {
         <div style={{ flex: 1, minWidth: 220, fontSize: 11.5, color: '#6b7280', fontFamily: 'DM Sans,sans-serif' }}>
           O período vale para processos e fornecedores iniciados, convites, cotações e homologações por mês. Documentos a vencer e questionários mostram a situação atual.
         </div>
+        <Button variant="neutral" size="sm" onClick={exportarExecutivo} title="Exporta os indicadores com o período aplicado">⬇ Exportar Excel</Button>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -119,6 +156,7 @@ export default function ClientReports() {
           ))}
         </Card>
       </div>
+      </>}
     </div>
   )
 }

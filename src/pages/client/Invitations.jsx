@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { hasAction } from '../../lib/modules.js'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { invitationsApi } from '../../services/api.js'
+import { invitationsApi, watchApi } from '../../services/api.js'
+import WatchButton from '../../components/WatchButton.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { PageHeader, Card, Button, Spinner, EmptyState } from '../../components/ui.jsx'
 import { can } from '../../lib/permissions.js'
@@ -56,6 +57,8 @@ export default function ClientInvitations() {
   const [cancelando, setCancelando] = useState(null)             // { inv, reason, busy }
   const [subsidiando, setSubsidiando] = useState(null)           // { inv } — patch_159
   const [liberados, setLiberados] = useState(new Set())          // fornecedores que já pagaram
+  const [watched, setWatched] = useState(new Set())              // "Acompanhar" (patch_166)
+  useEffect(() => { if (user?.clientId) watchApi.list(user.clientId).then(setWatched).catch(() => {}) }, [user?.clientId])
   const location = useLocation()
 
   // Razão social do cliente para os templates de mensagem
@@ -331,6 +334,10 @@ export default function ClientInvitations() {
                   <div style={{ fontSize:10, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>
                     {new Date(inv.created_at).toLocaleDateString('pt-BR')}
                   </div>
+                  {!inv.hoc_id && inv.objetivo !== 'contato' && inv.supplier_cnpj && !['CANCELLED', 'SUPERSEDED'].includes(inv.status) && (
+                    <WatchButton cnpj={inv.supplier_cnpj} clientId={user?.clientId} watched={watched.has(normalizeCnpj(inv.supplier_cnpj))}
+                      onChange={(c, on) => setWatched(s => { const n = new Set(s); on ? n.add(c) : n.delete(c); return n })}/>
+                  )}
                   {subsidiavel(inv) && (
                     <button onClick={() => { setError(''); setSuccess(''); setSubsidiando({ inv }) }}
                       title="O cliente passa a custear a homologação — só enquanto o fornecedor não pagou"

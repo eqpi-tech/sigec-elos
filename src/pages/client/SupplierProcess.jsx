@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
-import { clientApi, documentApi , processDocsApi, clientLogApi } from '../../services/api.js'
+import { clientApi, documentApi , processDocsApi, clientLogApi, watchApi } from '../../services/api.js'
+import WatchButton from '../../components/WatchButton.jsx'
 import ProcessLog from '../../components/ProcessLog.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
 import ProcessDocuments, { ProcessDocsSummary } from '../../components/ProcessDocuments.jsx'
@@ -373,7 +374,7 @@ function QuestionnairesTab({ supplierId, clientId, hocQ }) {
         const qids = (list || []).flatMap(q => (q.questionnaire_questions || []).map(x => x.id))
         if (qids.length) {
           const { data: ans } = await supabase.from('questionnaire_answers')
-            .select('question_id, answer_boolean, answer_text, updated_at')
+            .select('question_id, answer_boolean, answer_text, updated_at, replicated_from')
             .eq('supplier_id', supplierId).in('question_id', qids)
           setAnswers(Object.fromEntries((ans || []).map(a => [a.question_id, a])))
         }
@@ -398,12 +399,14 @@ function QuestionnairesTab({ supplierId, clientId, hocQ }) {
     </Card>
   )
 
-  const row = (q, a, i) => (
+  const row = (q, a, i, copiada = false) => (
     <div key={i} style={{ padding:'10px 14px', borderRadius:10, background:'#f8faff', border:'1px solid #eef0f6', marginBottom:6 }}>
       <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', fontWeight:600 }}>{q}</div>
       <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, marginTop:3,
         color: a == null ? '#9B9B9B' : /^n[aã]o/i.test(String(a)) ? '#dc2626' : '#15803d', fontWeight:700 }}>
         {a == null ? 'Não respondida' : String(a)}
+        {/* patch_167: resposta copiada de outra filial (mesma raiz de CNPJ) */}
+        {a != null && copiada && <span title="Copiada automaticamente de outra unidade do fornecedor (mesma raiz de CNPJ)" style={{ marginLeft:8, fontSize:10.5, fontWeight:600, color:'#92400e', background:'#fef3c7', borderRadius:20, padding:'1px 8px' }}>↺ copiada de outra unidade</span>}
       </div>
     </div>
   )
@@ -414,7 +417,7 @@ function QuestionnairesTab({ supplierId, clientId, hocQ }) {
         <Card key={q.id} style={{ borderRadius:14, padding:'20px 24px', marginBottom:16 }}>
           <SectionTitle>📋 {q.title}</SectionTitle>
           {(q.questionnaire_questions || []).sort((a,b) => a.order_index - b.order_index)
-            .map(qq => row(qq.text, fmtAns(answers[qq.id]), qq.id))}
+            .map(qq => row(qq.text, fmtAns(answers[qq.id]), qq.id, !!answers[qq.id]?.replicated_from))}
         </Card>
       ))}
       {hasHoc && (
@@ -443,6 +446,8 @@ export default function ClientSupplierProcess() {
   const [procDocs, setProcDocs] = useState(null)  // documentos do processo — fonte única (patch_139)
   const [procDocsErr, setProcDocsErr] = useState(false)
   const [histDoc, setHistDoc] = useState(null)   // histórico de versões (patch_145)
+  const [watched, setWatched] = useState(new Set())   // "Acompanhar" (patch_166)
+  useEffect(() => { if (user?.clientId) watchApi.list(user.clientId).then(setWatched).catch(() => {}) }, [user?.clientId])
 
 
   useEffect(() => {
@@ -565,6 +570,9 @@ export default function ClientSupplierProcess() {
                 SUBSIDIADO
               </div>
             )}
+            <WatchButton cnpj={data.cnpj} clientId={user?.clientId} size="md"
+              watched={watched.has(normalizeCnpj(data.cnpj || ''))}
+              onChange={(c, on) => setWatched(s => { const n = new Set(s); on ? n.add(c) : n.delete(c); return n })}/>
             {seal?.status === 'ACTIVE' && !seal.client_suspended_at && (
               <button onClick={() => navigate(`/cliente/certificado/${seal.id}`)} title="Certificado de homologação — para imprimir ou salvar em PDF"
                 style={{ display:'flex', alignItems:'center', gap:6, background:'#fff', color:'#2E3192', border:'1.5px solid #2E3192', borderRadius:10, padding:'7px 14px', cursor:'pointer', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:12 }}>

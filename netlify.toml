@@ -55,6 +55,10 @@
 [functions."homolog-collect-cron"]
   schedule = "*/15 * * * *"
 
+# "Acompanhar fornecedor" (patch_166): avisos ao cliente na hora — a cada 5 min
+[functions."client-notify-cron"]
+  schedule = "*/5 * * * *"
+
 # O worker background gera o PDF (Playwright): o binário do chromium lambda
 # não pode ser bundlado pelo esbuild — vai como módulo externo + arquivos
 [functions."bc-report-worker-background"]
