@@ -66,7 +66,7 @@ Use **Data início** e **Data fim** e clique em **Aplicar** para ver um período
 - **Seguem o período:** fornecedores e processos iniciados, convites, cotações e homologações por mês.
 - **Mostram sempre a situação atual:** documentos a vencer/vencidos e as respostas dos questionários dos homologados.
 
-**⬇ Exportar Excel** gera a planilha dos indicadores **com o período aplicado**.
+**⬇ Exportar Excel** gera a planilha **com o período aplicado**, em abas: os **indicadores** e o **detalhe** — fornecedores (situação, nível, custeio, categorias, homologação e validade), homologações e convites, com **razão social e CNPJ**.
 
 ![Relatórios](img/cliente/13-relatorios.jpg)
 
@@ -84,7 +84,7 @@ A aba **📄 Status dos documentos** mostra cada documento exigido nos processos
 
 ## 4. Meus Fornecedores
 
-Menu **Fornecedores → Meus Fornecedores**. Cada fornecedor mostra as **categorias** em que atua para a sua empresa (as reprovadas por CNAE em vermelho, com **✕**). Use a busca (nome, CNPJ ou **categoria**) e os filtros:
+Menu **Fornecedores → Meus Fornecedores**. Cada fornecedor mostra as **categorias** em que atua para a sua empresa (as reprovadas por CNAE em vermelho, com **✕**). Nos fluxos em que a categoria é definida pelo próprio fluxo de homologação (o fornecedor não escolhe), aparece a categoria do fluxo. Use a busca (nome, CNPJ ou **categoria**) e os filtros:
 
 - **Situação** — Homologado, Em análise, Aguardando pagamento, Reprovado, Suspenso / inativado, Vencido.
 - **Nível** — o fluxo (pacote) de homologação.

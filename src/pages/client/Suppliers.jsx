@@ -379,7 +379,7 @@ export default function ClientSuppliers() {
                         {sup?.categorias?.length > 0 && (
                           <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:6 }}>
                             {sup.categorias.slice(0, 4).map(c => (
-                              <span key={c.nome} title={c.reprovada ? 'Reprovada no processo — a atividade (CNAE) não cobre a categoria' : ''}
+                              <span key={c.nome} title={c.reprovada ? 'Reprovada no processo — a atividade (CNAE) não cobre a categoria' : c.do_fluxo ? 'Categoria definida pelo fluxo de homologação' : ''}
                                 style={{ fontSize:10, fontFamily:'DM Sans,sans-serif', padding:'2px 8px', borderRadius:20,
                                   background: c.reprovada ? '#fee2e2' : '#f1f5f9', color: c.reprovada ? '#b91c1c' : '#475569' }}>
                                 {c.reprovada ? '✕ ' : ''}{c.nome}

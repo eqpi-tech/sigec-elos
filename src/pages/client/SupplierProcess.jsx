@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hasAction } from '../../lib/modules.js'
-import { clientApi, documentApi , processDocsApi, clientLogApi, watchApi } from '../../services/api.js'
+import { clientApi, documentApi , processDocsApi, clientLogApi, watchApi, processCategoriesApi } from '../../services/api.js'
 import WatchButton from '../../components/WatchButton.jsx'
 import ProcessLog from '../../components/ProcessLog.jsx'
 import DocHistoryModal from '../../components/DocHistoryModal.jsx'
@@ -61,21 +61,26 @@ const TABS = ['Resumo', 'Documentos', 'Questionários', 'Inteligência CNPJ', 'L
 
 // ── Categorias do fornecedor neste cliente (29/10, pedido VIX) — com a
 //    reprovação por CNAE e o motivo (patch_147) ──────────────────────────
-function SupplierCategories({ supplierId, clientId }) {
+function SupplierCategories({ supplierId, clientId, flowId }) {
   const [cats, setCats] = useState(null)
+  const [fluxo, setFluxo] = useState(null)   // { nome } quando a categoria vem do fluxo
   useEffect(() => {
     if (!supplierId || !clientId) return
-    supabase.from('supplier_categories')
-      .select('category_id, rejected_at, rejection_reason, categories!inner(id, name, client_id)')
-      .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
-      .then(({ data }) => setCats((data || []).map(r => ({ ...r.categories, rejected_at: r.rejected_at, rejection_reason: r.rejection_reason }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))))
-  }, [supplierId, clientId])
+    processCategoriesApi.get({ supplierId, clientId, flowId }).then(r => {
+      setCats([...r.cats].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')))
+      setFluxo(r.doFluxo ? { nome: r.fluxo } : null)
+    }).catch(() => setCats([]))
+  }, [supplierId, clientId, flowId])
   if (!cats) return null
   const aprovadas = cats.filter(c => !c.rejected_at).length
   return (
     <Card style={{ borderRadius:14, padding:'18px 20px', gridColumn:'1 / -1' }}>
-      <SectionTitle>Categorias do fornecedor ({aprovadas} de {cats.length} no processo)</SectionTitle>
+      <SectionTitle>{fluxo ? 'Categoria do processo' : `Categorias do fornecedor (${aprovadas} de ${cats.length} no processo)`}</SectionTitle>
+      {fluxo && cats.length > 0 && (
+        <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#64748b', marginBottom:8 }}>
+          Neste processo a categoria é definida pelo fluxo de homologação{fluxo.nome ? <> <strong>{fluxo.nome}</strong></> : ''} — o fornecedor não escolhe categorias.
+        </div>
+      )}
       {cats.length === 0 ? (
         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#9B9B9B' }}>Nenhuma categoria escolhida pelo fornecedor.</div>
       ) : (
@@ -111,10 +116,8 @@ function ExceptionLetters({ seal, supplierId, clientId }) {
 
   useEffect(() => {
     if (!seal?.id) return
-    supabase.from('supplier_categories')
-      .select('category_id, rejected_at, categories!inner(id, name, client_id)')
-      .eq('supplier_id', supplierId).eq('categories.client_id', clientId)
-      .then(({ data }) => setCats((data || []).map(r => ({ ...r.categories, rejected_at: r.rejected_at }))))
+    // 30/10: sem categoria do cliente, vale a do fluxo do processo (ex.: ELOS Verificado)
+    processCategoriesApi.get({ supplierId, clientId, flowId: seal.flow_id }).then(r => setCats(r.cats)).catch(() => setCats([]))
     supabase.from('supplier_category_approvals')
       .select('category_id, status, letter_name, approved_at, letter_valid_until, covered_docs')
       .eq('seal_id', seal.id)
@@ -717,7 +720,7 @@ export default function ClientSupplierProcess() {
             </div>
           </Card>
 
-          <SupplierCategories supplierId={supplierId} clientId={user?.clientId}/>
+          <SupplierCategories supplierId={supplierId} clientId={user?.clientId} flowId={seal?.flow_id}/>
 
           {/* Dados gerais do fornecedor */}
           {cnpjDat && (

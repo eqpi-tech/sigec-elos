@@ -14,3 +14,15 @@ export function exportXlsx(fileBase, sheetName, rows) {
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
   XLSX.writeFile(wb, `${fileBase}_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
+
+// Várias abas num arquivo só (30/10 — Excel detalhado da visão executiva)
+export function exportXlsxSheets(fileBase, sheets) {
+  const wb = XLSX.utils.book_new()
+  for (const { name, rows } of sheets) {
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Aviso: 'Nenhum registro no período' }])
+    const cols = Object.keys(rows[0] || { Aviso: '' })
+    ws['!cols'] = cols.map(c => ({ wch: Math.min(60, Math.max(c.length, ...rows.map(r => String(r[c] ?? '').length)) + 2) }))
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31))
+  }
+  XLSX.writeFile(wb, `${fileBase}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
