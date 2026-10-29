@@ -7,9 +7,16 @@
 name: Go-live de cliente — comunicados
 
 on:
+  # O GitHub atrasa agendamentos em até ~4h30: o 1º disparo é de madrugada e o
+  # script espera até as 09:00 de Brasília; os outros dois são reserva (só
+  # completam quem faltou — quem já recebeu não recebe de novo).
   schedule:
-    - cron: '7 12 30 10 *'     # 09:07 BRT — VIX comunicado 1
-    - cron: '7 12 3 11 *'      # 09:07 BRT — VIX comunicado 2
+    - cron: '7 7 30 10 *'      # 04:07 BRT — VIX comunicado 1 (espera até 09:00)
+    - cron: '7 11 30 10 *'     # 08:07 BRT — reserva
+    - cron: '7 13 30 10 *'     # 10:07 BRT — reserva
+    - cron: '7 7 3 11 *'       # 04:07 BRT — VIX comunicado 2 (espera até 09:00)
+    - cron: '7 11 3 11 *'      # 08:07 BRT — reserva
+    - cron: '7 13 3 11 *'      # 10:07 BRT — reserva
   workflow_dispatch:
 
 concurrency: { group: comunicados-golive, cancel-in-progress: false }
@@ -17,7 +24,7 @@ concurrency: { group: comunicados-golive, cancel-in-progress: false }
 jobs:
   enviar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
