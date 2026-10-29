@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { Card, Button, PageHeader, SectionTitle, Spinner } from '../../components/ui.jsx'
 import {
-  DEMO_QUESTIONNAIRES, DEMO_SUPPLIER_ANSWERS, DEMO_SUPPLIER_CATEGORIES, DEMO_MEUS_DADOS,
+  DEMO_QUESTIONNAIRES, DEMO_SUPPLIER_ANSWERS, DEMO_COPIED_ANSWERS, DEMO_SUPPLIER_CATEGORIES, DEMO_MEUS_DADOS,
   DEMO_ELOS_CLIENTS, DEMO_TEAM_SUPPLIER, DEMO_TEAM_CLIENT, DEMO_SUPPLIER, DEMO_SEALS, HORIZONTE, PRIMATUS, fmtBR, isoD, brD,
 } from './demoData.js'
 import { useToast, InlineConfirm, copyText, SO_REAL } from './DemoFichaKit.jsx'
@@ -32,10 +32,11 @@ function Page({ title, sub, action, children, max = 1100 }) {
 // ── Fornecedor: Questionários (src/pages/supplier/Questionnaire.jsx) ──────
 export function DemoSupplierQuestionario() {
   const lista = DEMO_QUESTIONNAIRES.filter(q => q.active)
-  const [answers, setAnswers] = useState(DEMO_SUPPLIER_ANSWERS)
+  // resposta copiada de outra unidade (mesma raiz de CNPJ): o aviso some quando o fornecedor altera
+  const [answers, setAnswers] = useState(() => Object.fromEntries(Object.entries(DEMO_SUPPLIER_ANSWERS).map(([k, v]) => [k, { ...v, copiada: DEMO_COPIED_ANSWERS.includes(k) }])))
   const [saving, setSaving] = useState({})
   const [saved, setSaved] = useState({})
-  const set = (id, field, value) => setAnswers(p => ({ ...p, [id]: { ...p[id], [field]: value } }))
+  const set = (id, field, value) => setAnswers(p => ({ ...p, [id]: { ...p[id], [field]: value, copiada: false } }))
   const salvar = (q) => {
     setSaving(p => ({ ...p, [q.id]: true }))
     setTimeout(() => {
@@ -65,6 +66,11 @@ export function DemoSupplierQuestionario() {
                   <div style={{ fontSize:13, fontWeight:600, color:'#1a1c5e', fontFamily:D, marginBottom:10 }}>
                     <span style={{ color:'#9B9B9B', marginRight:6 }}>{i+1}.</span>{qq.text}{qq.required && <span style={{ color:'#dc2626', marginLeft:4 }}>*</span>}
                   </div>
+                  {answers[qq.id]?.copiada && (
+                    <div style={{ fontSize:11.5, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'5px 10px', marginBottom:10, fontFamily:D }}>
+                      ↺ Resposta copiada de outra unidade da sua empresa (mesma raiz de CNPJ). Confira e altere se for diferente para este CNPJ.
+                    </div>
+                  )}
                   {qq.type === 'boolean' && (
                     <div style={{ display:'flex', gap:8 }}>
                       {[{ v:true, l:'Sim' }, { v:false, l:'Não' }].map(o => <button key={o.l} onClick={() => set(qq.id, 'boolean', o.v)} style={chip(answers[qq.id]?.boolean === o.v)}>{o.l}</button>)}
@@ -862,10 +868,15 @@ export function DemoHelp({ role }) {
 // ── Fornecedor: Certificado de Homologação (diploma imprimível) ───────────
 // Réplica do certificado real (src/pages/supplier/Certificate.jsx) com
 // dados fictícios — o comercial pode até imprimir/salvar PDF na demo.
-export function DemoSupplierCertificado({ navigate }) {
-  // certificado do selo próprio ELOS Verificado (mesmas categorias e datas da carteira de selos)
-  const selo = DEMO_SEALS[0]
-  const cats = PRIMATUS.categorias.map(c => c.nome).sort()
+export function DemoSupplierCertificado({ navigate, cert }) {
+  // fornecedor: certificado do selo próprio ELOS Verificado (mesmas categorias e
+  // datas da carteira de selos). cliente (cert): certificado de homologação de um
+  // fornecedor homologado da Horizonte, aberto em Meus Fornecedores
+  const selo = cert ? { issued_at: cert.issued, expires_at: cert.expires } : DEMO_SEALS[0]
+  const cats = cert ? [...cert.cats].sort((a, b) => a.localeCompare(b, 'pt-BR')) : PRIMATUS.categorias.map(c => c.nome).sort()
+  const razao = cert ? cert.razao : PRIMATUS.razao
+  const cnpj = cert ? cert.cnpj : PRIMATUS.cnpj
+  const numero = cert ? `ELOS-DEMO${cert.cnpj.replace(/\D/g, '').slice(0, 8)}HZ` : 'ELOS-DEMO4F2A81C09B'
   const fmtDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' })
 
   return (
@@ -882,7 +893,7 @@ export function DemoSupplierCertificado({ navigate }) {
 
       {/* Barra de ações (some na impressão) */}
       <div className="cert-toolbar" style={{ maxWidth:1050, margin:'0 auto 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-        <button onClick={() => navigate('dashboard')} style={{ background:'rgba(255,255,255,.12)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:10, padding:'9px 18px', cursor:'pointer', fontFamily:D, fontSize:13 }}>← Voltar ao Dashboard</button>
+        <button onClick={() => navigate(cert?.back || 'dashboard')} style={{ background:'rgba(255,255,255,.12)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:10, padding:'9px 18px', cursor:'pointer', fontFamily:D, fontSize:13 }}>{cert ? '← Voltar' : '← Voltar ao Dashboard'}</button>
         <button onClick={() => window.print()} style={{ background:'#F47E2F', color:'#fff', border:'none', borderRadius:10, padding:'11px 28px', cursor:'pointer', fontFamily:M, fontWeight:800, fontSize:14, boxShadow:'0 6px 20px rgba(244,126,47,.4)' }}>
           🖨️ Imprimir / Salvar PDF
         </button>
@@ -921,26 +932,29 @@ export function DemoSupplierCertificado({ navigate }) {
                 Certificamos que o fornecedor
               </div>
               <div style={{ fontFamily:'Georgia,serif', fontStyle:'italic', fontWeight:700, fontSize:34, color:'#1a1c5e', lineHeight:1.2, margin:'0 auto 8px', maxWidth:820 }}>
-                {PRIMATUS.razao}
+                {razao}
               </div>
               <div style={{ fontFamily:D, fontSize:14, color:'#4a4f66', marginBottom:18 }}>
-                inscrito sob o CNPJ <strong style={{ color:'#1a1c5e' }}>{PRIMATUS.cnpj}</strong>
+                inscrito sob o CNPJ <strong style={{ color:'#1a1c5e' }}>{cnpj}</strong>
               </div>
               <div style={{ fontFamily:'Georgia,serif', fontSize:16.5, color:'#374151', lineHeight:1.7, maxWidth:840, margin:'0 auto' }}>
                 está <strong>conforme</strong> no processo de homologação de fornecedores
-                da plataforma <strong style={{ color:'#1a1c5e' }}>SIGEC-ELOS</strong>,
+                {cert ? ' da empresa ' : ' da plataforma '}<strong style={{ color:'#1a1c5e' }}>{cert ? HORIZONTE.razao : 'SIGEC-ELOS'}</strong>,
                 para as categorias de prestação de serviço e/ou fornecimento:
               </div>
               <div style={{ margin:'16px auto 0', maxWidth:860, fontFamily:D, fontSize:12.5, color:'#4a4f66', lineHeight:1.9 }}>
                 {cats.join('  ·  ')}
               </div>
+              {cert?.excecao && (
+                <div style={{ marginTop:12, fontFamily:D, fontSize:12, color:'#92400e' }}>📜 Homologado com exceção — carta de exceção do cliente vigente</div>
+              )}
             </div>
 
             {/* Rodapé: emissão · medalha · validade */}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop:28, gap:20 }}>
               <div style={{ flex:1, textAlign:'left' }}>
                 <div style={{ fontFamily:M, fontWeight:700, fontSize:10, letterSpacing:1.5, color:'#8a8fa8', textTransform:'uppercase', marginBottom:4 }}>Certificado Nº</div>
-                <div style={{ fontFamily:D, fontSize:13, color:'#1a1c5e', fontWeight:700 }}>ELOS-DEMO4F2A81C09B</div>
+                <div style={{ fontFamily:D, fontSize:13, color:'#1a1c5e', fontWeight:700 }}>{numero}</div>
                 <div style={{ fontFamily:D, fontSize:11.5, color:'#8a8fa8', marginTop:6 }}>
                   Emitido em {fmtDate(selo.issued_at)}
                 </div>
@@ -952,7 +966,7 @@ export function DemoSupplierCertificado({ navigate }) {
                   border:'4px solid #2E3192', boxShadow:'0 4px 16px rgba(0,0,0,.25)',
                   display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#fff' }}>
                   <div style={{ fontSize:26, lineHeight:1 }}>⭐</div>
-                  <div style={{ fontFamily:M, fontWeight:900, fontSize:10, letterSpacing:1, marginTop:4 }}>VERIFICADO</div>
+                  <div style={{ fontFamily:M, fontWeight:900, fontSize:10, letterSpacing:1, marginTop:4 }}>{cert ? 'HOMOLOGADO' : 'VERIFICADO'}</div>
                 </div>
               </div>
 

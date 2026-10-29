@@ -131,6 +131,21 @@ export const DEMO_CLIENT_SUPPLIERS = [
   { id:7, razao_social:'Metalmax Ind. Ltda',       cnpj:'12.408.771/0001-09', initials:'MI', city:'Contagem',       state:'MG', subsidiado:true,  sealStatus:'SUSPENDED', score:55, nivel:'Suprimentos – Nível 1', invitedAt:isoD(-60), escopo:'Peças usinadas', tipo:'Produto' },
   { id:8, razao_social:'LogFlex Transportes',      cnpj:'10.228.551/0001-02', initials:'LF', city:'Santos',         state:'SP', subsidiado:true,  sealStatus:'ACTIVE',    score:90, nivel:'Suprimentos – Nível 1', invitedAt:isoD(-40), issuedAt:isoD(-14), expiresAt:isoD(351), escopo:'Transporte de cargas', tipo:'Serviço' },
 ]
+// Categorias de cada fornecedor no processo da Horizonte (como no card de
+// Meus Fornecedores e no Resumo do processo). reprovada = a atividade (CNAE)
+// da empresa não cobre a categoria. A da Primatus é a mesma em todas as telas.
+const cat = (nome, reprovada = false) => ({ nome, reprovada })
+const CATS_FORNECEDOR = {
+  1: PRIMATUS.categorias.map(c => cat(c.nome, !c.cnae)),
+  2: [cat('Serviços Elétricos'), cat('Instalações Elétricas de Média Tensão'), cat('Painéis Elétricos'), cat('Automação & Controle'), cat('Manutenção Industrial'), cat('Subestações')],
+  3: [cat('Automação & Controle'), cat('Instrumentação Industrial')],
+  4: [cat('Manutenção Mecânica'), cat('Soldagem'), cat('Caldeiraria')],
+  5: [cat('Instalações Industriais'), cat('Montagem Industrial'), cat('Andaimes e Acesso', true)],
+  6: [cat('Gestão de Resíduos'), cat('Transporte de Resíduos Perigosos'), cat('Laudos Ambientais')],
+  7: [cat('Peças Usinadas'), cat('Caldeiraria', true)],
+  8: [cat('Transporte de Cargas'), cat('Movimentação de Cargas'), cat('Armazenagem'), cat('Transporte de Produtos Perigosos'), cat('Locação de Equipamentos', true)],
+}
+DEMO_CLIENT_SUPPLIERS.forEach(s => { s.categorias = CATS_FORNECEDOR[s.id] || [] })
 
 // ── Questionários da Horizonte (o cliente consulta; o fornecedor responde) ─
 export const DEMO_QUESTIONNAIRES = [
@@ -166,6 +181,9 @@ export const DEMO_SUPPLIER_ANSWERS = {
   q2a:{ boolean:false }, q2b:{ boolean:true }, q2c:{ text:'Nenhum' }, q2d:{ boolean:false },
   q3a:{ boolean:true }, q3b:{ boolean:true }, q3d:{ text:'Total' },
 }
+// Resposta copiada automaticamente de outra unidade (filial) da mesma raiz de
+// CNPJ — o fornecedor vê o aviso amarelo; o cliente vê "↺ copiada de outra unidade"
+export const DEMO_COPIED_ANSWERS = ['q1a']
 export const respostaTexto = (a) => a?.boolean === true ? 'Sim' : a?.boolean === false ? 'Não' : (a?.text || null)
 
 // ── Categorias do fornecedor (as mesmas 4 em todas as telas) ───────────────

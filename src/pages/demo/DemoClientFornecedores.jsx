@@ -8,7 +8,7 @@ import { MultiChips, FilterPanel } from '../../components/FilterChips.jsx'
 import { CartaExcecaoModal } from './DemoNewScreens.jsx'
 import { InviteModal } from './DemoClientDashboard.jsx'
 import { DEMO_CLIENT_SUPPLIERS, DEMO_INTERESTED_SUPPLIERS, DEMO_PRE_REGISTRATIONS, DEMO_QUESTIONNAIRES, fmtBR } from './demoData.js'
-import { useToast, exportRows, InlineConfirm } from './DemoFichaKit.jsx'
+import { useToast, exportRows, InlineConfirm, DemoWatchButton } from './DemoFichaKit.jsx'
 import DemoBuyerMarketplace from './DemoBuyerMarketplace.jsx'
 
 const SEAL_COLOR = { ACTIVE:'#22c55e', PENDING:'#f59e0b', SUSPENDED:'#ef4444', EXPIRED:'#9B9B9B' }
@@ -195,7 +195,10 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
   const prio = (s) => s.prioridade || prioPedida[s.id]
   const venceEm60 = (s) => s.sealStatus === 'ACTIVE' && s.expiresAt && (new Date(s.expiresAt) - new Date()) / 864e5 <= 60
   const list = all.filter(s => {
-    if (q && !s.razao_social.toLowerCase().includes(q.toLowerCase()) && !s.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')) return false
+    // a busca também acha pela categoria do fornecedor (como na tela real)
+    const ql = q.toLowerCase()
+    if (q && !s.razao_social.toLowerCase().includes(ql) && !s.cnpj.replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§')
+      && !(s.categorias || []).some(c => c.nome.toLowerCase().includes(ql))) return false
     if (fSit.length && !fSit.includes(s.sealStatus)) return false
     if (fNivel.length && !fNivel.includes(s.nivel)) return false
     if (fCust.length && !fCust.includes(s.subsidiado ? 'sim' : 'nao')) return false
@@ -215,7 +218,14 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
     'Nível': s.nivel, 'Custeio': s.subsidiado ? 'Subsidiado' : 'Pago pelo fornecedor',
     'Homologado em': s.sealStatus === 'ACTIVE' ? fmtBR(s.issuedAt) : '', 'Validade': s.expiresAt ? fmtBR(s.expiresAt) : '',
     'Convidado em': fmtBR(s.invitedAt), 'Cidade': s.city, 'UF': s.state, 'Escopo': s.escopo || '', 'Tipo': s.tipo || '',
+    'Categorias': (s.categorias || []).filter(c => !c.reprovada).map(c => c.nome).join('; '),
+    'Categorias reprovadas (CNAE)': (s.categorias || []).filter(c => c.reprovada).map(c => c.nome).join('; '),
+    'Carta de exceção': s.carta ? 'Sim' : '', 'Análise prioritária': s.sealStatus === 'PENDING' && prio(s) ? 'Sim' : '',
   })), setToast)
+  const certificado = (s) => navigate('certificado', { cert: {
+    razao: s.razao_social, cnpj: s.cnpj, cats: (s.categorias || []).filter(c => !c.reprovada).map(c => c.nome),
+    issued: s.issuedAt, expires: s.expiresAt, excecao: !!s.carta, back: 'fornecedores',
+  } })
 
   return (
     <div style={{ padding:'20px 32px 28px', maxWidth:1100, margin:'0 auto' }}>
@@ -224,7 +234,7 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
       <TabBar tab={tab} setTab={setTab} total={all.length}/>
 
       <FilterPanel total={all.length} shown={list.length} active={filtrosAtivos} onClear={limpar}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por nome ou CNPJ..." style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', outline:'none', width:'100%', boxSizing:'border-box' }}/>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar por nome, CNPJ ou categoria..." style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #e2e4ef', fontFamily:'DM Sans,sans-serif', fontSize:13, color:'#1a1c5e', outline:'none', width:'100%', boxSizing:'border-box' }}/>
         <MultiChips label="Situação" value={fSit} onChange={setFSit}
           options={[['ACTIVE','Homologado','#15803d'],['PENDING','Em análise','#b45309'],['SUSPENDED','Suspenso','#dc2626']].map(([v,l,c]) => ({ value:v, label:l, color:c, count: conta(s => s.sealStatus === v) })).filter(o => o.count > 0)}/>
         <MultiChips label="Nível" value={fNivel} onChange={setFNivel}
@@ -243,7 +253,7 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
       </div>
 
       <Card style={{ borderRadius:16, padding:'8px 0' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 120px 100px 170px', gap:12, padding:'10px 20px', borderBottom:'1px solid #f3f4f6' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 150px 110px 90px 190px', gap:12, padding:'10px 20px', borderBottom:'1px solid #f3f4f6' }}>
           {['Fornecedor','Localidade','Status','Score',''].map(h => (
             <div key={h} style={{ fontSize:10, fontWeight:700, color:'#9B9B9B', fontFamily:'Montserrat,sans-serif', textTransform:'uppercase', letterSpacing:.5 }}>{h}</div>
           ))}
@@ -253,7 +263,7 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
         ) : list.map((s, i) => {
           const sc = SEAL_COLOR[s.sealStatus] || '#9B9B9B'
           return (
-            <div key={s.id} style={{ display:'grid', gridTemplateColumns:'1fr 160px 120px 100px 170px', gap:12, padding:'14px 20px', borderBottom: i < list.length-1 ? '1px solid #f9fafb' : 'none', alignItems:'center', cursor:'pointer', transition:'background .12s' }}
+            <div key={s.id} style={{ display:'grid', gridTemplateColumns:'1fr 150px 110px 90px 190px', gap:12, padding:'14px 20px', borderBottom: i < list.length-1 ? '1px solid #f9fafb' : 'none', alignItems:'center', cursor:'pointer', transition:'background .12s' }}
               onMouseOver={e => e.currentTarget.style.background='#f8faff'}
               onMouseOut={e  => e.currentTarget.style.background='#fff'}
               onClick={() => abrir(s)}>
@@ -269,6 +279,24 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
                     {s.sealStatus === 'PENDING' && prio(s) && <span style={{ fontSize:9, background:'#fef3c7', color:'#b45309', borderRadius:20, padding:'1px 6px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>⚡ PRIORITÁRIO</span>}
                     {venceEm60(s) && <span style={{ fontSize:9, background:'#fee2e2', color:'#dc2626', borderRadius:20, padding:'1px 6px', fontFamily:'Montserrat,sans-serif', fontWeight:700 }}>⏰ VENCE {fmtBR(s.expiresAt)}</span>}
                   </div>
+                  {/* categorias do fornecedor neste cliente (máx. 4 + "+N"; reprovada pelo CNAE em vermelho) */}
+                  {s.categorias?.length > 0 && (
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4 }}>
+                      {s.categorias.slice(0, 4).map(c => (
+                        <span key={c.nome} title={c.reprovada ? 'Reprovada no processo — a atividade (CNAE) não cobre a categoria' : ''}
+                          style={{ fontSize:10, fontFamily:'DM Sans,sans-serif', padding:'2px 8px', borderRadius:20,
+                            background: c.reprovada ? '#fee2e2' : '#f1f5f9', color: c.reprovada ? '#b91c1c' : '#475569' }}>
+                          {c.reprovada ? '✕ ' : ''}{c.nome}
+                        </span>
+                      ))}
+                      {s.categorias.length > 4 && (
+                        <span title={s.categorias.slice(4).map(c => c.nome).join(', ')}
+                          style={{ fontSize:10, fontFamily:'DM Sans,sans-serif', padding:'2px 8px', borderRadius:20, background:'#f1f5f9', color:'#475569' }}>
+                          +{s.categorias.length - 4}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B' }}>{s.city} / {s.state}</div>
@@ -281,6 +309,7 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
                   </div>
                 ) : <span style={{ fontSize:11, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif' }}>—</span>}
               </div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
               {s.sealStatus === 'PENDING' ? (
                 <div style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
                   {!prio(s) && (
@@ -295,6 +324,12 @@ export default function DemoClientFornecedores({ navigate, initialTab }) {
                   <button style={{ padding:'5px 12px', borderRadius:8, background:'#EEF0FF', color:'#2E3192', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:11, border:'none', cursor:'pointer', whiteSpace:'nowrap' }}>Ver →</button>
                 </div>
               )}
+                <DemoWatchButton cnpj={s.cnpj} nome={s.razao_social} toast={setToast}/>
+                {s.sealStatus === 'ACTIVE' && (
+                  <button onClick={e => { e.stopPropagation(); certificado(s) }} title="Certificado de homologação"
+                    style={{ padding:'4px 10px', borderRadius:8, background:'#fff', color:'#2E3192', border:'1px solid #c7c9e2', fontFamily:'Montserrat,sans-serif', fontWeight:700, fontSize:10.5, cursor:'pointer', whiteSpace:'nowrap' }}>🎓 Certificado</button>
+                )}
+              </div>
             </div>
           )
         })}

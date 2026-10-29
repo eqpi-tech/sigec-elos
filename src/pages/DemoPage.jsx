@@ -203,7 +203,8 @@ function renderScreen(profile, screen, navigate, params) {
     if (screen === 'convites')      return <DemoConvites profile="CLIENT" navigate={navigate}/>
     if (screen === 'rfq')           return <DemoRFQ navigate={navigate}/>
     if (screen === 'questionarios') return <DemoClientQuestionarios/>
-    if (screen === 'relatorios')    return <DemoClientRelatorios/>
+    if (screen === 'relatorios')    return <DemoClientRelatorios navigate={navigate}/>
+    if (screen === 'certificado' && params.cert) return <DemoSupplierCertificado navigate={navigate} cert={params.cert}/>
     if (screen === 'compliance')    return <DemoClientCompliance/>
     if (screen === 'configuracoes') return <DemoClientConfig navigate={navigate}/>
     if (screen === 'termos')        return <DemoClientTerms/>

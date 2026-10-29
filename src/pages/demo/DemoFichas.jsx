@@ -14,7 +14,7 @@ import ProcessDocuments, { DOC_STATUS } from '../../components/ProcessDocuments.
 import ProcessLog from '../../components/ProcessLog.jsx'
 import {
   FICHA, M, D, pill, fmt, Tabs, Modal, DocViewer, HistoryModal, Field, contar, StatusDot,
-  effStatus, processData, findDoc, historyOf, logFetcher, useToast,
+  effStatus, processData, findDoc, historyOf, logFetcher, useToast, DemoWatchButton,
 } from './DemoFichaKit.jsx'
 import { DEMO_MARKETPLACE, PRIMATUS, SCORE_NOTE, isoD, brD } from './demoData.js'
 import { InviteModal } from './DemoClientDashboard.jsx'
@@ -25,6 +25,7 @@ const back = (onClick, label) => (
 )
 const SEAL = { client_id: 'hz', client_name: FICHA.cliente, status: 'PENDING', score: FICHA.score }
 const UPLOADABLE = ['MISSING', 'REJECTED', 'EXPIRED', 'EXPIRING']
+const linkBtn = (color) => ({ fontSize: 10, border: 'none', background: 'none', color, cursor: 'pointer', textDecoration: 'underline', padding: 0, fontFamily: D })
 const nota = (t) => <div style={{ fontFamily: D, fontSize: 11.5, color: '#64748b', marginTop: 6, lineHeight: 1.45 }}>ℹ️ {t}</div>
 
 function Titulo({ children, right }) {
@@ -321,8 +322,13 @@ export function DemoClientProcesso({ navigate }) {
   const [ver, setVer] = useState(null)
   const [hist, setHist] = useState(null)
   const [cartaAberta, setCartaAberta] = useState(true)
-  const [carta, setCarta] = useState({})   // categoria → validade
+  // categoria → { status: 'VIGENTE' | 'EXCLUIDA', validade, arquivo }. Serviços
+  // Elétricos já começa com carta vigente (ver carta · substituir · excluir)
+  const [carta, setCarta] = useState({ 'Serviços Elétricos': { status: 'VIGENTE', validade: isoD(120), arquivo: 'carta_excecao_servicos_eletricos.pdf', em: isoD(-15) } })
   const [validade, setValidade] = useState({})
+  const [trocar, setTrocar] = useState({})     // categoria → true (substituir / nova carta)
+  const [excluir, setExcluir] = useState(null) // categoria pedindo o motivo da exclusão
+  const [motivo, setMotivo] = useState('')
   const [laudo, setLaudo] = useState(FICHA.docCliente)
   const [banco, setBanco] = useState(false)
   const [, setToast, ToastEl] = useToast()
@@ -344,6 +350,9 @@ export function DemoClientProcesso({ navigate }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <SealBadge seal={SEAL} size="sm"/>
+            <DemoWatchButton cnpj={FICHA.cnpj} nome={FICHA.razao} size="md" toast={setToast}/>
+            {/* 🎓 Certificado só aparece com o processo homologado — a Primatus está em análise;
+                nos homologados, o botão fica em Meus Fornecedores */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={pill('#065f46', '#d1fae5')}>SUBSIDIADO</span>
               <Button variant="primary" size="sm" onClick={() => setBanco(true)}>🏦 Dados Bancários</Button>
@@ -381,8 +390,21 @@ export function DemoClientProcesso({ navigate }) {
                   <span style={{ fontSize: 10, fontWeight: 700, fontFamily: M, color: '#b91c1c', background: '#fee2e2', padding: '3px 10px', borderRadius: 20 }}>
                     ✕ Reprovada — a atividade (CNAE) do fornecedor não cobre a categoria
                   </span>
-                ) : carta[cat.nome] ? (
-                  <span style={{ fontSize: 10, fontWeight: 700, fontFamily: M, color: '#15803d', background: '#dcfce7', padding: '3px 10px', borderRadius: 20 }}>✓ Exceção vigente até {fmt(carta[cat.nome])}</span>
+                ) : carta[cat.nome]?.status === 'VIGENTE' && !trocar[cat.nome] ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, fontFamily: M, color: '#15803d', background: '#dcfce7', padding: '3px 10px', borderRadius: 20 }}>✓ Exceção vigente até {fmt(carta[cat.nome].validade)}</span>
+                    <button onClick={() => setVer({ label: `Carta de Exceção — ${cat.nome}`, source: 'MANUAL', sent: carta[cat.nome].em, expires: carta[cat.nome].validade })} title={carta[cat.nome].arquivo}
+                      style={linkBtn('#2E3192')}>ver carta</button>
+                    <button onClick={() => { setValidade((v) => ({ ...v, [cat.nome]: carta[cat.nome].validade })); setTrocar((x) => ({ ...x, [cat.nome]: true })) }} title="Trocar o arquivo da carta e/ou renovar a validade"
+                      style={linkBtn('#2E3192')}>substituir</button>
+                    <button onClick={() => { setExcluir(cat.nome); setMotivo('') }} title="Excluir a carta — a categoria volta a depender dos documentos"
+                      style={linkBtn('#b91c1c')}>excluir</button>
+                  </span>
+                ) : carta[cat.nome]?.status === 'EXCLUIDA' && !trocar[cat.nome] ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, fontFamily: M, color: '#475569', background: '#f1f5f9', padding: '3px 10px', borderRadius: 20 }}>Carta excluída</span>
+                    <button onClick={() => setTrocar((x) => ({ ...x, [cat.nome]: true }))} style={linkBtn('#2E3192')}>nova carta</button>
+                  </span>
                 ) : (
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <label style={{ fontSize: 10, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -390,9 +412,25 @@ export function DemoClientProcesso({ navigate }) {
                       <input type="date" min={amanha} value={validade[cat.nome] || ''} onChange={(e) => setValidade((v) => ({ ...v, [cat.nome]: e.target.value }))} style={{ fontSize: 11, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e4ef' }}/>
                     </label>
                     <button disabled={!validade[cat.nome]} title={validade[cat.nome] ? '' : 'Informe a validade da carta primeiro'}
-                      onClick={() => pickFile(() => { setCarta((x) => ({ ...x, [cat.nome]: validade[cat.nome] })); setToast(`✅ Carta registrada — ${cat.nome} homologada com exceção até ${fmt(validade[cat.nome])}. O fornecedor precisa regularizar o Alvará de Funcionamento até lá.`) }, '.pdf,.png,.jpg,.jpeg')}
+                      onClick={() => pickFile((arquivo) => { setCarta((x) => ({ ...x, [cat.nome]: { status: 'VIGENTE', validade: validade[cat.nome], arquivo, em: isoD(0) } })); setTrocar((x) => ({ ...x, [cat.nome]: false })); setToast(`✅ Carta registrada — ${cat.nome} homologada com exceção até ${fmt(validade[cat.nome])}. O fornecedor precisa regularizar o Alvará de Funcionamento até lá.`) }, '.pdf,.png,.jpg,.jpeg')}
                       style={{ fontSize: 11, fontWeight: 700, fontFamily: M, color: validade[cat.nome] ? '#2E3192' : '#9B9B9B', border: `1px dashed ${validade[cat.nome] ? '#2E319266' : '#d1d5db'}`, padding: '6px 12px', borderRadius: 8, background: '#fff', cursor: validade[cat.nome] ? 'pointer' : 'not-allowed' }}>📎 Anexar carta</button>
+                    {trocar[cat.nome] && <button onClick={() => setTrocar((x) => ({ ...x, [cat.nome]: false }))} style={{ ...linkBtn('#9B9B9B'), textDecoration: 'none' }}>cancelar</button>}
                   </span>
+                )}
+                {excluir === cat.nome && (
+                  // no lugar do prompt da tela real: motivo obrigatório na própria linha
+                  <div style={{ flexBasis: '100%', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', color: '#78350f', lineHeight: 1.45 }}>
+                    Excluir a carta de exceção da categoria <strong>"{cat.nome}"</strong>? Se os documentos da categoria não estiverem em dia, o processo volta para análise. A carta fica no histórico do processo.
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <input autoFocus value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo (obrigatório)"
+                        style={{ flex: 1, minWidth: 200, padding: '7px 10px', borderRadius: 8, border: '1px solid #e2e4ef', fontFamily: D, fontSize: 12.5, color: '#1a1c5e' }}/>
+                      <Button variant="neutral" size="sm" onClick={() => setExcluir(null)}>Cancelar</Button>
+                      <Button variant="danger" size="sm" disabled={motivo.trim().length < 3} onClick={() => {
+                        setCarta((x) => ({ ...x, [cat.nome]: { ...x[cat.nome], status: 'EXCLUIDA' } })); setExcluir(null)
+                        setToast('✅ Carta excluída. Falta regularizar: Alvará de Funcionamento — com documento pendente, o processo volta para análise (a Primatus já está em análise). O fornecedor foi avisado.')
+                      }}>Excluir carta</Button>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -416,6 +454,17 @@ export function DemoClientProcesso({ navigate }) {
               <Field label="Tipo de Fornecimento" value={FICHA.convite.tipo}/><Field label="Custeio" value="🟢 Subsidiado"/>
               <Field label="Localização" value={`${FICHA.cidade} / ${FICHA.uf}`}/><Field label="Convidado em" value={fmt(FICHA.convite.em)}/>
               <Field label="Situação" value="Em análise (na fila da EQPI)" strong/><Field label="Na fila desde" value={fmt(FICHA.naFilaDesde)}/>
+            </div>
+          </Card>
+          <Card style={{ borderRadius: 16, padding: '18px 22px', gridColumn: '1 / -1' }}>
+            <Titulo>Categorias do fornecedor ({FICHA.categorias.filter((c) => c.cnae).length} de {FICHA.categorias.length} no processo)</Titulo>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {[...FICHA.categorias].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).map((c) => (
+                <span key={c.nome} title={c.cnae ? '' : 'Reprovada no processo — a atividade (CNAE) do fornecedor não cobre a categoria'}
+                  style={{ fontSize: 12, fontFamily: D, padding: '5px 12px', borderRadius: 20, background: c.cnae ? 'rgba(46,49,146,.07)' : '#fee2e2', color: c.cnae ? '#2E3192' : '#b91c1c', border: `1px solid ${c.cnae ? 'rgba(46,49,146,.15)' : '#fecaca'}` }}>
+                  {c.cnae ? '' : '✕ '}{c.nome}{c.cnae ? '' : ' — reprovada: nenhum CNAE da empresa cobre a categoria'}
+                </span>
+              ))}
             </div>
           </Card>
           <Card style={{ borderRadius: 16, padding: '18px 22px', gridColumn: '1 / -1' }}>
@@ -454,7 +503,10 @@ export function DemoClientProcesso({ navigate }) {
           {qq.itens.map((q) => (
             <div key={q.q} style={{ padding: '9px 0', borderTop: '1px solid #f4f5f9' }}>
               <div style={{ fontFamily: D, fontWeight: 700, fontSize: 13, color: '#1a1c5e' }}>{q.q}</div>
-              <div style={{ fontFamily: D, fontSize: 13, color: q.r ? '#15803d' : '#cbd5e1' }}>{q.r || 'sem resposta'}</div>
+              <div style={{ fontFamily: D, fontSize: 13, color: q.r ? '#15803d' : '#cbd5e1' }}>
+                {q.r || 'sem resposta'}
+                {q.r && q.copiada && <span title="Copiada automaticamente de outra unidade do fornecedor (mesma raiz de CNPJ)" style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 600, color: '#92400e', background: '#fef3c7', borderRadius: 20, padding: '1px 8px' }}>↺ copiada de outra unidade</span>}
+              </div>
             </div>
           ))}
         </Card>
