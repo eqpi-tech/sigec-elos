@@ -227,6 +227,15 @@ if __name__ == '__main__':
         print(a.validar, 'lista validada — os envios agendados podem sair')
     elif a.enviar: enviar(a.enviar[0], int(a.enviar[1]), a.dry_run)
     elif a.agendado:
-        hoje = datetime.datetime.now(ZoneInfo('America/Sao_Paulo')).date().isoformat()
-        if hoje in CALENDARIO: enviar(*CALENDARIO[hoje])
-        else: print('nada agendado para', hoje)
+        # o GitHub atrasa os agendamentos em até ~4h30 (visto em 14–16/10): o
+        # workflow dispara de madrugada e aqui se espera até as 09:00 de Brasília.
+        # Disparos de reserva (08:07 e 10:07 BRT) só completam quem faltou.
+        agora = datetime.datetime.now(ZoneInfo('America/Sao_Paulo'))
+        hoje = agora.date().isoformat()
+        if hoje not in CALENDARIO: print('nada agendado para', hoje)
+        else:
+            alvo = agora.replace(hour=9, minute=0, second=0, microsecond=0)
+            if agora < alvo:
+                print(f'aguardando até {alvo:%H:%M} (Brasília)…', flush=True)
+                time.sleep((alvo - agora).total_seconds())
+            enviar(*CALENDARIO[hoje])
