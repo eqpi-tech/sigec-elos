@@ -122,7 +122,9 @@ async function adicionarOperacionais(admin, { supplierId, emails, cliente, razao
       const v = await vincular(admin, u.id, supplierId, 'Operacional')
       if (!v.ok) { out.push({ email: e, erro: v.erro }); continue }
       if (v.ja) { out.push({ email: e, ja: true }); continue }
-      const link = await linkSenha(admin, u.id, e, null)
+      // link de senha só para quem é novo ou nunca entrou; quem já usa o ELOS entra com a senha dele
+      const { data: au } = await admin.auth.admin.getUserById(u.id)
+      const link = (u.novo || !au?.user?.last_sign_in_at) ? await linkSenha(admin, u.id, e, null) : null
       await emailAcesso({ to: e, cliente, empresas: [razao], link, papel: 'Operacional' })
       await admin.from('audit_log').insert({ user_id: u.id, action: 'SUPPLIER_OPERACIONAL_ADDED', entity_type: 'supplier', entity_id: supplierId, metadata: { email: e, origem: 'convite' } })
       out.push({ email: e, ok: true })
