@@ -40,11 +40,14 @@ async function vincular(admin, userId, supplierId, nomePerfil) {
   const { data: ja } = await admin.from('user_roles').select('id')
     .eq('user_id', userId).eq('role', 'SUPPLIER').eq('supplier_id', supplierId).maybeSingle()
   if (ja) return { ok: true, ja: true }
+  // sem perfil o usuário veria tudo (fallback permissivo) — recusa em vez disso
+  const perfil = await perfilId(admin, nomePerfil)
+  if (!perfil) return { ok: false, erro: `perfil "${nomePerfil}" não encontrado` }
   const { count } = await admin.from('user_roles').select('id', { count: 'exact', head: true })
     .eq('user_id', userId).eq('role', 'SUPPLIER')
   const { error } = await admin.from('user_roles').insert({
     user_id: userId, role: 'SUPPLIER', supplier_id: supplierId, is_primary: !count, is_active: true,
-    access_profile_id: await perfilId(admin, nomePerfil),
+    access_profile_id: perfil,
   })
   return error ? { ok: false, erro: error.message } : { ok: true }
 }
