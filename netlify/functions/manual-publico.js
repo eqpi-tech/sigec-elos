@@ -8,7 +8,8 @@ const { createClient } = require('@supabase/supabase-js')
 const PUBLICOS = ['fornecedor', 'cliente', 'comprador']
 
 exports.handler = async (event) => {
-  const m = String(event.queryStringParameters?.m || '').toLowerCase()
+  // /manual/<m> → /.netlify/functions/manual-publico/<m> (o nome vem no caminho)
+  const m = String(event.queryStringParameters?.m || (event.path || '').split('/').filter(Boolean).pop() || '').toLowerCase().replace(/\.pdf$/, '')
   if (!PUBLICOS.includes(m)) return { statusCode: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: 'Manual não encontrado' }
   try {
     const sb = createClient(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
