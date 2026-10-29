@@ -25,6 +25,7 @@ export default function SupplierQuestionnaire() {
               init[qq.id] = {
                 boolean: qq.existingAnswer.answer_boolean,
                 text:    qq.existingAnswer.answer_text,
+                copiada: !!qq.existingAnswer.replicated_from,   // patch_167: veio de outra filial
               }
             }
           })
@@ -35,7 +36,7 @@ export default function SupplierQuestionnaire() {
   }, [user?.supplierId])
 
   const set = (questionId, field, value) => {
-    setAnswers(prev => ({ ...prev, [questionId]: { ...prev[questionId], [field]: value } }))
+    setAnswers(prev => ({ ...prev, [questionId]: { ...prev[questionId], [field]: value, copiada: false } }))
   }
 
   const handleSave = async (questionnaire) => {
@@ -95,6 +96,11 @@ export default function SupplierQuestionnaire() {
                       {qq.text}
                       {qq.required && <span style={{ color:'#dc2626', marginLeft:4 }}>*</span>}
                     </div>
+                    {answers[qq.id]?.copiada && (
+                      <div style={{ fontSize:11.5, color:'#92400e', background:'#fef3c7', borderRadius:8, padding:'5px 10px', marginBottom:10, fontFamily:'DM Sans,sans-serif' }}>
+                        ↺ Resposta copiada de outra unidade da sua empresa (mesma raiz de CNPJ). Confira e altere se for diferente para este CNPJ.
+                      </div>
+                    )}
 
                     {qq.type === 'boolean' && (
                       <div style={{ display:'flex', gap:8 }}>

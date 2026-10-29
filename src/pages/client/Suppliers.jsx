@@ -4,7 +4,8 @@ import { can } from '../../lib/permissions.js'
 import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { clientApi } from '../../services/api.js'
+import { clientApi, watchApi } from '../../services/api.js'
+import WatchButton from '../../components/WatchButton.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj, looksLikeCnpj, formatCnpj } from '../../lib/cnpj.js'
 import { exportXlsx, dataBR } from '../../lib/exportXlsx.js'
@@ -96,6 +97,11 @@ export default function ClientSuppliers() {
   }
   const [inactivateReason, setInactivateReason] = useState('')
   const [inactivating,     setInactivating]     = useState(false)
+
+  // "Acompanhar" (patch_166): CNPJs que este usuário acompanha
+  const [watched, setWatched] = useState(new Set())
+  const onWatch = (c, on) => setWatched(s => { const n = new Set(s); on ? n.add(c) : n.delete(c); return n })
+  useEffect(() => { if (user?.clientId) watchApi.list(user.clientId).then(setWatched).catch(() => {}) }, [user?.clientId])
 
   useEffect(() => {
     if (!user?.clientId) return
@@ -402,6 +408,8 @@ export default function ClientSuppliers() {
                         <Button variant="primary" size="sm" onClick={() => navigate(`/cliente/fornecedor/${item.supplierId}`)}>
                           Ver Processo →
                         </Button>
+                        <WatchButton cnpj={sup?.cnpj || item.inviteCnpj} clientId={user?.clientId}
+                          watched={watched.has(normalizeCnpj(sup?.cnpj || item.inviteCnpj || ''))} onChange={onWatch}/>
                         {seal?.status === 'ACTIVE' && !isSusp && seal.id && (
                           <Button variant="neutral" size="sm" onClick={() => navigate(`/cliente/certificado/${seal.id}`)} title="Certificado de homologação">
                             🎓 Certificado

@@ -1654,6 +1654,25 @@ export const preRegistrationsApi = {
   },
 }
 
+// "Acompanhar" fornecedor (patch_166): CNPJs que o usuário logado acompanha
+export const watchApi = {
+  list: async (clientId) => {
+    if (!clientId) return new Set()
+    const { data, error } = await supabase.from('client_supplier_watch').select('cnpj').eq('client_id', clientId)
+    if (error) throw new Error(error.message)
+    return new Set((data || []).map(r => r.cnpj))
+  },
+  set: async (clientId, cnpj, on) => {
+    if (on) {
+      const { error } = await supabase.from('client_supplier_watch').upsert({ client_id: clientId, cnpj }, { onConflict: 'user_id,client_id,cnpj', ignoreDuplicates: true })
+      if (error) throw new Error(error.message)
+    } else {
+      const { error } = await supabase.from('client_supplier_watch').delete().eq('client_id', clientId).eq('cnpj', cnpj)
+      if (error) throw new Error(error.message)
+    }
+  },
+}
+
 export const clientApi = {
   // Interessados (patch_125): RPC — o RLS de suppliers escondia nome/CNPJ de
   // quem declarou interesse sem ter processo com o cliente. Mantém o formato
@@ -1775,6 +1794,13 @@ export const clientApi = {
       cnpj_consultation: cnpjRes.status  === 'fulfilled' ? (cnpjRes.value.data?.[0] || null) : null,
       invitation:        inviteRes.status === 'fulfilled' ? inviteRes.value.data : null,
     }
+  },
+
+  // Relatório de status dos documentos (patch_165): cliente vem da sessão
+  documentsStatus: async () => {
+    const { data, error } = await supabase.rpc('client_documents_status')
+    if (error) throw new Error(error.message)
+    return data || []
   },
 
   getSuppliers: async (clientId) => {
@@ -2050,7 +2076,7 @@ export const questionnaireApi = {
     const questionIds = (data || []).flatMap(q => q.questionnaire_questions.map(qq => qq.id))
     const { data: answers } = questionIds.length ? await supabase
       .from('questionnaire_answers')
-      .select('question_id, answer_boolean, answer_text')
+      .select('question_id, answer_boolean, answer_text, replicated_from')
       .eq('supplier_id', supplierId)
       .in('question_id', questionIds) : { data: [] }
 
@@ -2066,7 +2092,9 @@ export const questionnaireApi = {
   saveAnswer: async ({ questionId, supplierId, answerBoolean, answerText }) => {
     const { error } = await supabase
       .from('questionnaire_answers')
-      .upsert({ question_id: questionId, supplier_id: supplierId, answer_boolean: answerBoolean ?? null, answer_text: answerText ?? null, updated_at: new Date().toISOString() },
+      // replicated_from nulo: quem salva passa a ser o dono da resposta (patch_167 —
+      // a resposta copiada de outra filial deixa de ser sobrescrita)
+      .upsert({ question_id: questionId, supplier_id: supplierId, answer_boolean: answerBoolean ?? null, answer_text: answerText ?? null, replicated_from: null, updated_at: new Date().toISOString() },
         { onConflict: 'question_id,supplier_id' })
     if (error) throw new Error(error.message)
   },
