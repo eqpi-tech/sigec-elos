@@ -28,6 +28,7 @@ export default function ClientReports() {
   const { user } = useAuth()
   const [aba, setAba] = useState('executivo')
   const [flowNames, setFlowNames] = useState({})
+  const [exportando, setExportando] = useState(false)
   useEffect(() => {
     if (!user?.clientId) return
     supabase.from('client_flows').select('id, name').eq('client_id', user.clientId)
@@ -57,7 +58,6 @@ export default function ClientReports() {
   // Excel da visão executiva com o período aplicado (29/10) — 30/10 (retorno da
   // Victoria): além dos indicadores, o DETALHE com razão social e CNPJ
   // (fornecedores, homologações e convites), no período escolhido
-  const [exportando, setExportando] = useState(false)
   const noPeriodo = (v) => {
     if (!comPeriodo) return true
     const dia = v ? String(v).slice(0, 10) : ''
