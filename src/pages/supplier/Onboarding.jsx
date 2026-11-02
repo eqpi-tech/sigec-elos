@@ -510,7 +510,9 @@ export default function SupplierOnboarding() {
                     </div>
                   ) : !existingSupplier.hasOwner && (
                     <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 14px', marginTop:12, fontSize:13, color:'#92400e', fontFamily:'DM Sans,sans-serif' }}>
-                      ⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.
+                      {isSubsidiado
+                        ? <>✅ Encontramos sua empresa na base. Prossiga para concluir o cadastro — a homologação é custeada por <strong>{termsSrc?.sender_name || clientQuote?.cliente || 'este cliente'}</strong>.</>
+                        : '⚠️ Encontramos sua empresa na base, mas sem homologação ativa. Prossiga para escolher um plano e ativar seu perfil.'}
                     </div>
                   ))}
                   {existingSupplier?.migrationLocked && (
