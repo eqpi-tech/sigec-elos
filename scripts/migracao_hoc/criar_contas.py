@@ -63,11 +63,12 @@ def main():
     ap.add_argument('--emails', nargs='+', help='só estes contatos (06/11: completar poucos sem rodar a onda inteira)')
     a = ap.parse_args()
     camp = CAMPANHAS[a.campanha]; ids = '{' + ','.join(map(str, camp['ids'])) + '}'
+    # 06/11: envios->'excluido' = removido a pedido do cliente (login bloqueado, sem vínculo) — nunca recriar
     filtro = f" AND lower(email) = ANY({q('{' + ','.join(e.strip().lower() for e in a.emails) + '}')}::text[])" if a.emails else ''
 
     contatos = rows(f"""SELECT id, lower(trim(email)) email, nome, tipo, hoc_client_ids, supplier_hoc_ids, hoc_group_id,
         elos_user_id, senha_criada_em, senha_token, senha_token_expira > now() token_ok
-        FROM hoc_migration_contacts WHERE hoc_client_ids && '{ids}'{filtro} ORDER BY tipo, email""")
+        FROM hoc_migration_contacts WHERE hoc_client_ids && '{ids}' AND NOT (envios ? 'excluido'){filtro} ORDER BY tipo, email""")
     emails = '{' + ','.join('"' + c['email'].replace('"', '') + '"' for c in contatos) + '}'
     auth = {u['email']: u for u in rows(f"SELECT id, lower(email) email, last_sign_in_at FROM auth.users WHERE lower(email) = ANY({q(emails)}::text[])")}
     uids = '{' + ','.join(u['id'] for u in auth.values()) + '}'

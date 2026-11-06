@@ -284,7 +284,7 @@ def sel(camp):
 def contatos(camp, onda, limite=None):
     ids = '{' + ','.join(map(str, CAMPANHAS[camp]['ids'])) + '}'
     lim = f"LIMIT {int(limite)}" if limite else ''
-    out = psql(f"SELECT json_agg(row_to_json(x)) FROM ({sel(camp)} WHERE hoc_client_ids && '{ids}' AND NOT (envios ? '{campo(camp, onda)}') ORDER BY tipo, email {lim}) x")
+    out = psql(f"SELECT json_agg(row_to_json(x)) FROM ({sel(camp)} WHERE hoc_client_ids && '{ids}' AND NOT (envios ? 'excluido') AND NOT (envios ? '{campo(camp, onda)}') ORDER BY tipo, email {lim}) x")
     return json.loads(out or 'null') or []
 
 def enviar_lote(msgs, chave=None):
