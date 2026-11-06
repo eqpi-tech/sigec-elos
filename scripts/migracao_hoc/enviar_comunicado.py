@@ -9,7 +9,7 @@ Destinatários: hoc_migration_contacts (patch_134). Cada envio fica registrado e
 envios->'<onda>' (data + id da Resend) — reexecutar não reenvia para quem já recebeu.
 Remetente = SIGEC-ELOS; responder vai para o suporte.
 """
-import argparse, datetime, json, os, shutil, subprocess, sys, time, urllib.request, urllib.error
+import hashlib, argparse, datetime, json, os, shutil, subprocess, sys, time, urllib.request, urllib.error
 from zoneinfo import ZoneInfo
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -287,10 +287,13 @@ def contatos(camp, onda, limite=None):
     out = psql(f"SELECT json_agg(row_to_json(x)) FROM ({sel(camp)} WHERE hoc_client_ids && '{ids}' AND NOT (envios ? '{campo(camp, onda)}') ORDER BY tipo, email {lim}) x")
     return json.loads(out or 'null') or []
 
-def enviar_lote(msgs):
-    req = urllib.request.Request('https://api.resend.com/emails/batch', data=json.dumps(msgs).encode(),
-                                 headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {RESEND}',
-                                          'User-Agent': 'sigec-elos-comunicados/1.0'})   # sem UA o Cloudflare da Resend devolve 403
+def enviar_lote(msgs, chave=None):
+    h = {'Content-Type': 'application/json', 'Authorization': f'Bearer {RESEND}',
+         'User-Agent': 'sigec-elos-comunicados/1.0'}   # sem UA o Cloudflare da Resend devolve 403
+    # 06/11: chave de idempotência — se a conexão cai depois de a Resend aceitar
+    # o lote, reenviar o MESMO lote em até 24h não duplica (caso do B1, lote 19)
+    if chave: h['Idempotency-Key'] = chave
+    req = urllib.request.Request('https://api.resend.com/emails/batch', data=json.dumps(msgs).encode(), headers=h)
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.loads(r.read()).get('data', [])
@@ -355,7 +358,8 @@ def main():
             assunto, html = fn(c)
             msgs.append({'from': FROM, 'reply_to': REPLY_TO, 'to': [c['email']], 'subject': assunto, 'html': html})
         try:
-            ids = enviar_lote(msgs)
+            chave = f"{campo(a.campanha, a.onda)}-" + hashlib.sha1(','.join(c['email'] for c in lote).encode()).hexdigest()
+            ids = enviar_lote(msgs, chave)
         except Exception as e:
             resumo(f'⛔ lote {i // 100 + 1}: falhou ({e}) — {ok} enviados; rode de novo para continuar'); sys.exit(1)
         vals = ','.join(f"('{c['id']}','{(ids[k] or {}).get('id', '') if k < len(ids) else ''}')" for k, c in enumerate(lote))
