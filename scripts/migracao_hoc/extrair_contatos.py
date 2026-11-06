@@ -24,7 +24,9 @@ cur.execute("SELECT @@session.transaction_read_only AS ro"); assert cur.fetchone
 cur.execute(f"SELECT id, COALESCE(NULLIF(TRIM(nome_fantasia), ''), razao_social) nome FROM cliente WHERE id IN ({IDS})")
 CLIENTES = {r['id']: r['nome'].strip() for r in cur.fetchall()}
 
-valido = re.compile(r'^[^@\s;,]+@[^@\s;,]+\.[^@\s;,]+$')
+# 06/11: domínio no formato que a Resend aceita — "vale.-verde.com" passava e
+# derrubou um lote inteiro do B1 (a API em lote recusa os 100 por 1 endereço)
+valido = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$")
 contatos = {}
 
 cur.execute(f"""SELECT u.id, TRIM(LOWER(u.email)) email, u.nome, u.id_cliente, u.id_grupo FROM usuario u

@@ -2,15 +2,21 @@
 # em scripts/migracao_hoc/enviar_comunicado.py (CALENDARIO). Roda às 09h de
 # Brasília nas datas do calendário; o script decide qual comunicado é o de hoje.
 # Travas: o comunicado 2 só vai para quem tem conta + link de senha; os 3 e 4 só
-# saem com a página Ajuda no ar. Faltou algo → o job falha e o GitHub avisa.
+# saem com a página Ajuda no ar. Faltou algo → o job falha e manda e-mail de
+# alerta (app_settings 'alertas_comunicados'; 06/11 — a falha do B1 em 04/11
+# só avisou a conta do GitHub e ninguém viu).
 # Quem já recebeu nunca recebe de novo (hoc_migration_contacts.envios).
 # Secrets: MIGRACAO_DB_URL (banco de produção) e RESEND_API_KEY.
 name: Migração HOC — comunicados
 
 on:
+  # O GitHub atrasa agendamentos em horas e às vezes nem dispara (visto em
+  # 30/10 e 03/11): reservas às 12:07 e 15:07 BRT só completam quem faltou.
   schedule:
     - cron: '7 12 14-16 10 *'        # 09:07 BRT — A2, A3, A4
     - cron: '7 12 4,11,18,20 11 *'   # 09:07 BRT — B1, B2, B3, B4
+    - cron: '7 15 11,18,20 11 *'     # 12:07 BRT — reserva B2, B3, B4
+    - cron: '7 18 11,18,20 11 *'     # 15:07 BRT — reserva B2, B3, B4
   workflow_dispatch:
     inputs:
       campanha:
@@ -50,3 +56,26 @@ jobs:
           else
             python scripts/migracao_hoc/enviar_comunicado.py --agendado
           fi
+      - name: Alerta de falha
+        if: failure()
+        env:
+          MIGRACAO_DB_URL: ${{ secrets.MIGRACAO_DB_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'EOF'
+          import os, sys, json
+          sys.path.insert(0, 'scripts/comunicados_golive')
+          from enviar import psql, resend, moldura
+          try:
+              v = psql("select value::text from app_settings where key='alertas_comunicados'").strip()
+              para = json.loads(v) if v else []
+          except BaseException:                         # banco fora: avisa ao menos o suporte
+              para = []
+          para = para or ['suporte@eqpitech.com.br']
+          for e in para:
+              resend(e, '[MIGRAÇÃO HOC] ALERTA — o envio do comunicado falhou',
+                     moldura(None, 'Migração HOC · acompanhamento interno',
+                             f'<p>O job de comunicados da migração falhou ou ficou incompleto. Veja o log: <a href="{os.environ["RUN_URL"]}">{os.environ["RUN_URL"]}</a></p>'
+                             '<p>Quem já recebeu não recebe de novo: rodar o workflow outra vez só completa o que faltou.</p>'))
+          EOF
