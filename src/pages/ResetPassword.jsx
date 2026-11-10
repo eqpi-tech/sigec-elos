@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { authApi } from '../services/api.js'
 import { Button, Spinner } from '../components/ui.jsx'
 
 export default function ResetPassword() {
@@ -9,6 +10,10 @@ export default function ResetPassword() {
   // boas-vindas e, ao concluir, entra direto no painel (sessão já ativa)
   const [params] = useSearchParams()
   const isWelcome = params.get('welcome') === '1'
+  // ?t=… (10/11, patch_171): link do próprio ELOS — abrir não consome o token
+  // (os filtros de e-mail corporativos abrem os links antes da pessoa); a
+  // senha só muda no "Salvar". Sem ?t= segue o link antigo do Supabase (#hash).
+  const token = params.get('t')
   const [ready, setReady]     = useState(false)    // token válido recebido
   const [invalid, setInvalid] = useState(false)    // token inválido/expirado
   const [password, setPassword]   = useState('')
@@ -18,6 +23,12 @@ export default function ResetPassword() {
   const [error, setError]         = useState('')
 
   useEffect(() => {
+    if (!token) return
+    authApi.passwordResetCheck(token).then(r => r?.ok ? setReady(true) : setInvalid(true)).catch(() => setInvalid(true))
+  }, [token])
+
+  useEffect(() => {
+    if (token) return
     // Supabase detecta o hash #access_token=...&type=recovery na URL
     // e dispara onAuthStateChange com event='PASSWORD_RECOVERY'
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -62,6 +73,12 @@ export default function ResetPassword() {
     if (password.length < 8)    { setError('Senha deve ter pelo menos 8 caracteres'); return }
     setError(''); setLoading(true)
     try {
+      if (token) {
+        await authApi.passwordResetSave(token, password)
+        setDone(true)
+        setTimeout(() => navigate('/login'), 2500)
+        return
+      }
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw new Error(error.message)
       setDone(true)

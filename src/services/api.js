@@ -37,6 +37,29 @@ export const cnpjApi = {
 
 // ── Auth (usado pelo AuthContext) ────────────────────────────────────────────
 export const authApi = {
+  // "Esqueci minha senha" (10/11, patch_171): link do próprio ELOS por e-mail —
+  // o link do Supabase era consumido pelos filtros de e-mail corporativos.
+  // Sempre responde ok (não revela se o e-mail tem conta).
+  requestPasswordReset: async (email) => {
+    const res = await fetch('/.netlify/functions/password-reset', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+    })
+    if (!res.ok) throw new Error('Não foi possível enviar o link agora. Tente de novo em instantes.')
+  },
+  passwordResetCheck: async (token) => {
+    const res = await fetch('/.netlify/functions/password-reset', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+    })
+    return res.ok ? res.json() : null
+  },
+  passwordResetSave: async (token, password) => {
+    const res = await fetch('/.netlify/functions/password-reset', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(res.status === 410 ? 'O link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".' : (data.error || 'Erro ao salvar a senha'))
+    return data
+  },
   signup: async ({ email, password, role, name }) => {
     const { data, error } = await supabase.auth.signUp({
       email,

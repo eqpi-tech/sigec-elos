@@ -8,8 +8,7 @@
 //   action='update'         → { userId, name } atualiza nome
 
 const { createClient } = require('@supabase/supabase-js')
-const { frontendUrl } = require('./lib/runtime_env.js')
-const { guardedResend } = require('./lib/mail_guard.js')
+const passwordReset = require('./lib/password_reset.js')
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -211,50 +210,10 @@ exports.handler = async (event) => {
       const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
       if (!authUser?.user?.email) return { statusCode:404, headers, body: JSON.stringify({ error:'Usuário não encontrado' }) }
 
-      const siteBase = frontendUrl()
-
-      // Gera link de reset de senha (válido por 24h)
-      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-        type:  'recovery',
-        email: authUser.user.email,
-        options: { redirectTo: `${siteBase}/redefinir-senha` }
-      })
-      if (linkErr) throw new Error(linkErr.message)
-
-      const resetLink = linkData?.properties?.action_link || linkData?.action_link
-
-      if (process.env.RESEND_API_KEY && resetLink) {
-        await guardedResend('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${process.env.RESEND_API_KEY}` },
-          body: JSON.stringify({
-            from: process.env.EMAIL_FROM || 'noreply@eqpitech.com.br',
-            to:   [authUser.user.email],
-            subject: 'SIGEC-ELOS — Redefinição de senha',
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
-                <div style="background:#2E3192;padding:32px;border-radius:12px 12px 0 0;text-align:center">
-                  <h1 style="color:#fff;margin:0;font-size:24px">SIGEC-ELOS</h1>
-                </div>
-                <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-top:none">
-                  <p>Olá!</p>
-                  <p>O administrador da plataforma solicitou a redefinição da sua senha.</p>
-                  <p>Clique no link abaixo para definir uma nova senha. O link expira em 24 horas.</p>
-                  <div style="text-align:center;margin:24px 0">
-                    <a href="${resetLink}" style="display:inline-block;background:#F47E2F;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold">
-                      Redefinir minha senha →
-                    </a>
-                  </div>
-                  <p style="font-size:12px;color:#9B9B9B">Se você não solicitou esta redefinição, ignore este e-mail.</p>
-                </div>
-                <div style="background:#f8fafc;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#9B9B9B">
-                  EQPI Tech · SIGEC-ELOS · elos.eqpitech.com.br
-                </div>
-              </div>
-            `,
-          })
-        })
-      }
+      // 10/11 (patch_171): link do próprio ELOS — o link de recuperação do
+      // Supabase era consumido pelos filtros de e-mail corporativos (caso VIX)
+      const resetLink = await passwordReset.criarLink(supabaseAdmin, userId, 'backoffice')
+      if (process.env.RESEND_API_KEY) await passwordReset.enviarEmail(authUser.user.email, resetLink, { backoffice: true })
 
       return { statusCode:200, headers, body: JSON.stringify({ success:true, resetLink }) }
     }
