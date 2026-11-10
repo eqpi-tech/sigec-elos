@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button } from '../components/ui.jsx'
 import { useIsMobile } from '../hooks/useIsMobile.js'
 import BannerStrip from '../components/BannerStrip.jsx'
-import { siteUrl } from '../lib/siteUrl.js'
+import { authApi } from '../services/api.js'
 
 export default function Login() {
   const [email,    setEmail]    = useState('')
@@ -33,10 +32,7 @@ export default function Login() {
   const handleForgot = async (e) => {
     e.preventDefault(); setForgotLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: `${siteUrl()}/redefinir-senha`,
-      })
-      if (error) throw new Error(error.message)
+      await authApi.requestPasswordReset(forgotEmail)
       setForgotSent(true)
     } catch (err) { setError(err.message) }
     finally { setForgotLoading(false) }

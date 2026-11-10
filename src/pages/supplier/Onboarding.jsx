@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react'
 import { useIsMobile } from '../../hooks/useIsMobile.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { cnpjApi, paymentsApi, invitationsApi } from '../../services/api.js'
+import { cnpjApi, paymentsApi, invitationsApi, authApi } from '../../services/api.js'
 import CategorySelector from '../../components/CategorySelector.jsx'
 import { supabase } from '../../lib/supabase.js'
-import { siteUrl } from '../../lib/siteUrl.js'
 import { Button, Spinner } from '../../components/ui.jsx'
 // CNPJ alfanumérico (Receita, 2026): letras nas 12 primeiras posições
 import { normalizeCnpj, isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
@@ -177,8 +176,7 @@ export default function SupplierOnboarding() {
   const handleForgot = async () => {
     if (!email) { setError('Informe o e-mail para receber o link de redefinição.'); return }
     setError('')
-    const { error: e } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl()}/redefinir-senha` })
-    if (e) setError(e.message); else setResetSent(true)
+    try { await authApi.requestPasswordReset(email); setResetSent(true) } catch (e) { setError(e.message) }
   }
 
   // Reset ao trocar perfil
