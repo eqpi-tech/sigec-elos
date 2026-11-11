@@ -80,7 +80,8 @@ export default function QuestionnaireAnswersReport({ clientId, admin = false }) 
   if (!quests.length) return <Card style={{ padding: 24, borderRadius: 14, fontSize: 13, color: '#6b7280' }}>Nenhum questionário cadastrado para este cliente.</Card>
 
   const titulo = quests.find(q => q.id === qid)?.title || 'questionario'
-  const col = (p) => `${(p.ordem ?? 0) + 1}. ${p.texto}`.slice(0, 250)
+  // a pergunta já numerada no texto (ex.: "1.1 A sociedade…") não ganha outro número
+  const col = (p) => (/^\s*\d/.test(p.texto || '') ? p.texto : `${(p.ordem ?? 0) + 1}. ${p.texto}`).slice(0, 250)
 
   const exportar = () => {
     const resumo = [
