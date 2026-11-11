@@ -1504,6 +1504,19 @@ export const mobilityApi = {
   addPerson: async ({ postId, supplierId, nome, cpf }) => {
     const cpfDigits = String(cpf || '').replace(/\D/g, '')
     if (!mobilityApi.validCpf(cpfDigits)) throw new Error('CPF inválido — confira os dígitos.')
+    // 11/11 (chamado #755247, patch_174): CPF removido deste posto volta a ser
+    // cadastrado → reativa o registro, com os documentos que ele já tinha
+    const { data: removido } = await supabase
+      .from('mobility_people').select('id')
+      .eq('post_id', postId).eq('cpf_digits', cpfDigits).eq('active', false)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (removido) {
+      const { data, error } = await supabase
+        .from('mobility_people').update({ active: true, nome: nome.trim() }).eq('id', removido.id)
+        .select('id, post_id, nome, cpf_digits, active').single()
+      if (error) throw new Error(error.code === '23505' ? 'Este CPF já está cadastrado neste posto.' : error.message)
+      return data
+    }
     const { data, error } = await supabase
       .from('mobility_people')
       .insert({ post_id: postId, supplier_id: supplierId, nome: nome.trim(), cpf_digits: cpfDigits })
