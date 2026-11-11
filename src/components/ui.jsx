@@ -46,8 +46,8 @@ export const Card = ({ children,style:s={},onClick,hover=false }) => (
   </div>
 )
 
-export const KpiCard = ({ label,value,sub,subColor,icon,iconBg }) => (
-  <Card>
+export const KpiCard = ({ label,value,sub,subColor,icon,iconBg,onClick }) => (
+  <Card onClick={onClick} hover={!!onClick}>
     <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
       <div>
         <div style={{ fontSize:11,fontWeight:600,color:'#9B9B9B',letterSpacing:.5,fontFamily:'Montserrat,sans-serif',marginBottom:6,textTransform:'uppercase' }}>{label}</div>

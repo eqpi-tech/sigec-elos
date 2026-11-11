@@ -6,6 +6,7 @@
 // Gráficos leves (SVG/CSS): barras de UM matiz p/ magnitude, paleta de
 // status SEMPRE com rótulo+ícone (nunca só cor), linha de série única.
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../../services/api.js'
 import { Card, Spinner, PageHeader, SectionTitle } from '../../components/ui.jsx'
 import { Tile, HBars, LineChart, BRAND } from '../../components/charts.jsx'
@@ -127,6 +128,7 @@ function FunnelTab({ d }) {
 }
 
 export default function Reports() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState('exec')
   const [exec, setExec] = useState(null)
   const [funnel, setFunnel] = useState(null)
@@ -140,7 +142,8 @@ export default function Reports() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      <PageHeader title="Relatórios" subtitle="Acompanhamento do projeto e das campanhas" />
+      <PageHeader title="Relatórios" subtitle="Acompanhamento do projeto e das campanhas"
+        action={{ label: '📊 Relatórios de um cliente →', onClick: () => navigate('/backoffice/relatorios-cliente') }} />
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[['exec', '📊 Dashboard Executivo'], ['funil', '📣 Funil da Campanha']].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}

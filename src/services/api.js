@@ -1797,6 +1797,7 @@ export const clientApi = {
 
     return {
       recentes,
+      items, abertos: abertos || [],   // listas por trás dos indicadores (11/11, #755248)
       total:          items.length,
       convitesAbertos: (abertos || []).length,
       homologados:    conta('ACTIVE'),
@@ -1871,8 +1872,9 @@ export const clientApi = {
   },
 
   // Relatório de status dos documentos (patch_165): cliente vem da sessão
-  documentsStatus: async () => {
-    const { data, error } = await supabase.rpc('client_documents_status')
+  documentsStatus: async (clientId) => {
+    // clientId só vale para o backoffice (patch_175); o cliente sempre recebe o dele
+    const { data, error } = await supabase.rpc('client_documents_status', clientId ? { p_client_id: clientId } : {})
     if (error) throw new Error(error.message)
     return data || []
   },
@@ -2058,6 +2060,49 @@ export const assertivaApi = {
 }
 
 // ── Questionários ────────────────────────────────────────────────────────────
+// Relatórios do cliente — iguais no cliente e no backoffice (11/11, chamado
+// #755248, patch_175). clientId só vale para o backoffice (ADMIN escolhe o
+// cliente); para o cliente o servidor usa sempre o cliente do usuário logado.
+export const reportsApi = {
+  execDashboard: async ({ from, to, clientId } = {}) => {
+    const { data, error } = await supabase.rpc('client_exec_dashboard', { p_from: from || null, p_to: to || null, ...(clientId ? { p_client_id: clientId } : {}) })
+    if (error) throw new Error(error.message)
+    return data
+  },
+  // a lista por trás de um indicador, com o mesmo critério do número
+  execDetail: async (kind, { from, to, clientId, questionnaireId } = {}) => {
+    const { data, error } = await supabase.rpc('client_exec_detail', {
+      p_kind: kind, p_from: from || null, p_to: to || null,
+      p_client_id: clientId || null, p_questionnaire_id: questionnaireId || null,
+    })
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  // backoffice: clientes para escolher (ELOS e migrados; o pseudo-cliente ELOS não tem linha)
+  clients: async () => {
+    const { data, error } = await supabase.from('clients').select('id, razao_social, nome_fantasia, active').order('razao_social')
+    if (error) throw new Error(error.message)
+    return (data || []).sort((a, b) => (b.active !== false) - (a.active !== false) || (a.nome_fantasia || a.razao_social).localeCompare(b.nome_fantasia || b.razao_social, 'pt-BR'))
+  },
+  termsAcceptance: async (clientId) => {
+    const { data, error } = await supabase.rpc('report_terms_acceptance', clientId ? { p_client_id: clientId } : {})
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  questionnaires: async (clientId) => {
+    const { data, error } = await supabase.from('questionnaires').select('id, title, active')
+      .eq('client_id', clientId).order('title')
+    if (error) throw new Error(error.message)
+    return data || []
+  },
+  // todas as respostas — no cliente, só perfis com Compliance (o servidor recusa os demais)
+  questionnaireAnswers: async (questionnaireId) => {
+    const { data, error } = await supabase.rpc('report_questionnaire_answers', { p_questionnaire_id: questionnaireId })
+    if (error) throw new Error(error.message === 'forbidden' ? 'Seu perfil não tem acesso às respostas dos questionários (módulo Compliance).' : error.message)
+    return data || []
+  },
+}
+
 export const questionnaireApi = {
   listByClient: async (clientId) => {
     const { data, error } = await supabase
