@@ -25,7 +25,7 @@ const RESP = { fornecedor: 'Fornecedor', interna: 'EQPI', cliente: 'Cliente' }
 const fmtD = (v) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '')
 const MAX_TELA = 500
 
-export default function DocumentsStatusReport({ flowNames = {} }) {
+export default function DocumentsStatusReport({ flowNames = {}, clientId, admin = false }) {
   const navigate = useNavigate()
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
@@ -38,8 +38,9 @@ export default function DocumentsStatusReport({ flowNames = {} }) {
   const [venceAte, setVenceAte] = useState('')
 
   useEffect(() => {
-    clientApi.documentsStatus().then(setRows).catch(e => setErr(e.message))
-  }, [])
+    setRows(null)
+    clientApi.documentsStatus(admin ? clientId : undefined).then(setRows).catch(e => setErr(e.message))
+  }, [clientId, admin])
 
   const docs = useMemo(() => [...new Set((rows || []).map(r => r.documento))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [rows])
   const filtrados = useMemo(() => (rows || []).filter(r => {
@@ -120,7 +121,7 @@ export default function DocumentsStatusReport({ flowNames = {} }) {
           <tbody>
             {filtrados.slice(0, MAX_TELA).map((r, i) => (
               <tr key={`${r.seal_id}-${r.doc_id}-${i}`} style={{ borderTop: '1px solid #f0f2f8', cursor: 'pointer' }}
-                onClick={() => navigate(`/cliente/fornecedor/${r.supplier_id}`)} title="Abrir o processo do fornecedor">
+                onClick={() => navigate(admin ? `/backoffice/analise/${r.supplier_id}` : `/cliente/fornecedor/${r.supplier_id}`)} title="Abrir o processo do fornecedor">
                 <td style={{ padding: '9px 12px', color: '#1a1c5e', fontWeight: 600 }}>{r.razao_social}<div style={{ fontWeight: 400, fontSize: 11, color: '#9B9B9B' }}>{formatCnpj(r.cnpj || '')}</div></td>
                 <td style={{ padding: '9px 12px', color: '#374151' }}>{r.documento}{r.responsavel && r.responsavel !== 'fornecedor' && <span style={{ fontSize: 10, color: '#9B9B9B' }}> · {RESP[r.responsavel]}</span>}
                   {r.motivo && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>Motivo: {r.motivo}</div>}</td>

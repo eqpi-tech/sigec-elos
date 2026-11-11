@@ -4,6 +4,7 @@
 // relatório para a área responsável, acessível por perfil específico
 // (módulo 'compliance' no editor de perfis).
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase.js'
 import { isCnpjComplete, formatCnpj } from '../../lib/cnpj.js'
@@ -14,6 +15,7 @@ import { Tile } from '../../components/charts.jsx'
 const fmtCnpj = (c) => c ? (isCnpjComplete(c) ? formatCnpj(c) : c) : ''
 
 export default function ClientCompliance() {
+  const navigate = useNavigate()
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
 
@@ -46,7 +48,10 @@ export default function ClientCompliance() {
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1000, margin: '0 auto' }}>
       <PageHeader title="Compliance" subtitle="Fornecedores com respostas que exigem avaliação da área de compliance"
-        action={rows.length > 0 ? <Button variant="primary" onClick={exportXlsx}>⬇ Exportar Excel</Button> : undefined} />
+        action={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button variant="neutral" onClick={() => navigate('/cliente/relatorios?aba=questionarios')}>Todas as respostas →</Button>
+          {rows.length > 0 && <Button variant="primary" onClick={exportXlsx}>⬇ Exportar Excel</Button>}
+        </div>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
         <Tile label="Fornecedores em atenção" value={sups.length} accent={sups.length ? '#b45309' : '#15803d'} />

@@ -8,9 +8,9 @@ import { Card } from './ui.jsx'
 export const BRAND = '#2E3192'
 const fmt = (n) => (n ?? 0).toLocaleString('pt-BR')
 
-export function Tile({ label, value, sub, accent }) {
+export function Tile({ label, value, sub, accent, onClick }) {
   return (
-    <Card style={{ borderRadius: 14, padding: '16px 20px' }}>
+    <Card style={{ borderRadius: 14, padding: '16px 20px' }} onClick={onClick} hover={!!onClick}>
       <div style={{ fontSize: 11, fontFamily: 'Montserrat,sans-serif', fontWeight: 700, color: '#9B9B9B', textTransform: 'uppercase', letterSpacing: .5 }}>{label}</div>
       <div style={{ fontSize: 28, fontFamily: 'Montserrat,sans-serif', fontWeight: 800, color: accent || '#1a1c5e', marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 12, fontFamily: 'DM Sans,sans-serif', color: '#9B9B9B', marginTop: 2 }}>{sub}</div>}
@@ -24,7 +24,8 @@ export function HBars({ rows, color = BRAND, labelWidth = 170 }) {
   return (
     <div>
       {rows.map(r => (
-        <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <div key={r.label} onClick={r.onClick} title={r.onClick ? 'Clique para ver a lista e exportar' : undefined}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, cursor: r.onClick ? 'pointer' : 'default' }}>
           <div style={{ width: labelWidth, fontSize: 12, fontFamily: 'DM Sans,sans-serif', color: '#1a1c5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.label}>{r.label}</div>
           <div style={{ flex: 1, height: 14, background: '#f1f3f9', borderRadius: 4, overflow: 'hidden' }}
             title={`${r.label}: ${fmt(r.n)}`}>

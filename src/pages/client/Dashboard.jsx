@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { clientApi } from '../../services/api.js'
-import { KpiCard, Card, PageHeader, Spinner, Badge, ScoreBar } from '../../components/ui.jsx'
+import { Card, PageHeader, Spinner, Badge, ScoreBar } from '../../components/ui.jsx'
 import { SITUACAO } from '../../lib/clientSituacao.js'
+import ClientKpis from '../../components/reports/ClientKpis.jsx'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -37,16 +38,8 @@ export default function ClientDashboard() {
         action={{ label:'Convidar Fornecedor', onClick: () => navigate('/cliente/convites') }}
       />
 
-      {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:28 }}>
-        <KpiCard label="Fornecedores"           value={data?.total ?? 0} icon="🤝"
-          sub={data?.convitesAbertos ? `+ ${data.convitesAbertos} convite(s) em aberto` : 'Com processo de homologação'} />
-        <KpiCard label="Homologados"            value={data?.homologados ?? 0} icon="✅" sub="Selo ELOS ativo" />
-        <KpiCard label="Em Análise"             value={data?.emAnalise ?? 0} icon="⏳"
-          sub={data?.aguardandoPagamento ? `+ ${data.aguardandoPagamento} aguardando pagamento` : 'Aguardando revisão EQPI'} />
-        <KpiCard label="Subsidiados"            value={data?.subsidiados ?? 0} icon="💰" sub="Custo assumido por você" />
-        <KpiCard label="Carta de Exceção"       value={data?.cartasExcecao ?? 0} icon="📜" sub="Fornecedores com carta vigente" />
-      </div>
+      {/* KPIs — clicáveis: a lista de cada número, com Excel (11/11, #755248) */}
+      <ClientKpis clientId={user.clientId} data={data} />
 
       {/* Lista recente */}
       <Card style={{ borderRadius:16, padding:'20px 24px' }}>
