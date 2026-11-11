@@ -1885,9 +1885,9 @@ export const clientApi = {
     // + carta de exceção. Antes a lista era montada aqui baixando TODOS os
     // convites em páginas de 1.000 em série — com o histórico do HOC a Appian
     // tem 10,8 mil convites e a tela levava segundos. O cliente vem da sessão
-    // (auth.uid()); clientId fica na assinatura por compatibilidade.
-    void clientId
-    const { data, error } = await supabase.rpc('client_suppliers_overview')
+    // (auth.uid()); clientId só vale para o backoffice (patch_175: o ADMIN
+    // escolhe o cliente nos Relatórios do cliente) — para o cliente é ignorado.
+    const { data, error } = await supabase.rpc('client_suppliers_overview', clientId ? { p_client_id: clientId } : {})
     if (error) throw new Error(error.message)
     return (data || []).map(r => {
       const seal = r.seal, invite = r.invite

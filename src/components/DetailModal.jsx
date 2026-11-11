@@ -51,7 +51,7 @@ export default function DetailModal({ title, subtitle, load, rows: rowsProp, fil
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, fontFamily: 'DM Sans,sans-serif' }}>
               <thead><tr>{cols.map(c => <th key={c} style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid #eef0f6', color: '#6b7280', fontWeight: 700, whiteSpace: 'nowrap', position: 'sticky', top: 0, background: '#fff' }}>{c}</th>)}</tr></thead>
               <tbody>{filtradas.slice(0, MAX_TELA).map((r, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f4f5f9' }}>{cols.map(c => <td key={c} style={{ padding: '7px 12px', color: '#1a1c5e', whiteSpace: c === 'Razão social' ? 'normal' : 'nowrap' }}>{String(r[c] ?? '')}</td>)}</tr>
+                <tr key={i} style={{ borderBottom: '1px solid #f4f5f9' }}>{cols.map(c => <td key={c} style={{ padding: '7px 12px', color: '#1a1c5e', whiteSpace: c === 'Razão social' ? 'normal' : 'nowrap', minWidth: c === 'Razão social' ? 240 : undefined }}>{String(r[c] ?? '')}</td>)}</tr>
               ))}</tbody>
             </table>
           )}
