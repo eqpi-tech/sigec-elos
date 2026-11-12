@@ -84,8 +84,10 @@ exports.handler = async (event) => {
   if (count >= 4) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Limite de 4 usuários por fornecedor atingido. Desative um usuário antes de convidar outro.' }) }
 
   // Verificar se e-mail já existe no sistema
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
-  const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+  // 12/11: busca exata pelo e-mail (patch_170) — listUsers() só via a 1ª página
+  // (50 de 5 mil logins) e o login existente era tratado como novo: "already registered"
+  const { data: existingId } = await supabaseAdmin.rpc('admin_user_id_by_email', { p_email: email })
+  const existingUser = existingId ? { id: existingId } : null
 
   let newUserId
   const tempPassword = generatePassword()

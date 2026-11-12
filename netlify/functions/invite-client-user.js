@@ -80,8 +80,9 @@ exports.handler = async (event) => {
     // Usuário já existe no Auth?
     let newUserId = null
     let tempPassword = null
-    const { data: list } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
-    const existing = (list?.users || []).find(u => u.email?.toLowerCase() === email.toLowerCase())
+    // 12/11: busca exata pelo e-mail (patch_170) — listUsers só via os 1.000 primeiros
+    const { data: existingId } = await supabaseAdmin.rpc('admin_user_id_by_email', { p_email: email })
+    const existing = existingId ? { id: existingId } : null
 
     if (existing) {
       newUserId = existing.id
