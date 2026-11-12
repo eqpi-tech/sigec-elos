@@ -285,7 +285,9 @@ def contatos(camp, onda, limite=None):
     ids = '{' + ','.join(map(str, CAMPANHAS[camp]['ids'])) + '}'
     lim = f"LIMIT {int(limite)}" if limite else ''
     out = psql(f"SELECT json_agg(row_to_json(x)) FROM ({sel(camp)} WHERE hoc_client_ids && '{ids}' AND NOT (envios ? 'excluido') AND NOT (envios ? '{campo(camp, onda)}') ORDER BY tipo, email {lim}) x")
-    return json.loads(out or 'null') or []
+    # 12/11: sem pendentes o json_agg volta nulo (linha vazia) — reserva sem
+    # ninguém para enviar não pode quebrar e disparar alerta falso
+    return json.loads((out or '').strip() or 'null') or []
 
 def enviar_lote(msgs, chave=None):
     h = {'Content-Type': 'application/json', 'Authorization': f'Bearer {RESEND}',
