@@ -35,8 +35,9 @@ exports.handler = async (event) => {
     const cleanCnpj = normalizeCnpj(cnpj)   // numérico ou alfanumérico
 
     // Verifica se e-mail já existe
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    const emailExists = existingUsers?.users?.some(u => u.email?.toLowerCase() === email.toLowerCase())
+    // 12/11: busca exata pelo e-mail (patch_170) — listUsers() só via a 1ª página
+    const { data: existingId } = await supabase.rpc('admin_user_id_by_email', { p_email: email })
+    const emailExists = !!existingId
     if (emailExists) return { statusCode: 409, headers, body: JSON.stringify({ error: 'Este e-mail já está cadastrado. Faça login ou recupere sua senha.' }) }
 
     // Verifica se CNPJ já existe como comprador
