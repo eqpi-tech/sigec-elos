@@ -2103,6 +2103,19 @@ export const reportsApi = {
   },
 }
 
+// ⚠️ pendências do fornecedor na busca (12/11, patch_176): documentos e
+// questionário ainda não enviados nos processos em andamento. Cliente: só o
+// processo dele; backoffice: todos os clientes, ou só o do filtro (clientId).
+export const pendenciasApi = {
+  flags: async (supplierIds, clientId) => {
+    const ids = [...new Set((supplierIds || []).filter(Boolean))]
+    if (!ids.length) return {}
+    const { data, error } = await supabase.rpc('pending_flags', { p_supplier_ids: ids, p_client_id: clientId || null })
+    if (error) throw new Error(error.message)
+    return data || {}
+  },
+}
+
 export const questionnaireApi = {
   listByClient: async (clientId) => {
     const { data, error } = await supabase

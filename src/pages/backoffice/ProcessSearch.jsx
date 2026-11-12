@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
+import { pendenciasApi } from '../../services/api.js'
+import PendenciasBadges from '../../components/PendenciasBadges.jsx'
 import { isSealRejected } from '../../lib/sealStatus.js'
 import { normalizeCnpj, looksLikeCnpj } from '../../lib/cnpj.js'
 import { Button, Card, ScoreBar, Spinner, PageHeader, EmptyState } from '../../components/ui.jsx'
@@ -97,6 +99,14 @@ export default function BackofficeProcessSearch() {
   const [filterClient,setFilterClient]= useState('')         // client_id ou ''
   const [showInactive,setShowInactive]= useState(false)
   const [results,     setResults]     = useState([])
+  // ⚠️ pendências do fornecedor (12/11, patch_176) — mesmo ⚠️ da busca do cliente
+  const [pend, setPend] = useState({})
+  useEffect(() => {
+    setPend({})
+    if (!results.length) return
+    const cli = filterClient && filterClient !== ELOS_PSEUDO_CLIENT.id ? filterClient : null
+    pendenciasApi.flags(results.map(r => r.id), cli).then(setPend).catch(() => {})
+  }, [results])   // eslint-disable-line react-hooks/exhaustive-deps
   const [pendingInvites, setPendingInvites] = useState([])   // convites do cliente ainda sem cadastro
   const [clients,     setClients]     = useState([])
   const [loading,     setLoading]     = useState(false)
@@ -405,6 +415,7 @@ export default function BackofficeProcessSearch() {
                           <span title={`Prioridade pedida pelo cliente em ${new Date(s.prio).toLocaleString('pt-BR')}`}
                             style={{ fontSize:10, fontWeight:700, color:'#b45309', background:'#fef3c7', border:'1px solid #fde68a', padding:'2px 8px', borderRadius:20 }}>⚡ Prioritária</span>
                         )}
+                        <PendenciasBadges p={pend[s.id]} porCliente={!filterClient} />
                       </div>
 
                       <div style={{ fontSize:12, color:'#9B9B9B', fontFamily:'DM Sans,sans-serif', marginBottom:4 }}>

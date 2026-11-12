@@ -4,7 +4,8 @@ import { can } from '../../lib/permissions.js'
 import { isSealRejected, sealStatusReason } from '../../lib/sealStatus.js'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { clientApi, watchApi } from '../../services/api.js'
+import { clientApi, watchApi, pendenciasApi } from '../../services/api.js'
+import PendenciasBadges, { temDocsPendentes, temQuestPendente } from '../../components/PendenciasBadges.jsx'
 import WatchButton from '../../components/WatchButton.jsx'
 import { supabase } from '../../lib/supabase.js'
 import { normalizeCnpj, looksLikeCnpj, formatCnpj } from '../../lib/cnpj.js'
@@ -55,6 +56,7 @@ export default function ClientSuppliers() {
 
   const [activeTab,   setActiveTab]   = useState('meus')
   const [mySuppliers, setMySuppliers] = useState([])
+  const [pend, setPend] = useState({})   // supplierId → pendências (patch_176)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
 
@@ -106,7 +108,12 @@ export default function ClientSuppliers() {
   useEffect(() => {
     if (!user?.clientId) return
     clientApi.getSuppliers(user.clientId)
-      .then(setMySuppliers)
+      .then(lista => {
+        setMySuppliers(lista)
+        // ⚠️ pendências (12/11): carregadas depois, sem atrasar a lista
+        const abertos = lista.filter(i => i.seal?.status === 'PENDING').map(i => i.supplierId)
+        pendenciasApi.flags(abertos).then(setPend).catch(() => {})
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [user?.clientId])
@@ -178,6 +185,8 @@ export default function ClientSuppliers() {
     if (fDest.includes('prio') && !(item.seal?.status === 'PENDING' && item.seal?.priority_requested_at)) return false
     if (fDest.includes('carta') && !item.cartaExcecao) return false
     if (fDest.includes('vence') && !venceEm60(item)) return false
+    if (fDest.includes('docs') && !temDocsPendentes(pend[item.supplierId])) return false
+    if (fDest.includes('quest') && !temQuestPendente(pend[item.supplierId])) return false
     return true
   })
   const conta = (fn) => mySuppliers.filter(fn).length
@@ -202,6 +211,8 @@ export default function ClientSuppliers() {
       'Categorias reprovadas (CNAE)': (sup.categorias || []).filter(c => c.reprovada).map(c => c.nome).join('; '),
       'Carta de exceção': item.cartaExcecao ? 'Sim' : '',
       'Análise prioritária': seal.status === 'PENDING' && seal.priority_requested_at ? 'Sim' : '',
+      'Documentos pendentes': temDocsPendentes(pend[item.supplierId]) ? 'Sim' : '',
+      'Questionário não respondido': temQuestPendente(pend[item.supplierId]) ? 'Sim' : '',
     }
   }))
   const niveis = [...new Set(mySuppliers.map(i => i.flowId || 'sem'))]
@@ -315,6 +326,8 @@ export default function ClientSuppliers() {
                 { value: 'prio',  label: '⚡ Prioritários', color: '#b45309', count: conta(i => i.seal?.status === 'PENDING' && i.seal?.priority_requested_at) },
                 { value: 'carta', label: '📜 Com carta de exceção', color: '#b45309', count: conta(i => i.cartaExcecao) },
                 { value: 'vence', label: '⏰ Vence em até 60 dias', color: '#dc2626', count: conta(venceEm60) },
+                { value: 'docs',  label: '⚠️ Documentos pendentes', color: '#b45309', count: conta(i => temDocsPendentes(pend[i.supplierId])) },
+                { value: 'quest', label: '⚠️ Questionário não respondido', color: '#b45309', count: conta(i => temQuestPendente(pend[i.supplierId])) },
               ].filter(o => o.count > 0)}/>
           </FilterPanel>
 
@@ -369,6 +382,7 @@ export default function ClientSuppliers() {
                               ⚡ Análise prioritária solicitada
                             </span>
                           )}
+                          <PendenciasBadges p={pend[item.supplierId]} />
                         </div>
                         <div style={{ fontFamily:'DM Sans,sans-serif', fontSize:12, color:'#9B9B9B', marginBottom:6 }}>
                           {(sup?.cnpj || item.inviteCnpj) && `CNPJ ${sup?.cnpj || item.inviteCnpj}`}
