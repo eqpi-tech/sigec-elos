@@ -127,51 +127,79 @@ exports.handler = async (event) => {
       for (const u of users || []) if (u.email) emailMap[u.id] = u.email
     }
 
+    // 13/11: histórico de lembretes de TODOS os processos numa leitura (antes:
+    // uma consulta por processo) e ordem justa — primeiro quem está há mais tempo
+    // sem lembrete. A varredura sem ordem parava no tempo-limite antes de chegar
+    // aos processos mais novos (136 da VIX nunca receberam lembrete).
+    const ids = (seals || []).map((s) => s.id)
+    const hist = {}   // seal_id → { doc: [datas desc], pay: [datas desc] }
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data: rows } = await supabase.from('audit_log').select('entity_id, action, created_at')
+        .in('action', ['DOC_PENDING_REMINDER', 'PAYMENT_PENDING_REMINDER']).in('entity_id', ids.slice(i, i + 100))
+        .order('created_at', { ascending: false })
+      for (const r of rows || []) {
+        const h = hist[r.entity_id] || (hist[r.entity_id] = { doc: [], pay: [] })
+        h[r.action === 'DOC_PENDING_REMINDER' ? 'doc' : 'pay'].push(r.created_at)
+      }
+    }
+    const supIds = [...new Set((seals || []).filter((s) => !s.released_at).map((s) => s.supplier_id))]
+    const planoPendente = new Set()
+    for (let i = 0; i < supIds.length; i += 100) {
+      const { data: pl } = await supabase.from('plans').select('supplier_id').eq('status', 'PENDING').in('supplier_id', supIds.slice(i, i + 100))
+      for (const r of pl || []) planoPendente.add(r.supplier_id)
+    }
+    const prazo = INTERVAL_DAYS * 86400000
+    const candidatos = []
+    for (const seal of seals || []) {
+      if (seal.clients && seal.clients.active === false) { skipped++; continue }
+      const h = hist[seal.id] || { doc: [], pay: [] }
+      const lista = seal.released_at ? h.doc : h.pay
+      if (lista.length >= MAX_REMINDERS) { skipped++; continue }
+      if (!seal.released_at && planoPendente.has(seal.supplier_id)) { skipped++; continue }   // boleto aguardando compensação
+      // 1º lembrete só ≥3 dias após o início do processo (régua divulgada: "a cada 3 dias")
+      const ultimo = lista[0] || seal.created_at
+      if (ultimo && Date.now() - new Date(ultimo).getTime() < prazo) { skipped++; continue }
+      candidatos.push({ seal, hist: lista, ordem: lista[0] ? new Date(lista[0]).getTime() : 0, criado: new Date(seal.created_at || 0).getTime() })
+    }
+    candidatos.sort((a, b) => a.ordem - b.ordem || a.criado - b.criado)
+
+    // catálogo e questionários lidos uma vez (antes: a cada processo)
+    const { data: catRows } = await supabase.from('documents_catalog').select('id, name, responsibility')
+    const catalogo = Object.fromEntries((catRows || []).map((c) => [String(c.id), c]))
+    const reqQPorCliente = {}
+    const reqQ = async (clientId) => {
+      if (!(clientId in reqQPorCliente)) {
+        const { data: qs } = await supabase.from('questionnaires').select('id, active, questionnaire_questions(id, required)').eq('client_id', clientId)
+        reqQPorCliente[clientId] = (qs || []).filter((q) => q.active !== false)
+          .flatMap((q) => (q.questionnaire_questions || []).filter((x) => x.required).map((x) => x.id))
+      }
+      return reqQPorCliente[clientId]
+    }
+
     // 29/10 (go-live VIXPAR): pendências juntadas POR DESTINATÁRIO — um login com
     // várias empresas (pré-cadastro: BRMED 107) recebe UM e-mail com a lista; com
     // uma empresa só, o e-mail é o mesmo de antes. Cadência segue por processo.
     const porDest = new Map()
-    for (const seal of seals || []) {
-      if (Date.now() > deadline - 20000 || sent >= MAX_EMAILS_PER_RUN) break
-      if (seal.clients && seal.clients.active === false) { skipped++; continue }
+    const RESERVA_ENVIO = 4 * 60 * 1000   // tempo guardado para enviar o que foi juntado
+    for (const { seal, hist: h } of candidatos) {
+      if (Date.now() > deadline - RESERVA_ENVIO || porDest.size >= MAX_EMAILS_PER_RUN) break
       const to = emailMap[seal.suppliers?.user_id] || seal.suppliers?.email
       if (!to) { skipped++; continue }
 
       // processo sem pagamento confirmado: aviso de pagamento (mesma cadência)
       if (!seal.released_at) {
-        const { data: plano } = await supabase.from('plans').select('status').eq('supplier_id', seal.supplier_id).maybeSingle()
-        if (plano?.status === 'PENDING') { skipped++; continue }   // boleto emitido, aguardando compensação
-        const { data: ph } = await supabase
-          .from('audit_log').select('created_at')
-          .eq('action', 'PAYMENT_PENDING_REMINDER').eq('entity_id', seal.id)
-          .order('created_at', { ascending: false }).limit(MAX_REMINDERS)
-        if (ph?.length >= MAX_REMINDERS) { skipped++; continue }
-        const ultimo = ph?.[0]?.created_at || seal.created_at
-        if (ultimo && Date.now() - new Date(ultimo).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
         const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
         try {
           await sendEmail(to, '💳 Falta confirmar o pagamento da sua homologação — SIGEC-ELOS',
             buildPaymentHtml(seal.suppliers?.razao_social || '', clientName))
           await supabase.from('audit_log').insert({
             action: 'PAYMENT_PENDING_REMINDER', entity_type: 'seal', entity_id: seal.id,
-            metadata: { to, lembrete_n: (ph?.length || 0) + 1 },
+            metadata: { to, lembrete_n: h.length + 1 },
           })
           sent++
         } catch (e) { console.warn(`[payment-reminders] ${seal.id}: ${e.message}`) }
         continue
       }
-
-      // cadência: ≥3 dias desde o último, máx. 5 por processo (audit_log)
-      const { data: hist } = await supabase
-        .from('audit_log').select('created_at')
-        .eq('action', 'DOC_PENDING_REMINDER').eq('entity_id', seal.id)
-        .order('created_at', { ascending: false }).limit(MAX_REMINDERS)
-      if (hist?.length >= MAX_REMINDERS) { skipped++; continue }
-      // 1º lembrete só ≥3 dias após o início do processo — cadastro de hoje
-      // não pode receber cobrança no mesmo dia (régua divulgada: "a cada 3 dias")
-      if (!hist?.length && seal.created_at
-          && Date.now() - new Date(seal.created_at).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
-      if (hist?.[0] && Date.now() - new Date(hist[0].created_at).getTime() < INTERVAL_DAYS * 86400000) { skipped++; continue }
 
       // pendências de documentos: exigidos sem envio (REJECTED/EXPIRED contam
       // como pendente — o fornecedor precisa reenviar)
@@ -184,43 +212,33 @@ exports.handler = async (event) => {
         .eq('supplier_id', seal.supplier_id).in('type', reqTypes)
       const okTypes = new Set((docs || []).filter((d) => SENT_STATUSES.includes(d.status)).map((d) => String(d.type)))
       // documento de responsabilidade do CLIENTE não é cobrado do fornecedor;
-      // o interno (captado pela EQPI) que não foi captado é (Luiz, 14/10)
-      const { data: respRows } = await supabase.from('documents_catalog')
-        .select('id, responsibility').in('id', reqTypes.map(Number).filter((n) => !isNaN(n)))
-      const doCliente = new Set((respRows || []).filter((r) => r.responsibility === 'cliente').map((r) => String(r.id)))
-      // obtido pela EQPI (Inscrição Estadual, patch_148) nunca é cobrado do fornecedor
-      const missingTypes = reqTypes.filter((t) => !okTypes.has(t) && !doCliente.has(t) && !DOCS_SO_EQPI.includes(String(t)))
+      // o interno (captado pela EQPI) que não foi captado é (Luiz, 14/10);
+      // obtido pela EQPI (Inscrição Estadual, patch_148) nunca é cobrado
+      const missingTypes = reqTypes.filter((t) => !okTypes.has(t) && catalogo[t]?.responsibility !== 'cliente' && !DOCS_SO_EQPI.includes(String(t)))
 
       // questionário do cliente: perguntas obrigatórias sem resposta
       let questPending = false
       if (seal.client_id) {
-        const { data: qs } = await supabase
-          .from('questionnaires').select('id, questionnaire_questions(id, required)')
-          .eq('client_id', seal.client_id)
-        const reqQ = (qs || []).flatMap((q) => (q.questionnaire_questions || []).filter((x) => x.required).map((x) => x.id))
-        if (reqQ.length) {
+        const req = await reqQ(seal.client_id)
+        if (req.length) {
           const { data: ans } = await supabase
             .from('questionnaire_answers').select('question_id')
-            .eq('supplier_id', seal.supplier_id).in('question_id', reqQ)
-          questPending = new Set((ans || []).map((a) => a.question_id)).size < reqQ.length
+            .eq('supplier_id', seal.supplier_id).in('question_id', req)
+          questPending = new Set((ans || []).map((a) => a.question_id)).size < req.length
         }
       }
 
       if (!missingTypes.length && !questPending && !mobGroups.length) { skipped++; continue } // completo → fila cuida
 
-      const { data: cat } = await supabase
-        .from('documents_catalog').select('id, name').in('id', missingTypes.map(Number).filter((n) => !isNaN(n)))
-      const nameMap = Object.fromEntries((cat || []).map((c) => [String(c.id), c.name]))
-      const missingNames = missingTypes.map((t) => nameMap[t] || `Documento #${t}`).slice(0, 15)
-      const nMob = mobGroups.length
+      const missingNames = missingTypes.map((t) => catalogo[t]?.name || `Documento #${t}`).slice(0, 15)
       const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
 
       if (!porDest.has(to)) porDest.set(to, [])
-      porDest.get(to).push({ seal, clientName, missingTypes, missingNames, questPending, mobGroups, lembreteN: (hist?.length || 0) + 1 })
+      porDest.get(to).push({ seal, clientName, missingTypes, missingNames, questPending, mobGroups, lembreteN: h.length + 1 })
     }
 
     for (const [to, itens] of porDest) {
-      if (Date.now() > deadline - 10000 || sent >= MAX_EMAILS_PER_RUN) break
+      if (Date.now() > deadline + 60000) break   // margem do limite de 15 min da função
       try {
         if (itens.length === 1) {
           const i = itens[0]
@@ -229,17 +247,17 @@ exports.handler = async (event) => {
         } else {
           await sendEmail(to, `📋 Pendências em ${itens.length} empresas da sua homologação — SIGEC-ELOS`, buildHtmlVarias(itens))
         }
-        for (const i of itens) {
-          await supabase.from('audit_log').insert({
-            action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: i.seal.id,
-            metadata: { to, agrupado: itens.length > 1 ? itens.length : undefined, missing_docs: i.missingTypes.length, mob_pessoas: i.mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: i.mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: i.questPending, lembrete_n: i.lembreteN },
-          })
-        }
+        await supabase.from('audit_log').insert(itens.map((i) => ({
+          action: 'DOC_PENDING_REMINDER', entity_type: 'seal', entity_id: i.seal.id,
+          metadata: { to, agrupado: itens.length > 1 ? itens.length : undefined, missing_docs: i.missingTypes.length, mob_pessoas: i.mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: i.mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: i.questPending, lembrete_n: i.lembreteN },
+        })))
         sent++
       } catch (e) { console.warn(`[pending-reminders] ${to}: ${e.message}`) }
     }
 
-    console.log(`[pending-reminders] enviados=${sent} pulados=${skipped}`)
+    console.log(`[pending-reminders] candidatos=${candidatos.length} enviados=${sent} pulados=${skipped}`)
+    await supabase.from('audit_log').insert({ action: 'PENDING_REMINDERS_RUN', entity_type: 'rotina',
+      metadata: { abertos: (seals || []).length, candidatos: candidatos.length, destinatarios: porDest.size, enviados: sent, pulados: skipped } })
     return { statusCode: 200, body: JSON.stringify({ sent, skipped }) }
   } catch (e) {
     console.error('[pending-reminders]', e)
