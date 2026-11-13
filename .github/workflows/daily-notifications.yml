@@ -1,5 +1,6 @@
 # .github/workflows/daily-notifications.yml
-# Executa todo dia às 8h BRT (11h UTC)
+# Agendado às 05:17 BRT (08:17 UTC): o GitHub vinha atrasando ~7h o horário
+# das 08:00 (rodava ~15h). Minuto quebrado evita o pico da hora cheia.
 # Chama a Netlify Function check-expiring-docs
 # Adicione CRON_SECRET e SITE_URL nos GitHub Secrets
 
@@ -7,7 +8,7 @@ name: Daily — Notificações de Documentos Vencendo
 
 on:
   schedule:
-    - cron: '0 11 * * *'   # 11:00 UTC = 08:00 BRT
+    - cron: '17 8 * * *'   # 08:17 UTC = 05:17 BRT
   workflow_dispatch:        # Permite rodar manualmente pelo GitHub Actions
 
 jobs:
