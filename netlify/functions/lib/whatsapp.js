@@ -17,6 +17,13 @@ function paraTwilio(numero) {
   return /^55[1-9]\d9\d{8}$/.test(d) ? `whatsapp:+${d}` : null
 }
 // 11 dígitos (DDD + celular) ganham o 55 — inclusive DDD 55 (Santa Maria/RS)
+// número de TESTE: aceita também internacional no formato +<país><número> (E.164)
+function paraTwilioTeste(v) {
+  const t = String(v || '').trim().replace(/^whatsapp:/i, '')
+  const d = t.replace(/\D/g, '')
+  if (t.startsWith('+') && d.length >= 10 && d.length <= 15) return `whatsapp:+${d}`
+  return paraTwilio(t)
+}
 const soDigitos = (n) => { const d = String(n || '').replace(/\D/g, ''); return /^[1-9]\d9\d{8}$/.test(d) ? '55' + d : d }
 
 const auth = () => 'Basic ' + Buffer.from(`${env('TWILIO_ACCOUNT_SID')}:${env('TWILIO_AUTH_TOKEN')}`).toString('base64')
@@ -45,13 +52,13 @@ async function disponivel(sb, modelo) {
   if (!configurado() || !env(MODELOS[modelo])) return { ok: false, motivo: 'sem_configuracao' }
   if (await pausado(sb)) return { ok: false, motivo: 'pausado' }
   if (!(await modeloAprovado(modelo))) return { ok: false, motivo: 'modelo_nao_aprovado' }
-  if (!isProd() && !paraTwilio(env('WHATSAPP_TEST_TO'))) return { ok: false, motivo: 'staging_sem_numero_de_teste' }
+  if (!isProd() && !paraTwilioTeste(env('WHATSAPP_TEST_TO'))) return { ok: false, motivo: 'staging_sem_numero_de_teste' }
   return { ok: true }
 }
 
 // Envia um modelo. variaveis: { 1: '...', 2: '...' }. Registra em whatsapp_messages.
-async function enviar(sb, { numero, modelo, variaveis, sealIds = [], supplierIds = [] }) {
-  const destino = isProd() ? paraTwilio(numero) : paraTwilio(env('WHATSAPP_TEST_TO'))
+async function enviar(sb, { numero, modelo, variaveis, sealIds = [], supplierIds = [], teste = false }) {
+  const destino = isProd() && !teste ? paraTwilio(numero) : paraTwilioTeste(teste ? numero : env('WHATSAPP_TEST_TO'))
   if (!destino) return { ok: false, motivo: 'numero_invalido' }
   const form = new URLSearchParams({
     MessagingServiceSid: env('TWILIO_MESSAGING_SERVICE_SID'),
