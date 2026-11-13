@@ -1,8 +1,9 @@
 // netlify/functions/whatsapp-webhook.js — retorno do Twilio (13/11/2026)
 //  · status da mensagem enviada (StatusCallback): sent/delivered/read/failed
-//  · mensagem recebida do fornecedor: "SAIR" (e variações) tira o número dos
-//    avisos por WhatsApp; qualquer outra recebe a orientação de contato.
-// Configurar no Messaging Service do Twilio: Incoming messages → esta URL.
+//  · (reserva) mensagem recebida: hoje o número é o mesmo do SUPORTE e as
+//    respostas vão para o sistema do suporte — o "SAIR" é lido pela API antes
+//    de cada rodada (lib/whatsapp.js processarSaidas). Este trecho só é usado se
+//    um dia o número de avisos tiver webhook próprio.
 // Segurança: assinatura X-Twilio-Signature conferida com o Auth Token.
 const crypto = require('crypto')
 const { createClient } = require('@supabase/supabase-js')
@@ -13,7 +14,8 @@ const twiml = (msg) => ({
   statusCode: 200, headers: { 'Content-Type': 'text/xml; charset=utf-8' },
   body: `<?xml version="1.0" encoding="UTF-8"?><Response>${msg ? `<Message>${msg.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</Message>` : ''}</Response>`,
 })
-const SAIR = /^(sair|parar|pare|stop|cancelar|descadastrar|nao quero|não quero)\b/i
+// só a mensagem que é EXATAMENTE a palavra (o número é do suporte: "parar o processo?" não é saída)
+const SAIR = /^\s*(sair|parar|stop|cancelar|descadastrar)[\s.!]*$/i
 
 function assinaturaValida(event, params) {
   const token = process.env.TWILIO_AUTH_TOKEN
