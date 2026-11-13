@@ -8,6 +8,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { frontendUrl, env } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const routeA = require('./lib/route_a.js')
+const whatsapp = require('./lib/whatsapp.js')
 const { requiredDocsForSeal, filtroAutomacao, docsDaAutomacao } = require('./lib/required_docs.js')
 
 // send-email.js só exporta handler (HTTP endpoint), não funções reutilizáveis.
@@ -263,11 +264,47 @@ exports.handler = async (event) => {
       }
     }
 
+    // ── WhatsApp de vencidos (13/11, decisões do Luiz): documento que segue sem
+    // renovar depois dos avisos de 30/15/7 dias recebe WhatsApp nos marcos de 3 e
+    // de 0 dias (máx. 2 por ciclo). Só o titular, agrupado por número, um por dia;
+    // só com o modelo aprovado pela Meta.
+    let waVenc = 0, waVencMotivo = null
+    const venceAgora = Object.entries(bySupplier)
+      .map(([sid, { supplier, docs }]) => ({ sid, supplier, docs: docs.filter(d => [3, 0].includes(Math.max(0, daysLeft(d)))) }))
+      .filter(x => x.docs.length)
+    if (venceAgora.length && budgetLeft() > 5000) {
+      const disp = await whatsapp.disponivel(supabase, 'vencidos')
+      if (!disp.ok) waVencMotivo = disp.motivo
+      else {
+        const porNumero = new Map()
+        for (const x of venceAgora) {
+          if (budgetLeft() < 4000) break
+          const { data: numero } = await supabase.rpc('supplier_whatsapp_numero', { p_supplier: x.sid })
+          if (!numero) continue
+          if (!porNumero.has(numero)) porNumero.set(numero, [])
+          porNumero.get(numero).push(x)
+        }
+        for (const [numero, xs] of porNumero) {
+          if (budgetLeft() < 2500) break
+          const { count } = await supabase.from('whatsapp_messages').select('id', { count: 'exact', head: true })
+            .eq('direcao', 'saida').eq('modelo', 'vencidos').eq('numero', numero).gte('created_at', today)
+          if (count) continue
+          const r = await whatsapp.enviar(supabase, {
+            numero, modelo: 'vencidos',
+            variaveis: { 1: whatsapp.rotuloEmpresas(xs.map(x => x.supplier?.razao_social)), 2: xs.reduce((n, x) => n + x.docs.length, 0) },
+            supplierIds: xs.map(x => x.sid),
+          })
+          if (r.ok) waVenc++
+        }
+      }
+    }
+
     // Log de auditoria no banco
     try {
       await supabase.from('audit_log').insert({
         action:    'EXPIRING_DOCS_CHECK',
-        metadata:  { total: expiringDocs.length, emails_sent: sent, urgent_marked: urgent, date: today },
+        metadata:  { total: expiringDocs.length, emails_sent: sent, urgent_marked: urgent, date: today,
+                     whatsapp: { elegiveis: venceAgora.length, enviados: waVenc, motivo: waVencMotivo } },
       })
     } catch { /* non-critical */ }
 

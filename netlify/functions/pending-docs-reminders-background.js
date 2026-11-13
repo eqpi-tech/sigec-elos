@@ -16,6 +16,7 @@ const { frontendUrl } = require('./lib/runtime_env.js')
 const { guardMail } = require('./lib/mail_guard.js')
 const { requiredDocsForSeal, mobilityTodo, filtroAutomacao } = require('./lib/required_docs.js')
 const { DOCS_SO_EQPI } = require('./lib/route_a.js')
+const whatsapp = require('./lib/whatsapp.js')
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -180,6 +181,7 @@ exports.handler = async (event) => {
     // várias empresas (pré-cadastro: BRMED 107) recebe UM e-mail com a lista; com
     // uma empresa só, o e-mail é o mesmo de antes. Cadência segue por processo.
     const porDest = new Map()
+    const waItens = []
     const RESERVA_ENVIO = 4 * 60 * 1000   // tempo guardado para enviar o que foi juntado
     for (const { seal, hist: h } of candidatos) {
       if (Date.now() > deadline - RESERVA_ENVIO || porDest.size >= MAX_EMAILS_PER_RUN) break
@@ -234,7 +236,7 @@ exports.handler = async (event) => {
       const clientName = seal.clients?.nome_fantasia || seal.clients?.razao_social || null
 
       if (!porDest.has(to)) porDest.set(to, [])
-      porDest.get(to).push({ seal, clientName, missingTypes, missingNames, questPending, mobGroups, lembreteN: h.length + 1 })
+      porDest.get(to).push({ seal, clientName, missingTypes, missingNames, questPending, mobGroups, lembreteN: h.length + 1, primeiro: h.length ? h[h.length - 1] : null })
     }
 
     for (const [to, itens] of porDest) {
@@ -252,12 +254,52 @@ exports.handler = async (event) => {
           metadata: { to, agrupado: itens.length > 1 ? itens.length : undefined, missing_docs: i.missingTypes.length, mob_pessoas: i.mobGroups.reduce((n, g) => n + g.peopleMissing, 0), mob_docs: i.mobGroups.reduce((n, g) => n + g.docs.length, 0), quest_pendente: i.questPending, lembrete_n: i.lembreteN },
         })))
         sent++
+        // 13/11: WhatsApp junto com o 3º e o 5º e-mail, se nada foi feito desde o 1º
+        for (const i of itens) if ((i.lembreteN === 3 || i.lembreteN === 5) && i.primeiro) waItens.push(i)
       } catch (e) { console.warn(`[pending-reminders] ${to}: ${e.message}`) }
+    }
+
+    // ── WhatsApp: último recurso (decisões do Luiz, 13/11) ────────────────
+    // só o titular, agrupado por número, máx. 2 por processo; só com o modelo
+    // aprovado pela Meta (antes disso fica registrado o motivo e nada sai)
+    let waEnviados = 0, waMotivo = null
+    if (waItens.length) {
+      const disp = await whatsapp.disponivel(supabase, 'pendencias')
+      if (!disp.ok) waMotivo = disp.motivo
+      else {
+        const porNumero = new Map()
+        for (const i of waItens) {
+          if (Date.now() > deadline + 90000) break
+          const { data: numero } = await supabase.rpc('supplier_whatsapp_numero', { p_supplier: i.seal.supplier_id })
+          if (!numero) continue
+          const { data: semAcao } = await supabase.rpc('supplier_sem_acao_desde', { p_supplier: i.seal.supplier_id, p_desde: i.primeiro })
+          if (!semAcao) continue
+          const { count } = await supabase.from('whatsapp_messages').select('id', { count: 'exact', head: true })
+            .eq('direcao', 'saida').eq('modelo', 'pendencias').contains('seal_ids', [i.seal.id]).neq('status', 'failed')
+          if ((count || 0) >= 2) continue
+          if (!porNumero.has(numero)) porNumero.set(numero, [])
+          porNumero.get(numero).push(i)
+        }
+        for (const [numero, its] of porNumero) {
+          const r = await whatsapp.enviar(supabase, {
+            numero, modelo: 'pendencias',
+            variaveis: {
+              1: whatsapp.rotuloEmpresas(its.map((i) => i.seal.suppliers?.razao_social)),
+              2: [...new Set(its.map((i) => i.clientName).filter(Boolean))].join(' e ') || 'o SIGEC-ELOS',
+              3: its.reduce((n, i) => n + i.missingTypes.length + i.mobGroups.length + (i.questPending ? 1 : 0), 0),
+            },
+            sealIds: its.map((i) => i.seal.id), supplierIds: [...new Set(its.map((i) => i.seal.supplier_id))],
+          })
+          if (r.ok) waEnviados++
+          else console.warn(`[pending-reminders] whatsapp ${numero.slice(0, 6)}…: ${r.motivo}`)
+        }
+      }
     }
 
     console.log(`[pending-reminders] candidatos=${candidatos.length} enviados=${sent} pulados=${skipped}`)
     await supabase.from('audit_log').insert({ action: 'PENDING_REMINDERS_RUN', entity_type: 'rotina',
-      metadata: { abertos: (seals || []).length, candidatos: candidatos.length, destinatarios: porDest.size, enviados: sent, pulados: skipped } })
+      metadata: { abertos: (seals || []).length, candidatos: candidatos.length, destinatarios: porDest.size, enviados: sent, pulados: skipped,
+        whatsapp: { elegiveis: waItens.length, enviados: waEnviados, motivo: waMotivo } } })
     return { statusCode: 200, body: JSON.stringify({ sent, skipped }) }
   } catch (e) {
     console.error('[pending-reminders]', e)
