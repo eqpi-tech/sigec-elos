@@ -30,12 +30,38 @@ const PARAMS = {
   aliquotaCbs:    Number(process.env.NFE_ALIQ_CBS || '0.90'),
 }
 
+// 13/11: código IBGE pela Receita (CNPJ) — vale mesmo com CEP errado no
+// cadastro (caso CRAWS: 26164-327 × 29164-327) — e pela API oficial do IBGE
+// quando a lista de municípios da BrasilAPI cai (504 em 11 e 13/11)
+// a BrasilAPI (Cloudflare) recusa com 403 chamada sem User-Agent (13/11)
+const UA = { Accept: 'application/json', 'User-Agent': 'SIGEC-ELOS/1.0' }
+async function ibgePorCnpj(cnpj) {
+  const c = String(cnpj || '').replace(/\D/g, '')
+  if (c.length !== 14) return null
+  try {
+    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${c}`, { headers: UA, signal: AbortSignal.timeout(10000) })
+    const d = r.ok ? await r.json() : null
+    return d?.codigo_municipio_ibge ? String(d.codigo_municipio_ibge).slice(0, 7) : null
+  } catch { return null }
+}
+async function ibgeOficial(municipio, uf) {
+  if (!municipio || !uf) return null
+  try {
+    const r = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`, { headers: UA, signal: AbortSignal.timeout(10000) })
+    const list = r.ok ? await r.json() : []
+    const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+    const hit = (list || []).find(m => norm(m.nome) === norm(municipio))
+    return hit?.id ? String(hit.id) : null
+  } catch { return null }
+}
+const MAX_TENTATIVAS_IBGE = 5   // sem IBGE: volta para a fila até 5 vezes antes de FAILED
+
 async function ibgePorCep(cep, municipio, uf) {
   // 16/10: cada fonte com tempo-limite e tentativa própria — a BrasilAPI caiu
   // (503/travada) e, num try único, o ViaCEP nem chegava a ser consultado
   const get = async (url) => {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
+      const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(8000) })
       return r.ok ? await r.json() : null
     } catch { return null }
   }
@@ -151,11 +177,16 @@ exports.handler = async (event) => {
       if (!sup?.cnpj) throw Object.assign(new Error('Fornecedor sem CNPJ'), { nonRetryable: true })
       const addr = sup.address || {}
       const hocEnd = (sup.hoc_extra?.enderecos || [])[0] || {}
-      const codigoIbge = await ibgePorCep(addr.cep || hocEnd.cep, addr.municipio || hocEnd.municipio || sup.city, addr.uf || hocEnd.uf || sup.state)
+      const munic = addr.municipio || hocEnd.municipio || sup.city, ufEnd = addr.uf || hocEnd.uf || sup.state
+      const codigoIbge = await ibgePorCep(addr.cep || hocEnd.cep, munic, ufEnd)
+        || await ibgePorCnpj(sup.cnpj) || await ibgeOficial(munic, ufEnd)
 
       const payload = mapearParaNfeIo(sup, inv, codigoIbge)
       if (!payload.borrower.address.city.code) {
-        throw Object.assign(new Error(`Cadastro incompleto: IBGE não resolvido (cep=${addr.cep || hocEnd.cep || '—'})`), { nonRetryable: true })
+        // fonte fora do ar ou cadastro ainda sem endereço (empresa recém-chegada do
+        // HOC): volta para a fila e tenta de novo — FAILED só depois de 5 tentativas
+        throw Object.assign(new Error(`Cadastro incompleto: IBGE não resolvido (cep=${addr.cep || hocEnd.cep || '—'})`),
+          { nonRetryable: (inv.attempts || 0) + 1 >= MAX_TENTATIVAS_IBGE, voltarFila: true })
       }
 
       callStarted = true   // a partir daqui, ambiguidade = NEEDS_REVIEW
@@ -179,7 +210,13 @@ exports.handler = async (event) => {
       }).eq('id', inv.id)
       emitted++
     } catch (e) {
-      if (e.nonRetryable && !callStarted) {
+      if (e.voltarFila && !e.nonRetryable && !callStarted) {
+        // IBGE não resolvido ainda (nada foi enviado à NFE.io): volta para a fila
+        await supabaseAdmin.from('nfe_invoices').update({
+          status: 'PENDING', log_erro: String(e.message).slice(0, 4000), serie: PARAMS.serie,
+        }).eq('id', inv.id)
+        failed++
+      } else if (e.nonRetryable && !callStarted) {
         // erro NOSSO, antes de falar com a NFE.io — seguro marcar FAILED
         await supabaseAdmin.from('nfe_invoices').update({
           status: 'FAILED', log_erro: String(e.message).slice(0, 4000), serie: PARAMS.serie,
