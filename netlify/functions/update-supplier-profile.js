@@ -26,7 +26,13 @@ const EDITABLE_FIELDS = [
   'nome_fantasia', 'phone', 'email', 'email_financeiro', 'contact_name',
   'inscricao_estadual', 'inscricao_municipal', 'tipo_empresa',
   'state', 'city', 'address',
+  'celular_avisos',   // 13/11: celular do titular para avisos por WhatsApp (patch_179)
 ]
+// celular brasileiro: DDD + 9 dígitos começando em 9 (mesma regra de celular_br no banco)
+const celularBR = (v) => {
+  const d = String(v || '').replace(/\D/g, '').replace(/^0/, '').replace(/^55(?=\d{11}$)/, '')
+  return /^[1-9]\d9\d{8}$/.test(d) ? d : null
+}
 
 const PARTNER_FIELDS = ['tipo', 'cpf_cnpj', 'nome', 'cargo', 'nacionalidade', 'participacao']
 
@@ -50,7 +56,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       const [{ data: supplier }, { data: partners }] = await Promise.all([
         sb.from('suppliers')
-          .select('id, razao_social, cnpj, nome_fantasia, phone, email, email_financeiro, contact_name, inscricao_estadual, inscricao_municipal, tipo_empresa, data_abertura, state, city, address, status')
+          .select('id, razao_social, cnpj, nome_fantasia, phone, email, email_financeiro, contact_name, inscricao_estadual, inscricao_municipal, tipo_empresa, data_abertura, state, city, address, status, celular_avisos, whatsapp_optout_at')
           .eq('id', supplierId).single(),
         sb.from('supplier_partners')
           .select('id, tipo, cpf_cnpj, nome, cargo, nacionalidade, participacao')
@@ -76,6 +82,12 @@ exports.handler = async (event) => {
         if (k in fields) payload[k] = fields[k] === '' ? null : fields[k]
       if (!Object.keys(payload).length)
         return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Nenhum campo editável informado' }) }
+      if (payload.celular_avisos) {
+        const c = celularBR(payload.celular_avisos)
+        if (!c) return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Celular inválido: informe DDD + número de celular (ex.: 27 99812-3456).' }) }
+        payload.celular_avisos = c
+        payload.whatsapp_optout_at = null   // informou o celular de novo: volta a receber
+      }
 
       const { error } = await sb.from('suppliers').update(payload).eq('id', supplierId)
       if (error) throw new Error(error.message)

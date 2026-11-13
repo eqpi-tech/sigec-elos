@@ -108,6 +108,7 @@ export default function SupplierOnboarding() {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
+  const [celular, setCelular]     = useState('')   // 13/11: avisos por WhatsApp (opcional)
 
   const [planType, setPlanType]   = useState('homologado')
   // portal do cliente (sem convite): pré-cadastro sem custo no lugar da homologação (patch_126)
@@ -322,6 +323,7 @@ export default function SupplierOnboarding() {
         cnae_list: cnpjData?.cnaes_secundarios?.map(c => c.codigo) || [],
         state: cnpjData?.uf || '', city: cnpjData?.municipio || '',
         phone: cnpjData?.ddd_telefone_1 || null,
+        celular_avisos: celular || null,
         employee_range: cnpjData?.porte ? cnpjData.porte : null,
         sanctions_checked: true, sanctions_result: sanctions,
         terms_accepted: true, data_sharing_accepted: true,
@@ -629,6 +631,11 @@ export default function SupplierOnboarding() {
                         <input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="joao@empresa.com.br" style={inputStyle} />
                       </div>
                       <div style={{ marginBottom:16 }}>
+                        <label style={labelStyle}>Celular para avisos (WhatsApp) — opcional</label>
+                        <input value={celular} onChange={e=>setCelular(e.target.value)} type="tel" placeholder="(27) 99812-3456" style={inputStyle} />
+                        <div style={{ fontSize:11, color:'#9B9B9B', marginTop:4 }}>Avisos sobre pendências e vencimentos da homologação.</div>
+                      </div>
+                      <div style={{ marginBottom:16 }}>
                         <label style={labelStyle}>Senha (mín. 8 caracteres)</label>
                         <input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
                       </div>
@@ -687,7 +694,8 @@ export default function SupplierOnboarding() {
                         <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}><strong>3. Suspensão do Selo:</strong> O descumprimento das obrigações documentais ou a identificação de irregularidades poderá resultar na suspensão ou cancelamento do Selo ELOS, sem direito a reembolso do valor pago.</p>
                         <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}><strong>4. Responsabilidade:</strong> A EQPI Tech atua como facilitadora do processo de pré-homologação e não se responsabiliza por decisões de contratação tomadas pelos Compradores com base nas informações da plataforma.</p>
                         <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}><strong>5. Cancelamento:</strong> O plano pode ser cancelado a qualquer momento, sem reembolso proporcional. O acesso à plataforma permanece ativo até o final do período contratado.</p>
-                        <p style={{ fontSize:12, color:'#374151', lineHeight:1.6 }}><strong>6. Foro:</strong> As partes elegem o foro da Comarca de Belo Horizonte/MG para dirimir quaisquer controvérsias.</p>
+                        <p style={{ fontSize:12, color:'#374151', lineHeight:1.6, margin:'0 0 8px' }}><strong>6. Comunicações:</strong> O Fornecedor autoriza a EQPI Tech a enviar avisos sobre a homologação — pendências, documentos vencidos ou a vencer — por e-mail e por WhatsApp, para os contatos informados no cadastro. Para deixar de receber pelo WhatsApp, basta responder SAIR a qualquer mensagem.</p>
+                        <p style={{ fontSize:12, color:'#374151', lineHeight:1.6 }}><strong>7. Foro:</strong> As partes elegem o foro da Comarca de Belo Horizonte/MG para dirimir quaisquer controvérsias.</p>
                       </>
                     )}
                   </div>
