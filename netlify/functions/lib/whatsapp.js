@@ -76,10 +76,51 @@ async function enviar(sb, { numero, modelo, variaveis, sealIds = [], supplierIds
   return ok ? { ok: true, sid: d.sid } : { ok: false, motivo: d?.message || `HTTP ${r?.status}` }
 }
 
+// ── "SAIR" (13/11): o número é o mesmo do SUPORTE — as respostas continuam indo
+// para o sistema do suporte (webhook do Twilio intocado). Antes de cada rodada,
+// lemos pela API as mensagens recebidas desde a última leitura: quem respondeu
+// SAIR sai dos avisos e recebe a confirmação (dentro da janela de 24h do
+// WhatsApp). Só em produção — o staging nunca responde a pessoas reais.
+// só a mensagem que é EXATAMENTE a palavra (o número é do suporte: "parar o processo?" não é saída)
+const SAIR = /^\s*(sair|parar|stop|cancelar|descadastrar)[\s.!]*$/i
+async function processarSaidas(sb) {
+  if (!isProd() || !configurado()) return { lidas: 0, saidas: 0 }
+  const get = async (u) => { const r = await fetch(u, { headers: { Authorization: auth() }, signal: AbortSignal.timeout(15000) }); return r.ok ? r.json() : {} }
+  const cs = await get(`https://messaging.twilio.com/v1/Services/${env('TWILIO_MESSAGING_SERVICE_SID')}/ChannelSenders`)
+  const remetente = (cs.senders || []).map((x) => x.sender).find((x) => String(x).startsWith('whatsapp:'))
+  if (!remetente) return { lidas: 0, saidas: 0 }
+  const { data: cfg } = await sb.from('app_settings').select('value').eq('key', 'whatsapp_ultima_leitura').maybeSingle()
+  const desde = cfg?.value?.em ? new Date(cfg.value.em) : new Date(Date.now() - 3 * 86400000)
+  const inicio = new Date()
+  const q = new URLSearchParams({ To: remetente, 'DateSent>': desde.toISOString().slice(0, 10), PageSize: '200' })
+  const lista = ((await get(`https://api.twilio.com/2010-04-01/Accounts/${env('TWILIO_ACCOUNT_SID')}/Messages.json?${q}`)).messages || [])
+    .filter((m) => m.direction === 'inbound' && new Date(m.date_sent || m.date_created) > desde)
+  let saidas = 0
+  for (const m of lista) {
+    const texto = String(m.body || '').trim()
+    if (!SAIR.test(texto.normalize('NFD').replace(/\p{Mn}/gu, ''))) continue
+    const numero = soDigitos(String(m.from || '').replace(/^whatsapp:/, ''))
+    const { error: dup } = await sb.from('whatsapp_messages').insert({ direcao: 'entrada', numero, corpo: texto.slice(0, 500), twilio_sid: m.sid, status: 'received', status_em: m.date_sent || null })
+    if (dup) continue   // já processada (twilio_sid único)
+    const { data: n } = await sb.rpc('whatsapp_optout', { p_numero: numero })
+    await sb.from('audit_log').insert({ action: 'WHATSAPP_OPTOUT', entity_type: 'numero', metadata: { numero, empresas: n || 0, sid: m.sid } })
+    saidas++
+    try {
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${env('TWILIO_ACCOUNT_SID')}/Messages.json`, {
+        method: 'POST', headers: { Authorization: auth(), 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(15000),
+        body: new URLSearchParams({ MessagingServiceSid: env('TWILIO_MESSAGING_SERVICE_SID'), To: m.from,
+          Body: 'Pronto! Você não vai mais receber avisos automáticos do SIGEC-ELOS por aqui. Os avisos continuam chegando por e-mail. Para voltar a receber pelo WhatsApp, informe o celular em Meus Dados.' }),
+      })
+    } catch { /* a saída já foi registrada; a confirmação é cortesia */ }
+  }
+  await sb.from('app_settings').upsert({ key: 'whatsapp_ultima_leitura', value: { em: inicio.toISOString() } }, { onConflict: 'key' })
+  return { lidas: lista.length, saidas }
+}
+
 // "EMPRESA X" ou "EMPRESA X e mais N empresas"
 const rotuloEmpresas = (nomes) => {
   const u = [...new Set(nomes.filter(Boolean))]
   return u.length <= 1 ? (u[0] || 'sua empresa') : `${u[0]} e mais ${u.length - 1} empresa${u.length - 1 > 1 ? 's' : ''}`
 }
 
-module.exports = { paraTwilio, soDigitos, disponivel, enviar, modeloAprovado, rotuloEmpresas, isProd }
+module.exports = { paraTwilio, soDigitos, disponivel, enviar, modeloAprovado, rotuloEmpresas, isProd, processarSaidas }

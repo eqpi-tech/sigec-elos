@@ -264,6 +264,7 @@ exports.handler = async (event) => {
     // aprovado pela Meta (antes disso fica registrado o motivo e nada sai)
     let waEnviados = 0, waMotivo = null
     if (waItens.length) {
+      try { await whatsapp.processarSaidas(supabase) } catch (e) { console.warn('[whatsapp] SAIR:', e.message) }   // quem pediu para sair não recebe
       const disp = await whatsapp.disponivel(supabase, 'pendencias')
       if (!disp.ok) waMotivo = disp.motivo
       else {

@@ -273,6 +273,7 @@ exports.handler = async (event) => {
       .map(([sid, { supplier, docs }]) => ({ sid, supplier, docs: docs.filter(d => [3, 0].includes(Math.max(0, daysLeft(d)))) }))
       .filter(x => x.docs.length)
     if (venceAgora.length && budgetLeft() > 5000) {
+      try { await whatsapp.processarSaidas(supabase) } catch (e) { console.warn('[whatsapp] SAIR:', e.message) }   // quem pediu para sair não recebe
       const disp = await whatsapp.disponivel(supabase, 'vencidos')
       if (!disp.ok) waVencMotivo = disp.motivo
       else {
