@@ -71,6 +71,8 @@ exports.handler = async (event) => {
 
     // CNPJ numérico ou alfanumérico: 14 caracteres em maiúsculas, sem pontuação
     const cleanCnpj = normalizeCnpj(cnpj)
+    // celular para avisos por WhatsApp (opcional; inválido é ignorado)
+    const celularAvisos = (() => { const d = String(body.celular_avisos || '').replace(/\D/g, '').replace(/^0/, '').replace(/^55(?=\d{11}$)/, ''); return /^[1-9]\d9\d{8}$/.test(d) ? d : null })()
 
     // 1. Verifica se CNPJ já existe — upsert em vez de insert cego
     const { data: existingSupplier } = await supabaseAdmin
@@ -124,6 +126,7 @@ exports.handler = async (event) => {
         state:           state           || existingSupplier.state,
         city:            city            || existingSupplier.city,
         phone:           phone           || existingSupplier.phone,
+        celular_avisos:  celularAvisos   || existingSupplier.celular_avisos || null,
       }
       // Só reivindica user_id se ainda não tem dono (fornecedores importados do HOC)
       if (!existingSupplier.user_id) updatePayload.user_id = user.id
@@ -146,6 +149,7 @@ exports.handler = async (event) => {
           state:             state           || null,
           city:              city            || null,
           phone:             phone           || null,
+          celular_avisos:    celularAvisos,   // 13/11 (patch_179): WhatsApp do titular
           services:          services        || [],
           certifications:    certifications  || [],
           status:            'PENDING',

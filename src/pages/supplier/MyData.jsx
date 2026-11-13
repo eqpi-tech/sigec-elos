@@ -45,7 +45,7 @@ export default function SupplierMyData() {
       setSupplier(s)
       setPartners(p)
       setForm({
-        nome_fantasia: s.nome_fantasia || '', phone: s.phone || '',
+        nome_fantasia: s.nome_fantasia || '', phone: s.phone || '', celular_avisos: s.celular_avisos || '',
         email: s.email || '', email_financeiro: s.email_financeiro || '',
         contact_name: s.contact_name || '',
         inscricao_estadual: s.inscricao_estadual || '', inscricao_municipal: s.inscricao_municipal || '',
@@ -69,7 +69,7 @@ export default function SupplierMyData() {
       await callApi('POST', {
         action: 'update-profile',
         fields: {
-          nome_fantasia: form.nome_fantasia, phone: form.phone,
+          nome_fantasia: form.nome_fantasia, phone: form.phone, celular_avisos: form.celular_avisos,
           email: form.email, email_financeiro: form.email_financeiro,
           contact_name: form.contact_name,
           inscricao_estadual: form.inscricao_estadual, inscricao_municipal: form.inscricao_municipal,
@@ -183,6 +183,13 @@ export default function SupplierMyData() {
           <div>
             <span style={lbl}>Telefone</span>
             <input value={form.phone} onChange={set('phone')} style={inp}/>
+          </div>
+          <div>
+            <span style={lbl}>Celular para avisos (WhatsApp)</span>
+            <input value={form.celular_avisos} onChange={set('celular_avisos')} placeholder="(27) 99812-3456" style={inp}/>
+            <div style={{ fontSize:11, color:'#6b7280', marginTop:4, fontFamily:'DM Sans,sans-serif' }}>
+              Avisos sobre pendências e vencimentos da homologação. {supplier?.whatsapp_optout_at ? 'Você pediu para não receber — informe o celular de novo para voltar a receber.' : 'Para não receber, responda SAIR a uma das mensagens.'}
+            </div>
           </div>
           <div>
             <span style={lbl}>E-mail Comercial</span>
